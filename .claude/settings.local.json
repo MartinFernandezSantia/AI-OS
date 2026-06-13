@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "WebSearch",
+      "WebFetch",
+      "Edit",
+      "Write",
+      "mcp__mcp-registry__search_mcp_registry",
+      "mcp__chrome-devtools__*",
+      "Glob"
+    ],
+    "deny": [
+      "Bash(rm *)",
+      "Bash(del *)",
+      "Bash(rmdir *)",
+      "Bash(rd *)",
+      "Bash(unlink *)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)"
+    ],
+    "ask": [
+      "Bash(git push *)"
+    ]
+  }
+}
