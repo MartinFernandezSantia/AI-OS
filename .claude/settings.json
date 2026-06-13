@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.local)",
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Bash(npm)",
+      "Bash(npm *)",
+      "Bash(npx)",
+      "Bash(npx *)"
+    ]
+  }
+}

@@ -44,3 +44,12 @@ Match the register in `references/voice.md`. Casual but professional. Short sent
 - When I make a decision, suggest logging it via the decisions log.
 - When you spot a manual task I'm doing 3+ times, surface it next time `/level-up` runs.
 - Default Shift: when I bring a new task, ask "to what extent could AI be leveraged here?" before assuming I'll do it the old way.
+
+## Development workflow
+
+When writing or changing code in this repo:
+
+- Use `pnpm` for everything. Never `npm` or `npx` (enforced via `.claude/settings.json` deny rules).
+- Never read `.env` or `.env.local` files (also enforced via deny rules).
+- Work on a branch off `main`, never commit directly to `main`. If a fitting branch exists, use it; otherwise create one.
+- Commit when it makes sense. Keep messages short, follow conventional style, and keep the git tree clean and traceable.
