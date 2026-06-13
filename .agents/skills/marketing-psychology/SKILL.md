@@ -453,3 +453,6 @@ When facing a marketing challenge, consider:
 - **popups**: Use triggers and psychology in popups
 - **pricing-page optimization**: See cro for pricing psychology
 - **ab-testing**: Test psychological hypotheses
+- **influence-psychology**: Cialdini's foundational principles underlying these mental models
+- **cro-methodology**: For applying psychology to the conversion optimization process
+- **storybrand-messaging**: For how narrative structure and psychology combine in story-based marketing

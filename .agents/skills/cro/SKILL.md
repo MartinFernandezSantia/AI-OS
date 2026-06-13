@@ -179,6 +179,9 @@ When recommending experiments, consider tests for:
 - **popups**: If considering popups as part of the strategy
 - **copywriting**: If the page needs a complete copy rewrite
 - **ab-testing**: To properly test recommended changes
+- **cro-methodology**: For the evidence-based research and experimentation framework behind CRO
+- **influence-psychology**: For psychological principles (social proof, scarcity, authority) driving conversions
+- **marketing-psychology**: For mental models explaining buyer behavior and decision-making
 
 ---
 

@@ -250,3 +250,6 @@ For headlines and CTAs, provide 2-3 options:
 - **emails**: For email copywriting
 - **popups**: For popup and modal copy
 - **ab-testing**: To test copy variations
+- **cro-methodology**: For objection-driven copy patterns and counter-objection structure
+- **influence-psychology**: For psychological principles (reciprocity, commitment, scarcity) behind persuasive copy
+- **storybrand-messaging**: For narrative structure and story-based copy frameworks

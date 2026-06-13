@@ -1,6 +1,6 @@
 ---
 name: top-design
-description: 'Create award-winning, immersive web experiences at the level of Awwwards-featured agencies. Use when the user mentions "premium website", "portfolio site", "scroll animations", "Awwwards quality", "brand experience", "cinematic web design", "parallax storytelling", or "agency-quality site". Also trigger when building landing pages that need to impress, designing creative portfolios, or elevating a standard website to a memorable digital experience. Covers dramatic typography, purposeful motion, scroll-based composition, and performance-optimized animation. For foundational UI, see refactoring-ui. For type selection, see web-typography.'
+description: 'Create award-winning, immersive web experiences at the level of Awwwards-featured agencies. Use when the user mentions "premium website", "portfolio site", "scroll animations", "Awwwards quality", "brand experience", "cinematic web design", "parallax storytelling", or "agency-quality site". Also trigger when building landing pages that need to impress, designing creative portfolios, or elevating a standard website to a memorable digital experience. Covers dramatic typography, purposeful motion, scroll-based composition, and performance-optimized animation. For foundational UI, see refactoring-ui. For type selection, see web-typography. For subject-grounded visual identity and aesthetic direction, see frontend-design. For design compliance review, see web-design-guidelines.'
 license: MIT
 metadata:
   author: wondelai
