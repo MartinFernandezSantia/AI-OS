@@ -61,3 +61,4 @@ When writing or changing code in this repo:
 - Never read `.env` or `.env.local` files (also enforced via deny rules).
 - Work on a branch off `main`, never commit directly to `main`. If a fitting branch exists, use it; otherwise create one.
 - Commit when it makes sense. Keep messages short, follow conventional style, and keep the git tree clean and traceable.
+- Install everything at the AIOS (repo) level, never at user level. Skills go in `.claude/skills/`, MCPs and permissions in `.claude/settings.json` (committed) — so the whole environment is portable through this repo. Never use the `-g`/global flag when adding skills, and never write to `~/.claude/`.

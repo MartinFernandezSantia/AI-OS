@@ -11,6 +11,12 @@ Registry of every system your AIOS can reach. Filled by `/onboard` from Q4-Q7 an
 | 5 | Project / task tracking | None — lives in my head | not yet connected | — | — |
 | 6 | Meeting intelligence | None | not yet connected | — | — |
 | 7 | Knowledge / files | None — no system yet | not yet connected | — | — |
+| 8 | Web audit / perf | Lighthouse MCP (`@danielsogl/lighthouse-mcp`) | mcp (`.mcp.json`) | none | 2026-06-13 |
+| 9 | Web audit / debug | Chrome DevTools MCP (`chrome-devtools-mcp`) | mcp (`.mcp.json`) | none (needs Chrome installed) | 2026-06-13 |
+| 10 | SEO / search data | Google Search Console MCP | **pending** | OAuth (Google) | — |
+
+**Pending connections:**
+- **#10 Google Search Console MCP** — blocked until Google verifies the business. Needs Google OAuth + a verified GSC property before it can be wired. Revisit once verification clears.
 
 **Tool constraints (mine):** any tool I adopt must be (1) free or self-hostable open-source, and (2) able to connect to Claude (e.g. via MCP). Don't recommend paid-only closed SaaS without flagging the tradeoff.
 
