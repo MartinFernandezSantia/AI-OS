@@ -23,6 +23,7 @@ Read `references/3ms-framework.md` once. It's how Martin thinks about AI work. M
 - `connections.md` — registry of every system your AIOS can reach
 - `decisions/log.md` — append-only record of decisions and why
 - `archives/` — old stuff. Don't delete. Move here.
+- `project-context/<Project>/` — companion files for external projects (committed/synced). Generated media (Higgsfield, Nano Banana, etc.) goes in `project-context/<Project>/assets/` — commit final picks; put throwaway iterations in `assets/drafts/` (gitignored).
 
 See `EXPANSIONS.md` for what to add as you grow.
 
@@ -35,6 +36,8 @@ See `EXPANSIONS.md` for what to add as you grow.
 **What matters this quarter (set 2026-06-13).** (1) Stand up this AIOS as my ops center + knowledge base; (2) **top priority** — enhance and start selling the print-shop system; (3) spin up social + regular posting; (4) help Dad's real-estate business (site + social). Full list in `context/priorities.md`.
 
 **Tooling rule.** Any tool I adopt must be free/self-hostable open-source AND able to connect to Claude. Don't recommend paid-only closed SaaS without flagging the tradeoff.
+
+**Higgsfield rule.** Before ANY Higgsfield generation (image, video, ad, Marketing Studio), load the `higgsfield-preflight` skill and follow its gate. Never skip the credit estimate, never alter uploaded references, never auto-run a premium model.
 
 ## Voice
 
