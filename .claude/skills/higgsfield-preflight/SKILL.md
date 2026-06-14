@@ -51,7 +51,9 @@ Bake these into the prompt and parameters before you present the gate.
 
 Before showing the gate, **do not draft the prompt solo.** Run the three-agent review in `references/pregen-review.md`: a **Reference Auditor** reads only the reference image(s) + intent and returns a Structure Spec (preserve / fabrication-zones / changes / open questions); a **Prompt Engineer** turns that into a slot-structured prompt + params; an **Adversarial Reviewer** with fresh context tries to break it (missing constraints, unneutralized fabrication, text/geometry risks). Revise loop, max 2 rounds, then the reviewed prompt feeds Part B.
 
-Each agent gets only the relevant context (image paths + intent), never the chat history. This runs on every generation; the "just generate" / "skip review" override (below) skips it. If it ever feels too heavy for quick edits, narrow it to a threshold (premium / video / brand-final) — a one-line change here.
+Each agent gets only the relevant context (image paths + intent), never the chat history. The "just generate" / "skip review" override (below) skips it.
+
+**Scale the review to the job's complexity** (learned 2026-06-14): the full three-agent fan-out earns its keep on novel or complex generations — on the first storefront render it caught a viewing-direction inversion and a fabricated wall clock no solo pass would have. But it is overkill for precise, user-specified targeted edits, where the single **Adversarial Reviewer** is the highest-value agent. Default: full fan-out for new/complex generations; a lone adversarial reviewer (or skip, with the user's OK) for tight follow-up edits. Don't run heavy process on a 2-credit tweak — it erodes momentum for no quality gain.
 
 ---
 
@@ -65,6 +67,20 @@ Default is still to **neutralize glass** (dark / reflective / out-of-focus, no i
 4. The prompt instructs the model to render each interior through its glass per the supplied reference, matched perspective, **nothing invented beyond the reference**. Anything stuck to the glass (stickers/decals) is removed — accuracy beats invented detail.
 5. The Reference Auditor folds the interior refs into its Structure Spec (which interior → which opening).
 6. Expectation check: if perspective/placement comes out loose, fall back to compositing/masking the interior into the window region from the original.
+
+---
+
+## Lessons from editing real photographs
+
+Hard-won on the Santía storefront edit (2026-06-14). Apply these when retouching a real photo:
+
+1. **Glass realism vs interior visibility is a trade-off — decide up front.** Realistic dark/reflective shopfront glass and a clearly-readable interior fight each other; the model cannot fully do both. Martin prefers **realistic, dim, reflective glass with the interior only glimpsed**, not a bright clear reveal. Expect to land it with a final manual brightness/dimming pass on the glass — the model won't give the last 10%.
+2. **Don't synthesize reflections or lighting onto a flat AI image — it looks fake.** Adding fake glare/shadows to a flat render (the v3 mistake) read as "really bad." Prefer a base that already carries the real photo's glass and light, and *preserve* it, over generating new reflections.
+3. **Compose from the best prior versions — don't chase one perfect prompt.** When one output nails the glass/light/framing and another nails the interior, edit the better one as the base and pass the other as a reference. The winner here was v1 (real-photo glass, framing, paving) as base + v2 (good interior) as reference.
+4. **Interior reference photos shot from inside face outward.** From the street the scene is reversed — chair backs, far wall. Account for viewing direction (the Adversarial Reviewer caught this once already).
+5. **Fix EXIF orientation before passing phone/camera photos.** They can carry a misleading orientation tag and render sideways. This box has no ImageMagick; use `ffmpeg -i in.jpg -map_metadata -1 out.jpg` (no transpose) and **visually verify upright** before generating.
+6. **Nano Banana edits within the canvas — it cannot outpaint.** You can't add a balcony above a tight crop without zooming out, which shrinks and garbles the sign. To change framing, start from a less-cropped base or use a reframe/expand pass.
+7. **Folder convention:** generated outputs live in `project-context/<Project>/assets/drafts/higgsfield/` (gitignored); promote the final pick to `assets/` and commit.
 
 ---
 
@@ -117,7 +133,8 @@ If Martin says "just generate" / "just go" / "skip preflight" / "skip review" fo
 
 Before any generation runs:
 
-- [ ] Pre-generation review run (auditor → prompt engineer → reviewer), unless overridden?
+- [ ] Pre-generation review scaled to complexity (full fan-out vs lone reviewer), unless overridden?
+- [ ] Editing a real photo? Glass-vs-interior priority decided; best base chosen; EXIF orientation verified upright?
 - [ ] References passed through untouched (upscale only)?
 - [ ] All rendered text confirmed legible / intentional?
 - [ ] Fine-detail / through-glass / indistinct zones neutralized (not fabricated)?
