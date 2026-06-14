@@ -32,15 +32,17 @@ Bake these into the prompt and parameters before you present the gate.
 
 2. **Text must be deliberate and consistent.** Any text rendered in the output is intentional and must read correctly and consistently. If a reference image contains text that isn't clearly legible, **stop and ask Martin what it says** before generating anything — never guess at copy.
 
-3. **No random people.** Do not generate humans unless one of these is true: a consistent character already exists (Soul Character via `higgsfield-soul-id`), or an established AI influencer is being reused. If a person is genuinely needed and none exists, flag it and offer to build a consistent character first rather than spawning a throwaway face.
+3. **Fine detail & through-glass interiors are fabricated.** AI re-renders invent anything small or indistinct — interiors seen through windows/glass, distant signage, reflections, stickers/decals, screens, price tags, far-off objects. They look plausible at a glance and fall apart on zoom. **Identify these zones before generating and neutralize them in the prompt:** render through-glass interiors as dark, softly reflective, or out-of-focus glass rather than detailed rooms; keep glass clean (no invented stickers/text); leave distant or indistinct areas softly blurred or in shadow; never invent small text, signage, screens, or product detail. If a real interior or detail must be preserved accurately, an AI re-render is the wrong tool — mask/composite it from the original instead. Call out which zones you're neutralizing in the gate's References line.
 
-4. **Professional lighting, always.** Treat lighting on two levels and write both into the prompt:
+4. **No random people.** Do not generate humans unless one of these is true: a consistent character already exists (Soul Character via `higgsfield-soul-id`), or an established AI influencer is being reused. If a person is genuinely needed and none exists, flag it and offer to build a consistent character first rather than spawning a throwaway face.
+
+5. **Professional lighting, always.** Treat lighting on two levels and write both into the prompt:
    - *Diegetic* — the real gear and setup that would capture this scene (key/fill/rim, softboxes, golden hour, practicals).
    - *Post / grade* — editing-level lighting: color grade, contrast, mood, highlight roll-off. Aim for a finished, professionally graded look, not a raw camera dump.
 
-5. **Video → shot breakdown.** Don't treat a video as one undifferentiated clip. Propose it as numbered shots (framing, motion, transition) and show that in the gate.
+6. **Video → shot breakdown.** Don't treat a video as one undifferentiated clip. Propose it as numbered shots (framing, motion, transition) and show that in the gate.
 
-6. **Video → ambient sound.** Decide and propose the ambient / sound design (room tone, foley, music bed, or intentional silence) and confirm it in the gate before generating.
+7. **Video → ambient sound.** Decide and propose the ambient / sound design (room tone, foley, music bed, or intentional silence) and confirm it in the gate before generating.
 
 ---
 
@@ -95,6 +97,7 @@ Before any generation runs:
 
 - [ ] References passed through untouched (upscale only)?
 - [ ] All rendered text confirmed legible / intentional?
+- [ ] Fine-detail / through-glass / indistinct zones neutralized (not fabricated)?
 - [ ] No people unless consistent character / AI influencer?
 - [ ] Professional lighting (diegetic + grade) in the prompt?
 - [ ] (video) Shots broken out?
