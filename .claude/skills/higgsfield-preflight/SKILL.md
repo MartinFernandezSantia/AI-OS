@@ -10,8 +10,9 @@ description: |
   a strict guide (never altered), deliberate/consistent text,
   professional lighting, shot breakdowns + ambient sound for video,
   no random people, cheaper-tool checks, non-premium models by
-  default, and a hard pre-generation gate that shows the prompt,
-  model, params, and a real credit estimate before anything runs.
+  default, a multi-agent pre-generation review of every prompt,
+  and a hard pre-generation gate that shows the prompt, model,
+  params, and a real credit estimate before anything runs.
   These rules OVERRIDE the marketplace Higgsfield skills' UX rules
   where they conflict (cost estimation and premium-model defaults).
 ---
@@ -43,6 +44,27 @@ Bake these into the prompt and parameters before you present the gate.
 6. **Video → shot breakdown.** Don't treat a video as one undifferentiated clip. Propose it as numbered shots (framing, motion, transition) and show that in the gate.
 
 7. **Video → ambient sound.** Decide and propose the ambient / sound design (room tone, foley, music bed, or intentional silence) and confirm it in the gate before generating.
+
+---
+
+## Part A.5 — Pre-generation review (multi-agent, every generation)
+
+Before showing the gate, **do not draft the prompt solo.** Run the three-agent review in `references/pregen-review.md`: a **Reference Auditor** reads only the reference image(s) + intent and returns a Structure Spec (preserve / fabrication-zones / changes / open questions); a **Prompt Engineer** turns that into a slot-structured prompt + params; an **Adversarial Reviewer** with fresh context tries to break it (missing constraints, unneutralized fabrication, text/geometry risks). Revise loop, max 2 rounds, then the reviewed prompt feeds Part B.
+
+Each agent gets only the relevant context (image paths + intent), never the chat history. This runs on every generation; the "just generate" / "skip review" override (below) skips it. If it ever feels too heavy for quick edits, narrow it to a threshold (premium / video / brand-final) — a one-line change here.
+
+---
+
+## Interior-reference flow (when an interior must be visible through glass)
+
+Default is still to **neutralize glass** (dark / reflective / out-of-focus, no invented detail). Use this flow only when the interior is a selling point and Martin wants it shown:
+
+1. Martin provides interior reference photo(s), one per opening where relevant.
+2. **Placement chat** — agree a short spatial brief: which interior maps to which window, depth, and the key objects that should read.
+3. Pass exterior + interior images as multiple `--image` flags (`--image exterior.jpg --image left.jpg --image right.jpg`); most image models accept repeated references.
+4. The prompt instructs the model to render each interior through its glass per the supplied reference, matched perspective, **nothing invented beyond the reference**. Anything stuck to the glass (stickers/decals) is removed — accuracy beats invented detail.
+5. The Reference Auditor folds the interior refs into its Structure Spec (which interior → which opening).
+6. Expectation check: if perspective/placement comes out loose, fall back to compositing/masking the interior into the window region from the original.
 
 ---
 
@@ -84,7 +106,7 @@ Rules for filling the card:
 
 ## Override
 
-If Martin says "just generate" / "just go" / "skip preflight" for a request, skip the *wait* for that one request. Two rules never get skipped even then:
+If Martin says "just generate" / "just go" / "skip preflight" / "skip review" for a request, skip the *wait* and the Part A.5 multi-agent review for that one request. Two rules never get skipped even then:
 
 - References are still never altered (upscale only).
 - A premium model is still never used without an explicit, separate yes.
@@ -95,6 +117,7 @@ If Martin says "just generate" / "just go" / "skip preflight" for a request, ski
 
 Before any generation runs:
 
+- [ ] Pre-generation review run (auditor → prompt engineer → reviewer), unless overridden?
 - [ ] References passed through untouched (upscale only)?
 - [ ] All rendered text confirmed legible / intentional?
 - [ ] Fine-detail / through-glass / indistinct zones neutralized (not fabricated)?
