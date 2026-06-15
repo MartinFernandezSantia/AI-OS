@@ -1,0 +1,4 @@
+# Allow @higgsfield/cli's postinstall to download its vendor binary.
+# Repo-level (committed) so the CLI works on every clone without a global install.
+allowBuilds:
+  '@higgsfield/cli': true

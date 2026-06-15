@@ -1,0 +1,26 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@higgsfield/cli':
+        specifier: ^0.1.40
+        version: 0.1.40
+
+packages:
+
+  '@higgsfield/cli@0.1.40':
+    resolution: {integrity: sha512-SgpShjkFZfMomvXAtLUDAp4n6oI/v7smAMJFmc4pCNfwucXYVbBQiLrYHrsXcaC2rJDhiBxhcrkBu0bStmcc7w==}
+    engines: {node: '>=14'}
+    cpu: [x64, arm64]
+    os: [darwin, linux, win32]
+    hasBin: true
+
+snapshots:
+
+  '@higgsfield/cli@0.1.40': {}

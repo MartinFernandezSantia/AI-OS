@@ -1,0 +1,9 @@
+{
+  "name": "aios",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Martin's AI Operating System — repo-level tooling",
+  "devDependencies": {
+    "@higgsfield/cli": "^0.1.40"
+  }
+}
