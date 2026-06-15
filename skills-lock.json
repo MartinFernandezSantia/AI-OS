@@ -217,6 +217,18 @@
       "skillPath": "good-strategy-bad-strategy/SKILL.md",
       "computedHash": "639b908e4c62c7c65ad27618d791967cae71e16833ce20f699fb6a93f5581a42"
     },
+    "higgsfield-generate": {
+      "source": "higgsfield-ai/skills",
+      "sourceType": "github",
+      "skillPath": "higgsfield-generate/SKILL.md",
+      "computedHash": "8e0602dbcfbf3fd56e6d9207f0c1fe866f3c973d4a1701c810f5d8e15451bc68"
+    },
+    "higgsfield-marketplace-cards": {
+      "source": "higgsfield-ai/skills",
+      "sourceType": "github",
+      "skillPath": "higgsfield-marketplace-cards/SKILL.md",
+      "computedHash": "dadfdc8d1ab18c68edc1266b699100edf6628eeb494a8a6db62972a4bac5b5be"
+    },
     "high-output-management": {
       "source": "wondelai/skills",
       "sourceType": "github",
@@ -414,6 +426,12 @@
       "sourceType": "github",
       "skillPath": "skills/programmatic-seo/SKILL.md",
       "computedHash": "0bbdcbacfbe46fd78d774041ee49afd313505bb435b775dc246f4b8e6981d797"
+    },
+    "prompt-master": {
+      "source": "nidhinjs/prompt-master",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "4184cd6e1d8936fa87f0395b0f771f23e00c1878521a4d7f967f6afbec7e6f76"
     },
     "prospecting": {
       "source": "coreyhaines31/marketingskills",
