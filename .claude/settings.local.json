@@ -7,7 +7,6 @@
       "Edit",
       "Write",
       "mcp__mcp-registry__search_mcp_registry",
-      "mcp__chrome-devtools__*",
       "Glob"
     ],
     "deny": [

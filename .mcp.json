@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "lighthouse": {
-      "command": "pnpm",
-      "args": ["dlx", "@danielsogl/lighthouse-mcp@latest"]
-    },
-    "chrome-devtools": {
-      "command": "pnpm",
-      "args": ["dlx", "chrome-devtools-mcp@latest"]
-    }
-  }
+  "mcpServers": {}
 }

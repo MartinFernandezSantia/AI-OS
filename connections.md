@@ -11,8 +11,7 @@ Registry of every system your AIOS can reach. Filled by `/onboard` from Q4-Q7 an
 | 5 | Project / task tracking | None — lives in my head | not yet connected | — | — |
 | 6 | Meeting intelligence | None | not yet connected | — | — |
 | 7 | Knowledge / files | None — no system yet | not yet connected | — | — |
-| 8 | Web audit / perf | Lighthouse MCP (`@danielsogl/lighthouse-mcp`) | mcp (`.mcp.json`) | none | 2026-06-13 |
-| 9 | Web audit / debug | Chrome DevTools MCP (`chrome-devtools-mcp`) | mcp (`.mcp.json`) | none (needs Chrome installed) | 2026-06-13 |
+| 8 | Web automation / audit / QA | agent-browser (skill + global CLI) | skill (`.claude/skills/agent-browser`) | none (manages its own Chromium) | 2026-06-15 |
 | 10 | SEO / search data | Google Search Console MCP | **pending** | OAuth (Google) | — |
 
 **Pending connections:**

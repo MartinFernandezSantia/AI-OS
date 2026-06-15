@@ -32,7 +32,11 @@ Submit jobs to any Higgsfield model. Wraps the `higgsfield` CLI. Covers generic 
 
 Before any other command:
 
-1. If `higgsfield` is not on `$PATH`, install it:
+1. If `higgsfield` is not available, get it. In this AIOS repo it ships as a
+   pinned `@higgsfield/cli` devDependency, so the canonical install is just
+   `pnpm install` (works on Linux, macOS, and Windows) — then run it via
+   `pnpm exec higgsfield ...` or with `node_modules/.bin` on `$PATH`. Outside
+   this repo, the unix-only fallback is:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/higgsfield-ai/cli/main/install.sh | sh
    ```
