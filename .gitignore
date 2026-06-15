@@ -6,3 +6,6 @@ __pycache__/
 node_modules/
 audits/
 projects/*
+
+# Generated AI asset drafts — keep finals, ignore throwaway iterations
+project-context/**/assets/drafts/
