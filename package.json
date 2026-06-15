@@ -4,6 +4,8 @@
   "private": true,
   "description": "Martin's AI Operating System — repo-level tooling",
   "devDependencies": {
-    "@higgsfield/cli": "^0.1.40"
+    "@higgsfield/cli": "^0.1.40",
+    "@resvg/resvg-js": "^2.6.2",
+    "sharp": "^0.35.1"
   }
 }
