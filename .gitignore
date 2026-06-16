@@ -9,3 +9,10 @@ projects/*
 
 # Generated AI asset drafts — keep finals, ignore throwaway iterations
 project-context/**/assets/drafts/
+
+# Throwaway/temp artifacts (QR pngs, tunnel logs, scratch files) — never commit
+temp/
+tmp/
+**/temp/
+**/tmp/
+*.tmp
