@@ -20,6 +20,18 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-15 — Terminal Gráfica `.tg` logo-reveal sting: final frame + 3s bounce video
+
+**Decision:** Locked a 16:9 logo-reveal for Terminal Gráfica's `.tg` mark. Final still = `project-context/TerminalGrafica/assets/tg-logo-reveal-final-frame.png` (deep dark bg, two white halo rings, central glow; Nano Banana Pro at 2k). Final video = `…/assets/tg-logo-reveal-3s.mp4` (wan2_7, 1080p, 3s, silent): empty dark → logo pops in and bounces a couple of times → settles on the still. The still was generated single-shot with the logo passed as a reference; the bounce-into-existence motion came from making that still the END frame (a generated dark plate as the start frame). Added repo-level tooling — `sharp` + `@resvg/resvg-js` and `scripts/` helpers — to rasterize/composite the SVG logo.
+
+**Why:** Martin wanted a quick, punchy brand sting. Letting the video model use the resting frame as the *last* frame (not the first) is what produces a real "appears from nothing" reveal; a single start image only animates an already-present logo. Used non-premium models with a real credit estimate per the Higgsfield preflight gate; Nano Banana Pro (premium) was an explicit, justified call for 2k source fidelity. Note: the AI re-render rendered the leading dot as a colon `:` — accepted by Martin, but the standing lesson is to composite the real vector when glyph fidelity must be exact.
+
+**Alternatives considered:** Compositing the exact logo over a generated plate (guaranteed glyphs, but Martin chose single-gen); single start-image animation (no real reveal, bounce barely perceptible); 4s duration for crisper multi-bounce (offered; Martin kept 3s).
+
+**Owner:** Martin.
+
+---
+
 ## 2026-06-15 — agent-browser is the one browser tool; dropped the Chrome DevTools + Lighthouse MCP servers
 
 **Decision:** Removed both MCP servers (`chrome-devtools`, `lighthouse`) from `.mcp.json` and the dead `mcp__chrome-devtools__*` permission. Browser automation, screenshots, scraping, QA, and audits all go through the vendored `agent-browser` skill instead. Added `SETUP.md` documenting fresh-machine install (core vs optional).
