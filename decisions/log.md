@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-16 — TG recepción-archivos: cuando se toquen los límites del free de Supabase, mover SOLO el storage a Cloudflare R2 (no pasar a Supabase Pro)
+
+**Decision:** El plan de escalado preventivo para la app de recepción de archivos es: mantener Supabase free para Postgres (metadata + estados) y Realtime (tablero en vivo), y migrar **solo los bytes de los archivos a Cloudflare R2** vía URLs prefirmadas (browser → R2, subida y descarga directas). NO migrar a Supabase Pro ($25/mes fijos) solo por tocar límites. Disparador de migración: cuando el egress mensual de Supabase pase ~3-4 GB (no esperar al tope de 5 GB). Antes que nada, implementar política de borrado de archivos post-entrega para mantener el storage casi indefinidamente bajo 1 GB.
+
+**Why:** El cuello de botella real del free de Supabase es el **egress (5 GB/mes; descargas, no subidas)**, no el almacenamiento. Para un workload con tanta descarga como subida, eso se agota rápido. R2 **no cobra egress nunca** y su free tier (10 GB storage, 1M Class A, 10M Class B) cubre de sobra una sola imprenta; pasado el free son centavos, no $25 fijos. R2 es S3-compatible (igual que Supabase Storage por debajo), así que el cambio de cliente es chico y Postgres+Realtime siguen gratis. AWS S3 se descarta porque cobra egress (~$0.09/GB), justo el costo a evitar.
+
+**Alternatives considered:** Supabase Pro $25/mes (caro solo por bandwidth para un cliente chico); AWS S3 (cobra egress, peor encaje); Backblaze B2 (10 GB free, egress gratis vía Cloudflare Bandwidth Alliance — buena 2da opción, más plomería); self-host MinIO on-premise/VPS (cero egress, control total, pero carga operativa/backups — plan C).
+
+**Owner:** Martin.
+
 ## 2026-06-15 — Terminal Gráfica `.tg` logo-reveal sting: final frame + 3s bounce video
 
 **Decision:** Locked a 16:9 logo-reveal for Terminal Gráfica's `.tg` mark. Final still = `project-context/TerminalGrafica/assets/tg-logo-reveal-final-frame.png` (deep dark bg, two white halo rings, central glow; Nano Banana Pro at 2k). Final video = `…/assets/tg-logo-reveal-3s.mp4` (wan2_7, 1080p, 3s, silent): empty dark → logo pops in and bounces a couple of times → settles on the still. The still was generated single-shot with the logo passed as a reference; the bounce-into-existence motion came from making that still the END frame (a generated dark plate as the start frame). Added repo-level tooling — `sharp` + `@resvg/resvg-js` and `scripts/` helpers — to rasterize/composite the SVG logo.
