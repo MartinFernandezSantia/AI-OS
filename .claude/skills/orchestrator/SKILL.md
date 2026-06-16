@@ -40,6 +40,18 @@ Six agents. Only the orchestrator (you, the main thread) invokes them. Agents ne
 
 Each agent file defines what docs to read on startup. You do not pass that context manually.
 
+### Delegation policy
+
+**Delegate implementation by default.** Your job is to plan, define contracts (via `architect`), brief, review, and integrate — not to write production code yourself. Route component/screen/styling work to `frontend`, server/data/API work to `backend`. Write code inline only for trivial glue, or a task so small the handoff would cost more than it saves (a single front-desk-sized edit, not a feature).
+
+Two reasons this is the default, not a preference:
+- **Role.** The agents exist so you stay a coordinator with lean context. Quietly writing the implementation yourself collapses that — it is the failure mode to avoid.
+- **Cost.** Execution agents run on Sonnet by design (`architect` runs on Opus); you run on Opus. When the structure and brief are solid, a Sonnet agent's code is on par with yours at a fraction of the token cost. Writing bulk code inline burns Opus for no quality gain.
+
+**Fidelity is not a reason to keep work inline.** When a port or feature must match an exact spec, the answer is a tight brief plus a file map pointing the agent at the precise source files — not holding the work in your own context. A well-briefed Sonnet agent reaches the same fidelity.
+
+**Be explicit.** If you judge a task small enough to do inline, say so and why in one line. Never silently absorb implementation work that belongs to an agent.
+
 ### Brief format
 
 ```
