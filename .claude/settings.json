@@ -8,7 +8,22 @@
       "Bash(npm)",
       "Bash(npm *)",
       "Bash(npx)",
-      "Bash(npx *)"
+      "Bash(npx *)",
+      "Bash(supabase)",
+      "Bash(supabase *)",
+      "Bash(pnpm supabase)",
+      "Bash(pnpm supabase *)",
+      "Bash(pnpm exec supabase)",
+      "Bash(pnpm exec supabase *)",
+      "Bash(pnpm dlx supabase)",
+      "Bash(pnpm dlx supabase *)",
+      "Bash(pnpm run supabase)",
+      "Bash(pnpm run supabase *)",
+      "Bash(pnpm -w supabase *)",
+      "Bash(pnpm --filter * supabase *)",
+      "Bash(bunx supabase *)",
+      "Bash(yarn supabase *)",
+      "Bash(yarn dlx supabase *)"
     ]
   }
 }

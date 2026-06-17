@@ -7,7 +7,9 @@
       "Edit",
       "Write",
       "mcp__mcp-registry__search_mcp_registry",
-      "Glob"
+      "Glob",
+      "mcp__claude_ai_Context7__query-docs",
+      "Skill(agent-browser)"
     ],
     "deny": [
       "Bash(rm *)",
