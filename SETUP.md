@@ -27,6 +27,31 @@ empty. Browser work is handled by the optional `agent-browser` below.
 | **agent-browser** (web automation, screenshots, scraping, QA, audits, Electron/Slack) | `pnpm add -g agent-browser` then `agent-browser install` (fetches its own managed Chromium). Global CLI — lives outside the repo, so install it per machine | Any browser-driven task; the preferred browser tool |
 | **Higgsfield** (image / video generation) | Provided by `pnpm install` (step 5). Then a Higgsfield account + `higgsfield auth login` (one-time, interactive). Generation costs paid credits | Only when generating media |
 | **Google Search Console MCP** | Google OAuth + a verified GSC property — **pending/blocked** per [connections.md](connections.md) | Future, once business verification clears |
+| **video-use** (conversation-driven video editor: transcribe, cut, grade, subtitle, overlays) | `uv` + a static `ffmpeg`/`ffprobe` on PATH, then `uv sync` inside [.claude/skills/video-use](.claude/skills/video-use), plus an ElevenLabs API key in that dir's `.env`. The skill itself is vendored (committed), so a clone already has it — see the dedicated section below | Only when editing video |
+
+## video-use (optional video editor) — fresh-machine steps
+
+[.claude/skills/video-use](.claude/skills/video-use) is the [browser-use/video-use](https://github.com/browser-use/video-use)
+skill, **vendored** (cloned, `.git` stripped, committed) so a fresh AIOS clone
+already has it — no clone or symlink step, and being under `.claude/skills/` it
+is auto-discovered by Claude Code. Its `.env` and `.venv/` are gitignored (the
+root `.env` rule and the skill's own `.gitignore`). What a new machine still
+needs — all **no-sudo, no `~/.claude/` writes** (this box has no pip and `sudo`
+is unavailable, so the system-package routes in the skill's `install.md` don't
+apply here):
+
+| # | Install | Command | Notes |
+|---|---|---|---|
+| 1 | **uv** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | Python deps manager. Lands in `~/.local/bin`. System `python3` is 3.14 with no pip, so uv is the path |
+| 2 | **static ffmpeg + ffprobe** | download `ffmpeg-release-amd64-static` from johnvansickle.com, copy `ffmpeg`/`ffprobe` into `~/.local/bin` | Hard requirement. Static build = no apt/sudo. `~/.local/bin` is already on PATH on this box |
+| 3 | **Python deps** | `cd .claude/skills/video-use && uv sync` | Pinned to Python 3.12 via `.python-version` (uv fetches it) — librosa/numba lack 3.14 wheels. Creates the local `.venv` |
+| 4 | **ElevenLabs API key** | paste into `.claude/skills/video-use/.env` as `ELEVENLABS_API_KEY=...` (`chmod 600`) | Required for transcription (ElevenLabs Scribe). Gitignored — never committed |
+
+After that, helpers run via the venv: `uv run python helpers/<name>.py ...`
+(or `.venv/bin/python`) from the skill dir — **not** a bare `python`, which would
+miss the deps. `yt-dlp` (URL sources) and the animation engines (HyperFrames /
+Remotion / Manim) are installed lazily on first use; HyperFrames/Remotion go
+through `pnpm` here, never `npm`/`npx`.
 
 ## Platform notes
 
