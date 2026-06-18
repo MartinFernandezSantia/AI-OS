@@ -20,6 +20,19 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-18 — Kiosk de recepción: dispositivo por-usuario, URL `tg-recepcion.vercel.app`, no indexable
+
+**Decision:** El kiosk de cliente (`recepcion-cliente`) se trata como **superficie por-usuario** (cada cliente lo abre desde su propio teléfono), no como un equipo compartido en el mostrador. Tres consecuencias, ya implementadas (branch `feat/kiosk-per-user-cleanup`):
+- **URL de prod:** `tg-recepcion.vercel.app` — mismo patrón `tg-*` que el sistema de presupuestos (`tg-presupuestos.vercel.app`). El dominio propio de la marca no está disponible.
+- **No indexable:** `robots: { index: false, follow: false, nocache: true }` en `app/layout.tsx`. Es interno, no una página pública.
+- **Limpieza de UI por-usuario:** se quitó el botón "Sacar foto" (no hay originales físicos en el teléfono del cliente) y "Atender a otra persona" → "Volver al inicio" (no hay cola de gente en un device compartido).
+
+**Why:** El modelo broker ya hace que cada sesión sea individual y efímera; el device es el teléfono del cliente, no un kiosko fijo. Las frases y el botón de cámara venían del supuesto "mostrador compartido" y confundían. La URL en Vercel evita depender del dominio de marca (no disponible) y mantiene consistencia con presupuestos. Noindex porque no hay razón para que Google la vea y sí razones de privacidad para que no.
+
+**Alternatives considered:** `tg-recepcion-archivos` (más largo, sin ganancia); robots.txt `Disallow: /` (la meta robots por página alcanza para una app de kiosk). Dejar la UI como estaba (mantiene supuestos de device compartido que ya no aplican).
+
+**Owner:** Martin.
+
 ## 2026-06-18 — Recepción de archivos: modelo broker (sin anon) consolidado en el sistema de presupuestos, EN PROD
 
 **Decision:** El flujo de recepción de archivos de Terminal Gráfica (cliente sube archivos en mostrador) se unifica dentro de `quote-automation-system` con un **modelo broker server-side**, y quedó **en producción funcionando** (2026-06-18). Tres piezas:
