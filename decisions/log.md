@@ -20,6 +20,20 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-18 — Recepción de archivos: modelo broker (sin anon) consolidado en el sistema de presupuestos, EN PROD
+
+**Decision:** El flujo de recepción de archivos de Terminal Gráfica (cliente sube archivos en mostrador) se unifica dentro de `quote-automation-system` con un **modelo broker server-side**, y quedó **en producción funcionando** (2026-06-18). Tres piezas:
+- **Mostrador** = módulo interno `/mostrador` del sistema de presupuestos, reusando su auth (empleados/admin) y design system.
+- **Kiosk** = app separada `recepcion-cliente`, ahora repo propio en GitHub **`MartinFernandezSantia/reception-kiosk`** (privado).
+- **Broker** = route handlers `app/api/reception/**` con **service-role key** + token opaco por sesión (sha256, scoped, TTL 12h). El kiosk NO tiene identidad Supabase.
+- **Anonymous sign-ins APAGADOS permanentemente.** Un proyecto Supabase compartido. Upstash Redis provisionado para rate-limit.
+
+**Why:** Habilitar anon en el proyecto compartido exponía data del host (el trigger `handle_new_user` da `role='employee'` a cualquier usuario nuevo incluido anon; policies `clients_*` sin guard de is_anonymous → un anon podía leer PII de clientes y tocar presupuestos). El broker elimina la clase de problema entera: como nunca se crea identidad anónima, el blast radius desaparece de raíz y el host NO necesita hardening de RLS. La autorización vive en código auditado (los handlers), no en RLS sobre un anon. Un solo proyecto Supabase = menos costo y operación (decisión previa del dueño). Detalle técnico completo en `quote-automation-system/docs/decisions/ADR-002` y `docs/architecture/reception-upload-broker.md`.
+
+**Alternatives considered:** (1) Habilitar anon + hardenear el host (modificar `handle_new_user` + ~13 policies): más riesgoso sobre el sistema vivo, mismo end-state. (2) Segundo proyecto Supabase para el kiosk: rechazado (un solo proyecto). (3) Storage world-writable sin identidad: cualquiera sube/lee/borra. Residual aceptado: el canal Broadcast `tg-recepcion` es público (filtra nombres/filenames a cualquier holder de la publishable key); hardening = canal privado + Realtime Authorization, v2. La app standalone `recepcion-archivos` quedó superseded y archivada en `projects/TerminalGrafica/_archive/`.
+
+**Owner:** Martin.
+
 ## 2026-06-17 — Oferta de automatización de WhatsApp para gráficas: stack self-hosted + modelo instalación/abono, no competir por precio
 
 **Decision:** Para vender automatización de WhatsApp (recibir pedidos + responder consultas) a gráficas en Argentina, el producto es un stack **self-hosted: WhatsApp Cloud API oficial + Chatwoot (Community, MIT) + n8n**, con un modelo de IA **open-weights de gama media (Llama 3.3 70B / Qwen vía OpenRouter o Groq)** para responder, todo orquestado por n8n e integrado al sistema de presupuestos/recepción de archivos del cliente. Conexión a WhatsApp **siempre por la Cloud API oficial** (nunca Baileys/whatsapp-web.js: riesgo de ban en un canal crítico). Infra: **VPS Hetzner CPX31** (4 vCPU/8GB, ~USD 10) + storage en **Cloudflare R2** (ya decidido, ver [2026-06-16]). Comercialización: **instalación una vez + abono mensual obligatorio** ("operación y mejora continua"), en ARS, posicionado como desarrollo custom L2. NO vender instalación suelta sin abono, y NO competir por precio contra SaaS genéricos tipo Aoki/Cliengo.
