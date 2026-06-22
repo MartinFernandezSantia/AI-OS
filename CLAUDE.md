@@ -63,5 +63,8 @@ When writing or changing code in this repo:
 - Use `pnpm` for everything. Never `npm` or `npx` (enforced via `.claude/settings.json` deny rules).
 - Never read `.env` or `.env.local` files (also enforced via deny rules).
 - Work on a branch off `main`, never commit directly to `main`. If a fitting branch exists, use it; otherwise create one.
-- Commit when it makes sense. Keep messages short, follow conventional style, and keep the git tree clean and traceable.
+- **Auto-commit during the session — don't wait to be asked.** Commit each coherent unit of work as soon as it's complete and verified: a finished doc, a logged decision, a working code change, a new sub-project. Don't batch a whole session into one commit, and don't leave the tree dirty at session end.
+  - Group by topic into separate, logical commits — never bundle unrelated changes into one. If the working tree already has changes that aren't mine, commit them in their own topic commits too (don't sweep them into mine).
+  - Keep messages short, conventional style (`type(scope): summary`), and traceable. Same branch rule applies: never on `main`.
+  - Only skip the auto-commit when a change is mid-flight/half-broken, secret/credential material, or I've explicitly said to hold off.
 - Install everything at the AIOS (repo) level, never at user level. Skills go in `.claude/skills/`, MCPs and permissions in `.claude/settings.json` (committed) — so the whole environment is portable through this repo. Never use the `-g`/global flag when adding skills, and never write to `~/.claude/`.
