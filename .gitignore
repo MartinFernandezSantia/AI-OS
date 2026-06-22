@@ -16,3 +16,5 @@ tmp/
 **/temp/
 **/tmp/
 *.tmp
+# QR generation venv (local tooling)
+.qr-venv/
