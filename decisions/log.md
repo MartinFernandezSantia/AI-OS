@@ -20,6 +20,36 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-22 — Usar IA reactiva para responder WhatsApp es compliant; el riesgo de baneo es comportamiento, no IA
+
+**Decision:** El producto de automatización de WhatsApp para gráficas (bot reactivo con LLM sobre la Cloud API oficial) se lanza como **atención reactiva dentro de la ventana de 24 hs, sin mensajería proactiva al inicio**. Confirmado vía deep-research (reporte en `project-context/TerminalGrafica/whatsapp-automation/research/`). Hallazgos clave que fijan el diseño:
+- **Permitido:** el veto de Meta (ene-2026) a "AI Providers" apunta a quien distribuye asistentes de propósito general; un bot acotado al negocio (FAQs, cotizaciones, estado de pedido) es funcionalidad "incidental/accesoria" → permitido. Mantenerlo acotado al negocio, nunca posicionado como asistente general.
+- **Riesgo real = comportamiento, no IA.** Meta no puede detectar que la respuesta la escribió una IA (cifrado E2E). El baneo se dispara por bloqueos/reportes/spam/picos de volumen, vía el quality tier (Verde/Amarillo/Rojo, feedback de últimos 7 días).
+- **Ventana de 24 hs:** se calcula sobre el **último** mensaje entrante del cliente y se resetea con cada nuevo entrante (no con las respuestas del negocio). Dentro: texto libre (IA OK). Fuera: solo plantillas pre-aprobadas — regla dura de la API (error `131047` si mandás texto libre fuera de ventana), estructural, no interpretación de intención.
+- **Opt-out NO necesario para reactivo.** El opt-in está implícito (el cliente escribió primero) y no hay lista de la cual desuscribir. Solo se vuelve obligatorio si se agrega mensajería proactiva (plantillas marketing/broadcasts). Corrige una sobre-aplicación previa de la regla.
+- **Derivación a humano = obligatoria** según política de Meta si se usa automatización dentro de la ventana.
+- **Plantillas pre-producción recomendadas (todas Utility):** cotización lista, pedido listo para retirar, arte/diseño para aprobar (mínimo viable); luego cambio de estado, recordatorio de pago neutral, retomar conversación caída. Evitar plantillas Marketing al lanzar (se pagan siempre + mayor riesgo de baneo).
+
+**Why:** El flujo de una gráfica (cotizar → aprobar arte → producir → retirar) cruza las 24 hs casi siempre, así que las plantillas Utility de ciclo de pedido son el único punto donde se necesita reabrir conversación — y son el punto de integración con el sistema de cotización/recepción de archivos. Lanzar reactivo + sin proactivo minimiza el riesgo de baneo mientras se valida el producto.
+
+**Alternatives considered:** Sumar mensajería proactiva/marketing desde el día uno (mayor riesgo de baneo, requiere opt-in/opt-out, plantillas pagas — diferido a canal maduro).
+
+**Open / re-verify:** SIM prepago personal vs número dedicado y si la verificación de negocio cambia el riesgo de baneo (el research no encontró evidencia de primera fuente). El veto a "AI Providers" se juzga "a sola discreción" de Meta y los términos cambiaron 6-mar-2026 — re-verificar antes de escalar.
+
+**Owner:** Martin.
+
+---
+
+## 2026-06-19 — Server de producción del stack WhatsApp: Hostinger KVM 2 (reemplaza Hetzner CPX31)
+
+**Decision:** El servidor de producción para el stack de automatización de WhatsApp (Chatwoot Community + n8n, ver [2026-06-17]) pasa a ser un **Hostinger KVM 2**, reemplazando el Hetzner CPX31 que se había decidido antes. La implementación actual corre en una **VM local que replica los recursos de un KVM 2** para probar antes de mover a prod. Estado al día de hoy: Chatwoot seteado con usuario, expuesto en un subdominio de un dominio personal de Martin vía Cloudflare, con Zero Trust activo en todo menos en el path de webhooks (abiertos para que Meta/WhatsApp llegue). Pendiente: conectar WhatsApp vía Cloud API oficial con una **SIM prepaga desechable** (el número de prueba de Meta aparecía bloqueado) y construir los flujos de n8n.
+
+**Why:** [pendiente de completar por Martin — motivo del cambio Hetzner → Hostinger]. La VM local idéntica en recursos permite validar el setup sin pagar el VPS hasta que esté listo para prod.
+
+**Alternatives considered:** Hetzner CPX31 (decisión previa en [2026-06-17], 4 vCPU/8GB ~USD 10).
+
+**Owner:** Martin
+
 ## 2026-06-18 — Kiosk de recepción: dispositivo por-usuario, URL `tg-recepcion.vercel.app`, no indexable
 
 **Decision:** El kiosk de cliente (`recepcion-cliente`) se trata como **superficie por-usuario** (cada cliente lo abre desde su propio teléfono), no como un equipo compartido en el mostrador. Tres consecuencias, ya implementadas (branch `feat/kiosk-per-user-cleanup`):
