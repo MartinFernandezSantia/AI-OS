@@ -20,6 +20,24 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-23 — `/level-up`: Research/plan completeness enforcer (skill)
+
+**Decision:** Ship a skill that forces every software/architecture/infra research or planning task to cover the real-world dimensions Claude tends to skip — pricing/cost, security, UX, scalability, ops/maintenance, compliance — and to *justify* any dimension marked N/A instead of silently dropping it. Scoped via the 3Ms Method pass:
+
+- **Constraint:** quality of Martin's core deliverable (the architecture/infra decisions he sells). Incomplete output costs rework (re-reading + re-prompting) and risk (shipping a client decision missing security/pricing/scale).
+- **EAD:** Automate (not eliminable — research is core; not delegable — it's his expertise). 60/30/10: fixed rubric ≈60% deterministic, applying it ≈30% AI, N/A judgment ≈10% Martin.
+- **Process:** Trigger = Martin asks Claude to research/plan infra/architecture. Sources = topic + codebase + web/docs + standing constraints (free/self-hostable + Claude-connectable tooling rule, ARS pricing, small-local-business scale). Transformation = raw research → structured against the rubric. Decision point = which dimensions apply; N/A must be justified out loud. Destination = structured research/plan doc, often feeding a decision-log entry.
+- **Autonomy: L2 (Drafted).** AI drafts with rubric enforced; Martin reviews. No L3/L4 — he's the reviewer by design.
+- **KPI:** Bucket = less cost + more value per customer. Metric = *first-pass dimension coverage* (% of research/plan outputs that hit every applicable dimension before a re-prompt). Today ≈ low; target ≈ 100%, missing-dimension re-prompts → ~0.
+
+**Why:** Highest-frequency drudgery Martin named this week, and it degrades the exact work he's productizing. Fixing the methodology once lifts every future research/plan pass. The skill makes gaps *visible* rather than doing the thinking for him.
+
+**Alternatives considered:** Per-client context structure (#4 — strategic but clients haven't landed; build thin later); file-placement + runtime-context convention (#2 — mostly an Eliminate via CLAUDE.md + gitignored local env file; cheapest win, lowest ceiling). Both deferred.
+
+**Owner:** Martin.
+
+---
+
 ## 2026-06-22 — Usar IA reactiva para responder WhatsApp es compliant; el riesgo de baneo es comportamiento, no IA
 
 **Decision:** El producto de automatización de WhatsApp para gráficas (bot reactivo con LLM sobre la Cloud API oficial) se lanza como **atención reactiva dentro de la ventana de 24 hs, sin mensajería proactiva al inicio**. Confirmado vía deep-research (reporte en `project-context/TerminalGrafica/whatsapp-automation/research/`). Hallazgos clave que fijan el diseño:
