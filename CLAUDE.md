@@ -33,6 +33,8 @@ See `EXPANSIONS.md` for what to add as you grow.
 
 **What I do / who I serve.** I sell AI/non-AI automations and custom web systems to small, operations-heavy local businesses (print shops and similar). Flagship: a quoting + process-digitalization system for a print shop, which I'm productizing to sell to others. Side interests: web design (Claude, Higgsfield) and CRM/marketing. Full detail in `context/about-business.md`.
 
+**Project registry — READ BEFORE assuming infra.** I run many projects at once (personal / client / demo; confirmed / unconfirmed; in-dev / stand-by). The single source of truth is `context/projects.md`. **Whenever I mention a project, open that file first and check the "Infra y dueño" column before suggesting any VPS, server, account, domain, or budget.** Never share infra between projects, and never treat a client's unconfirmed resource (e.g. the Chatwoot client's Hostinger VPS) as available. I currently have NO production VPS of my own — `chatwoot.silvercoastwebagency.com` is a local dev VM, not prod. When unsure of an owner/status, ask.
+
 **What matters this quarter (set 2026-06-13).** (1) Stand up this AIOS as my ops center + knowledge base; (2) **top priority** — enhance and start selling the print-shop system; (3) spin up social + regular posting; (4) help Dad's real-estate business (site + social). Full list in `context/priorities.md`.
 
 **Tooling rule.** Any tool I adopt must be free/self-hostable open-source AND able to connect to Claude. Don't recommend paid-only closed SaaS without flagging the tradeoff.
