@@ -25,6 +25,8 @@ Read `references/3ms-framework.md` once. It's how Martin thinks about AI work. M
 - `archives/` — old stuff. Don't delete. Move here.
 - `project-context/<Project>/` — companion files for external projects (committed/synced). Generated media (Higgsfield, Nano Banana, etc.) goes in `project-context/<Project>/assets/` — commit final picks; put throwaway iterations in `assets/drafts/` (gitignored).
 
+**Plans live in the AIOS — always.** Never create or save an implementation/design plan outside this repo (no `~/.claude/plans/`, no `/tmp`, no scratchpad as a final home). A project plan goes in `project-context/<Project>/plans/`; an AIOS-level plan goes in `plans/` at the repo root. If a planning tool drops a plan elsewhere (e.g. ExitPlanMode writing to `~/.claude/plans/`), move it into the AIOS and commit it before continuing.
+
 See `EXPANSIONS.md` for what to add as you grow.
 
 ## Knowledge base
