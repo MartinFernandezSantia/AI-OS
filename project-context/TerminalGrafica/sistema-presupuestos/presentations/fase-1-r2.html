@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fase 1 · Migración del almacenamiento a Cloudflare R2</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/white.css">
+  <style>
+    :root{
+      --brand:#cd5f29;        /* naranja Terminal Gráfica */
+      --brand-dark:#9c4720;
+      --ink:#2b2b2b;
+      --muted:#6b6b6b;
+      --bg-soft:#faf4ef;
+      --ok:#2e7d4f;
+    }
+    .reveal{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;color:var(--ink);}
+    .reveal h1,.reveal h2,.reveal h3{color:var(--brand-dark);font-weight:700;text-transform:none;letter-spacing:0;}
+    .reveal h1{font-size:2.0em;line-height:1.1;}
+    .reveal h2{font-size:1.5em;}
+    .reveal section{text-align:left;}
+    .reveal .center{text-align:center;}
+    .reveal em{color:var(--brand-dark);font-style:normal;font-weight:700;}
+    .reveal .lead{font-size:1.15em;color:var(--muted);}
+    .reveal ul{margin-left:1em;}
+    .reveal li{margin:.35em 0;}
+    .pill{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:.15em .8em;font-size:.55em;vertical-align:middle;font-weight:600;}
+    .card{background:var(--bg-soft);border:1px solid #eaddd2;border-radius:14px;padding:.7em 1em;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8em;}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7em;}
+    .flow{display:flex;align-items:stretch;gap:.4em;justify-content:center;flex-wrap:wrap;font-size:.62em;}
+    .flow .step{background:#fff;border:2px solid var(--brand);border-radius:12px;padding:.5em .7em;min-width:120px;text-align:center;}
+    .flow .arrow{align-self:center;color:var(--brand);font-size:1.4em;font-weight:700;}
+    .tag{font-size:.5em;color:var(--muted);display:block;}
+    .reveal table{font-size:.62em;}
+    .reveal table td{padding:.35em .6em;vertical-align:top;}
+    .reveal table .term{color:var(--brand-dark);font-weight:700;white-space:nowrap;}
+    .good{color:var(--ok);font-weight:700;}
+    .small{font-size:.7em;color:var(--muted);}
+    .reveal .footer{position:fixed;bottom:8px;right:16px;font-size:12px;color:#bbb;}
+    .kicker{color:var(--brand);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.5em;}
+    .reveal section img{border:none;box-shadow:none;}
+    .nochange{background:#eef7f0;border:1px solid #cfe7d6;border-radius:14px;padding:.7em 1em;}
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- 1 · PORTADA -->
+<section data-background-color="#fff" class="center">
+  <span class="kicker">Sistema de recepción de archivos · Terminal Gráfica</span>
+  <h1>Fase 1<br>Mudanza del almacenamiento<br>de archivos a la nube</h1>
+  <p class="lead">Qué vamos a hacer, cómo y por qué</p>
+  <p class="small">Una explicación sin tecnicismos (y con glosario al final)</p>
+</section>
+
+<!-- 2 · QUÉ ES EL MÓDULO -->
+<section>
+  <span class="kicker">Para ponernos en contexto</span>
+  <h2>¿Qué es el módulo de recepción de archivos?</h2>
+  <p class="lead">Es la parte del sistema que resuelve un problema cotidiano de la imprenta:</p>
+  <p><em>el cliente tiene que entregar sus archivos digitales</em> (logos, afiches, diseños) para imprimir.</p>
+  <div class="grid2">
+    <div class="card">😕 <strong>Antes</strong><span class="tag">USB que se pierden, mails con archivos pesados, WhatsApp, “mandámelo de nuevo”.</span></div>
+    <div class="card">🙂 <strong>Ahora</strong><span class="tag">El cliente sube sus archivos de forma ordenada y el local los recibe al instante, identificados.</span></div>
+  </div>
+</section>
+
+<!-- 3 · LOS DOS ACTORES -->
+<section>
+  <span class="kicker">Las dos pantallas del sistema</span>
+  <h2>Quién usa qué</h2>
+  <div class="grid2">
+    <div class="card center">
+      <h3>📱 El Kiosko</h3>
+      <strong>Lo usa el cliente</strong>
+      <span class="tag">Una tablet/pantalla en el local (o desde su celular). Toca un “timbre”, espera que lo atiendan y sube sus archivos. No ve nada del resto.</span>
+    </div>
+    <div class="card center">
+      <h3>🖥️ El Mostrador</h3>
+      <strong>Lo usa el empleado</strong>
+      <span class="tag">La pantalla detrás del mostrador. Ve quién llegó, aprueba, recibe los archivos y los descarga para imprimir.</span>
+    </div>
+  </div>
+  <p class="small center">A lo largo de la presentación: <em>Kiosko</em> = cliente · <em>Mostrador</em> = empleado.</p>
+</section>
+
+<!-- 4 · CÓMO VIAJA UN ARCHIVO HOY -->
+<section>
+  <span class="kicker">El recorrido actual</span>
+  <h2>¿Cómo viaja un archivo hoy?</h2>
+  <div class="flow">
+    <div class="step">🔔 El cliente<br>“toca el timbre”<span class="tag">avisa que llegó</span></div>
+    <div class="arrow">→</div>
+    <div class="step">✅ El empleado<br>aprueba<span class="tag">desde el mostrador</span></div>
+    <div class="arrow">→</div>
+    <div class="step">⬆️ El cliente<br>sube archivos<span class="tag">desde el kiosko</span></div>
+    <div class="arrow">→</div>
+    <div class="step">📦 Se guardan<br>en un “depósito”<span class="tag">en la nube</span></div>
+    <div class="arrow">→</div>
+    <div class="step">⬇️ El empleado<br>descarga<span class="tag">para imprimir</span></div>
+  </div>
+  <p class="small center" style="margin-top:1em">Hoy todo funciona. <em>La Fase 1 cambia un solo eslabón:</em> el “depósito” donde se guardan los archivos.</p>
+</section>
+
+<!-- 5 · DÓNDE SE GUARDAN HOY -->
+<section>
+  <span class="kicker">El eslabón que vamos a cambiar</span>
+  <h2>¿Dónde se guardan los archivos hoy?</h2>
+  <p class="lead">En un servicio llamado <em>Supabase Storage</em> — pensalo como un <strong>depósito alquilado</strong> donde dejamos cada archivo del cliente.</p>
+  <div class="card">
+    📦 Funciona bien para guardar… pero <strong>tiene un costo cada vez que sacás algo del depósito</strong> (cada descarga), y nos ata a un solo proveedor.
+  </div>
+  <p class="small">Para el cliente y el empleado es invisible: ellos solo suben y descargan. Pero por dentro, dónde viven esos archivos define <em>cuánto cuesta operar el sistema</em>.</p>
+</section>
+
+<!-- 6 · POR QUÉ CAMBIAMOS -->
+<section>
+  <span class="kicker">El motivo</span>
+  <h2>¿Por qué cambiar de depósito?</h2>
+  <div class="grid3">
+    <div class="card">💸 <strong>Costo</strong><span class="tag">El nuevo depósito <em>no cobra por sacar archivos</em>. La descarga sale gratis.</span></div>
+    <div class="card">🎛️ <strong>Control</strong><span class="tag">No dependemos de un servidor pago extra para que funcione la descarga pesada.</span></div>
+    <div class="card">🧱 <strong>Base a futuro</strong><span class="tag">Habilita la Fase 2: empaquetar y descargar sesiones enteras sin costo.</span></div>
+  </div>
+  <p class="small center" style="margin-top:.8em">En criollo: <em>mismo servicio para el cliente, menor costo y más control para el negocio.</em></p>
+</section>
+
+<!-- 7 · LA SOLUCIÓN R2 -->
+<section>
+  <span class="kicker">La solución</span>
+  <h2>El nuevo depósito: <em>Cloudflare R2</em></h2>
+  <p class="lead">R2 es un <strong>depósito de archivos en internet</strong>. Su diferencia clave:</p>
+  <div class="card center" style="font-size:1.1em">
+    📥 Guardar archivos: cuesta poquísimo &nbsp;·&nbsp; 📤 <span class="good">Sacar archivos: GRATIS</span>
+  </div>
+  <p class="small">Ese “sacar gratis” (se llama <em>egress</em>) es justo lo que hace que, más adelante, descargar pedidos pesados no cueste nada.</p>
+</section>
+
+<!-- 8 · QUÉ HACE LA FASE 1 -->
+<section>
+  <span class="kicker">El alcance, en una frase</span>
+  <h2>Qué hace exactamente la Fase 1</h2>
+  <div class="nochange" style="font-size:1.1em">
+    Mover los archivos del depósito viejo (Supabase) al depósito nuevo (R2),
+    <strong>sin cambiar nada de lo que ven el cliente ni el empleado.</strong>
+  </div>
+  <ul style="margin-top:.7em">
+    <li>Mismo kiosko, mismo mostrador, mismos pasos.</li>
+    <li>Cambia <em>por dentro</em> a dónde van a parar los archivos.</li>
+    <li>Es un cambio que se puede probar y poner en marcha por sí solo.</li>
+  </ul>
+</section>
+
+<!-- 9 · CÓMO SE SUBE SEGURO -->
+<section>
+  <span class="kicker">El “cómo”, parte 1</span>
+  <h2>¿Cómo sube un archivo sin dejar la puerta abierta?</h2>
+  <p class="lead">No le damos al cliente la llave del depósito. Le damos un <em>vale temporal</em>.</p>
+  <div class="card">
+    🎟️ <strong>Vale de un solo uso (“URL prefirmada”):</strong> el sistema le entrega al cliente un permiso temporal para dejar <em>un</em> archivo en <em>un</em> casillero específico, y por unos minutos nada más. Después, ese vale ya no sirve.
+  </div>
+  <p class="small">Quien reparte los vales es el <em>Broker</em>: una pieza del sistema (del lado del local, no del cliente) que primero verifica que la sesión esté aprobada y recién ahí entrega el vale.</p>
+</section>
+
+<!-- 10 · CAMBIO INTERNO IMPORTANTE -->
+<section>
+  <span class="kicker">El “cómo”, parte 2</span>
+  <h2>Un ajuste importante por dentro</h2>
+  <p class="lead">Hoy, la pantalla del mostrador “firmaba” algunos de esos vales <strong>en el navegador del empleado</strong>. Con el depósito nuevo, eso ya no se puede.</p>
+  <div class="card">
+    🔒 <strong>¿Por qué?</strong> Firmar un vale para R2 requiere una <em>clave secreta</em>, y una clave secreta <strong>nunca</strong> debe vivir en un navegador (cualquiera podría verla). Por eso, esa firma se muda al <em>servidor</em>, que es un lugar cerrado y controlado.
+  </div>
+  <p class="small">Resultado: mismo comportamiento para el empleado, pero la llave secreta queda guardada donde corresponde.</p>
+</section>
+
+<!-- 11 · SEGURIDAD -->
+<section>
+  <span class="kicker">Lo que viene incluido</span>
+  <h2>Seguridad de fábrica</h2>
+  <div class="grid2">
+    <div class="card">🚪 <strong>Depósito privado</strong><span class="tag">Nadie llega a los archivos por internet: solo con un vale válido y temporal.</span></div>
+    <div class="card">⚖️ <strong>Límite de tamaño real</strong><span class="tag">El propio depósito rechaza archivos más grandes de lo permitido (no solo se “pide por favor”).</span></div>
+    <div class="card">📍 <strong>Solo desde nuestras pantallas</strong><span class="tag">El sistema solo acepta pedidos que vengan del kiosko y del mostrador, no de páginas ajenas.</span></div>
+    <div class="card">🔑 <strong>Claves guardadas</strong><span class="tag">Las claves secretas viven en el servidor, nunca en el navegador.</span></div>
+  </div>
+  <p class="small center">Estas protecciones se revisaron con una auditoría de seguridad antes de implementar.</p>
+</section>
+
+<!-- 12 · QUÉ CAMBIA PARA EL USUARIO -->
+<section class="center">
+  <span class="kicker">La pregunta del millón</span>
+  <h2>¿Qué cambia para el cliente y el empleado?</h2>
+  <p style="font-size:2.4em;margin:.3em 0" class="good">Nada visible.</p>
+  <p class="lead">Misma experiencia, mismos pasos, misma pantalla.<br>Lo que mejora es <em>el costo y el control</em> del lado del negocio.</p>
+</section>
+
+<!-- 13 · GLOSARIO -->
+<section>
+  <span class="kicker">Para tener a mano</span>
+  <h2>Glosario</h2>
+  <table>
+    <tr><td class="term">Kiosko</td><td>La pantalla/app que usa el <strong>cliente</strong> para subir archivos.</td></tr>
+    <tr><td class="term">Mostrador</td><td>La pantalla que usa el <strong>empleado</strong> para recibir y descargar.</td></tr>
+    <tr><td class="term">Broker</td><td>La pieza del sistema (del lado del local) que reparte los “vales” y controla que todo esté aprobado.</td></tr>
+    <tr><td class="term">R2 / Bucket</td><td>El nuevo <strong>depósito</strong> de archivos en la nube. Un “bucket” es un depósito puntual dentro de R2.</td></tr>
+    <tr><td class="term">URL prefirmada</td><td>El <strong>vale temporal</strong> para subir o bajar un archivo puntual, válido pocos minutos.</td></tr>
+    <tr><td class="term">sessionId (“sid”)</td><td>El <strong>número de la visita</strong> del cliente. Cada vez que alguien toca el timbre se crea uno, y los archivos de esa visita se guardan bajo ese número.</td></tr>
+    <tr><td class="term">fileId</td><td>El <strong>número de cada archivo</strong> dentro de una visita, para que dos archivos con el mismo nombre no se pisen.</td></tr>
+    <tr><td class="term">Egress</td><td>El “peaje” por <strong>sacar</strong> datos de un depósito. En R2 ese peaje es <strong>gratis</strong>.</td></tr>
+  </table>
+</section>
+
+<!-- 14 · GLOSARIO PARTE 2 (Fase 2) -->
+<section>
+  <span class="kicker">Términos que vas a escuchar en la Fase 2</span>
+  <h2>Glosario · adelanto</h2>
+  <p class="lead">Estos aparecen en la <em>Fase 2</em> (la descarga de pedidos enteros). Los dejamos explicados por las dudas:</p>
+  <table>
+    <tr><td class="term">uid</td><td>El <strong>identificador del empleado</strong> que pidió una descarga (“user id”). Sirve para saber quién pidió qué.</td></tr>
+    <tr><td class="term">exp</td><td>El <strong>vencimiento</strong> de un vale (“expiration”): la hora exacta después de la cual deja de servir. En la Fase 2, los vales de descarga vencen en 60 segundos.</td></tr>
+    <tr><td class="term"><code>exp=abc</code></td><td>Un ejemplo de vale <strong>mal formado</strong>: donde debería ir una hora (un número) viene basura (“abc”). El sistema debe detectarlo y rechazarlo, en vez de dejar pasar un vale sin vencimiento. Es una de las validaciones que pide la auditoría.</td></tr>
+  </table>
+</section>
+
+<!-- 15 · CIERRE -->
+<section class="center" data-background-color="#faf4ef">
+  <h2>En resumen</h2>
+  <p class="lead">La Fase 1 <em>muda los archivos a un depósito más barato y controlado</em>,<br>sin que nadie note la diferencia al usar el sistema.</p>
+  <p class="small">Próximo paso · <strong>Fase 2:</strong> descargar pedidos enteros, empaquetados y <em>sin costo</em>, aprovechando el depósito nuevo.</p>
+  <p style="margin-top:1.2em">🙋 <strong>Preguntas</strong></p>
+</section>
+
+</div></div>
+<div class="footer">Terminal Gráfica · Fase 1 · R2</div>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({
+    hash:true,
+    slideNumber:'c/t',
+    transition:'slide',
+    controlsTutorial:true,
+    width:1100, height:720, margin:0.06
+  });
+</script>
+</body>
+</html>
