@@ -1,4 +1,8 @@
-# Allow @higgsfield/cli's postinstall to download its vendor binary.
+# Allow postinstall build scripts for packages that download native binaries.
 # Repo-level (committed) so the CLI works on every clone without a global install.
 allowBuilds:
   '@higgsfield/cli': true
+  # tg-zip-worker (Wrangler) native deps — esbuild + workerd bundler/runtime
+  esbuild: true
+  sharp: true
+  workerd: true
