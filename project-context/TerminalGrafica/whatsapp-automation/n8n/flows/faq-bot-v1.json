@@ -28,7 +28,7 @@
           "conditions": [
             {
               "id": "cond-event",
-              "leftValue": "={{ $json.event }}",
+              "leftValue": "={{ $json.body.event }}",
               "rightValue": "message_created",
               "operator": {
                 "type": "string",
@@ -37,7 +37,7 @@
             },
             {
               "id": "cond-incoming",
-              "leftValue": "={{ $json.message_type == 'incoming' || $json.message_type === 0 }}",
+              "leftValue": "={{ $json.body.message_type == 'incoming' || $json.body.message_type === 0 }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -46,7 +46,7 @@
             },
             {
               "id": "cond-content",
-              "leftValue": "={{ $json.content }}",
+              "leftValue": "={{ $json.body.content }}",
               "operator": {
                 "type": "string",
                 "operation": "notEmpty"
@@ -73,7 +73,7 @@
           "conditions": [
             {
               "id": "cond-no-assignee",
-              "leftValue": "={{ JSON.stringify($json.conversation.meta.assignee) }}",
+              "leftValue": "={{ JSON.stringify($json.body.conversation.meta.assignee) }}",
               "rightValue": "null",
               "operator": {
                 "type": "string",
@@ -93,7 +93,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.account.id + '/conversations/' + $json.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.body.account.id + '/conversations/' + $json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -113,7 +113,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// IMPORTANTE: si renombrás el nodo webhook, actualizá 'Chatwoot Webhook' abajo\nconst webhookData = $('Chatwoot Webhook').item.json;\nconst allMessages = $input.item.json.payload || [];\n\n// === EDITAR: pegar el contenido final de prompts/system-prompt-tg.md ===\nconst systemPrompt = `[COMPLETAR: ver prompts/system-prompt-tg.md]`;\n\nconst llmMessages = [{ role: 'system', content: systemPrompt }];\n\n// Últimos 6 mensajes de contexto (3 turnos aprox)\nconst recent = allMessages.slice(-6);\nfor (const msg of recent) {\n  const isIn = msg.message_type === 'incoming' || msg.message_type === 0;\n  const isOut = msg.message_type === 'outgoing' || msg.message_type === 1;\n  if (isIn && msg.content) {\n    llmMessages.push({ role: 'user', content: msg.content });\n  } else if (isOut && msg.content && !msg.private) {\n    llmMessages.push({ role: 'assistant', content: msg.content });\n  }\n}\n\n// Garantizar que el mensaje actual esté como último turno de usuario\nconst last = llmMessages[llmMessages.length - 1];\nif (webhookData.content && (!last || last.role !== 'user' || last.content !== webhookData.content)) {\n  llmMessages.push({ role: 'user', content: webhookData.content });\n}\n\nreturn [{\n  json: {\n    llmMessages,\n    conversationId: webhookData.conversation.id,\n    accountId: webhookData.account.id\n  }\n}];"
+        "jsCode": "const webhookData = $('Chatwoot Webhook').item.json;\nconst allMessages = $input.item.json.payload || [];\n\nconst systemPrompt = `Sos el asistente virtual de Terminal Gráfica, un centro de impresiones en Mar del Plata.\nTu rol: responder consultas de clientes sobre productos, servicios, horarios y ubicación.\n\nREGLAS DE OPERACIÓN:\n1. Respondé SOLO sobre temas del negocio. Si preguntan fuera de scope, decí: \"Eso está fuera de lo que puedo ayudarte, pero con gusto te oriento en lo que necesitás para tu trabajo de impresión.\"\n2. Si el cliente pide hablar con una persona, incluí la palabra ESCALAR en tu respuesta (el sistema te va a derivar automáticamente).\n3. Si el cliente quiere hacer un pedido o cotización específica, pedile los datos que falten: tipo de producto, cantidad, medida, material/terminación, fecha de entrega deseada, y decile que el equipo le va a confirmar precio y tiempo.\n4. Nunca inventes precios ni tiempos de producción. Si preguntan, decí que el equipo les confirma y usá ESCALAR.\n5. Si no encontrás la respuesta en la información del negocio, decí: \"No tengo ese dato exacto, pero te lo confirmo con el equipo. ¿Querés que te paso con alguien?\" (e incluí ESCALAR).\n6. Respondé en español argentino, tono amigable y profesional. Mensajes cortos: máximo 3-4 oraciones por respuesta.\n7. No te presentés como IA ni como bot. Si preguntan, decí \"Soy el asistente de Terminal Gráfica\".\n8. Nunca enviés promos ni mensajes proactivos. Respondé únicamente lo que te preguntan.\n\nINFORMACIÓN DEL NEGOCIO:\n\nNombre: Terminal Gráfica — Centro de Impresiones\nDirección: Rodríguez Peña 3865, Mar del Plata, Buenos Aires\nTeléfono: (0223) 476-0019\nEmail: terminalgrafica@gmail.com\nInstagram: @terminalgrafica\nWeb: terminalgrafica.com.ar\n\nHorarios de atención en el local:\n- Lunes a viernes: 8:00 a 20:00\n- Sábados: 9:00 a 13:00\n- Domingos: cerrado\n\nProductos disponibles:\n- Impresión digital color (láser) — A5 a A3, papeles 75 a 300 gsm\n- Impresión inkjet (apuntes, libros)\n- Impresión gran formato eco-solvente (vinilo y canvas)\n- Gigantografías y carteles\n- Planos y blueprints\n- Stickers, etiquetas y tags\n- Troquelado y medio corte\n- Laminados\n- Ploteo\n- Flyers y folletería\n- Materiales para eventos\n- Libros encuadernados bajo demanda\n- Módulos educativos / apuntes\n- Papelería comercial\n- Diseño gráfico (consultar)\n\nFormatos de archivo aceptados:\n- PDF en alta resolución (300 dpi, sangría de 3 mm) — recomendado\n- AI, CDR, PSD — consultar con el equipo`;\n\nconst llmMessages = [{ role: 'system', content: systemPrompt }];\n\nconst recent = allMessages.slice(-6);\nfor (const msg of recent) {\n  const isIn = msg.message_type === 'incoming' || msg.message_type === 0;\n  const isOut = msg.message_type === 'outgoing' || msg.message_type === 1;\n  if (isIn && msg.content) {\n    llmMessages.push({ role: 'user', content: msg.content });\n  } else if (isOut && msg.content && !msg.private) {\n    llmMessages.push({ role: 'assistant', content: msg.content });\n  }\n}\n\nconst last = llmMessages[llmMessages.length - 1];\nif (webhookData.body.content && (!last || last.role !== 'user' || last.content !== webhookData.body.content)) {\n  llmMessages.push({ role: 'user', content: webhookData.body.content });\n}\n\nreturn [{\n  json: {\n    llmMessages,\n    conversationId: webhookData.body.conversation.id,\n    accountId: webhookData.body.account.id\n  }\n}];"
       },
       "id": "5e6f7a8b-9c0d-1234-5e6f-7a8b9c0d1234",
       "name": "Armar Prompt",
@@ -124,25 +124,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "HTTP-Referer",
-              "value": "https://silvercoastwebagency.com"
-            },
-            {
-              "name": "X-Title",
-              "value": "TerminalGrafica Bot"
-            }
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.0-flash-lite-001', messages: $json.llmMessages, max_tokens: 400, temperature: 0.3 }) }}",
+        "jsonBody": "={{ ({ model: 'gemini-2.0-flash-lite', messages: $json.llmMessages, max_tokens: 400, temperature: 0.3 }) }}",
         "options": {}
       },
       "id": "6f7a8b9c-0d1e-2345-6f7a-8b9c0d1e2345",
@@ -153,7 +140,7 @@
       "credentials": {
         "httpHeaderAuth": {
           "id": "2",
-          "name": "OpenRouter API Key"
+          "name": "Gemini API Key"
         }
       }
     },
