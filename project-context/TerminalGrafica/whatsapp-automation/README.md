@@ -34,14 +34,19 @@ WhatsApp Cloud API (oficial) + Chatwoot Community + n8n, self-hosted.
   Chatwoot = System User token permanente (`whatsapp_business_messaging` +
   `whatsapp_business_management`).
 
+### En progreso 🔧
+- **n8n / capa de automatizaciones (2026-06-25):** setup guide + flow v1 creados en
+  `n8n/`. Próximo paso: instalar n8n en el VM (ver `n8n/setup-guide.md`), completar
+  el system prompt (`n8n/prompts/system-prompt-tg.md`) e importar el flow.
+  - Flow v1 = Chatwoot webhook → filtros → historial → Gemini Flash-Lite (OpenRouter) → reply / escalar
+  - Modelo elegido: `google/gemini-2.0-flash-lite-001` vía OpenRouter (provider-agnostic)
+
 ### Falta 🔲
-- **n8n / capa de automatizaciones** — no arrancada. Próxima fase grande: recibir
-  pedidos + responder FAQs con un modelo open-weights mid-tier.
+- **Completar e importar flow n8n** — fill in system prompt con datos reales de TG, instalar n8n.
 - **Verificación de negocio en Meta** — diferida hasta escalar (el acceso estándar
   alcanza para volumen bajo).
 - **Limpieza pendiente:** borrar el `~/.cloudflared/config.yml` viejo, los records/
-  hostname del tunnel de `martinfs.dev`, y actualizar `FRONTEND_URL` de Chatwoot al
-  dominio nuevo.
+  hostname del tunnel de `martinfs.dev` (instrucciones en `n8n/setup-guide.md` sección 9).
 
 ## Notas de setup / gotchas
 
@@ -120,14 +125,18 @@ canal maduro con opt-in explícito.
   cliente (precios, abono Base/Plus, puesta en marcha).
 - `research/` — reportes de investigación (p. ej. políticas de Meta sobre IA en
   WhatsApp y riesgo de baneo).
+- `n8n/setup-guide.md` — instrucciones paso a paso para instalar n8n y conectar con Chatwoot.
+- `n8n/flows/faq-bot-v1.json` — workflow n8n importable (FAQ bot + escalación).
+- `n8n/prompts/system-prompt-tg.md` — system prompt template para completar con datos de TG.
 
 ## Próximos pasos
 
-1. `/level-up` para scopear y arrancar la capa de automatizaciones (n8n u otra
-   herramienta — decidir ahí).
-2. Research profundo de los términos de Meta sobre usar IA para responder WhatsApp
-   (detección de respuestas IA + prácticas para no banear el número) — en curso vía
-   `/deep-research`, irá a `research/`.
+1. Instalar n8n en el VM siguiendo `n8n/setup-guide.md`.
+2. Completar el system prompt con los datos reales de TerminalGrafica.
+3. Importar `n8n/flows/faq-bot-v1.json`, vincular credentials, activar y probar.
+4. Iterar el system prompt según respuestas reales de la primera semana.
+5. Cargar las plantillas Utility pre-producción en Meta (ver checklist más abajo).
+6. Integrar con el sistema de cotizaciones (recepción de archivos → broker) cuando esté deployado.
 
 ---
 

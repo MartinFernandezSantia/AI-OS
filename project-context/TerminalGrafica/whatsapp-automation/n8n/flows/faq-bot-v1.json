@@ -1,0 +1,361 @@
+{
+  "meta": {
+    "instanceId": "imported"
+  },
+  "name": "Chatwoot FAQ Bot — TerminalGrafica v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot",
+        "options": {}
+      },
+      "id": "1a2b3c4d-5e6f-7890-1a2b-3c4d5e6f7890",
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "chatwoot-tg-v1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-event",
+              "leftValue": "={{ $json.event }}",
+              "rightValue": "message_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-incoming",
+              "leftValue": "={{ $json.message_type == 'incoming' || $json.message_type === 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "id": "cond-content",
+              "leftValue": "={{ $json.content }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "2b3c4d5e-6f7a-8901-2b3c-4d5e6f7a8901",
+      "name": "IF — Mensaje Entrante",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-no-assignee",
+              "leftValue": "={{ JSON.stringify($json.conversation.meta.assignee) }}",
+              "rightValue": "null",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "3c4d5e6f-7a8b-9012-3c4d-5e6f7a8b9012",
+      "name": "IF — Sin Asignación",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.account.id + '/conversations/' + $json.conversation.id + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "4d5e6f7a-8b9c-0123-4d5e-6f7a8b9c0123",
+      "name": "Get Historial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// IMPORTANTE: si renombrás el nodo webhook, actualizá 'Chatwoot Webhook' abajo\nconst webhookData = $('Chatwoot Webhook').item.json;\nconst allMessages = $input.item.json.payload || [];\n\n// === EDITAR: pegar el contenido final de prompts/system-prompt-tg.md ===\nconst systemPrompt = `[COMPLETAR: ver prompts/system-prompt-tg.md]`;\n\nconst llmMessages = [{ role: 'system', content: systemPrompt }];\n\n// Últimos 6 mensajes de contexto (3 turnos aprox)\nconst recent = allMessages.slice(-6);\nfor (const msg of recent) {\n  const isIn = msg.message_type === 'incoming' || msg.message_type === 0;\n  const isOut = msg.message_type === 'outgoing' || msg.message_type === 1;\n  if (isIn && msg.content) {\n    llmMessages.push({ role: 'user', content: msg.content });\n  } else if (isOut && msg.content && !msg.private) {\n    llmMessages.push({ role: 'assistant', content: msg.content });\n  }\n}\n\n// Garantizar que el mensaje actual esté como último turno de usuario\nconst last = llmMessages[llmMessages.length - 1];\nif (webhookData.content && (!last || last.role !== 'user' || last.content !== webhookData.content)) {\n  llmMessages.push({ role: 'user', content: webhookData.content });\n}\n\nreturn [{\n  json: {\n    llmMessages,\n    conversationId: webhookData.conversation.id,\n    accountId: webhookData.account.id\n  }\n}];"
+      },
+      "id": "5e6f7a8b-9c0d-1234-5e6f-7a8b9c0d1234",
+      "name": "Armar Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://silvercoastwebagency.com"
+            },
+            {
+              "name": "X-Title",
+              "value": "TerminalGrafica Bot"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ model: 'google/gemini-2.0-flash-lite-001', messages: $json.llmMessages, max_tokens: 400, temperature: 0.3 }) }}",
+        "options": {}
+      },
+      "id": "6f7a8b9c-0d1e-2345-6f7a-8b9c0d1e2345",
+      "name": "Llamar LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "OpenRouter API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-escalar",
+              "leftValue": "={{ $json.choices[0].message.content }}",
+              "rightValue": "ESCALAR",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "7a8b9c0d-1e2f-3456-7a8b-9c0d1e2f3456",
+      "name": "IF — Escalar",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Prompt').item.json.accountId + '/conversations/' + $('Armar Prompt').item.json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: $('Llamar LLM').item.json.choices[0].message.content, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "8b9c0d1e-2f3a-4567-8b9c-0d1e2f3a4567",
+      "name": "Enviar Respuesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1880, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Prompt').item.json.accountId + '/conversations/' + $('Armar Prompt').item.json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: 'Entendido 🤝 Ya le paso el mensaje a un compañero del equipo. En breve te van a estar respondiendo.', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "9c0d1e2f-3a4b-5678-9c0d-1e2f3a4b5678",
+      "name": "Mensaje Escalación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1880, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Prompt').item.json.accountId + '/conversations/' + $('Armar Prompt').item.json.conversationId + '/labels' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ labels: ['escalar'] }) }}",
+        "options": {}
+      },
+      "id": "0d1e2f3a-4b5c-6789-0d1e-2f3a4b5c6789",
+      "name": "Label Escalación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2120, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Chatwoot API Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "IF — Mensaje Entrante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Mensaje Entrante": {
+      "main": [
+        [
+          {
+            "node": "IF — Sin Asignación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF — Sin Asignación": {
+      "main": [
+        [
+          {
+            "node": "Get Historial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Historial": {
+      "main": [
+        [
+          {
+            "node": "Armar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Prompt": {
+      "main": [
+        [
+          {
+            "node": "Llamar LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar LLM": {
+      "main": [
+        [
+          {
+            "node": "IF — Escalar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Escalar": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Escalación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Escalación": {
+      "main": [
+        [
+          {
+            "node": "Label Escalación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
