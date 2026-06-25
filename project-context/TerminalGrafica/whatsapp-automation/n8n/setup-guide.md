@@ -139,11 +139,13 @@ Entrá a `https://n8n.silvercoastwebagency.com` → Credentials → New.
 - Header Name: `api_access_token`
 - Header Value: tu token de acceso de Chatwoot (Settings → API Access Token)
 
-### Credential 2 — OpenRouter API Key
+### Credential 2 — Gemini API Key
 - Type: `HTTP Header Auth`
-- Name: **`OpenRouter API Key`** (exacto)
+- Name: **`Gemini API Key`** (exacto, el flow lo busca por este nombre)
 - Header Name: `Authorization`
-- Header Value: `Bearer <tu_openrouter_key>`
+- Header Value: `Bearer <tu_google_ai_studio_key>`
+
+> Usamos el endpoint OpenAI-compatible de Google AI Studio (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`) — mismo formato de request que OpenRouter, sin cambios en el flow. Modelo: `gemini-2.0-flash-lite`.
 
 ---
 
