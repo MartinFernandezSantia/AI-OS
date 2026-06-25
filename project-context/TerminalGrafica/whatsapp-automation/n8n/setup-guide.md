@@ -162,7 +162,7 @@ Después de importar:
 
 ## 8. Activar y probar
 
-1. En el workflow, toggle **Active** (arriba a la derecha).
+1. En el workflow, hacé click en **Publish** (arriba a la derecha). En n8n 2.x este botón reemplaza al toggle "Active" — es lo mismo: activa la production URL del webhook.
 2. Desde tu WhatsApp personal, mandá un mensaje al número de TerminalGrafica.
 3. En n8n → Executions, vas a ver la ejecución en tiempo real.
 4. Verificá en Chatwoot que el bot respondió.
