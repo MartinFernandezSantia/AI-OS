@@ -84,21 +84,48 @@ En Cloudflare Zero Trust:
 
 ---
 
-## 5. Configurar el webhook en Chatwoot
+## 5. Registrar el webhook en Chatwoot
 
-En Chatwoot → Settings → Integrations → Webhooks → New Webhook:
+Chatwoot y n8n están en el mismo docker-compose network, así que n8n es alcanzable desde Chatwoot en la URL interna `http://n8n:5678/webhook/chatwoot` — sin pasar por internet.
 
-**URL:**
+**El problema:** la UI de Chatwoot valida el formato de la URL y rechaza hostnames de Docker como `n8n` (solo acepta dominios públicos válidos). La REST API también devuelve 404 porque el endpoint `/api/v1/accounts/{id}/integrations/webhooks` no existe en Chatwoot CE — el modelo real se llama `Webhook` y la tabla es `webhooks`.
+
+**La solución: registrar el webhook directo via Rails runner.**
+
+```bash
+docker exec chatwoot-rails-1 bundle exec rails runner \
+  "w = Webhook.create!(account_id: 1, url: 'http://n8n:5678/webhook/chatwoot', subscriptions: ['message_created']); puts w.id"
 ```
-http://n8n:5678/webhook/chatwoot
+
+El output debe ser el ID numérico del webhook creado (p. ej. `1`). Si imprime un número, funcionó.
+
+Para verificar que quedó registrado, chequeá en Chatwoot → Settings → Integrations → Webhooks — debe aparecer la entrada.
+
+### Notas sobre el modelo Webhook en Chatwoot CE
+
+- Modelo: `Webhook` (tabla `webhooks`). No confundir con `Integrations::Hook` (que es para Slack/DialogFlow/OpenAI).
+- Campos relevantes: `account_id`, `url` (valida http/https), `subscriptions` (array JSONB).
+- Eventos disponibles en `Webhook::ALLOWED_WEBHOOK_EVENTS`: `message_created`, `conversation_created`, `conversation_updated`, `contact_created`, etc.
+- La URL interna `http://n8n:5678/...` pasa la validación porque el parser de URI de Ruby acepta hostnames cortos.
+
+### Si necesitás agregar más eventos después
+
+```bash
+docker exec chatwoot-rails-1 bundle exec rails runner \
+  "Webhook.find(1).update!(subscriptions: ['message_created', 'conversation_updated'])"
 ```
 
-> Usamos la URL interna de Docker (`http://n8n:5678`) porque Chatwoot y n8n están en el mismo docker-compose network. No pasa por internet.
+### Si necesitás listar o borrar webhooks
 
-**Eventos a activar:**
-- [x] Message Created
+```bash
+# Listar
+docker exec chatwoot-rails-1 bundle exec rails runner \
+  "Webhook.where(account_id: 1).each { |w| puts \"#{w.id}: #{w.url} → #{w.subscriptions}\" }"
 
-Guardar.
+# Borrar por ID
+docker exec chatwoot-rails-1 bundle exec rails runner \
+  "Webhook.find(1).destroy"
+```
 
 ---
 
