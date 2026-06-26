@@ -1,17 +1,21 @@
-# FAQ Bot v1 → v2 — Roadmap
+# FAQ Bot v1 → v4 — Roadmap
 
-Estado actual (2026-06-26): **bot funcionando end-to-end** en el VM local.
-WhatsApp → Chatwoot → n8n → OpenRouter (Gemini Flash-Lite) → responde en WhatsApp.
+Estado actual (2026-06-26): **v4 lista para importar** — funnel de ventas completo con saludo humano, handoff inteligente y nota privada de contexto para el agente.
+WhatsApp → Chatwoot → n8n → Gemini Flash-Lite → responde en WhatsApp.
 
 ---
 
-## Lo que funciona hoy (v1)
+## Lo que funciona hoy (v4)
 
 - Filtro de mensajes: solo entrantes, solo sin agente asignado
 - Historial de conversación: últimos 6 mensajes como contexto para el LLM
-- System prompt real de TerminalGráfica (horarios, productos, reglas de escalación)
-- Escalación automática: si el LLM incluye `ESCALAR` → mensaje de derivación + label en Chatwoot
-- Modelo: Gemini Flash-Lite via OpenRouter (credential `OpenRouter API Key`)
+- **Saludo humano en primer mensaje:** detección de historial vacío → "Hola! Buenas, ¿en qué te podemos ayudar?" fijo, sin LLM
+- **Persona no-bot:** system prompt sin "asistente virtual"; si preguntan quién sos → "Te atiende el equipo de Terminal Gráfica"
+- **Bot solo informa, no cotiza:** cualquier pedido/precio → ESCALAR inmediato al agente humano
+- **Escalación con nota de contexto:** al hacer handoff → LLM genera nota privada (`private: true`) en Chatwoot con resumen del cliente + datos mencionados + próximo paso sugerido; el agente la ve, el cliente no
+- Guardrails v2: filtro regex anti-injection + rama no-texto
+- Debounce (5s) + idempotencia anti-retries + agregación de ráfagas
+- Modelo: Gemini Flash-Lite via Gemini API direct (credential `Gemini API Key`)
 
 ---
 
@@ -26,25 +30,14 @@ Plan:
 - Agregar nodo en n8n antes de Armar Prompt: embed del mensaje del cliente → búsqueda semántica → inyectar solo las variantes relevantes
 - Reduce tokens/conversación 6-7x (ver estimaciones de costo en memoria `chatbot-llm-model-cost`)
 
-### 2. Flujo orientado a cerrar la venta + handoff inteligente a agente
+### 2. Flujo orientado a cerrar la venta + handoff inteligente a agente ✅ DONE en v4
 
-El bot actual responde FAQs reactivamente. El objetivo real (con la info actual, **sin** esperar al RAG) es que la conversación:
-- No solo conteste preguntas, sino que **identifique la razón/interés del cliente** y en qué podemos ayudarlo (¿quiere cotizar? ¿es duda de horario/ubicación? ¿reclamo? ¿pedido en curso?).
-- Recopile los datos del pedido turno a turno (tipo de producto, cantidad, medidas, material/terminación, fecha deseada) — no pedir todo de golpe.
-- **Cuando la IA ya no pueda sostener la conversación con la info provista → handoff a un agente humano**, no seguir improvisando.
-
-**Sub-tareas concretas para esto:**
-
-a) **Definir los disparadores de handoff** (¿en qué situaciones se pasa a un humano?). Borrador: cliente pide hablar con persona / pide precio o tiempo concreto / datos del pedido completos / la IA no tiene el dato / cliente frustrado o reclamo / N mensajes off-topic seguidos.
-
-b) **Investigar los mecanismos de Chatwoot para el handoff** y elegir cuáles usar:
-   - **Labels/tags** (ya usamos `escalar`) — para filtrar y rutear en la bandeja.
-   - **Assignment**: asignar la conversación a un agente o team específico via API (`POST .../conversations/{id}/assignments`).
-   - **Conversation status**: `open` / `pending` / `snoozed` / `resolved` — marcar `open`+sin-asignar para que un humano la tome, o `pending` mientras el bot trabaja.
-   - **Custom attributes** en la conversación para guardar estado del bot (ej. `bot_handed_off: true`) y que el bot deje de responder esa conversación.
-   - El IF — Sin Asignación del flow ya respeta que si hay agente asignado, el bot no contesta — eso es la base del handoff.
-
-c) **Resumen para el agente.** Al hacer handoff, la IA genera un mensaje **privado** (`private: true`) en la conversación de Chatwoot con: (1) qué quiere el cliente, (2) datos ya recopilados, (3) cómo continuar / qué falta preguntar. Así el humano toma la conversación con contexto, sin releer todo el hilo. Va como nota interna, el cliente no la ve.
+**Decisiones tomadas e implementadas:**
+- El bot **solo informa** (productos, servicios, horarios, ubicación). No cotiza ni recopila datos de pedido — eso es tarea del agente humano.
+- Disparadores de ESCALAR: precio/cotización/pedido concreto / pide hablar con persona / bot no tiene el dato / frustración o reclamo.
+- Primer mensaje → saludo fijo "Hola! Buenas, ¿en qué te podemos ayudar?" sin LLM.
+- Handoff incluye: (1) nota privada con contexto para el agente, (2) mensaje de derivación al cliente, (3) label `escalar` en Chatwoot.
+- SLA target: agente responde en ≤5 min en horario laboral. Gestión de expectativas fuera de horario: pendiente (ver §5).
 
 ### 2b. Lista de números baneados (bypass del bot → directo a agente)
 
