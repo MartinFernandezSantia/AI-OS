@@ -73,14 +73,25 @@ En Cloudflare DNS (zona `silvercoastwebagency.com`):
 
 ---
 
-## 4. Zero Trust — proteger la UI de n8n
+## 4. Zero Trust — proteger la UI de n8n + bypasses necesarios
 
 En Cloudflare Zero Trust:
 - Applications → Add an application → Self-hosted
 - Application domain: `n8n.silvercoastwebagency.com`
 - Policy: Email → `martin-santia@hotmail.com.ar`
 
-> Los webhooks de n8n (`/webhook/*`) no requieren autenticación Zero Trust — Cloudflare los pasa directamente.
+**Bypass obligatorio para webhooks de Chatwoot → n8n:**
+En la misma application de n8n, agregá una policy adicional con mayor prioridad:
+- Action: `Bypass` · Path: `/webhook/*` · Rule: Everyone
+
+Esto es necesario porque Chatwoot llama al webhook con una URL pública y no tiene token de ZT.
+En producción, reemplazar este bypass por verificación HMAC (ver `roadmap.md` §4).
+
+**Bypass obligatorio para n8n → Chatwoot API:**
+En la application de Chatwoot (`chatwoot.silvercoastwebagency.com`), agregá también:
+- Action: `Bypass` · Path: `/api/*` · Rule: Everyone
+
+Sin este bypass, las requests HTTP de n8n al API de Chatwoot son interceptadas por ZT y redirigidas al login (error `ERR_FR_REDIRECTION_FAILURE`). El API de Chatwoot ya requiere `api_access_token` — ZT es una capa redundante para la API.
 
 ---
 
@@ -171,10 +182,14 @@ Después de importar:
 
 | Síntoma | Causa probable |
 |---|---|
-| Chatwoot no llama a n8n | El webhook URL en Chatwoot es incorrecto, o n8n no está corriendo |
-| n8n recibe el event pero falla en Get Historial | Credential de Chatwoot mal configurada |
+| Chatwoot no llama a n8n | El webhook URL en Chatwoot es incorrecto o n8n no está corriendo |
+| n8n recibe el event pero el IF lo rechaza | Los campos del payload están bajo `$json.body.*`, no en el root |
+| Get Historial falla con `ERR_FR_REDIRECTION_FAILURE` | Falta el bypass `/api/*` en la ZT application de Chatwoot — ver §4 |
+| Get Historial falla con 401 | Credential `Chatwoot API Token` mal configurada o expirada |
+| Armar Prompt falla con "json property isn't an object" | Code node en modo `runOnceForEachItem` — debe ser `runOnceForAllItems` |
 | LLM responde "ESCALAR" siempre | System prompt muy restrictivo — revisá la sección de info del negocio |
-| Bot responde a sus propios mensajes (loop) | El IF de `message_type == incoming` no está filtrando — revisá la versión de Chatwoot |
+| Modelo not found (404) | El slug del modelo en OpenRouter cambió — verificar en openrouter.ai/models |
+| Bot responde a sus propios mensajes (loop) | El IF de `message_type == incoming` no filtra — revisar versión de Chatwoot |
 
 ---
 
