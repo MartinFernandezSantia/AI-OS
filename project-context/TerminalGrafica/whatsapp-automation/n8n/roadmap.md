@@ -13,7 +13,22 @@ WhatsApp → Chatwoot → n8n → Gemini Flash-Lite → responde en WhatsApp.
 - **Persona no-bot:** system prompt sin "asistente virtual"; si preguntan quién sos → "Te atiende el equipo de Terminal Gráfica"
 - **Bot solo informa, no cotiza:** cualquier pedido/precio → ESCALAR inmediato al agente humano
 - **Escalación con nota de contexto:** al hacer handoff → LLM genera nota privada (`private: true`) en Chatwoot con resumen del cliente + datos mencionados + próximo paso sugerido; el agente la ve, el cliente no
-- **Bot se calla post-escalación:** una vez escalada la conversación, el bot no procesa mensajes siguientes. Señal = presencia de nota privada en el historial (único punto del flujo que la crea) → `action: skip` en Armar Prompt
+- **Frontera bot/humano por asignación:** el bot procesa SOLO conversaciones sin agente asignado (`IF — Sin Asignación`, gatea por `meta.assignee == null`). Al escalar, el nodo `Asignar Agente` asigna la conversación a un agente → a partir de ahí `meta.assignee != null` → el bot deja de responder automáticamente. No hace falta detectar nada en el historial.
+
+### Ciclo de vida de la conversación (modelo "bot primero, solo si se resolvió")
+
+Frontera bot↔humano = **asignación** (`meta.assignee`). Estados:
+- Conversación nueva → sin asignar → **bot** tría.
+- Bot escala → `Asignar Agente` la asigna → **humano** la atiende, el bot se calla.
+- Humano resuelve → una **regla de automatización de Chatwoot** ("Conversation Resolved" → "Remove Assigned Agent") limpia la asignación.
+- Cliente vuelve días después → Chatwoot reabre la conversación, ya sin agente asignado → **el bot tría de nuevo**. Si la conversación NO se había resuelto (sigue asignada), el cliente que escribe queda con el humano. → cumple "bot primero solo si se resolvió".
+
+**Setup manual en Chatwoot (pendiente de Martin):**
+1. En el nodo `Asignar Agente` reemplazar `assignee_id: 1` por el ID real del agente que recibe las derivaciones (GET `/api/v1/accounts/{id}/agents` o desde la UI). Para varios agentes: evaluar asignar a un equipo (requiere gatear también por `meta.team`, que el webhook hoy no trae de forma confiable — ver nota).
+2. Regla de automatización: Evento **"Conversation Resolved"** → Acción **"Remove Assigned Agent"**. Sin esto, el bot no vuelve a triar conversaciones reabiertas.
+3. (Opcional, cosmético) Crear un agente dedicado "Bot" en Chatwoot y usar su token para que los mensajes del bot se atribuyan a esa identidad en vez de a una persona.
+
+Nota: alternativa "nativa" = conectar un Agent Bot al inbox (las conversaciones nacen en `pending`, gate por `status`). Más prolijo y da identidad propia al bot, pero más setup (crear+conectar bot, 2 reglas de automatización para el ciclo de reapertura). Se descartó por ahora a favor del modelo por asignación, que reusa el gate existente y necesita 1 sola regla.
 - Guardrails v2: filtro regex anti-injection + rama no-texto
 - Debounce (5s) + idempotencia anti-retries + agregación de ráfagas
 - Modelo: Gemini Flash-Lite via Gemini API direct (credential `Gemini API Key`)
