@@ -13,6 +13,7 @@ WhatsApp → Chatwoot → n8n → Gemini Flash-Lite → responde en WhatsApp.
 - **Persona no-bot:** system prompt sin "asistente virtual"; si preguntan quién sos → "Te atiende el equipo de Terminal Gráfica"
 - **Bot solo informa, no cotiza:** cualquier pedido/precio → ESCALAR inmediato al agente humano
 - **Escalación con nota de contexto:** al hacer handoff → LLM genera nota privada (`private: true`) en Chatwoot con resumen del cliente + datos mencionados + próximo paso sugerido; el agente la ve, el cliente no
+- **Bot se calla post-escalación:** una vez escalada la conversación, el bot no procesa mensajes siguientes. Señal = presencia de nota privada en el historial (único punto del flujo que la crea) → `action: skip` en Armar Prompt
 - Guardrails v2: filtro regex anti-injection + rama no-texto
 - Debounce (5s) + idempotencia anti-retries + agregación de ráfagas
 - Modelo: Gemini Flash-Lite via Gemini API direct (credential `Gemini API Key`)
