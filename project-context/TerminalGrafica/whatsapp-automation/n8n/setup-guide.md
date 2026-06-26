@@ -220,6 +220,58 @@ El flow v2 (`flows/faq-bot-v2.json`) agrega tres nodos nuevos respecto a v1:
 
 ---
 
+## 11. Migrar a v3 (concurrencia + fallback de fallo)
+
+El flow v3 (`flows/faq-bot-v3.json`) resuelve dos problemas de producción sobre v2 **dentro** del flow (race condition + idempotencia), y delega el **fallback de fallo a Chatwoot** (no al workflow). Mismas credenciales, no hace falta crear ninguna nueva.
+
+### Qué agrega v3 dentro del flow
+
+**a) Debounce + agregación explícita contra race condition (ráfagas).**
+Nodo nuevo **Wait — Debounce (5s)** entre `IF — Tiene Texto` y `Get Historial`. Tras esperar, el Code node (`Armar Prompt`):
+1. Chequea si *mi* mensaje sigue siendo el último entrante. Si durante los 5s llegó otro, esta ejecución se descarta (`action: skip`) y procesa solo la del último mensaje.
+2. **Agrega explícitamente** todos los mensajes entrantes posteriores a la última respuesta (la "ráfaga") en **un único turno `user`** para el LLM, separados por salto de línea.
+
+Resultado: si el cliente manda "hola" / "necesito 100 flyers" / "para el viernes", el bot recibe los tres como un solo mensaje coherente y responde **una vez**, en vez de tres respuestas descoordinadas.
+
+> El window de 5s es ajustable: nodo Wait → campo `amount`. Más alto = más tolerante a tipeo lento, pero más latencia. 4-6s es razonable para WhatsApp.
+> El orden del historial se asume por `created_at`; el Code ordena defensivamente por si la API no lo garantiza.
+
+**b) Idempotencia contra retries/duplicados.**
+El mismo Code chequea si ya existe una respuesta (bot o agente) *posterior* a mi mensaje. Si sí → `action: skip`. Evita doble respuesta cuando Chatwoot reintenta un webhook, y frena al bot si un humano ya contestó durante la espera.
+
+**c) Reintentos transitorios.**
+Los nodos `Get Historial`, `Llamar LLM` y `Enviar Respuesta` tienen `Retry On Fail` (3 intentos, 3s entre cada uno) para blips de red / rate limit. Si después de los reintentos siguen fallando, la ejecución **falla** y queda visible en n8n → Executions. El cliente queda cubierto por el net de Chatwoot (abajo).
+
+### Cómo importar v3
+1. n8n → Workflows → Import from File → `flows/faq-bot-v3.json`.
+2. Vinculá las credenciales (`Chatwoot API Token`, `Gemini API Key`) en los nodos que aparezcan en naranja.
+3. Desactivá v2 y publicá v3.
+
+### Troubleshooting v3
+
+| Síntoma | Causa probable |
+|---|---|
+| El bot tarda ~5s de más en responder | Es el Wait del debounce — esperado. Bajá `amount` si molesta |
+| El bot no responde nunca (siempre descarta) | El Code no encuentra `body.id` o `created_at` en el payload — verificá los campos del webhook en una ejecución real y ajustá los nombres |
+| El LLM recibe un solo turno gigante | Esperado: la ráfaga se agrega en un único mensaje `user`. Si querés turnos separados, cambiá el bloque de agregación en `Armar Prompt` |
+| Mensajes de ráfaga llegan separados (>5s) | Cada uno cae fuera del window y se procesa solo — subí `amount` si querés agruparlos |
+
+### Fallback de fallo → del lado de Chatwoot (NO en el workflow)
+
+La decisión de diseño es que el fallback viva en Chatwoot, no en n8n. Razón: una red de seguridad en Chatwoot cubre **también el caso de n8n caído por completo** (donde el webhook nunca corre y el flow no puede notificar nada), y no depende de la lógica del flow. El tradeoff es que es por tiempo (espera X min), no instantáneo al error — para el piloto es suficiente.
+
+**Opción A — Automation Rule** (Settings → Automation → Add):
+- Event: `Conversation Created` (o `Message Created`)
+- Condition: conversación sin asignar / sin primera respuesta
+- Action: tras un delay, si sigue sin respuesta → asignar a un team + label `sin-respuesta-bot` + notificar al agente.
+
+**Opción B — SLA Policy** (si la versión de Chatwoot lo soporta):
+- Definir "First Response Time" (ej. 5 min). Las conversaciones que lo incumplen quedan marcadas como SLA breached y filtrables en la bandeja — señal clara de que el bot no respondió.
+
+Cualquiera garantiza que un cliente nunca quede sin atención aunque la automatización esté caída. **Pendiente de configurar en el VM** (ver `roadmap.md` §4b).
+
+---
+
 ## 10. Limpieza pendiente (del migration de dominio)
 
 Mientras estás en el VM, aprovechá:

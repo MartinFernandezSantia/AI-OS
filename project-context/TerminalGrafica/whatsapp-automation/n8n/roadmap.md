@@ -88,15 +88,18 @@ Límite conocido del enfoque actual: el regex **no** ataja injection semántico 
 - **Off-topic rate limit:** si un cliente envía 10+ mensajes fuera de scope seguidos, escalar en lugar de seguir respondiendo. Requiere estado/memoria — pendiente fase 2.
 - **HMAC signature verification:** agregar nodo al inicio del flow para verificar `X-Chatwoot-Signature` con el secret del webhook. Actualmente el endpoint está bypassado en Zero Trust (demo only).
 
-### 4b. Hardening de prod — concurrencia (HOY es demo, no aguanta prod)
+### 4b. Hardening de prod — concurrencia
 
-El workflow es stateless request/response: cada mensaje = un webhook = una ejecución independiente. n8n corre esas ejecuciones en paralelo sin problema, pero hay tres agujeros para prod:
+El workflow es stateless request/response: cada mensaje = un webhook = una ejecución independiente. n8n corre esas ejecuciones en paralelo sin problema, pero había tres agujeros para prod:
 
-1. **Race condition en ráfagas (el más serio).** Cliente manda 3 mensajes rápidos → 3 ejecuciones simultáneas, cada una hace su `Get Historial` antes de que las otras respondan → ven historial incompleto → el LLM contesta 3 veces, descoordinado. **Solución: debounce/agregación por conversación** (esperar ~3-5s de silencio, juntar los mensajes del cliente y procesarlos como uno). Esto es lo que intuitivamente llamamos "queue de mensajes", pero es debounce, no infra.
-2. **Idempotencia / retries.** Si Chatwoot reintenta un webhook (timeout/5xx) el bot responde dos veces. Falta dedup por `message.id`.
-3. **Escala del motor.** Default = modo `regular` + SQLite. OK para piloto de un negocio. Para multi-cliente / alto volumen → **queue mode de n8n** (Redis + workers). Esta sí es la "queue" de infraestructura.
+1. ✅ **Race condition en ráfagas (el más serio).** Cliente manda 3 mensajes rápidos → 3 ejecuciones simultáneas, cada una hacía su `Get Historial` antes de que las otras respondan → el LLM contestaba 3 veces, descoordinado. **Resuelto en v3:** nodo Wait (5s) de debounce + agregación explícita — solo procesa la ejecución del último mensaje, que junta toda la ráfaga en un único turno `user` para el LLM. Una sola respuesta con todo el contexto.
+2. ✅ **Idempotencia / retries.** Si Chatwoot reintenta un webhook el bot respondía dos veces. **Resuelto en v3:** el Code descarta (`action: skip`) si ya hay una respuesta (bot o agente) posterior a mi mensaje. Más `retryOnFail` (3 intentos) en los nodos HTTP para errores transitorios.
+3. **Escala del motor.** Default = modo `regular` + SQLite. OK para piloto de un negocio. Para multi-cliente / alto volumen → **queue mode de n8n** (Redis + workers). Esta sí es la "queue" de infraestructura. Pendiente.
 
-Para el piloto de TG (un negocio, volumen bajo) está OK. Antes de sumar un 2do cliente o promocionarlo: resolver al menos el punto 1.
+**Pendiente — fallback de fallo del lado de Chatwoot (decisión: NO va en el workflow).**
+Cubre el caso de n8n caído por completo (el webhook nunca corre → el flow no puede notificar nada). Configurar en el VM una **Automation Rule** o **SLA Policy** en Chatwoot: conversación sin asignar / sin primera respuesta en X min → asignar a un team + label `sin-respuesta-bot` + notificar. Detalle en `setup-guide.md` §11. Es por tiempo (no instantáneo al error), suficiente para el piloto.
+
+Para el piloto de TG (un negocio, volumen bajo) v3 ya cubre lo crítico. Antes de sumar un 2do cliente: queue mode (punto 3) + el net de Chatwoot configurado.
 
 ### 5. Investigar / a definir
 
