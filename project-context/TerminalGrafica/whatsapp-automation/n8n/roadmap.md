@@ -42,10 +42,9 @@ La estructura actual ya lo respeta — verificar que OpenRouter lo cachea (revis
 
 ### 4. Guardrails
 
-- **Prompt injection:** el cliente podría intentar override del system prompt ("ignorá las instrucciones anteriores..."). Agregar instrucción explícita en el system prompt + filtro en el Code node que detecte patrones conocidos antes de llamar al LLM.
-- **Scope enforcement:** el bot ya tiene la regla de quedarse en tema, pero puede necesitar un segundo check (IF el mensaje contiene ciertas keywords → no llamar al LLM, responder template fijo).
-- **Off-topic rate limit:** si un cliente envía 10+ mensajes fuera de scope seguidos, escalar en lugar de seguir respondiendo.
-- **Mensajes sin texto:** el bot falla si llega una imagen, audio o sticker (content vacío). Agregar rama en el IF inicial para responder "No puedo procesar archivos por acá, escribime lo que necesitás".
+- ✅ **Prompt injection:** filtro regex (10 patrones EN+ES) en Armar Prompt antes de llamar al LLM → si detecta → respuesta neutral sin LLM. Más instrucción SEGURIDAD en system prompt. Implementado en v2.
+- ✅ **Mensajes sin texto:** nueva rama en el flujo (IF — Tiene Texto → FALSE → Respuesta No-Texto). Implementado en v2.
+- **Off-topic rate limit:** si un cliente envía 10+ mensajes fuera de scope seguidos, escalar en lugar de seguir respondiendo. Requiere estado/memoria — pendiente fase 2.
 - **HMAC signature verification:** agregar nodo al inicio del flow para verificar `X-Chatwoot-Signature` con el secret del webhook. Actualmente el endpoint está bypassado en Zero Trust (demo only).
 
 ### 5. Investigar / a definir

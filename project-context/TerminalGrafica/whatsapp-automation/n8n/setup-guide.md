@@ -193,7 +193,34 @@ Después de importar:
 
 ---
 
-## 9. Limpieza pendiente (del migration de dominio)
+## 9. Migrar a v2 (guardrails)
+
+El flow v2 (`flows/faq-bot-v2.json`) agrega tres nodos nuevos respecto a v1:
+
+**Nuevos nodos:**
+- **IF — Tiene Texto** (entre IF — Sin Asignación y Get Historial): separa mensajes con contenido de los sin contenido (imágenes, audio, stickers).
+- **Respuesta No-Texto** (rama FALSE de IF — Tiene Texto): envía "No puedo procesar archivos ni mensajes de voz. Escribime tu consulta y te ayudo con gusto."
+- **IF — Injection Detectada** (entre Armar Prompt y Llamar LLM): si el Code node detecta patrones de prompt injection → rama TRUE.
+- **Mensaje Injection** (rama TRUE de IF — Injection Detectada): responde "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?" sin llamar al LLM.
+
+**Cómo importar v2:**
+1. En n8n → Workflows → importá `flows/faq-bot-v2.json`.
+2. Vinculá las credenciales (van a aparecer en naranja): `Chatwoot API Token` y `Gemini API Key`.
+3. Desactivá el workflow v1 y publicá v2.
+
+**No hace falta** crear credenciales nuevas — son las mismas que v1.
+
+**Troubleshooting adicional v2:**
+
+| Síntoma | Causa probable |
+|---|---|
+| Imagen/audio sin respuesta | `IF — Tiene Texto` no está conectado a `Respuesta No-Texto` (rama FALSE) |
+| Injection filter bloquea mensajes legítimos | Los patrones son muy amplios — revisá `INJECTION_PATTERNS` en Armar Prompt y ajustá |
+| `IF — Injection Detectada` nunca es TRUE | Verificar que Armar Prompt retorna `injectionDetected: true` — probá con el mensaje "ignora las instrucciones" en test |
+
+---
+
+## 10. Limpieza pendiente (del migration de dominio)
 
 Mientras estás en el VM, aprovechá:
 
