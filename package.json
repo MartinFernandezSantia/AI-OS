@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "description": "Martin's AI Operating System — repo-level tooling",
+  "scripts": {
+    "promptfoo": "promptfoo"
+  },
   "devDependencies": {
     "@higgsfield/cli": "^0.1.40",
     "@resvg/resvg-js": "^2.6.2",
+    "promptfoo": "^0.121.17",
     "sharp": "^0.35.1"
   }
 }

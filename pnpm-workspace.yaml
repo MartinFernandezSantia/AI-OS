@@ -2,7 +2,11 @@
 # Repo-level (committed) so the CLI works on every clone without a global install.
 allowBuilds:
   '@higgsfield/cli': true
+  '@playwright/browser-chromium': false  # not needed for HTTP endpoint testing
+  '@swc/core': true  # promptfoo transpiler
   # tg-zip-worker (Wrangler) native deps — esbuild + workerd bundler/runtime
   esbuild: true
+  onnxruntime-node: true  # promptfoo local grading
+  protobufjs: true  # promptfoo serialization
   sharp: true
   workerd: true
