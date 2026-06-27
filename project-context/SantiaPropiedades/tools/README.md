@@ -17,7 +17,7 @@ Los archivos originales NO se tocan ni se renombran. Todo el tagging vive en el 
 - **espacio**: fachada, entrada, living, comedor, cocina, baño, dormitorio, balcón, vista, placard, lavadero, entorno, plano
 - **toma**: exterior, interior, detalle, contexto
 - **calidad**: buena, recuperable, mala, duplicada
-- **problemas** (varios): autos, personas, cartel-alquila, desorden, subexpuesta, sobreexpuesta, desgaste, reflejos, encuadre-torcido, baja-resolucion
+- **problemas** (varios): autos, personas, cartel-alquila, muebles, objetos, desorden, muy-oscura — solo cosas que se ven a simple vista. La calidad técnica de la foto la evalúa Claude al editar.
 - **uso** (varios): zonaprop, web, ficha, descartar
 - **portada**: ★ marca la foto principal del aviso
 - **notas**: texto libre
