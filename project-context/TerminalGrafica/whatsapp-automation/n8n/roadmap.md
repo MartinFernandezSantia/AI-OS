@@ -32,7 +32,7 @@ Nota: alternativa "nativa" = conectar un Agent Bot al inbox (las conversaciones 
 - Guardrails v2: filtro regex anti-injection + rama no-texto
 - **Filtro de canal:** el primer IF (`IF — Mensaje Entrante`) exige `conversation.channel == 'Channel::Whatsapp'` → SOLO procesa WhatsApp. Otros canales del mismo Chatwoot (email, web widget, etc.) no entran al workflow. Crítico: sin esto el bot respondía a mails entrantes de cualquier inbox conectado.
 - Debounce (5s) + idempotencia anti-retries + agregación de ráfagas
-- Modelo: Gemini Flash-Lite via Gemini API direct (credential `Gemini API Key`)
+- Modelo: `google/gemini-2.5-flash-lite` via OpenRouter (credential `OpenRouter API Key`)
 
 ---
 
