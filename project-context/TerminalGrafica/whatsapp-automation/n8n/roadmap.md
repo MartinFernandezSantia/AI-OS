@@ -30,6 +30,7 @@ Frontera bot↔humano = **asignación** (`meta.assignee`). Estados:
 
 Nota: alternativa "nativa" = conectar un Agent Bot al inbox (las conversaciones nacen en `pending`, gate por `status`). Más prolijo y da identidad propia al bot, pero más setup (crear+conectar bot, 2 reglas de automatización para el ciclo de reapertura). Se descartó por ahora a favor del modelo por asignación, que reusa el gate existente y necesita 1 sola regla.
 - Guardrails v2: filtro regex anti-injection + rama no-texto
+- **Filtro de canal:** el primer IF (`IF — Mensaje Entrante`) exige `conversation.channel == 'Channel::Whatsapp'` → SOLO procesa WhatsApp. Otros canales del mismo Chatwoot (email, web widget, etc.) no entran al workflow. Crítico: sin esto el bot respondía a mails entrantes de cualquier inbox conectado.
 - Debounce (5s) + idempotencia anti-retries + agregación de ráfagas
 - Modelo: Gemini Flash-Lite via Gemini API direct (credential `Gemini API Key`)
 

@@ -46,6 +46,15 @@
                 "type": "boolean",
                 "operation": "true"
               }
+            },
+            {
+              "id": "cond-channel",
+              "leftValue": "={{ $json.body.conversation.channel }}",
+              "rightValue": "Channel::Whatsapp",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
