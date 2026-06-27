@@ -16,11 +16,11 @@ Los archivos originales NO se tocan ni se renombran. Todo el tagging vive en el 
 
 - **espacio**: fachada, entrada, living, comedor, cocina, baño, dormitorio, balcón, vista, placard, lavadero, entorno, plano
 - **toma**: exterior, interior, detalle, contexto
-- **calidad**: buena, recuperable, mala, duplicada
-- **problemas** (varios): autos, personas, cartel-alquila, muebles, objetos, desorden, muy-oscura — solo cosas que se ven a simple vista. La calidad técnica de la foto la evalúa Claude al editar.
 - **uso** (varios): zonaprop, web, ficha, descartar
 - **portada**: ★ marca la foto principal del aviso
-- **notas**: texto libre
+- **notas para Claude**: texto libre — acá dejás cualquier cosa que necesites que mire o corrija sí o sí
+
+> Martin taggea el "qué es" (espacio/toma/destino) + notas. La calidad de la foto y qué corregir (autos, desorden, muebles, luz, etc.) lo identifica Claude mirando cada imagen.
 
 > Editar el vocabulario = editar el objeto `VOCAB` arriba de todo en `tagger.html`.
 
@@ -36,14 +36,12 @@ Los archivos originales NO se tocan ni se renombran. Todo el tagging vive en el 
       "archivo": "WhatsApp Image 2026-06-26 at 10.30.01 AM.jpeg",
       "espacio": "fachada",
       "toma": "exterior",
-      "calidad": "recuperable",
-      "problemas": ["autos", "cartel-alquila"],
       "uso": ["web", "zonaprop"],
-      "notas": "",
+      "notas": "sacá los autos de adelante",
       "portada": true
     }
   ]
 }
 ```
 
-La columna **problemas** es la que alimenta el prompt de limpieza en Higgsfield: dice exactamente qué sacar de cada foto.
+Con el espacio + las notas, Claude mira cada foto, decide qué limpiar/corregir y arma el prompt de Higgsfield.
