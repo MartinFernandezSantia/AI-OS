@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tagger de Propiedades — Santia Propiedades</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f232c; --line:#2a2f3a;
+    --txt:#e6e8ec; --mut:#9aa3b2; --accent:#e2574c; --accent2:#3b82f6;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  header .prop{font-size:13px;color:var(--accent);font-weight:600}
+  header .spacer{flex:1}
+  .count{font-size:12px;color:var(--mut)}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:7px 12px;border-radius:8px}
+  button:hover{border-color:var(--accent2)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.ghost{background:transparent}
+  .layout{display:flex;height:calc(100vh - 53px)}
+  /* left list */
+  .list{width:230px;min-width:230px;overflow-y:auto;border-right:1px solid var(--line);background:var(--panel)}
+  .thumb{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .thumb:hover{background:var(--panel2)}
+  .thumb.active{background:var(--panel2);box-shadow:inset 3px 0 0 var(--accent)}
+  .thumb img{width:46px;height:46px;object-fit:cover;border-radius:6px;background:#000;flex:none}
+  .thumb .meta{min-width:0}
+  .thumb .nm{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+  .thumb .tg{font-size:11px;font-weight:600;margin-top:2px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;background:#555}
+  .dot.done{background:var(--ok)}
+  .dot.part{background:var(--warn)}
+  /* center image */
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden;position:relative}
+  .stage img{max-width:100%;max-height:100%;object-fit:contain}
+  .stage .hint{color:var(--mut);font-size:14px;text-align:center;padding:30px;line-height:1.6}
+  .stage .fname{position:absolute;bottom:10px;left:10px;right:10px;font-size:11px;color:#cbd5e1;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:6px;backdrop-filter:blur(3px)}
+  /* right panel */
+  .panel{width:330px;min-width:330px;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
+  .field{margin-bottom:16px}
+  .field h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 7px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:var(--panel2);user-select:none}
+  .chip:hover{border-color:var(--accent2)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .chip.on.multi{background:var(--accent2);border-color:var(--accent2)}
+  textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px;font:inherit;font-size:13px;resize:vertical;min-height:54px}
+  .row{display:flex;align-items:center;gap:8px}
+  .star{font-size:13px}
+  .nav{display:flex;gap:8px;margin-top:8px}
+  .nav button{flex:1}
+  .pickbox{margin:auto;text-align:center}
+  .pickbox p{color:var(--mut);font-size:13px;margin:10px 0 0;line-height:1.6}
+  input[type=file]{display:none}
+  .qual-buena.on{background:var(--ok);border-color:var(--ok)}
+  .qual-mala.on,.qual-descartar.on{background:var(--bad);border-color:var(--bad)}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏷️ Tagger</h1>
+  <span class="prop" id="propName">— sin carpeta —</span>
+  <span class="spacer"></span>
+  <span class="count" id="count"></span>
+  <button class="ghost" id="btnPick">📁 Carpeta</button>
+  <button class="ghost" id="btnImport">⬆ Importar JSON</button>
+  <button class="primary" id="btnExport">⬇ Exportar JSON</button>
+  <input type="file" id="dirInput" webkitdirectory directory multiple />
+  <input type="file" id="jsonInput" accept="application/json,.json" />
+</header>
+
+<div class="layout">
+  <div class="list" id="list"></div>
+
+  <div class="stage" id="stage">
+    <div class="pickbox" id="pickbox">
+      <button class="primary" id="btnPick2">📁 Elegir carpeta de la propiedad</button>
+      <p>Elegí una carpeta de <b>project-context/SantiaPropiedades/Propiedades/</b><br>
+      (ej: <i>Córdoba 2107 2 F</i>). Se cargan todas las fotos para taggear.<br><br>
+      Navegá con <kbd>↑</kbd> <kbd>↓</kbd>. Tu progreso se autoguarda en el navegador,<br>
+      pero exportá el JSON para dejarlo en el repo.</p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel" style="display:none">
+    <div class="field row" style="justify-content:space-between">
+      <button class="star" id="btnStar">☆ Marcar portada</button>
+      <span class="count" id="idx"></span>
+    </div>
+
+    <div class="field">
+      <h3>Espacio</h3>
+      <div class="chips" data-dim="espacio" data-multi="0"></div>
+    </div>
+    <div class="field">
+      <h3>Tipo de toma</h3>
+      <div class="chips" data-dim="toma" data-multi="0"></div>
+    </div>
+    <div class="field">
+      <h3>Calidad</h3>
+      <div class="chips" data-dim="calidad" data-multi="0"></div>
+    </div>
+    <div class="field">
+      <h3>Problemas a corregir</h3>
+      <div class="chips" data-dim="problemas" data-multi="1"></div>
+    </div>
+    <div class="field">
+      <h3>Destino</h3>
+      <div class="chips" data-dim="uso" data-multi="1"></div>
+    </div>
+    <div class="field">
+      <h3>Notas</h3>
+      <textarea id="notas" placeholder="Cualquier cosa puntual (ej: vista al frente, humedad en techo, ambiente integrado)"></textarea>
+    </div>
+    <div class="nav">
+      <button id="prev">← Anterior</button>
+      <button id="next">Siguiente →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- vocabulario controlado ----
+const VOCAB = {
+  espacio:  ["fachada","entrada","living","comedor","cocina","baño","dormitorio","balcón","vista","placard","lavadero","entorno","plano"],
+  toma:     ["exterior","interior","detalle","contexto"],
+  calidad:  ["buena","recuperable","mala","duplicada"],
+  problemas:["autos","personas","cartel-alquila","desorden","subexpuesta","sobreexpuesta","desgaste","reflejos","encuadre-torcido","baja-resolucion"],
+  uso:      ["zonaprop","web","ficha","descartar"]
+};
+const SINGLE = ["espacio","toma","calidad"]; // un solo valor
+const MULTI  = ["problemas","uso"];          // varios valores
+
+let prop = "";          // nombre de propiedad (carpeta)
+let photos = [];        // [{archivo, url}]
+let data = {};          // archivo -> {espacio,toma,calidad,problemas:[],uso:[],notas,portada}
+let cur = -1;
+
+const $ = s => document.querySelector(s);
+const lsKey = () => "santiatags::" + prop;
+
+function blank(){ return {espacio:"",toma:"",calidad:"",problemas:[],uso:[],notas:"",portada:false}; }
+
+function load(files){
+  const imgs = [...files].filter(f => /\.(jpe?g|png|webp|avif)$/i.test(f.name));
+  if(!imgs.length){ alert("Esa carpeta no tiene imágenes."); return; }
+  // nombre de propiedad = primer segmento del path relativo
+  const rel = imgs[0].webkitRelativePath || imgs[0].name;
+  prop = rel.includes("/") ? rel.split("/")[0] : "Propiedad";
+  imgs.sort((a,b)=> (a.webkitRelativePath||a.name).localeCompare(b.webkitRelativePath||b.name, undefined, {numeric:true}));
+  photos = imgs.map(f => ({archivo: f.name, url: URL.createObjectURL(f)}));
+  // estado: localStorage si existe
+  data = {};
+  try{ const s = localStorage.getItem(lsKey()); if(s) data = JSON.parse(s); }catch(e){}
+  photos.forEach(p => { if(!data[p.archivo]) data[p.archivo] = blank(); });
+  $("#propName").textContent = prop;
+  $("#pickbox").style.display = "none";
+  $("#panel").style.display = "block";
+  buildChips();
+  renderList();
+  select(0);
+}
+
+function buildChips(){
+  document.querySelectorAll(".chips").forEach(box => {
+    const dim = box.dataset.dim;
+    box.innerHTML = "";
+    VOCAB[dim].forEach(v => {
+      const c = document.createElement("div");
+      c.className = "chip" + (box.dataset.multi==="1" ? " m":"");
+      if(dim==="calidad") c.classList.add("qual-"+ (v==="buena"?"buena": v==="mala"?"mala":""));
+      if(dim==="uso" && v==="descartar") c.classList.add("qual-descartar");
+      c.textContent = v;
+      c.onclick = () => toggle(dim, v, box.dataset.multi==="1");
+      box.appendChild(c);
+    });
+  });
+}
+
+function toggle(dim, val, multi){
+  const d = data[photos[cur].archivo];
+  if(multi){
+    const i = d[dim].indexOf(val);
+    if(i>=0) d[dim].splice(i,1); else d[dim].push(val);
+  } else {
+    d[dim] = d[dim]===val ? "" : val;
+  }
+  persist(); paintChips(); renderList();
+}
+
+function isDone(d){ return d.espacio && d.calidad && d.uso.length>0; }
+function isPart(d){ return d.espacio||d.toma||d.calidad||d.problemas.length||d.uso.length||d.notas||d.portada; }
+
+function renderList(){
+  const el = $("#list"); el.innerHTML="";
+  photos.forEach((p,i) => {
+    const d = data[p.archivo];
+    const div = document.createElement("div");
+    div.className = "thumb" + (i===cur?" active":"");
+    const status = isDone(d) ? "done" : isPart(d) ? "part" : "";
+    const tag = [d.portada?"★":"", d.espacio, d.calidad].filter(Boolean).join(" · ");
+    div.innerHTML = `<span class="dot ${status}"></span>
+      <img src="${p.url}" loading="lazy">
+      <div class="meta"><div class="tg">${tag||"<span style='color:#667'>sin taggear</span>"}</div>
+      <div class="nm">${p.archivo}</div></div>`;
+    div.onclick = ()=>select(i);
+    el.appendChild(div);
+  });
+  const done = photos.filter(p=>isDone(data[p.archivo])).length;
+  $("#count").textContent = `${done}/${photos.length} listas`;
+}
+
+function select(i){
+  if(i<0||i>=photos.length) return;
+  cur = i;
+  const p = photos[i];
+  $("#stage").innerHTML = `<img src="${p.url}"><div class="fname">${p.archivo}</div>`;
+  $("#idx").textContent = `${i+1} / ${photos.length}`;
+  $("#notas").value = data[p.archivo].notas || "";
+  paintChips();
+  renderList();
+  document.querySelector(".thumb.active")?.scrollIntoView({block:"nearest"});
+}
+
+function paintChips(){
+  const d = data[photos[cur].archivo];
+  document.querySelectorAll(".chips").forEach(box => {
+    const dim = box.dataset.dim, multi = box.dataset.multi==="1";
+    [...box.children].forEach(c => {
+      const on = multi ? d[dim].includes(c.textContent) : d[dim]===c.textContent;
+      c.classList.toggle("on", on);
+      c.classList.toggle("multi", on && multi);
+    });
+  });
+  $("#btnStar").textContent = d.portada ? "★ Portada" : "☆ Marcar portada";
+}
+
+function persist(){ try{ localStorage.setItem(lsKey(), JSON.stringify(data)); }catch(e){} }
+
+// ---- eventos ----
+$("#btnPick").onclick = $("#btnPick2").onclick = ()=> $("#dirInput").click();
+$("#dirInput").onchange = e => load(e.target.files);
+$("#notas").oninput = e => { data[photos[cur].archivo].notas = e.target.value; persist(); };
+$("#btnStar").onclick = ()=>{ const d=data[photos[cur].archivo]; d.portada=!d.portada; persist(); paintChips(); renderList(); };
+$("#prev").onclick = ()=> select(cur-1);
+$("#next").onclick = ()=> select(cur+1);
+
+document.addEventListener("keydown", e=>{
+  if(e.target.tagName==="TEXTAREA") return;
+  if(e.key==="ArrowDown"||e.key==="ArrowRight"){ e.preventDefault(); select(cur+1); }
+  if(e.key==="ArrowUp"||e.key==="ArrowLeft"){ e.preventDefault(); select(cur-1); }
+});
+
+$("#btnExport").onclick = ()=>{
+  if(!photos.length){ alert("Primero cargá una carpeta."); return; }
+  const out = {
+    propiedad: prop,
+    generado: new Date().toISOString().slice(0,10),
+    total: photos.length,
+    fotos: photos.map(p => ({archivo:p.archivo, ...data[p.archivo]}))
+  };
+  const blob = new Blob([JSON.stringify(out,null,2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "tags.json";
+  a.click();
+};
+
+$("#btnImport").onclick = ()=> $("#jsonInput").click();
+$("#jsonInput").onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const j = JSON.parse(r.result);
+      (j.fotos||[]).forEach(ft=>{
+        const {archivo,...rest} = ft;
+        data[archivo] = Object.assign(blank(), data[archivo], rest);
+      });
+      persist(); if(cur>=0) select(cur); renderList();
+      alert("JSON importado. Se fusionó con lo que había.");
+    }catch(err){ alert("No pude leer ese JSON."); }
+  };
+  r.readAsText(f);
+};
+</script>
+</body>
+</html>
