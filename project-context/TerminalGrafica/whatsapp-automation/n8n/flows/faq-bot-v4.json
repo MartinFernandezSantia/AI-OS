@@ -583,7 +583,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ assignee_id: 1 }) }}",
+        "jsonBody": "={{ ({ assignee_id: 3 }) }}",
         "options": {}
       },
       "id": "aa11cc22-dd33-ee44-ff55-001122334455",
