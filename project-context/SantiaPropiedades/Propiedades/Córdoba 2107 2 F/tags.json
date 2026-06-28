@@ -1,0 +1,207 @@
+{
+  "propiedad": "Córdoba 2107 2 F",
+  "generado": "2026-06-27",
+  "total": 25,
+  "fotos": [
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.01 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.11 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "Quitar ramas de arbol en zona superior de la imagen",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.13 AM.jpeg",
+      "espacio": "vista",
+      "toma": "contexto",
+      "uso": ["zonaprop"],
+      "notas": "Arreglar calle o no mostrarla, quitar ramas asomando en zona superior. (Reclasificada por Claude: es la vista desde el balcon, no la fachada)",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.14 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.18 AM (1).jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.18 AM (2).jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.18 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.19 AM (1).jpeg",
+      "espacio": "entrada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "Esta es la entrada al edificio. Quita los autos",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.19 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "Quitar autos y personas",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.20 AM (1).jpeg",
+      "espacio": "living",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Limpiar imagen, mejorar colores e iluminacion",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.20 AM (2).jpeg",
+      "espacio": "cocina",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Mejorar calidad, iluminacion y reparar desgaste del tiempo en cosas",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.20 AM.jpeg",
+      "espacio": "fachada",
+      "toma": "exterior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.21 AM (1).jpeg",
+      "espacio": "entrada",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Cerrar puerta al baño o mejorar iluminacion del mismo, quitar lampara en el techo",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.21 AM (2).jpeg",
+      "espacio": "baño",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.21 AM.jpeg",
+      "espacio": "entrada",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.22 AM (1).jpeg",
+      "espacio": "baño",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.22 AM (2).jpeg",
+      "espacio": "baño",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.22 AM.jpeg",
+      "espacio": "placard",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Limpiar interior de placard y enderezar un poco los estantes",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.23 AM (2).jpeg",
+      "espacio": "balcón",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.23 AM.jpeg",
+      "espacio": "balcón",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.24 AM (1).jpeg",
+      "espacio": "balcón",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.24 AM (2).jpeg",
+      "espacio": "balcón",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.24 AM.jpeg",
+      "espacio": "balcón",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Limpia la basura en la imagen y el desorden en el balcon que se ve",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.25 AM (1).jpeg",
+      "espacio": "cocina",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "",
+      "portada": false
+    },
+    {
+      "archivo": "WhatsApp Image 2026-06-26 at 10.30.25 AM.jpeg",
+      "espacio": "cocina",
+      "toma": "interior",
+      "uso": ["zonaprop"],
+      "notas": "Quitar escoba",
+      "portada": false
+    }
+  ]
+}
