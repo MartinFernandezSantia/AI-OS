@@ -81,13 +81,14 @@
       <h2>Costos one-time — desarrollo <span class="tag mio">los pagás vos</span></h2>
       <table id="t-dev">
         <tr><th>Concepto</th><th class="r">USD</th></tr>
-        <tr><td>OpenRouter (testing al construir)</td><td class="r"><input type="number" value="10" data-dev></td></tr>
-        <tr><td>Claude / herramienta de dev <span class="tag">¿overhead?</span></td><td class="r"><input type="number" value="100" data-dev></td></tr>
-        <tr><td>Tu tiempo (horas × valor hora)</td><td class="r"><input type="number" value="0" data-dev></td></tr>
+        <tr><td>Dominio</td><td class="r"><input type="number" value="10" data-dev></td></tr>
+        <tr><td>Retención WhatsApp API</td><td class="r"><input type="number" value="15" data-dev></td></tr>
+        <tr><td>Claude (herramienta de dev)</td><td class="r"><input type="number" value="100" data-dev></td></tr>
+        <tr><td>OpenRouter API (testing)</td><td class="r"><input type="number" value="10" data-dev></td></tr>
         <tr class="row-total"><td>Total invertido por vos</td><td class="r tot">$<span id="dev-total">0</span></td></tr>
       </table>
-      <p class="note">El dominio y la "retención WhatsApp" los saqué de acá: son infra
-      recurrente de TG (ver columna derecha), no costo tuyo de desarrollo.</p>
+      <p class="note">Costos internos que ya gastaste para construirlo. Son tuyos (sunk),
+      van en el costo del desarrollo independientemente de quién pague la infra de acá en adelante.</p>
     </div>
 
     <div class="card">
@@ -96,7 +97,6 @@
         <tr><th>Concepto</th><th class="r">USD/mes</th></tr>
         <tr><td>VPS (Hetzner CAX21, ver tabla)</td><td class="r"><input type="number" value="9" data-infra></td></tr>
         <tr><td>Tokens IA (OpenRouter, 900 conv/mes)</td><td class="r"><input type="number" value="12" data-infra></td></tr>
-        <tr><td>Dominio (anual /12)</td><td class="r"><input type="number" value="0.83" data-infra></td></tr>
         <tr><td>WhatsApp API (solo responde)</td><td class="r"><input type="number" value="0" data-infra></td></tr>
         <tr class="row-total"><td>Carga mensual de TG</td><td class="r tot">$<span id="infra-total">0</span></td></tr>
       </table>
@@ -154,16 +154,8 @@
   <div class="flags" style="margin-top:16px">
     <h2>Banderas sobre tus números (corroboración)</h2>
     <ul>
-      <li><b>WhatsApp "retención $15":</b> Meta Cloud API <u>no</u> cobra fee mensual de plataforma.
-      Con el modelo por-mensaje, las conversaciones de servicio (cliente escribe, vos respondés
-      dentro de 24h) son <u>gratis</u>. Tu "$0 solo respuestas" está bien. El $15 solo existe si
-      vas por un BSP (Twilio, 360dialog) en vez de Cloud API directo. <b>Confirmá cuál usás.</b></li>
-      <li><b>Claude $100:</b> si es tu suscripción mensual que usás en TODOS tus proyectos, es
-      overhead tuyo de negocio, no costo de este proyecto. Cargarlo entero acá te infla el costo
-      y te esconde el margen real. Atribuí una fracción o sacalo.</li>
       <li><b>4 vCPU es holgado</b> para una sola imprenta (~900 conv/mes). 2/8 (KVM 2) alcanzaría.
       Voy a 4/8 igual porque en Hetzner cuesta casi lo mismo y te da aire para Chatwoot + n8n + Postgres + Redis juntos.</li>
-      <li><b>Dominio</b> es costo anual recurrente de TG (~$10/año), no one-time de desarrollo.</li>
       <li><b>Pico de tokens:</b> en pass-through es costo de TG, no tuyo. Nunca te comas tokens en
       un pago único. Defensas que ya tenés: OpenRouter (cambiás de modelo), max_tokens topeado,
       RAG optimizado. Sumá topes de gasto en la cuenta de TG.</li>
