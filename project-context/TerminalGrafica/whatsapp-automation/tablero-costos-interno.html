@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TG WhatsApp — Tablero de costos (INTERNO)</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --border:#2a2f3a;
+    --txt:#e6e8ec; --muted:#9aa3b2; --accent:#4ea1ff; --good:#3ecf8e;
+    --warn:#ffb454; --bad:#ff6b6b; --tg:#c792ea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:15px;margin:0 0 12px;color:var(--accent)}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  .wrap{max-width:980px;margin:0 auto}
+  .banner{background:#1a2433;border:1px solid #2d4a6b;border-radius:10px;
+    padding:14px 16px;margin-bottom:20px;font-size:13px}
+  .banner b{color:var(--accent)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--border);font-size:13px}
+  th{color:var(--muted);font-weight:600}
+  td.r,th.r{text-align:right}
+  input[type=number],input[type=text]{width:90px;background:var(--panel2);
+    border:1px solid var(--border);color:var(--txt);border-radius:6px;padding:5px 7px;
+    font:inherit;text-align:right}
+  input[type=text]{width:100%;text-align:left}
+  .row-total td{border-top:2px solid var(--border);border-bottom:none;
+    font-weight:700;padding-top:10px}
+  .tot{font-size:16px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;
+    background:#2a2f3a;color:var(--muted);margin-left:6px}
+  .tag.tg{background:#2d2440;color:var(--tg)}
+  .tag.mio{background:#16332a;color:var(--good)}
+  .pill{padding:2px 8px;border-radius:6px;font-weight:600}
+  .pos{color:var(--good)} .neg{color:var(--bad)} .warn{color:var(--warn)}
+  .vps td:first-child{font-weight:600}
+  .vps .rec{background:#16332a}
+  .flags{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .flags li{margin-bottom:9px}
+  .flags b{color:var(--warn)}
+  .toggle{display:flex;gap:8px;margin:10px 0 4px}
+  .toggle label{background:var(--panel2);border:1px solid var(--border);padding:6px 12px;
+    border-radius:8px;cursor:pointer;font-size:13px}
+  .toggle input{margin-right:6px}
+  .note{color:var(--muted);font-size:12px;margin-top:8px}
+  .big{font-size:22px;font-weight:800}
+  .barfill{height:6px;border-radius:4px;background:var(--good);margin-top:4px}
+  .controls{display:flex;gap:10px;margin:18px 0;align-items:center}
+  button{background:var(--panel2);border:1px solid var(--border);color:var(--txt);
+    padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+  button:hover{border-color:var(--accent)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
+  a{color:var(--accent)}
+  .savestate{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Terminal Gráfica · Automatización WhatsApp — Tablero de costos</h1>
+  <p class="sub">USO INTERNO (no para el cliente). Editá los números, los totales se recalculan solos.
+  Última base de precios VPS: <b>28-jun-2026</b>.</p>
+
+  <div class="banner">
+    <b>Modelo de cobro — decisión pendiente.</b> Acordamos que TG sea dueño de la infra
+    (paga proveedores directo). Eso es <b>pass-through</b>: vos no revendés infra, no tenés
+    margen ahí, y cero exposición al pico de tokens. Alternativa <b>managed</b>: vos pagás la
+    infra y le facturás una cuota con markup (TG vuelve a depender de vos — lo que justamente
+    no quería). Elegí abajo cómo calcular el margen mensual.
+  </div>
+
+  <!-- ============ COSTOS ============ -->
+  <div class="grid">
+    <div class="card">
+      <h2>Costos one-time — desarrollo <span class="tag mio">los pagás vos</span></h2>
+      <table id="t-dev">
+        <tr><th>Concepto</th><th class="r">USD</th></tr>
+        <tr><td>OpenRouter (testing al construir)</td><td class="r"><input type="number" value="10" data-dev></td></tr>
+        <tr><td>Claude / herramienta de dev <span class="tag">¿overhead?</span></td><td class="r"><input type="number" value="100" data-dev></td></tr>
+        <tr><td>Tu tiempo (horas × valor hora)</td><td class="r"><input type="number" value="0" data-dev></td></tr>
+        <tr class="row-total"><td>Total invertido por vos</td><td class="r tot">$<span id="dev-total">0</span></td></tr>
+      </table>
+      <p class="note">El dominio y la "retención WhatsApp" los saqué de acá: son infra
+      recurrente de TG (ver columna derecha), no costo tuyo de desarrollo.</p>
+    </div>
+
+    <div class="card">
+      <h2>Costos recurrentes / mes — infra <span class="tag tg">los paga TG</span></h2>
+      <table id="t-infra">
+        <tr><th>Concepto</th><th class="r">USD/mes</th></tr>
+        <tr><td>VPS (Hetzner CAX21, ver tabla)</td><td class="r"><input type="number" value="9" data-infra></td></tr>
+        <tr><td>Tokens IA (OpenRouter, 900 conv/mes)</td><td class="r"><input type="number" value="12" data-infra></td></tr>
+        <tr><td>Dominio (anual /12)</td><td class="r"><input type="number" value="0.83" data-infra></td></tr>
+        <tr><td>WhatsApp API (solo responde)</td><td class="r"><input type="number" value="0" data-infra></td></tr>
+        <tr class="row-total"><td>Carga mensual de TG</td><td class="r tot">$<span id="infra-total">0</span></td></tr>
+      </table>
+      <p class="note">Tokens: rango real $5–$20 según volumen. Poné topes y alertas en la
+      cuenta de IA de TG para que un pico no lo sorprenda.</p>
+    </div>
+  </div>
+
+  <!-- ============ INGRESOS Y MARGEN ============ -->
+  <div class="card" style="margin-top:16px">
+    <h2>Tu precio y tu ganancia</h2>
+    <div class="toggle">
+      <label><input type="radio" name="modelo" value="pass" checked> Pass-through (TG paga infra)</label>
+      <label><input type="radio" name="modelo" value="managed"> Managed (vos facturás infra)</label>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <table>
+        <tr><th>Concepto</th><th class="r">USD</th></tr>
+        <tr><td>Precio que cobrás por el desarrollo (one-time)</td><td class="r"><input type="number" value="0" id="price-dev"></td></tr>
+        <tr><td>Garantía incluida (días)</td><td class="r"><input type="number" value="60" id="warranty"></td></tr>
+        <tr><td>Soporte post-garantía (USD/hora)</td><td class="r"><input type="number" value="0" id="price-hour"></td></tr>
+        <tr id="row-cuota"><td>Cuota mensual que facturás <span class="tag">solo managed</span></td><td class="r"><input type="number" value="0" id="price-month"></td></tr>
+      </table>
+      <div>
+        <table>
+          <tr><td>Ganancia en desarrollo</td><td class="r"><span class="big" id="m-dev">$0</span></td></tr>
+          <tr><td colspan="2"><div class="barfill" id="bar-dev" style="width:0%"></div>
+            <span class="note" id="note-dev"></span></td></tr>
+          <tr><td>Ganancia mensual recurrente</td><td class="r"><span class="big" id="m-month">$0</span></td></tr>
+          <tr><td colspan="2"><span class="note" id="note-month"></span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VPS COMPARATIVA ============ -->
+  <div class="card" style="margin-top:16px">
+    <h2>Comparativa VPS — 4 vCPU / 8 GB (referencia, jun-2026)</h2>
+    <table class="vps">
+      <tr><th>Plan</th><th>Proveedor</th><th>vCPU</th><th>RAM</th><th>Disco</th><th class="r">USD/mes</th><th>Compromiso</th></tr>
+      <tr class="rec"><td>CAX21 ✔</td><td>Hetzner</td><td>4 (ARM)</td><td>8 GB</td><td>80 GB SSD</td><td class="r">~$9</td><td>Ninguno · mensual</td></tr>
+      <tr><td>CX32</td><td>Hetzner</td><td>4 (Intel)</td><td>8 GB</td><td>80 GB SSD</td><td class="r">~$7–8*</td><td>Ninguno · mensual</td></tr>
+      <tr><td>CPX31</td><td>Hetzner</td><td>4 (AMD)</td><td>8 GB</td><td>160 GB</td><td class="r">~$18–25</td><td>Ninguno · mensual</td></tr>
+      <tr><td>KVM 2</td><td>Hostinger</td><td><span class="warn">2</span></td><td>8 GB</td><td>100 GB NVMe</td><td class="r">$7 intro / $15 renov</td><td>12–24 meses upfront</td></tr>
+      <tr><td>KVM 4</td><td>Hostinger</td><td>4</td><td>16 GB</td><td>200 GB NVMe</td><td class="r">~$25 renov</td><td>12–24 meses upfront</td></tr>
+    </table>
+    <p class="note">* CX32 conviene verificar post ajuste del 15-jun. <b>Recomendado: Hetzner CAX21</b> —
+    es exactamente 4/8, ~$9 fijo, sin lock-in, y es el "Cost-optimized" que viste. ARM solo en
+    Europa (latencia ~250 ms a Arg, irrelevante para mensajería async). Confirmá imágenes Docker
+    arm64 (Chatwoot y n8n las publican). Si querés US o x86, CX32. Hostinger pierde: KVM 2 es
+    solo 2 vCPU y el de 4 vCPU es caro y con pago adelantado.</p>
+  </div>
+
+  <!-- ============ BANDERAS ============ -->
+  <div class="flags" style="margin-top:16px">
+    <h2>Banderas sobre tus números (corroboración)</h2>
+    <ul>
+      <li><b>WhatsApp "retención $15":</b> Meta Cloud API <u>no</u> cobra fee mensual de plataforma.
+      Con el modelo por-mensaje, las conversaciones de servicio (cliente escribe, vos respondés
+      dentro de 24h) son <u>gratis</u>. Tu "$0 solo respuestas" está bien. El $15 solo existe si
+      vas por un BSP (Twilio, 360dialog) en vez de Cloud API directo. <b>Confirmá cuál usás.</b></li>
+      <li><b>Claude $100:</b> si es tu suscripción mensual que usás en TODOS tus proyectos, es
+      overhead tuyo de negocio, no costo de este proyecto. Cargarlo entero acá te infla el costo
+      y te esconde el margen real. Atribuí una fracción o sacalo.</li>
+      <li><b>4 vCPU es holgado</b> para una sola imprenta (~900 conv/mes). 2/8 (KVM 2) alcanzaría.
+      Voy a 4/8 igual porque en Hetzner cuesta casi lo mismo y te da aire para Chatwoot + n8n + Postgres + Redis juntos.</li>
+      <li><b>Dominio</b> es costo anual recurrente de TG (~$10/año), no one-time de desarrollo.</li>
+      <li><b>Pico de tokens:</b> en pass-through es costo de TG, no tuyo. Nunca te comas tokens en
+      un pago único. Defensas que ya tenés: OpenRouter (cambiás de modelo), max_tokens topeado,
+      RAG optimizado. Sumá topes de gasto en la cuenta de TG.</li>
+      <li><b>Decisión abierta:</b> pass-through vs managed. Para este cliente (quiere ser dueño y no
+      depender de vos) → pass-through. El managed le contradice lo que pidió.</li>
+    </ul>
+  </div>
+
+  <div class="controls">
+    <button onclick="resetAll()">Restablecer a valores del archivo</button>
+    <span class="savestate" id="savestate"></span>
+  </div>
+  <p class="note">Tus ediciones se guardan en este navegador (localStorage). Para que un cambio
+  quede en git, editá el <code>value</code> por defecto en el HTML y commiteá.</p>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const KEY = 'tg-costos-v1';
+let defaults = {};
+
+function num(el){ const v = parseFloat(el.value); return isNaN(v)?0:v; }
+
+function snapshotDefaults(){
+  $$('input[type=number]').forEach((el,i)=>{ el.dataset.k = 'n'+i; defaults['n'+i]=el.value; });
+  $$('input[name=modelo]').forEach(el=>{ if(el.checked) defaults.modelo=el.value; });
+}
+
+function load(){
+  const raw = localStorage.getItem(KEY);
+  if(!raw){ return; }
+  try{
+    const s = JSON.parse(raw);
+    $$('input[type=number]').forEach(el=>{ if(s[el.dataset.k]!==undefined) el.value=s[el.dataset.k]; });
+    if(s.modelo){ const r=$('input[name=modelo][value="'+s.modelo+'"]'); if(r) r.checked=true; }
+  }catch(e){}
+}
+
+function save(){
+  const s={};
+  $$('input[type=number]').forEach(el=>{ s[el.dataset.k]=el.value; });
+  s.modelo = $('input[name=modelo]:checked').value;
+  localStorage.setItem(KEY, JSON.stringify(s));
+  $('#savestate').textContent = 'guardado ✓';
+  setTimeout(()=>$('#savestate').textContent='', 1200);
+}
+
+function calc(){
+  const devCost = $$('[data-dev]').reduce((a,el)=>a+num(el),0);
+  const infra   = $$('[data-infra]').reduce((a,el)=>a+num(el),0);
+  $('#dev-total').textContent = devCost.toFixed(2);
+  $('#infra-total').textContent = infra.toFixed(2);
+
+  const priceDev = num($('#price-dev'));
+  const priceMonth = num($('#price-month'));
+  const modelo = $('input[name=modelo]:checked').value;
+
+  // margen desarrollo
+  const mDev = priceDev - devCost;
+  $('#m-dev').textContent = '$'+mDev.toFixed(2);
+  $('#m-dev').className = 'big ' + (mDev>=0?'pos':'neg');
+  const pct = priceDev>0 ? Math.max(0,Math.min(100, mDev/priceDev*100)) : 0;
+  $('#bar-dev').style.width = pct+'%';
+  $('#bar-dev').style.background = mDev>=0 ? 'var(--good)' : 'var(--bad)';
+  $('#note-dev').textContent = priceDev>0
+    ? `margen ${pct.toFixed(0)}% sobre el precio · recordá: trato barato = pago en aprendizaje + caso de estudio`
+    : 'cargá el precio que vas a cobrar por el desarrollo';
+
+  // margen mensual segun modelo
+  const rowCuota = $('#row-cuota');
+  let mMonth, noteMonth;
+  if(modelo==='managed'){
+    rowCuota.style.opacity = 1;
+    mMonth = priceMonth - infra;
+    noteMonth = `cuota $${priceMonth.toFixed(2)} − infra $${infra.toFixed(2)} · OJO: te comés el pico de tokens`;
+  } else {
+    rowCuota.style.opacity = .4;
+    mMonth = priceMonth; // en pass-through, solo retainer opcional de monitoreo
+    noteMonth = priceMonth>0
+      ? `retainer opcional de monitoreo · infra $${infra.toFixed(2)} la paga TG, no es tu costo`
+      : `pass-through: tu ingreso recurrente es $0 salvo que cobres un retainer de monitoreo. Infra ($${infra.toFixed(2)}) la paga TG`;
+  }
+  $('#m-month').textContent = '$'+mMonth.toFixed(2);
+  $('#m-month').className = 'big ' + (mMonth>=0?'pos':'neg');
+  $('#note-month').textContent = noteMonth;
+
+  save();
+}
+
+function resetAll(){
+  $$('input[type=number]').forEach(el=>{ el.value = defaults[el.dataset.k]; });
+  const r=$('input[name=modelo][value="'+defaults.modelo+'"]'); if(r) r.checked=true;
+  localStorage.removeItem(KEY);
+  calc();
+}
+
+snapshotDefaults();
+load();
+$$('input').forEach(el=>el.addEventListener('input', calc));
+$$('input[name=modelo]').forEach(el=>el.addEventListener('change', calc));
+calc();
+</script>
+</body>
+</html>
