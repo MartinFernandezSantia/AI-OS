@@ -21,10 +21,10 @@
     },
     {
       "archivo": "WhatsApp Image 2026-06-26 at 10.30.13 AM.jpeg",
-      "espacio": "vista",
-      "toma": "contexto",
+      "espacio": "fachada",
+      "toma": "exterior",
       "uso": ["zonaprop"],
-      "notas": "Arreglar calle o no mostrarla, quitar ramas asomando en zona superior. (Reclasificada por Claude: es la vista desde el balcon, no la fachada)",
+      "notas": "Arreglar calle o no mostrarla, quitar ramas asomando en zona superior",
       "portada": false
     },
     {
