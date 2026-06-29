@@ -20,6 +20,30 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-29 — Bot WhatsApp accede al catálogo por function calling (NO RAG vectorial), con safeguards del red-team
+
+**Decision:** Para que el FAQ-bot de Terminal Gráfica informe productos/precios con precisión, el bot consulta la BD viva del sistema de presupuestos (Supabase Postgres, la fuente de verdad) vía **function/tool calling desde n8n** — **no** RAG vectorial. Razón estructural: catálogo y precios son datos estructurados + cómputo, no recuperación semántica; vectorizar duplicaría la fuente de verdad y daría imprecisión probabilística sobre números (confirmado por deep-research, 113 agentes, y debate adversarial Opus 2 rondas). Diseño:
+- **Vista de solo-lectura `bot_catalogo`** con taxonomía (categorías + nombres canónicos + sinónimos[] + casos_de_uso[]) que va SIEMPRE en el prompt (cacheada); las 186 variantes con precios se traen on-demand por SQL.
+- **Resolución nombre→ítem en 2 niveles:** N1 = SQL con OR de sinónimos (determinístico, ~80%); N2 = LLM resuelve contra la taxonomía si N1 falla.
+- **Precios = misma fila/motor que el mostrador, nunca una copia ni una reimplementación.** Sin reglas de precio → muestra el número. Con reglas → para cotizar de verdad el bot debe **llamar al motor de precios existente** (función/endpoint compartido), nunca recalcular las reglas en n8n (eso reintroduce deriva = precio fantasma). Nunca calcula con inputs incompletos: los pide o escala.
+
+**5 ajustes que salieron del red-team (críticos):**
+1. **Número solo para precio sin reglas;** lo que depende de cantidad/medida/terminación va en rango + gatillo de captura, nunca número pelado. Plantilla fija, el LLM no tipea el precio.
+2. **Auto-silencio:** SKU con `updated_at` > 30 días → el bot deja de mostrar ese precio y escala (nadie audita los 186 a mano).
+3. **Se elimina el "no trabajamos eso" terminal** → handoff suave siempre que no resuelva con datos. Esto vuelve OBSERVABLE el falso negativo (la venta que moría en silencio queda como conversación viva).
+4. **Feedback loop sin etiquetado voluntario:** señales automáticas del log + digest semanal con 5 conversaciones perdidas al azar para que Martin marque "era venta / no" (ground truth forzado, 2 min).
+5. **Infra defensiva:** timeout + fallback a humano si la BD cae/lentea; kill switch global + modo solo-handoff de fábrica.
+
+Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff suave + log `bot_decisiones` desde día 1. El cálculo de precios con reglas y la decisión sobre pgvector se prenden por fases según lo que muestre el loop.
+
+**Why:** El bot es el cliente piloto de un producto a vender a otras imprentas: un precio fantasma (captura + cobro distinto en mostrador) o un falso "no lo hacemos" matan la reputación de la imprenta y con eso el producto. Los safeguards priorizan no romper reputación sobre features. Single source of truth (datos Y lógica) es lo que evita la deriva, que es la raíz de casi todos los modos de falla. Cambiaría de idea sobre pgvector si, con frases reales del log, un eval en promptfoo muestra que la resolución por sinónimos+LLM falla por encima de un umbral; cambiaría sobre el cálculo de precios si las reglas resultan demasiado acopladas al código del sistema como para exponerlas como función.
+
+**Alternatives considered:** RAG vectorial / pgvector (rechazado a esta escala: duplica fuente de verdad, imprecisión sobre precios, sin evidencia de ventaja en el deep-research); import por xls del catálogo (rechazado: foto que driftea); reimplementar las reglas de precio en un nodo n8n (rechazado: segunda versión de la lógica = precio fantasma garantizado); salida terminal "no trabajamos eso" (rechazado: falso negativo invisible); etiquetado manual del agente en Chatwoot como ground truth (rechazado: muere en la semana 2).
+
+**Owner:** Martin.
+
+---
+
 ## 2026-06-23 — `/level-up`: Research/plan completeness enforcer (skill)
 
 **Decision:** Ship a skill that forces every software/architecture/infra research or planning task to cover the real-world dimensions Claude tends to skip — pricing/cost, security, UX, scalability, ops/maintenance, compliance — and to *justify* any dimension marked N/A instead of silently dropping it. Scoped via the 3Ms Method pass:

@@ -38,14 +38,31 @@ Nota: alternativa "nativa" = conectar un Agent Bot al inbox (las conversaciones 
 
 ## Pendiente — próxima sesión
 
-### 1. RAG sobre el catálogo
+### 1. Acceso al catálogo por function calling (NO RAG vectorial)
 
-El system prompt actual lista los productos a texto plano. Con 186+ variantes de precio/material/tamaño, el prompt crece y la precisión baja.
+> Decisión 2026-06-29 (ver `decisions/log.md`). Validado por deep-research (113 agentes) + debate adversarial Opus (2 rondas). Reemplaza el plan original de "RAG sobre el catálogo".
 
-Plan:
-- Crear BD vectorizada (Supabase pgvector o Chroma local) con el catálogo de productos y precios
-- Agregar nodo en n8n antes de Armar Prompt: embed del mensaje del cliente → búsqueda semántica → inyectar solo las variantes relevantes
-- Reduce tokens/conversación 6-7x (ver estimaciones de costo en memoria `chatbot-llm-model-cost`)
+**Problema:** el system prompt lista los productos a texto plano. Con 186+ variantes de precio/material/tamaño, el prompt crece y la precisión baja. Además el cliente nombra las cosas distinto a como están en el catálogo (ej. "remeras estampadas" → "impresión textil DTF").
+
+**Por qué NO RAG vectorial:** catálogo y precios ya están estructurados en la BD del sistema de presupuestos (Supabase Postgres = fuente de verdad). Precios y reglas son cómputo determinístico, no recuperación semántica. Vectorizar duplicaría la fuente de verdad y daría imprecisión probabilística sobre números — justo donde un error quema la reputación. (Decisión sobre pgvector se difiere: se reevalúa con frases reales del log vía promptfoo.)
+
+**Arquitectura:**
+- El bot consulta la BD viva vía **function/tool calling desde n8n**. Vista de solo-lectura **`bot_catalogo`** (ver `../data-model.md`).
+- El catálogo de NOMBRES es chico (~20-40 productos canónicos). La **taxonomía** (categorías + nombres canónicos + sinónimos[] + casos_de_uso[]) va SIEMPRE en el prompt (cacheada, §3). Las 186 variantes con precios NO van al prompt: se traen on-demand por SQL una vez identificado el producto. → baja tokens/conversación 6-7x.
+- **Resolución nombre→ítem en 2 niveles:** N1 = SQL con OR de sinónimos (determinístico, ~80%); N2 = LLM resuelve contra la taxonomía si N1 falla.
+
+**Precios (regla dura):**
+- Sin reglas de precio → el bot muestra el número (leído de la fila, plantilla fija, el LLM no lo tipea).
+- Con reglas → para cotizar de verdad el bot debe **llamar al motor de precios existente** (función/endpoint compartido del sistema de presupuestos), **nunca recalcular las reglas en n8n** (segunda versión de la lógica = precio fantasma). Nunca calcula con inputs incompletos: los pide o escala.
+- Lo que depende de cantidad/medida/terminación y no se puede calcular → **rango + gatillo de captura**, nunca número pelado.
+- `updated_at` > 30 días → el bot deja de mostrar ese precio y escala (auto-silencio, nadie audita los 186 a mano).
+
+**Safeguards del red-team (críticos):**
+- **Se elimina el "no trabajamos eso" terminal** → handoff suave siempre que no resuelva con datos. Vuelve observable el falso negativo.
+- **Infra defensiva:** timeout en el SQL + fallback a humano si la BD cae/lentea (nunca spinner ni error crudo); kill switch global + modo solo-handoff de fábrica.
+- **Loop de mejora (Capa 3):** instrumentar tabla `bot_decisiones` desde día 1 (ver `../mantenimiento-y-monitoreo.md` §5).
+
+**Fases:** v1 = precios sin reglas + handoff suave + log `bot_decisiones`. Después, con datos del loop: cálculo de precios con reglas (vía motor compartido) y decisión pgvector.
 
 ### 2. Flujo orientado a cerrar la venta + handoff inteligente a agente ✅ DONE en v4
 

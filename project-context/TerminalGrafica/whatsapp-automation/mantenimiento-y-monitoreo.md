@@ -113,6 +113,37 @@ Las dos cosas que requieren juicio y lenguaje natural, no detección:
 
 ---
 
+## 5. Capa 3 — calidad de decisiones del bot (loop de mejora)
+
+> Distinta de las capas 1-2: esas responden "¿está caído?" y "¿salió un CVE?". Esta responde **"¿el bot está decidiendo bien?"**. Se instrumenta junto con el acceso al catálogo (roadmap §1, decisión 2026-06-29). Nace del red-team adversarial: el riesgo no es técnico, es el **precio fantasma** y el **falso negativo invisible** (la venta que el bot mata en silencio).
+
+**Principio de diseño: el ground truth NO puede depender del etiquetado voluntario del agente** (muere en la semana 2 con la gente atendiendo el mostrador). Todo lo posible sale de señales automáticas; lo poco manual es forzado y mínimo.
+
+### Qué se loguea (tabla `bot_decisiones`, automático)
+Por cada interacción relevante (detalle de columnas en `../data-model.md`):
+- Mensaje crudo del cliente, producto resuelto (o ninguno), top-3 candidatos del SQL con su score.
+- Acción tomada (informó precio / informó capacidad / repreguntó / handoff).
+- Señales automáticas: filas devueltas por SQL (0 = candidato a falso negativo), si hubo handoff, si el cliente respondió después del handoff, tiempo a primera respuesta humana.
+
+### Señales derivadas (sin que nadie toque nada)
+- **Candidato a falso negativo:** consulta con match razonable (top-3 con score) que igual no cerró.
+- **Venta muerta (proxy):** conversación que termina sin handoff y el cliente no vuelve a escribir en 48h tras una negativa/no-cierre.
+- **Cola de carga:** top consultas con 0 filas + top términos que llevaron a handoff = qué sinónimos/productos faltan en `bot_catalogo`.
+
+### Digest semanal (vía Hermes, junto al digest de seguridad)
+Arranca con lo que importa, no con métricas de vanidad:
+1. **5 conversaciones perdidas al azar** (entre negativas / escalas-sin-cierre) → Martin marca en 2 min "era venta / no era". **Ese es el ground truth** y de paso calibra el umbral. Muestreo forzado, no voluntario.
+2. Cola de carga (sinónimos/productos faltantes).
+3. Métricas en plata: consultas resueltas solas, handoffs maduros generados, candidatos a venta perdida.
+
+### Cómo mejora el bot con esto
+- Términos no reconocidos → se agregan como sinónimos en `bot_catalogo` → la próxima vez son hit de N1 (se cura casi solo).
+- Si el muestreo muestra que escala de más o de menos → se ajusta el prompt / umbral.
+- En ~1 mes, con frases reales, eval en **promptfoo** (ya en el repo) para afinar umbral y decidir si pgvector aporta sobre sinónimos+LLM.
+- El loop es lo que permite **prender features con confianza por fases** (ej. cálculo de precios con reglas): primero se mira funcionar, después se suelta.
+
+---
+
 ## Accionables pendientes
 
 - [ ] Cambiar el slug pinneado de Gemini en n8n por un array de fallback
@@ -125,6 +156,7 @@ Las dos cosas que requieren juicio y lenguaje natural, no detección:
 - [ ] Activar `unattended-upgrades` (canal `-security`) + auto-reboot 4am + log rotation Docker + cron de prune.
 - [ ] Mover adjuntos de Chatwoot a R2 (`ACTIVE_STORAGE_SERVICE=s3`).
 - [ ] Hermes: digest semanal de seguridad (primer job).
+- [ ] Capa 3: instrumentar `bot_decisiones` desde el día 1 del acceso al catálogo (roadmap §1) + sumar el digest de calidad del bot al digest semanal de Hermes (5 conversaciones perdidas al azar para muestreo forzado).
 
 _Fuentes de la investigación 2026-06-29: GitHub releases/advisories de Chatwoot,
 Meta Graph API versions page + On-Premises sunset, Google Gemini deprecations page._
