@@ -137,6 +137,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 **Owner:** Martin.
 
+## 2026-06-29 — Monitoreo del sistema WhatsApp en dos capas; el digest semanal de seguridad es el primer job de Hermes
+
+**Decision:** El monitoreo del stack self-hosted (Chatwoot + n8n + Postgres + Redis) se parte en dos capas. **Capa 1 (detección):** herramientas determinísticas open-source — Uptime Kuma + Netdata + dead-man's-switch de backups + un ping externo — que notifican a un único canal de Telegram, sin LLM en el camino. **Capa 2 (inteligencia):** un agente Hermes que (a) genera un digest semanal de seguridad sobre el stack pinneado y (b) más adelante hace triage de las alertas de la Capa 1. El **digest semanal de seguridad es el primer job real de Hermes** (antes que el copiloto de engagement social). Guía completa en `project-context/TerminalGrafica/whatsapp-automation/mantenimiento-y-monitoreo.md`.
+
+**Why:** El LLM no puede ser el detector de caídas: si vive en el mismo VPS, cae con él, y agrega latencia/costo/alucinación a una alerta crítica. La detección tiene que ser tonta y externa; el agente aporta donde hace falta juicio (filtrar CVEs que afectan vs ruido, traducir alertas). El digest semanal ataca el riesgo real detectado en la investigación 2026-06-29: no es la frecuencia de updates (solo ~3 forzados/año entre Chatwoot, WhatsApp API y Gemini), es **no enterarse a tiempo** de un CVE que Chatwoot parchea en silencio. Es mejor primer job para Hermes que el engagement social: cero riesgo (solo lee y avisa), valor claro, y justifica standuparlo (el gut-check de [[hermes-role]] pedía un primer need unattended real). Cambiaría de idea si apareciera un servicio gestionado que cubra detección + digest por un costo trivial sin romper la regla de tooling (open-source/self-host + conecta a Claude).
+
+**Alternatives considered:** Un solo agente Hermes que haga todo incluido detección de downtime (rechazado: LLM en camino crítico); monitoreo 100% manual (rechazado: el agujero es justamente no enterarse a tiempo); SaaS de monitoreo cerrado (rompe la regla de tooling).
+
+**Owner:** Martin.
+
 ## 2026-06-15 — agent-browser is the one browser tool; dropped the Chrome DevTools + Lighthouse MCP servers
 
 **Decision:** Removed both MCP servers (`chrome-devtools`, `lighthouse`) from `.mcp.json` and the dead `mcp__chrome-devtools__*` permission. Browser automation, screenshots, scraping, QA, and audits all go through the vendored `agent-browser` skill instead. Added `SETUP.md` documenting fresh-machine install (core vs optional).
