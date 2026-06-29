@@ -1,1 +1,8 @@
 .env
+
+# Artefacto generado por promptfoo en cada run (315 casos de test)
+redteam.yaml
+
+# Resultados de evaluaciones
+output/
+*.eval.json

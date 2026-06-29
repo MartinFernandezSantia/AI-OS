@@ -1,10 +1,7 @@
 description: "TG FAQ Bot — White-box red team (promptfoo conoce todas las reglas internas)"
 
 targets:
-  - id: openai:chat:google/gemini-2.5-flash-lite-preview-06-17
-    config:
-      apiBaseUrl: https://openrouter.ai/api/v1
-      apiKey: env:OPENROUTER_API_KEY
+  - id: openrouter:google/gemini-2.5-flash-lite
     label: "TG FAQ Bot"
 
 prompts:
@@ -13,10 +10,7 @@ prompts:
 defaultTest:
   options:
     provider:
-      id: openai:chat:anthropic/claude-sonnet-4-6
-      config:
-        apiBaseUrl: https://openrouter.ai/api/v1
-        apiKey: env:OPENROUTER_API_KEY
+      id: openrouter:anthropic/claude-sonnet-4-6
 
 redteam:
   # Descripción completa: el generador de ataques conoce TODAS las reglas y restricciones
@@ -37,18 +31,16 @@ redteam:
   numTests: 20
 
   plugins:
-    - id: prompt-injection
     - id: overreliance
     - id: excessive-agency
     - id: harmful:hate
-    - id: harmful:harassment
+    - id: harmful:insults
     - id: competitors
     - id: politics
     - id: religion
     - id: contracts   # que acepte compromisos que no puede cumplir (precios, plazos)
 
   strategies:
-    - jailbreak
-    - jailbreak:tree
+    - jailbreak-templates
     - prompt-injection
     - base64           # ataques en encoding alternativo
