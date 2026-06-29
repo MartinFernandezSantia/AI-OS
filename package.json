@@ -4,7 +4,9 @@
   "private": true,
   "description": "Martin's AI Operating System — repo-level tooling",
   "scripts": {
-    "promptfoo": "promptfoo"
+    "promptfoo": "promptfoo",
+    "tg:redteam:blackbox": "promptfoo redteam run --config project-context/TerminalGrafica/whatsapp-automation/promptfoo/black-box.yaml --env-file project-context/TerminalGrafica/whatsapp-automation/promptfoo/.env",
+    "tg:redteam:whitebox": "promptfoo redteam run --config project-context/TerminalGrafica/whatsapp-automation/promptfoo/white-box.yaml --env-file project-context/TerminalGrafica/whatsapp-automation/promptfoo/.env"
   },
   "devDependencies": {
     "@higgsfield/cli": "^0.1.40",
