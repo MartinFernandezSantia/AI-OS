@@ -20,6 +20,18 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-06-29 — El bot pasa a recolectar+confirmar el pedido antes de escalar (lead calificado); variantes (sin precio) en el prompt
+
+**Decision:** El FAQ-bot deja de escalar en crudo ante intención de pedido ("necesito X"). Nuevo comportamiento: cuando detecta intención de pedido, entra en **modo armado de pedido** → junta los datos (producto + cantidad + características/variantes) preguntando lo que falte → resume y **pide confirmación** → recién ahí escala, dejando un **lead calificado** para que el asesor cierre y cotice. Sigue sin dar precios ni cerrar el pedido. Para habilitar preguntas precisas, el catálogo del prompt ahora incluye las **variantes (nombres/opciones) por producto, SIN precios** (Get Catálogo upgradeado). Implementado como cambio de prompt en `faq-bot-v5.json` (no requiere nodos nuevos: el multi-turno sale del historial y el handoff note ya resume la conversación). Esto **revierte** la decisión previa "el bot solo informa, no recopila datos de pedido".
+
+**Why:** Escalar en crudo cada "necesito X" tira leads vagos al humano y da mala UX. "El bot califica y prepara" (conclusión del red-team) le da al asesor un pedido ya armado y al cliente sensación de avance. Incluir variantes sin precio es barato (nombres cortos, cacheable) y **no** reintroduce el riesgo de precio fantasma (ese riesgo es de los PRECIOS, que siguen fuera del prompt y on-demand). El multi-turno y la nota de traspaso ya existían, así que el cambio es solo de prompt. Cambiaría de idea si el loop (`bot.decisiones`) muestra que el bot se enrosca juntando datos, da precios sin querer, o que los asesores prefieren el lead crudo. La precisión fina (validar configs contra variantes reales y mostrar precios de las `mostrable`) llega con el Increment B.
+
+**Alternatives considered:** Mantener escalar-en-crudo (rechazado: leads pobres, UX); calificación-antes-de-handoff vía nodos/estado explícito (rechazado: innecesario, el historial del LLM ya da el estado); meter también los precios en el prompt para cotizar en el bot (rechazado: precio fantasma — los precios van on-demand en B).
+
+**Owner:** Martin.
+
+---
+
 ## 2026-06-29 — Bot WhatsApp accede al catálogo por function calling (NO RAG vectorial), con safeguards del red-team
 
 **Decision:** Para que el FAQ-bot de Terminal Gráfica informe productos/precios con precisión, el bot consulta la BD viva del sistema de presupuestos (Supabase Postgres, la fuente de verdad) vía **function/tool calling desde n8n** — **no** RAG vectorial. Razón estructural: catálogo y precios son datos estructurados + cómputo, no recuperación semántica; vectorizar duplicaría la fuente de verdad y daría imprecisión probabilística sobre números (confirmado por deep-research, 113 agentes, y debate adversarial Opus 2 rondas). Diseño:
