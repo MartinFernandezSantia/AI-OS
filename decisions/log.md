@@ -29,7 +29,7 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 **5 ajustes que salieron del red-team (críticos):**
 1. **Número solo para precio sin reglas;** lo que depende de cantidad/medida/terminación va en rango + gatillo de captura, nunca número pelado. Plantilla fija, el LLM no tipea el precio.
-2. **Auto-silencio:** SKU con `updated_at` > 30 días → el bot deja de mostrar ese precio y escala (nadie audita los 186 a mano).
+2. **Auto-silencio:** SKU con `updated_at` > 30 días → el bot deja de mostrar ese precio y escala (nadie audita los 186 a mano). *(Ajuste 2026-06-29 al mapear el schema: `product_variants` no tiene `updated_at`; queda diferido. El bot lee el mismo precio vivo que el mostrador y las promos vencen por `valid_to` en las reglas, así que el riesgo es bajo. Si se quiere, agregar `updated_at`+trigger en una migración.)*
 3. **Se elimina el "no trabajamos eso" terminal** → handoff suave siempre que no resuelva con datos. Esto vuelve OBSERVABLE el falso negativo (la venta que moría en silencio queda como conversación viva).
 4. **Feedback loop sin etiquetado voluntario:** señales automáticas del log + digest semanal con 5 conversaciones perdidas al azar para que Martin marque "era venta / no" (ground truth forzado, 2 min).
 5. **Infra defensiva:** timeout + fallback a humano si la BD cae/lentea; kill switch global + modo solo-handoff de fábrica.
