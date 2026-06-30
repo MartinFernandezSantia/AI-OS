@@ -85,29 +85,51 @@ Parámetros: `$1` = id de conversación (del webhook), `$2` = mensaje crudo del 
 
 ---
 
-## Incremento B — resolución estructurada + precios (después de validar A)
+## Incremento B — precios (PRÓXIMA SESIÓN)
 
-Cambia el modo de la llamada LLM de texto libre a **salida estructurada**, para poder traer precios.
+> Estado: Incremento A + **order-intake** CONSTRUIDOS Y ANDANDO (`faq-bot-v5.json`, probado por WhatsApp
+> contra el seed, 2026-06-29). Falta esto para que el bot también informe precios.
 
-1. **Resolución estructurada:** el LLM, con la taxonomía en el prompt, devuelve JSON:
-   `{ producto_id | null, intent: 'info'|'precio'|'escalar'|'saludo', clarify?: string, candidatos: [...] }`.
-2. **Si intent='precio' y hay producto_id** → nodo `Get Variantes`:
+**Objetivo:** que el bot informe el **precio de lista** de las variantes sin reglas. Las que tienen reglas
+siguen escalando para cotización humana. Riesgo #1 (red-team): **precio fantasma** → número SOLO para
+`mostrable`, con **plantilla fija** (el LLM nunca tipea el número).
+
+**Dónde encaja:** hoy, cuando el cliente confirma un pedido o pide precio, el bot escala. Con B, si el
+producto+variante resuelto es `mostrable`, el bot puede **decir el precio de lista** (además de/antes de
+escalar para cerrar); si `tiene_reglas`, sigue escalando (el asesor cotiza).
+
+**Qué construir:**
+1. **Resolución estructurada producto+variante.** Hoy el LLM devuelve texto libre (respuesta o `ESCALAR`).
+   Para el precio exacto hay que saber la variante puntual. Opción más chica sobre el flujo actual: que el
+   LLM emita un marcador cuando corresponda precio (ej. `PRECIO:<producto>|<variante>`) que n8n parsea.
+   Alternativa: salida JSON `{ intent, producto_id, variante_id }`.
+2. **Nodo `Get Variantes`** (Postgres, on-demand, solo si hay intent de precio):
    ```sql
    select variante, color, unidad, precio_lista, tiene_reglas, mostrable
    from bot.variantes where producto_id = $1 order by precio_lista;
    ```
-3. **Composición del precio (regla dura):**
-   - `mostrable = true` → mostrar "variante: $precio" con plantilla fija (el LLM no tipea el número).
-   - `tiene_reglas = true` (mostrable=false) → NO mostrar número: "desde $X; para el precio exacto
-     necesito cantidad y medida, te paso un asesor" (rango + captura) o escalar.
-   - Mezcla → mostrar las mostrables y para las que tienen reglas, el gatillo de captura.
-4. **Logging fino:** completar `producto_resuelto`, `candidatos`, `filas_sql`, `nivel_resolucion`.
-5. **Fase 2 (cálculo real con reglas):** llamar al motor del quote-system (`lib/quote-utils.ts`)
-   expuesto como endpoint — recién cuando A y B estén sólidos y el loop dé datos.
+3. **Composición (regla dura):**
+   - `mostrable = true` → "La [variante] sale $[precio]" con **plantilla fija** (n8n arma el string).
+   - `tiene_reglas = true` → NO mostrar número → escalar para cotización (como hoy).
+   - Si el cliente no especificó la variante → usar el order-intake (preguntar) antes de dar precio.
+4. **Logging fino:** completar `producto_resuelto`, `candidatos`, `filas_sql`, `accion='informo_precio'`.
+5. **Validar fuerte contra el seed** (precios exactos: Fotocopia A4 simple faz = $30; Banner 0,80×1,50m =
+   $4500; etc.). Es el feature de mayor riesgo de reputación — testear como en A.
 
----
+**Fase 2 (cálculo real con reglas):** exponer el motor del quote-system (`lib/quote-utils.ts`, que aplica
+`pricing_rules.effect`) como endpoint y que el bot lo llame con inputs completos. Recién cuando B esté
+sólido y el loop dé datos.
+
+## Otros pendientes (registrados)
+- **Higiene:** Martin exporta el v5 vivo de n8n y pisa `flows/faq-bot-v5.json` (el commiteado tiene ids de
+  credencial placeholder `REPLACE_WITH_BOT_READONLY_CRED_ID`).
+- **Latencia (~6-11s, la mitad es el debounce):** bajar `Wait — Debounce` a 3s, verificar prompt caching,
+  cachear el catálogo en n8n.
+- **Sinónimos:** cargar a `bot.producto_meta` (lo alimenta el loop de `bot.decisiones`).
+- **Prod:** hoy corre contra un proyecto Supabase de **testing**; eventualmente apuntar a prod. Actualizar el
+  ref en `data-model.md` y `bot-readonly-role.sql` (siguen con el ref de prod, no el de testing).
 
 ## Orden
-1. [Martin] Rol + credencial Postgres en n8n (prereqs 2-3).
-2. [Juntos] Incremento A (A1-A4) y validar.
-3. [Juntos] Incremento B.
+1. ✅ [Martin] Rol + credencial Postgres en n8n.
+2. ✅ [Juntos] Incremento A + order-intake (`faq-bot-v5`) — andando.
+3. [Juntos] Incremento B (precios) — próxima sesión.
