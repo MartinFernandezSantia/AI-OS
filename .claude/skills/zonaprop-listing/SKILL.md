@@ -41,13 +41,27 @@ If the user hasn't provided everything you need, ask for it in one message. Don'
 - Quién publica (dueño directo, inmobiliaria, tipo de plan)
 - Competidores directos o qué destacan otros avisos de la zona
 
+## Step 1.5 — Ground the title in real comparables (IMPORTANTE)
+
+Antes de redactar, mirá cómo titulan los avisos reales de la MISMA categoría y zona. Cada categoría (depto, terreno, casa, local) se titula distinto, y el mercado te muestra qué diferenciales importan.
+
+- **ZonaProp está detrás de Cloudflare** — WebFetch da 403 y agent-browser se traba en el Turnstile (challenge en loop, Ray ID nuevo cada vez). No pierdas tiempo ahí.
+- **Usá Argenprop, que redacta igual y no tiene ese muro.** WebFetch a la URL de listado de la categoría+zona funciona. Ejemplos verificados:
+  - Deptos alquiler MDP: `https://www.argenprop.com/departamento-alquiler-localidad-mar-del-plata-1-ambiente`
+  - Terrenos venta MDP: `https://www.argenprop.com/terrenos/venta/mar-del-plata/dolares-10000-25000`
+- Pedile al fetch los títulos textuales de los primeros ~15 avisos. Fijate: (1) el patrón de título de esa categoría, (2) qué diferenciadores repiten, (3) cuántos son genéricos y débiles (a esos les ganás fácil).
+
+Aprendizajes ya confirmados por categoría:
+- **Departamentos**: patrón = tipo + ambientes + diferencial + zona. La mitad de la competencia usa títulos genéricos ("Alquiler monoambiente") — un diferencial concreto te despega. Términos que se buscan: "cocina separada", "1 ambiente y medio", "a estrenar", "24 meses" (plazo de contrato).
+- **Terrenos / lotes**: patrón = tipo + m² + zona (casi siempre incluyen la superficie). La mayoría son lotes pelados sin nada que decir, así que cualquier característica real (forestado, alambrado, servicios) es un diferencial enorme. En el título usá "Terreno" o "Lote" aunque el subtipo del portal sea "Parcela" — se buscan mucho más.
+
 ## Step 2 — Produce the listing
 
 ### Output format
 
 **TÍTULO** (1 línea, máximo ~80 caracteres)
 
-**DESCRIPCIÓN** (mínimo 400 palabras, máximo ~1.000)
+**DESCRIPCIÓN** (corta y escaneable — ver reglas)
 
 **CAMPOS ADICIONALES A COMPLETAR** (lista de campos del portal que hay que llenar más allá de título/descripción)
 
@@ -55,40 +69,43 @@ If the user hasn't provided everything you need, ask for it in one message. Don'
 
 ### Rules for the TÍTULO
 
-- Incluye: tipo + ambientes + barrio, en ese orden.
-- Suma el diferenciador más fuerte (luminoso, vista, terraza, a estrenar, cochera, etc.).
-- Sin emojis. Sin signos de exclamación. Sin mayúsculas innecesarias.
-- Sin precio en el título (va en campo separado del portal).
-- Sin links, sin números de teléfono.
-- Ejemplo: "Departamento 3 ambientes con terraza en Palermo Hollywood"
+- Orden que pide ZonaProp: tipo de propiedad + operación + **m²** + ubicación + info clave.
+- Liderá con el diferenciador más fuerte y concreto (m² fuera de lo común, cocina separada, forestado, vista, a estrenar, expensas incluidas, etc.). Mirá los comparables del Step 1.5 para saber cuál pega.
+- Corto. Los avisos ganadores del mercado son cortos; ninguno cuenta una historia.
+- Sin emojis (ZonaProp no los renderiza en el aviso). Sin signos de exclamación. Sin MAYÚSCULAS sostenidas.
+- Sin precio en el título (va en campo separado). Sin links ni teléfonos.
+- Ejemplos verificados: "Monoambiente 30 m² con cocina separada y balcón, Plaza Mitre" · "Terreno 3.850 m² forestado y alambrado, zona Rumenco - Mar del Plata"
 
 ### Rules for the DESCRIPCIÓN
 
-**Psychology hooks to apply:**
-- **Loss aversion**: redactar desde lo que el comprador/inquilino podría perder si no lo toma, no solo desde características.
-- **Escasez / unicidad**: si hay algo genuinamente único (orientación, piso alto, último disponible), decirlo explícitamente.
-- **Social proof implícita**: referencias a la zona, el barrio, el estilo de vida.
-- **Anclaje**: mencionar el precio o las expensas en relación favorable cuando aplique.
-- **Visualización**: que el lector se imagine viviendo ahí. Describir la luz, los usos de los espacios, la dinámica del día a día.
+**La regla #1 — el primer párrafo es lo único visible sin expandir.** En ZonaProp el resto de la descripción queda colapsado hasta que el usuario hace click en "ver más". El comprador escanea decenas de propiedades: si el primer párrafo no lo engancha, no expande. Por eso:
 
-**Copy structure:**
-1. **Párrafo de apertura (gancho)**: 2-3 oraciones que describan la experiencia de vivir ahí, no las especificaciones. Que enganche.
-2. **Distribución y espacios**: describir el recorrido por la propiedad, ambiente por ambiente, con detalle.
-3. **Diferenciales y extras**: todo lo que sube el valor percibido (luminosidad, vistas, amenidades, cochera, baulera, etc.).
-4. **Ubicación y entorno**: barrio, accesibilidad, comercios, transporte, parques.
-5. **Call to action**: invitar al contacto o visita. Sin teléfono ni link.
+- **Cargá TODO lo importante en el primer párrafo**: tipo, m², ubicación, el diferencial más fuerte y el dato que cierra (expensas incluidas, precio/m² excepcional, característica única). Denso pero legible.
+- No abras con una "historia" ni con la experiencia de vivir ahí antes de los datos. El comprador quiere hechos, rápido.
+
+**Psychology hooks (aplicalos con moderación, sin inflar):**
+- **Escasez / unicidad**: si hay algo genuinamente raro (superficie fuera de lo común, cocina separada, forestación de 30 años), nombralo como lo que no se consigue en la competencia.
+- **Anclaje**: cuando el precio o las expensas juegan a favor (precio/m² bajo, expensas incluidas vs. competencia con +$X), hacelo notar — sin poner el número de precio en el cuerpo.
+- **Loss aversion suave**: "no abunda en la zona", "listo para usar".
+
+**Copy structure (corta — 3 a 5 párrafos, no más):**
+1. **Párrafo 1 (el que carga todo)**: tipo + m² + ubicación + diferencial + dato que cierra. Es el único garantizado de leerse.
+2. **Distribución / lo que hay**: ambientes o características, directo, sin relleno.
+3. **Extras y entorno**: lo que sube valor + ubicación/acceso/servicios.
+4. **CTA**: invitar a consultar o visitar. Sin teléfono ni link.
 
 **Formatting rules:**
-- Mínimo 400 caracteres. Apuntar a 600-900 para máxima completitud.
+- Corta y escaneable. El usuario compara decenas de avisos — respetá su tiempo.
+- Mínimo técnico ~150 caracteres; apuntá a completar bien sin inflar.
 - Sin links externos (penaliza el score de Panoramix).
 - Sin número de teléfono ni email en el texto (el portal los filtra y puede penalizar).
-- Sin precio en la descripción (va en su campo separado).
+- Sin precio en la descripción (va en su campo separado). Condiciones como "expensas incluidas" sí van, porque son un beneficio, no un número.
 - Español argentino. Vos/ustedes. Registro cálido pero profesional.
-- Párrafos cortos. Sin bullets en la descripción del portal (el campo es texto plano).
+- Párrafos cortos. Sin bullets ni emojis (el campo es texto plano y no los renderiza).
 
 ### Rules for CAMPOS ADICIONALES
 
-Listar explícitamente qué campos hay que completar en el portal más allá de título/descripción, y con qué valor (basado en los datos provistos). Esto ayuda a maximizar el score de Panoramix. Ejemplo:
+Listar explícitamente qué campos hay que completar en el portal más allá de título/descripción, y con qué valor (basado en los datos provistos). Esto ayuda a maximizar el score de Panoramix. Ejemplo depto:
 
 - Superficie total: 72 m²
 - Superficie cubierta: 65 m²
@@ -100,6 +117,10 @@ Listar explícitamente qué campos hay que completar en el portal más allá de 
 - Antigüedad: 15 años
 - Amenidades: Pileta / Suma / Cochera
 - (etc.)
+
+**Si al usuario le faltan datos clave de la categoría, señalálos como "averiguar y completar"** — no solo suben el score, son las preguntas que el comprador hace sí o sí:
+- **Terreno / lote**: servicios disponibles (luz, agua, gas, cloacas), zonificación / aptitud (qué se puede construir), medidas frente x fondo.
+- **Departamento / casa**: expensas, orientación, antigüedad, plazo de contrato (en alquiler).
 
 ---
 
