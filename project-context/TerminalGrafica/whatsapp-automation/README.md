@@ -121,8 +121,13 @@ canal maduro con opt-in explícito.
 
 ## Archivos de este sub-proyecto
 
+- [prod-readiness-review.md](prod-readiness-review.md) — review de producción
+  (2026-07-07): punch list P0/P1/P2 para llevar el v5 a nivel mercado en el
+  KVM 4. ⚠️ Incluye el cambio de pricing de Meta del 1-oct-2026 (mensajes de
+  servicio pagos) que rompe el "~USD 0" de la propuesta.
 - [propuesta-cliente.md](propuesta-cliente.md) — propuesta comercial para el
-  cliente (precios, abono Base/Plus, puesta en marcha).
+  cliente (precios, abono Base/Plus, puesta en marcha). ⚠️ Precio WhatsApp
+  desactualizado desde el anuncio de Meta (ver review §1).
 - `research/` — reportes de investigación (p. ej. políticas de Meta sobre IA en
   WhatsApp y riesgo de baneo).
 - `n8n/setup-guide.md` — instrucciones paso a paso para instalar n8n y conectar con Chatwoot.
