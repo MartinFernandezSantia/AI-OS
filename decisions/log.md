@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-07 — Bot de WhatsApp VENDIDO a TG: USD 400 desarrollo + USD 30/mes (o 300/año)
+
+**Decision:** TG confirmó el proyecto de automatización de WhatsApp (cierre ~fin de junio 2026). Acuerdo: **USD 400** de desarrollo (única vez) + mantenimiento **USD 30/mes o USD 300/año** (moneda registrada como USD; corregir acá si fuera ARS). El proyecto pasa de demo-sin-confirmar a cliente confirmado → el prod target **Hostinger KVM 4 a nombre de TG** queda habilitado (aún sin contratar). Go-live gates = lista P0 de `project-context/TerminalGrafica/whatsapp-automation/prod-readiness-review.md`.
+
+**Why:** Primer cliente del producto a productizar; precio piloto a cambio de testimonio + caso de éxito (muy por debajo de la propuesta original de ARS 1.200.000 + abono 100/160k — se priorizó cerrar). Pendientes derivados que protegen la relación: (1) **avisar por escrito a TG que desde el 1-oct-2026 Meta cobra los mensajes de servicio** (~USD 0.026/msg, pass-through en su cuenta Meta — a volumen actual puede superar el propio abono); (2) confirmar que VPS + Meta + API de IA se facturan directo a TG (USD 30/mes no absorbe infra); (3) contratar el KVM 4 y ejecutar los P0 antes del go-live.
+
+**Alternatives considered:** Sostener el precio de la propuesta original (no cerró a ese nivel; el valor del caso de éxito justifica el descuento fundador).
+
+**Owner:** Martin.
+
 ## 2026-06-29 — El bot pasa a recolectar+confirmar el pedido antes de escalar (lead calificado); variantes (sin precio) en el prompt
 
 **Decision:** El FAQ-bot deja de escalar en crudo ante intención de pedido ("necesito X"). Nuevo comportamiento: cuando detecta intención de pedido, entra en **modo armado de pedido** → junta los datos (producto + cantidad + características/variantes) preguntando lo que falte → resume y **pide confirmación** → recién ahí escala, dejando un **lead calificado** para que el asesor cierre y cotice. Sigue sin dar precios ni cerrar el pedido. Para habilitar preguntas precisas, el catálogo del prompt ahora incluye las **variantes (nombres/opciones) por producto, SIN precios** (Get Catálogo upgradeado). Implementado como cambio de prompt en `faq-bot-v5.json` (no requiere nodos nuevos: el multi-turno sale del historial y el handoff note ya resume la conversación). Esto **revierte** la decisión previa "el bot solo informa, no recopila datos de pedido".

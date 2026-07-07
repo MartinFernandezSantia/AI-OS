@@ -5,7 +5,7 @@ cada vez que Martin mencione un proyecto, ANTES de sugerir infra, presupuesto o 
 La columna que más importa es **Infra y dueño** — es el semáforo que te frena antes de
 asumir que algo existe o está disponible. Quién es cada cliente: `context/clients.md`.
 
-_Última actualización: 2026-06-24._
+_Última actualización: 2026-07-07._
 
 ## Regla del semáforo (leer primero)
 
@@ -25,8 +25,8 @@ Antes de proponer "usá tal VPS / servidor / cuenta / dominio" para un proyecto:
 
 | # | Proyecto | Alias | Cliente | Tipo | Confirmado | Etapa | Infra y dueño |
 |---|---|---|---|---|---|---|---|
-| **1** | **Sistema de Presupuestos** | "sistema de presupuestos", "sistema de gráfica/imprenta", "sistema de TG" | Terminal Gráfica | Cliente | ✅ Sí | En producción + desarrollo activo (migrando Storage → R2 para el módulo de recepción de archivos) | Supabase Free + Vercel — ⚠️ hoy en **cuentas personales de Martin** (a pasar a TG); R2/Cloudflare **en alta** (cuenta para TG). **Sin VPS.** Incluye módulos recepción de archivos + recepción de clientes. |
-| **2** | **WhatsApp / Chatwoot** | "el de Chatwoot para TG", "automatización de WhatsApp para TG" | Terminal Gráfica | Cliente (demo para presupuestar — el cliente pidió investigarlo) | ⚠️ **NO** | Demo / dev local · ⏰ **presupuesto a entregar esta semana** | 🔴 Dev = **VM local de Martin** + Cloudflare Tunnel (`chatwoot.silvercoastwebagency.com`). Prod previsto = **Hostinger KVM 2 a nombre de TG, NO confirmado → NO disponible**. WhatsApp Cloud API + API de IA irían a cuentas de TG. |
+| **1** | **Sistema de Presupuestos** | "sistema de presupuestos", "sistema de gráfica/imprenta", "sistema de TG" | Terminal Gráfica | Cliente | ✅ Sí | En producción + desarrollo activo. **Kiosko de recepción de clientes EN PROD desde ~2026-06-18, sin quejas.** Migración Storage → R2: Fase 1 construida (sin deployar), **en pausa esperando el VPS de TG** — el worker ZIP se construiría en el VPS (cambio vs plan original de Cloudflare Worker). | Supabase Free + Vercel — ⚠️ hoy en **cuentas personales de Martin** (a pasar a TG); R2/Cloudflare **en alta** (cuenta para TG). **Sin VPS propio del sistema** (el worker ZIP usará el KVM 4 del bot). |
+| **2** | **WhatsApp / Chatwoot** | "el de Chatwoot para TG", "automatización de WhatsApp para TG" | Terminal Gráfica | Cliente | ✅ **Sí — VENDIDO (~fin jun-2026)**: USD 400 desarrollo + mantenimiento USD 30/mes o USD 300/año (moneda asumida USD — confirmar) | Dev local andando (bot v5) → construir prod. Go-live gates = P0 de `project-context/TerminalGrafica/whatsapp-automation/prod-readiness-review.md` | Dev = **VM local de Martin** + Cloudflare Tunnel (`chatwoot.silvercoastwebagency.com`). Prod = **Hostinger KVM 4 a nombre de TG — confirmado por la venta, AÚN SIN CONTRATAR**. WhatsApp Cloud API + API de IA a cuentas de TG. ⚠️ Desde el 1-oct-2026 Meta cobra los mensajes de servicio (pass-through de TG — avisar por escrito). |
 | **3** | **SantiaPropiedades (Web)** | "Web SantiaPropiedades" | SantiaPropiedades (familia) | Familia / cliente | ✅ Sí | En producción, pendiente revisiones/mejoras | Cuentas **personales de Martin** — Vercel + Supabase Free. Alcance: Web + Google Business Profile + ZonaProp + Instagram (por hacer). _Archivos no están en esta máquina._ |
 | **4** | **Niche-News-Agent** | "el agente de noticias", "el digest" | — | Personal | n/a | Diseñado, sin construir | Arranca **local**; si funciona → servidor. n8n + Telegram + RSS/GoogleNews/GDELT/RSSHub. 2º trabajo de Hermes. |
 | **5** | **Social-Engagement-Copilot** | "el copilot de social", "lo de Reddit/LinkedIn" | — | Personal | n/a | Research hecho, sin construir | Una cuenta real envejecida, modo asistido (agente borra, Martin postea). 1er trabajo de Hermes. |
@@ -42,9 +42,10 @@ Antes de proponer "usá tal VPS / servidor / cuenta / dominio" para un proyecto:
   (TG y SantiaPropiedades). Error conocido a separar.
 - ❗ **No hay VPS de producción propio.** No lo asumas.
 
-**🔴 De cliente / NO disponible:**
-- **Hostinger KVM 2** de TG — a futuro, **sin confirmar**. No contar con él para nada
-  (ni para Chatwoot ni para R2 de quote-automation ni otros).
+**🟡 De cliente / confirmado pero AÚN NO operativo:**
+- **Hostinger KVM 4** de TG — **confirmado por la venta del bot (jul-2026), todavía sin
+  contratar.** Cuando exista: Chatwoot + n8n del bot, y el worker ZIP de R2. Solo para
+  proyectos de TG — nunca compartirlo con otros clientes o proyectos personales.
 - Cuenta **Cloudflare / R2** para TG — **en proceso de alta** (todavía no operativa).
 
 ## Notas
