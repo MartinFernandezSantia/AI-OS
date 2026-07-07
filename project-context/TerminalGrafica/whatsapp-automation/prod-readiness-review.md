@@ -359,10 +359,36 @@ windows (24 h + `human_agent` 7 d) which a reactive bot respects by default.
 ## 9. Model and prompt lifecycle
 
 - **Forced model migration lands the same month as the pricing change:**
-  `gemini-2.5-flash-lite` shuts down **2026-10-16**. Do the cheap insurance now
-  (already an accionable in mantenimiento-y-monitoreo): OpenRouter fallback
-  array/preset including the successor, then a promptfoo regression run + a
-  red-team pass on the new model before October, not during the fire.
+  `gemini-2.5-flash-lite` shuts down **2026-10-16** (confirmed on Google's
+  deprecations page). Do the cheap insurance now (already an accionable in
+  mantenimiento-y-monitoreo): OpenRouter fallback array/preset including the
+  successor, then a promptfoo regression run + a red-team pass on the new model
+  before October, not during the fire.
+- **Successor decision (researched 2026-07-07).** Constraints: cheapest,
+  fewest hallucinations, ideally native audio. Verdict:
+  - **Primary: `google/gemini-3.1-flash-lite`** — the designated successor
+    (GA since May 2026), $0.25/M in / $1.50/M out, **native audio input**
+    ($0.50/M ≈ $0.001 per voice note), implicit caching, available on
+    OpenRouter. 2.5-3.75× today's price but still $5-15/month at this volume.
+    Two open items: its HHEM faithfulness score is unpublished (the current
+    model scored 3.3%, top-3 ever measured — high bar), and there's an
+    unresolved report of implicit-cache savings not applying on billing —
+    verify both before committing.
+  - **Challenger/fallback: `openai/gpt-5.4-nano`** — $0.20/$1.25, **HHEM 3.1%
+    (best grounded-faithfulness on the leaderboard)**, automatic caching. No
+    audio: pairs with a transcription step (Groq whisper-turbo $0.04/audio-hr,
+    or self-hosted faster-whisper), which also yields a loggable transcript
+    for `bot.decisiones`. Set it as the second entry in the OpenRouter preset.
+  - **Dropped: Claude Haiku 4.5** (old shortlist) — 9.8% HHEM, $1/$5 (4-10×
+    rivals), no audio, and its 4,096-token prompt-caching minimum exceeds this
+    bot's ~2.5k system prompt so caching wouldn't engage.
+  - **Budget floor, emergency-fallback only:** deepseek-v4-flash ($0.09/$0.18
+    on OpenRouter) / qwen3.5-flash — cheapest but mid-pack faithfulness (~5-6%).
+  - **Decision gate:** run the promptfoo suite + the real-catalog battery
+    (sinónimos, gremio price test, order-intake) against both candidates; pick
+    on measured faithfulness. From October the WhatsApp per-message fee
+    (~$0.026) dwarfs LLM cost per reply (~$0.001-0.003), so faithfulness, not
+    price, should decide.
 - **Prompt caching + catalog caching are one project.** The catalog SQL runs on
   every message; its output is interpolated into the system prompt. Cache the
   catalog string in n8n (TTL 5-15 min): one DB query per interval instead of
