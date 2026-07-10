@@ -208,11 +208,23 @@ Antes de la lógica, el continente:
   `x-chatwoot-signature`? Y en Chatwoot (Settings → Integrations → Webhooks →
   editar), ¿hay un campo `secret`?
 
+  > **Decisión (2026-07-10):** confirmados `X-Chatwoot-Signature` + `secret` en
+  > el setup real → vamos por **Rama A (HMAC)**. Header/Basic Auth del nodo
+  > descartados: Chatwoot no manda un header estático controlable (solo config de
+  > URL), y su header de auth (`X-Chatwoot-Signature`) rota por request → Header
+  > Auth no valida valores que cambian. Path-secret descartado: es un bearer en
+  > la URL → queda en logs de n8n/Cloudflare y en la config de Chatwoot; si
+  > filtran, filtra el secreto. La clave del HMAC nunca viaja. Rama B queda solo
+  > como fallback si el bug #13809 impide verificar con el secret visible.
+
   **Rama A — Verificación de firma HMAC (si Chatwoot firma). PREFERIDA.**
   1. Copiar el `secret` del webhook → guardarlo como credencial/variable en n8n.
-  2. Habilitar **Raw Body** en el nodo Webhook (el HMAC se calcula sobre los
-     bytes exactos; el JSON re-serializado NO matchea — gotcha que rompe el 90%
-     de las verificaciones de firma).
+  2. Habilitar **Raw Body** en el nodo Webhook → los bytes exactos quedan en
+     `$json.rawBody` (**solo con el workflow Active y por la Production URL**; en
+     Test URL puede venir parseado). El HMAC se calcula sobre esos bytes; el JSON
+     re-serializado NO matchea — gotcha que rompe el 90% de las verificaciones.
+     Requiere `NODE_FUNCTION_ALLOW_BUILTIN=crypto` en el contenedor para poder
+     `require('crypto')` en el Code node (o usar el nodo Crypto nativo).
   3. Primer nodo tras el webhook: Code/Crypto que calcula
      `sha256=HMAC-SHA256(secret, "{X-Chatwoot-Timestamp}.{raw_body}")` y lo
      compara (tiempo constante) con `X-Chatwoot-Signature`. Mismatch → 401 + cortar.
