@@ -223,8 +223,12 @@ Antes de la lógica, el continente:
      `$json.rawBody` (**solo con el workflow Active y por la Production URL**; en
      Test URL puede venir parseado). El HMAC se calcula sobre esos bytes; el JSON
      re-serializado NO matchea — gotcha que rompe el 90% de las verificaciones.
-     Requiere `NODE_FUNCTION_ALLOW_BUILTIN=crypto` en el contenedor para poder
-     `require('crypto')` en el Code node (o usar el nodo Crypto nativo).
+     Vars en el proceso que ejecuta el Code node (ambas **bloqueadas por default**
+     en n8n 2.x): `NODE_FUNCTION_ALLOW_BUILTIN=crypto` (para `require('crypto')`)
+     y `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (para leer el secret con `$env`). Con
+     task runners **externos** (`N8N_RUNNERS_MODE=external`), el allow-builtin va
+     como `env-override` en `/etc/n8n-task-runners.json`, no como env del
+     container; el secret + el flag de env deben ser visibles para el runner.
   3. Primer nodo tras el webhook: Code/Crypto que calcula
      `sha256=HMAC-SHA256(secret, "{X-Chatwoot-Timestamp}.{raw_body}")` y lo
      compara (tiempo constante) con `X-Chatwoot-Signature`. Mismatch → 401 + cortar.
