@@ -360,6 +360,14 @@ Antes de la lógica, el continente:
     primero e idéntico, últimos ~6 turnos, mensaje nuevo último).
 - Cierra `F` orden, `P2` (catálogo), habilita `P19`.
 
+> **Observado en dev (2026-07-10):** el bot apunta a un proyecto Supabase
+> **free-tier que se auto-pausa** por inactividad → el host deja de resolver y
+> `Get Catálogo` tira "Host not found", matando toda la ejecución (exactamente el
+> SPOF de esta sección). Implicancia go-live: la DB de prod **no puede ser
+> free-tier que se pausa** — Postgres en el KVM 4 o un plan Supabase que no
+> duerma, bajo cuenta de TG — y el fallback a cache pasa de mejora a **obligatorio**
+> para que un corte de DB degrade en vez de dejar al cliente sin respuesta.
+
 ### Sección 9 — Guardrails Tier-2 + LLM (structured output)
 
 - **Objetivo:** validar semánticamente y llamar al modelo con un contrato robusto.
