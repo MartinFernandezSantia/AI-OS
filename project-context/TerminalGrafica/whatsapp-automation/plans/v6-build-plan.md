@@ -191,16 +191,30 @@ Antes de la lógica, el continente:
 
 ### Sección 1 — Asegurar el webhook 🔒
 
-- **Objetivo:** que nadie de afuera pueda forjar eventos de Chatwoot.
-- **v5:** `/webhook/*` bypasseado a Everyone en Zero Trust, sin verificación de
-  firma. Cualquiera con la URL postea mensajes en conversaciones reales.
-- **v6 (hacer las dos):**
-  1. **Sacar n8n de internet.** Chatwoot y n8n comparten red Docker → registrar
-     el webhook de Chatwoot como interno `http://n8n:5678/webhook/chatwoot` y
-     **borrar el bypass público**. Nada externo necesita llegar al webhook de n8n.
-  2. **HMAC** como defensa en profundidad: nodo al inicio que verifica
-     `X-Chatwoot-Signature` contra el secret, por si algún endpoint queda público
-     después. Rama inválida → 401 + descartar.
+- **Objetivo:** que nadie de afuera pueda forjar eventos de Chatwoot, **sin**
+  sacar el webhook de internet — Chatwoot solo acepta URLs públicas, no
+  conexiones internas ni hostnames de Docker (verificado en el setup real, 2026-07-10).
+- **v5:** `/webhook/*` bypasseado a Everyone en Zero Trust, sin autenticación.
+  Cualquiera con la URL postea mensajes en conversaciones reales.
+- **v6 — parámetro Authentication del nodo Webhook:** activar **Authentication =
+  Basic Auth** en el nodo `Chatwoot Webhook` (credencial user+pass en n8n). El
+  nodo exige entonces `Authorization: Basic …` en cada request; sin credencial →
+  **401 automático**. Como Chatwoot solo guarda una URL (no headers, no campo
+  secret, no firma), la credencial viaja **embebida en la URL** que se registra
+  en Chatwoot: `https://user:pass@n8n.dominio/webhook/chatwoot`.
+  - **A verificar:** que el cliente HTTP de Chatwoot (HTTParty) reenvíe el
+    userinfo de la URL como header Basic Auth. Probar con una request de test
+    antes de comprometerlo.
+  - **Fallback si no reenvía userinfo:** path secreto largo y aleatorio
+    (`/webhook/chatwoot-<random-largo>`) — el path es el bearer — + chequeo en el
+    flujo. Menos limpio que Basic Auth, pero funciona con la restricción "solo URL".
+  - **HMAC no aplica:** el webhook genérico de Chatwoot no expone un secret
+    compartido ni firma el payload, así que no hay `X-Chatwoot-Signature` que
+    verificar. La autenticación es por la credencial en la URL, punto.
+- **Corregir `setup-guide.md`:** el doc afirma que la URL interna
+  `http://n8n:5678/webhook/chatwoot` funciona (parser URI de Ruby acepta
+  hostnames cortos). No funciona — Chatwoot no conecta a hostnames internos.
+  Reescribir esa sección con el enfoque Basic-Auth-en-URL. (Supersede review §3.1.)
 - Cierra `P1`.
 
 ### Sección 2 — Filtro de ingreso (Filter, no cadena de IFs)
