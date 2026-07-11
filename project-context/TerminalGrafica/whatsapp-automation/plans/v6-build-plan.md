@@ -289,6 +289,12 @@ Antes de la lógica, el continente:
 
 ### Sección 2 — Filtro de ingreso (Filter, no cadena de IFs)
 
+> **✅ HECHO EN DEV (2026-07-11).** Un nodo Filter (AND) reemplazó `IF — Mensaje
+> Entrante` + `IF — Sin Asignación`. Condiciones: `body.event == message_created`,
+> `body.message_type == incoming`, `body.conversation.channel == Channel::Whatsapp`,
+> y `!$json.body.conversation.meta?.assignee` (booleano → F6 cerrado). Verificado:
+> mensaje real sigue pasando.
+
 - **Objetivo:** dejar pasar solo mensajes que el bot debe triar.
 - **v5:** `IF — Mensaje Entrante` + `IF — Sin Asignación`, ambos sin usar la rama
   false (`F` nodos). El gate de asignación es frágil: `JSON.stringify(assignee)
