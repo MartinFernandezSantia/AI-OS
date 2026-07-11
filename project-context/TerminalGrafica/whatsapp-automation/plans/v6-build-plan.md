@@ -191,6 +191,25 @@ Antes de la lógica, el continente:
 
 ### Sección 1 — Asegurar el webhook 🔒
 
+> **✅ RESUELTO Y VERIFICADO EN DEV (2026-07-11).** Receta final que anda:
+> - **URL pública** vía Cloudflare Tunnel (https) + ZT bypass para `/webhook/*`.
+>   NO usar network-alias Docker (envenena el DNS del hostname → SSRF rechaza, ver abajo).
+> - **Nodo Webhook:** Authentication = None; Options → **Raw Body ON**. El body
+>   crudo va a **binario** (prop `data`), NO a `$json.rawBody`; en `binaryDataMode:
+>   filesystem` se lee solo con `getBinaryDataBuffer` (el base64 inline viene vacío).
+> - **Env del proceso que corre el Code node** (bloqueadas por default en 2.x):
+>   `NODE_FUNCTION_ALLOW_BUILTIN=crypto`, `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`,
+>   `CHATWOOT_WEBHOOK_SECRET=<secret ACTUAL del webhook>`. **Cambiar el env exige
+>   reiniciar n8n** (un secret viejo en el env fue lo que dio `ok:false` en el test).
+> - **Code node (Run Once for All Items):** raw = `await this.helpers.getBinaryDataBuffer(i,'data')`;
+>   firma = `sha256=` + HMAC-SHA256(secret, `<timestamp>.<raw-bytes>`) hex; comparar
+>   timing-safe con `X-Chatwoot-Signature`; + freshness anti-replay con
+>   `X-Chatwoot-Timestamp` (ventana 5 min). Devuelve `{...json, _verified}`.
+> - **Gate:** IF sobre `{{ $json._verified }}` → true = resto del flujo, false = NoOp (descartar).
+> - **Sin bug #13809 en esta versión:** el secret visible del webhook ES la clave
+>   de firma. Formato confirmado contra el código Ruby de Chatwoot:
+>   `OpenSSL::HMAC.hexdigest('SHA256', secret, "#{timestamp}.#{raw_body}")`.
+
 - **Objetivo:** que nadie de afuera pueda forjar eventos de Chatwoot, **sin**
   sacar el webhook de internet — la entrega interna es imposible por diseño:
   Chatwoot ≥4.14 tiene un **guard anti-SSRF en la entrega** que resuelve el
