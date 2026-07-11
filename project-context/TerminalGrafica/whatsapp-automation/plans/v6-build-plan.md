@@ -195,8 +195,12 @@ Antes de la lógica, el continente:
   sacar el webhook de internet — la entrega interna es imposible por diseño:
   Chatwoot ≥4.14 tiene un **guard anti-SSRF en la entrega** que resuelve el
   hostname y rechaza IPs privadas (`Hostname '<x>' has no public ip addresses`,
-  visto en el log de Sidekiq 2026-07-10). El truco del network-alias Docker pasa
-  la validación de URL pero muere en la entrega. Sin env de override oficial
+  visto en el log de Sidekiq 2026-07-10). El truco del network-alias Docker es
+  peor que inútil: **envenena la resolución del hostname público dentro de la red
+  Docker** — Chatwoot resuelve el FQDN público a la IP privada del container y el
+  guard rechaza **hasta la URL https** (mismo `... has no public ip addresses`).
+  Hay que **quitar el alias** para que la entrega pública vuelva a funcionar.
+  Sin env de override oficial
   (issue chatwoot#14494 abierto, sin respuesta de maintainers); parchear Chatwoot
   queda descartado (fork a mantener en cada upgrade). → Ruta soportada: **URL
   pública vía Cloudflare Tunnel + autenticación dentro del flujo (HMAC)**.
