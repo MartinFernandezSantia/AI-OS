@@ -533,6 +533,7 @@
                 2304,
                 880
             ],
+            "onError": "continueErrorOutput",
             "retryOnFail": true,
             "maxTries": 3,
             "waitBetweenTries": 3000,
@@ -608,6 +609,7 @@
                 2944,
                 720
             ],
+            "onError": "continueRegularOutput",
             "retryOnFail": true,
             "maxTries": 3,
             "waitBetweenTries": 3000,
@@ -621,7 +623,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Nota Agente').first().json.accountId + '/conversations/' + $('Armar Nota Agente').first().json.conversationId + '/messages' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
@@ -637,6 +639,7 @@
                 3152,
                 720
             ],
+            "onError": "continueRegularOutput",
             "retryOnFail": true,
             "maxTries": 3,
             "waitBetweenTries": 3000,
@@ -650,7 +653,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Nota Agente').first().json.accountId + '/conversations/' + $('Armar Nota Agente').first().json.conversationId + '/messages' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
@@ -676,7 +679,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Nota Agente').first().json.accountId + '/conversations/' + $('Armar Nota Agente').first().json.conversationId + '/labels' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
@@ -702,7 +705,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Armar Nota Agente').first().json.accountId + '/conversations/' + $('Armar Nota Agente').first().json.conversationId + '/assignments' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/assignments' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
@@ -1038,6 +1041,13 @@
                         "type": "main",
                         "index": 0
                     }
+                ],
+                [
+                    {
+                        "node": "Asignar Agente",
+                        "type": "main",
+                        "index": 0
+                    }
                 ]
             ]
         },
@@ -1045,7 +1055,7 @@
             "main": [
                 [
                     {
-                        "node": "Armar Nota Agente",
+                        "node": "Asignar Agente",
                         "type": "main",
                         "index": 0
                     }
@@ -1053,6 +1063,39 @@
                 [
                     {
                         "node": "Enviar Respuesta",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Asignar Agente": {
+            "main": [
+                [
+                    {
+                        "node": "Label Escalación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Label Escalación": {
+            "main": [
+                [
+                    {
+                        "node": "Mensaje Escalación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mensaje Escalación": {
+            "main": [
+                [
+                    {
+                        "node": "Armar Nota Agente",
                         "type": "main",
                         "index": 0
                     }
@@ -1082,39 +1125,6 @@
             ]
         },
         "Nota Privada Agente": {
-            "main": [
-                [
-                    {
-                        "node": "Mensaje Escalación",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Mensaje Escalación": {
-            "main": [
-                [
-                    {
-                        "node": "Label Escalación",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Label Escalación": {
-            "main": [
-                [
-                    {
-                        "node": "Asignar Agente",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Asignar Agente": {
             "main": [
                 [
                     {
