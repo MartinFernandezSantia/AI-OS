@@ -104,7 +104,7 @@
                 416
             ],
             "id": "97a09252-e976-4fa8-bac7-7096eb7d3227",
-            "name": "Filter"
+            "name": "Filtro Ingreso"
         },
         {
             "parameters": {
@@ -130,7 +130,7 @@
                 "options": {}
             },
             "id": "ca5400db-7c91-451a-8ea7-dacd582c1613",
-            "name": "IF — Tiene Texto",
+            "name": "¿Tiene Texto?",
             "type": "n8n-nodes-base.if",
             "typeVersion": 2,
             "position": [
@@ -354,7 +354,7 @@
                 176
             ],
             "id": "77d810c5-7191-44a0-9610-8f023bad9301",
-            "name": "Switch"
+            "name": "Switch Ruteo"
         },
         {
             "parameters": {},
@@ -405,7 +405,7 @@
                 "options": {}
             },
             "id": "35b35d44-6b32-4780-a096-5bf458e4c944",
-            "name": "Mensaje Injection",
+            "name": "Mensaje Anti-Injection",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
@@ -430,7 +430,7 @@
                 736
             ],
             "id": "45819285-3e36-4844-b920-8e909baba41e",
-            "name": "Cache Check"
+            "name": "Chequear Cache Catálogo"
         },
         {
             "parameters": {
@@ -464,7 +464,7 @@
                 736
             ],
             "id": "f1311605-ab0f-443d-acdf-eec0567d6e22",
-            "name": "If Cache Hit"
+            "name": "¿Cache Catálogo Fresco?"
         },
         {
             "parameters": {
@@ -499,7 +499,7 @@
                 880
             ],
             "id": "c1091a77-1914-4699-b836-57e068db2811",
-            "name": "Cache Store"
+            "name": "Guardar Cache Catálogo"
         },
         {
             "parameters": {
@@ -512,7 +512,7 @@
                 880
             ],
             "id": "9a993763-d9de-41e0-930d-241ab21060fa",
-            "name": "Armar mensajes"
+            "name": "Armar Mensajes LLM"
         },
         {
             "parameters": {
@@ -526,7 +526,7 @@
                 "options": {}
             },
             "id": "5a93a48a-a072-4b47-a2f8-4c0a45d3488d",
-            "name": "Llamar LLM",
+            "name": "Llamar LLM Respuesta",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
@@ -706,7 +706,7 @@
                 "options": {}
             },
             "id": "a3ce5c4c-e253-4004-9e42-f891246150fc",
-            "name": "Asignar Agente",
+            "name": "Asignar a Humano",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
@@ -906,25 +906,25 @@
             "main": [
                 [
                     {
-                        "node": "Filter",
+                        "node": "Filtro Ingreso",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Filter": {
+        "Filtro Ingreso": {
             "main": [
                 [
                     {
-                        "node": "IF — Tiene Texto",
+                        "node": "¿Tiene Texto?",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "IF — Tiene Texto": {
+        "¿Tiene Texto?": {
             "main": [
                 [
                     {
@@ -979,14 +979,14 @@
             "main": [
                 [
                     {
-                        "node": "Switch",
+                        "node": "Switch Ruteo",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Switch": {
+        "Switch Ruteo": {
             "main": [
                 [
                     {
@@ -1004,36 +1004,36 @@
                 ],
                 [
                     {
-                        "node": "Mensaje Injection",
+                        "node": "Mensaje Anti-Injection",
                         "type": "main",
                         "index": 0
                     }
                 ],
                 [
                     {
-                        "node": "Cache Check",
+                        "node": "Chequear Cache Catálogo",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Cache Check": {
+        "Chequear Cache Catálogo": {
             "main": [
                 [
                     {
-                        "node": "If Cache Hit",
+                        "node": "¿Cache Catálogo Fresco?",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "If Cache Hit": {
+        "¿Cache Catálogo Fresco?": {
             "main": [
                 [
                     {
-                        "node": "Armar mensajes",
+                        "node": "Armar Mensajes LLM",
                         "type": "main",
                         "index": 0
                     }
@@ -1051,36 +1051,36 @@
             "main": [
                 [
                     {
-                        "node": "Cache Store",
+                        "node": "Guardar Cache Catálogo",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Cache Store": {
+        "Guardar Cache Catálogo": {
             "main": [
                 [
                     {
-                        "node": "Armar mensajes",
+                        "node": "Armar Mensajes LLM",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Armar mensajes": {
+        "Armar Mensajes LLM": {
             "main": [
                 [
                     {
-                        "node": "Llamar LLM",
+                        "node": "Llamar LLM Respuesta",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Llamar LLM": {
+        "Llamar LLM Respuesta": {
             "main": [
                 [
                     {
@@ -1091,7 +1091,7 @@
                 ],
                 [
                     {
-                        "node": "Asignar Agente",
+                        "node": "Asignar a Humano",
                         "type": "main",
                         "index": 0
                     }
@@ -1120,14 +1120,14 @@
                 ],
                 [
                     {
-                        "node": "Asignar Agente",
+                        "node": "Asignar a Humano",
                         "type": "main",
                         "index": 0
                     }
                 ],
                 [
                     {
-                        "node": "Asignar Agente",
+                        "node": "Asignar a Humano",
                         "type": "main",
                         "index": 0
                     }
@@ -1145,7 +1145,7 @@
                 ]
             ]
         },
-        "Asignar Agente": {
+        "Asignar a Humano": {
             "main": [
                 [
                     {
