@@ -217,7 +217,20 @@ begin
 end;
 $$;
 
--- --- 6. Grants --------------------------------------------------------------
+-- --- 6. RLS: deny-all a roles no-owner (defensa en profundidad) -------------
+-- El schema bot NO está expuesto por PostgREST y bot_readonly no tiene grants de
+-- tabla sobre estas 3 (solo EXECUTE de la función). Esto es cinturón+tiradores:
+-- si algún día se expone el schema o se otorga un grant directo por error, quedan
+-- cerradas. firewall_check es SECURITY DEFINER → corre como owner (postgres,
+-- BYPASSRLS) y sigue leyendo/escribiendo. Sin policies = nadie fuera del owner
+-- entra directo. NO usar FORCE ROW LEVEL SECURITY (rompería al owner).
+-- OJO: NO prender RLS en bot.decisiones — los nodos Log de n8n le hacen INSERT
+-- directo con la cred bot_readonly (no via función definer); RLS sin policy los cortaría.
+alter table bot.blocklist          enable row level security;
+alter table bot.sender_estado      enable row level security;
+alter table bot.injection_patterns enable row level security;
+
+-- --- 7. Grants --------------------------------------------------------------
 -- Si el rol de la cred de n8n NO es 'bot_readonly', cambialo en estas 3 lineas.
 -- Con SECURITY DEFINER, la cred solo necesita USAGE del schema + EXECUTE. No
 -- toca las tablas directo (siguen read-only para ese rol).
