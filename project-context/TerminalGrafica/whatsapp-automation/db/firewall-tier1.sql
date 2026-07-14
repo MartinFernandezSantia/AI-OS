@@ -230,12 +230,22 @@ alter table bot.blocklist          enable row level security;
 alter table bot.sender_estado      enable row level security;
 alter table bot.injection_patterns enable row level security;
 
--- --- 7. Grants --------------------------------------------------------------
--- Si el rol de la cred de n8n NO es 'bot_readonly', cambialo en estas 3 lineas.
--- Con SECURITY DEFINER, la cred solo necesita USAGE del schema + EXECUTE. No
--- toca las tablas directo (siguen read-only para ese rol).
-grant usage on schema bot to bot_readonly;
-grant execute on function bot.firewall_check(text, text, bigint) to bot_readonly;
+-- --- 7. Grants (condicionales) ----------------------------------------------
+-- Con SECURITY DEFINER la cred de n8n solo necesita USAGE del schema + EXECUTE
+-- de la función (no toca las tablas directo). Si n8n conecta como 'postgres'
+-- (owner), NO hace falta ningún grant: ya tiene todo.
+-- Este bloque otorga SOLO si el rol existe, así la migración no falla si el rol
+-- tiene otro nombre o no está creado. Cambiá 'bot_readonly' si tu rol es otro.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'bot_readonly') then
+    grant usage on schema bot to bot_readonly;
+    grant execute on function bot.firewall_check(text, text, bigint) to bot_readonly;
+    raise notice 'Grants otorgados a bot_readonly.';
+  else
+    raise notice 'Rol bot_readonly no existe: sin grants. Si n8n conecta como postgres/owner ya tiene acceso; si usa otro rol restringido, otorgale USAGE del schema bot + EXECUTE de bot.firewall_check(text,text,bigint).';
+  end if;
+end $$;
 -- fw_log corre dentro del definer, no necesita grant propio.
 
 -- =============================================================================
