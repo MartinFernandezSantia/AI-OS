@@ -118,7 +118,7 @@
                     "conditions": [
                         {
                             "id": "cond-content",
-                            "leftValue": "={{ $json.body.content }}",
+                            "leftValue": "={{ $('Chatwoot Webhook').first().json.body.content }}",
                             "operator": {
                                 "type": "string",
                                 "operation": "notEmpty"
@@ -141,7 +141,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.body.account.id + '/conversations/' + $json.body.conversation.id + '/messages' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
@@ -180,7 +180,7 @@
         },
         {
             "parameters": {
-                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.body.account.id + '/conversations/' + $json.body.conversation.id + '/messages' }}",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "options": {}
@@ -888,6 +888,208 @@
                     "name": "Bot Readonly DB"
                 }
             }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "select * from bot.firewall_check($1, $2, $3)",
+                "options": {
+                    "queryReplacement": "={{ (() => { const b = $('Chatwoot Webhook').first().json.body; const sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? ''; return [ String(sid), b.content || '', b.conversation.id ]; })() }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -96,
+                640
+            ],
+            "id": "a1f2c3d4-5e6f-4708-9a1b-2c3d4e5f6071",
+            "name": "Firewall Tier-1",
+            "onError": "continueRegularOutput",
+            "credentials": {
+                "postgres": {
+                    "id": "vxRQvyIwYEqGpJqc",
+                    "name": "Bot Readonly DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "fw-pass",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "pass",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "pass"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "fw-refusal",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "refusal",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "refusal"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "fw-silence",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "silence",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "silence"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "fw-drop",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "drop",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "drop"
+                        }
+                    ]
+                },
+                "options": {
+                    "fallbackOutput": "extra"
+                }
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.4,
+            "position": [
+                128,
+                640
+            ],
+            "id": "b2c3d4e5-6f70-4819-8a2b-3c4d5e6f7182",
+            "name": "Switch Firewall"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ ({ content: 'Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+                "options": {}
+            },
+            "id": "c3d4e5f6-7081-492a-8b3c-4d5e6f708293",
+            "name": "Mensaje Firewall Refusal",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                352,
+                520
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "KxbAlYAWQ95ZZKQ5",
+                    "name": "Chatwoot API Token"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ ({ content: 'Estamos recibiendo muchos mensajes tuyos y necesito un momento. Escribinos de nuevo en un ratito y te ayudamos con gusto.', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+                "options": {}
+            },
+            "id": "d4e5f607-8192-4a3b-8c4d-5e6f70819304",
+            "name": "Aviso Rate Firewall",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                352,
+                660
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "KxbAlYAWQ95ZZKQ5",
+                    "name": "Chatwoot API Token"
+                }
+            }
+        },
+        {
+            "parameters": {},
+            "id": "e5f60718-92a3-4b4c-8d5e-6f7081930415",
+            "name": "Descartar Firewall (drop)",
+            "type": "n8n-nodes-base.noOp",
+            "typeVersion": 1,
+            "position": [
+                352,
+                800
+            ]
         }
     ],
     "connections": {
@@ -915,6 +1117,56 @@
         },
         "Filtro Ingreso": {
             "main": [
+                [
+                    {
+                        "node": "Firewall Tier-1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Firewall Tier-1": {
+            "main": [
+                [
+                    {
+                        "node": "Switch Firewall",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Switch Firewall": {
+            "main": [
+                [
+                    {
+                        "node": "¿Tiene Texto?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Mensaje Firewall Refusal",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Aviso Rate Firewall",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Descartar Firewall (drop)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
                 [
                     {
                         "node": "¿Tiene Texto?",
