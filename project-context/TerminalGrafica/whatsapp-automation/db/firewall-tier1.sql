@@ -70,6 +70,10 @@ on conflict do nothing;
 -- Loguea toda accion no-pass a bot.decisiones para que el bloqueo sea OBSERVABLE
 -- (un drop silencioso esconde falsos positivos -> esto los saca en el digest).
 -- Nunca puede tumbar la decision del firewall: atrapa cualquier error.
+-- Valores de 'accion' que emite el firewall (cada uno guarda conversation_id +
+-- mensaje_cliente que lo disparo):
+--   firewall_drop_blocklist  | firewall_drop_silenciado | firewall_drop_rate
+--   firewall_silence_rate    | firewall_refusal (strike) | firewall_strike_max (strike)
 create or replace function bot.fw_log(
   p_conversation_id bigint,
   p_text            text,
@@ -113,7 +117,7 @@ begin
 
   -- 1) Blocklist
   if exists (select 1 from bot.blocklist b where b.sender_key = p_sender_key) then
-    perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop');
+    perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop_blocklist');
     return query select 'drop'::text, 'blocklist'::text, 0; return;
   end if;
 
@@ -130,7 +134,7 @@ begin
   -- 2) Ya silenciado (por rate o por strikes)
   if rec.silenciado_hasta is not null and rec.silenciado_hasta > now() then
     update bot.sender_estado se set updated_at = now() where se.sender_key = p_sender_key;
-    perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop');
+    perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop_silenciado');
     return query select 'drop'::text, 'silenciado'::text, rec.strikes; return;
   end if;
 
@@ -164,7 +168,7 @@ begin
         strikes          = rec.strikes,
         updated_at       = now()
       where se.sender_key = p_sender_key;
-      perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop');
+      perform bot.fw_log(p_conversation_id, p_text, 'firewall_drop_rate');
       return query select 'drop'::text, 'rate'::text, rec.strikes; return;
     end if;
   end if;
