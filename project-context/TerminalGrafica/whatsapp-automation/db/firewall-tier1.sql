@@ -105,7 +105,7 @@ as $$
 declare
   rec bot.sender_estado%rowtype;
   -- knobs (ajustables acá)
-  c_cap            int      := 15;                    -- mensajes por ventana
+  c_cap            int      := 10;                    -- mensajes por ventana (sobre la ráfaga legítima máx ~7)
   c_ventana        interval := interval '60 seconds';
   c_rate_cooldown  interval := interval '5 minutes';
   c_strike_max     int      := 3;                     -- injections antes de silenciar

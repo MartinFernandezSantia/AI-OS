@@ -1062,7 +1062,7 @@
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ ({ content: 'Estamos recibiendo muchos mensajes y necesitamos un momento. Escribinos de nuevo en un rato y te ayudamos con gusto. Si es urgente, mandanos un mail a terminalgrafica@gmail.com o pasá por el local (Rodríguez Peña 3865, Mar del Plata).', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+                "jsonBody": "={{ ({ content: 'Perdoná, nos están entrando muchos mensajes juntos y necesitamos un minuto para ordenarnos. Esperanos un momentito y seguimos por acá. Si es urgente, escribinos a terminalgrafica@gmail.com o pasá por el local.', message_type: 'outgoing', content_type: 'text', private: false }) }}",
                 "options": {}
             },
             "id": "d4e5f607-8192-4a3b-8c4d-5e6f70819304",
