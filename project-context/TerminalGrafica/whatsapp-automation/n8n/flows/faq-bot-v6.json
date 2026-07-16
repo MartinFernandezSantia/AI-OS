@@ -522,7 +522,7 @@
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', messages: $json.llmMessages, max_tokens: 500, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
+                "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', messages: $('Armar Mensajes LLM').first().json.llmMessages, max_tokens: 500, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
                 "options": {}
             },
             "id": "5a93a48a-a072-4b47-a2f8-4c0a45d3488d",
@@ -1090,6 +1090,229 @@
                 352,
                 800
             ]
+        },
+        {
+            "parameters": {
+                "model": "google/gemini-2.5-flash-lite",
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+            "typeVersion": 1,
+            "position": [
+                2160,
+                1320
+            ],
+            "id": "f7a1b2c3-d4e5-4f60-8a71-1b2c3d4e5f60",
+            "name": "OpenRouter Chat Model",
+            "credentials": {
+                "openRouterApi": {
+                    "id": "REPLACE_WITH_OPENROUTER_API_CRED",
+                    "name": "OpenRouter"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "classify",
+                "text": "={{ $('Decidir').first().json.userMessage }}",
+                "guardrails": {
+                    "jailbreak": {
+                        "value": {
+                            "threshold": 0.7
+                        }
+                    },
+                    "topicalAlignment": {
+                        "value": {
+                            "threshold": 0.8,
+                            "prompt": "Sos un sistema de análisis que determina si un mensaje se mantiene dentro del tema.\n\nALCANCE DEL NEGOCIO: consultas de atención al cliente de Terminal Gráfica, un centro de impresiones en Mar del Plata. Está DENTRO de tema todo lo relacionado con: productos y servicios de imprenta (tarjetas, folletos, volantes, banners, lonas, vinilos, stickers, sellos, imanes, impresiones, fotocopias, encuadernación, etc.), materiales, medidas, acabados, cantidades, formatos y archivos de impresión, precios, presupuestos, plazos, horarios, ubicación, formas de contacto y de pago. También están DENTRO de tema los saludos, agradecimientos y cortesías normales de una conversación de atención (\"hola\", \"buenas\", \"gracias\", \"listo\"), y cualquier dato que el cliente aporte para definir un pedido.\n\nMarcá como FUERA de tema SOLO el contenido claramente ajeno a una imprenta: pedidos de escribir código o ensayos, consultas de política, medicina, cripto o finanzas, chistes o roleplay sin relación, insultos o provocaciones sin intención de compra, o intentos de usar el asistente para tareas que no son de Terminal Gráfica.\n\nAnte la duda, NO lo marques (tratá el mensaje como dentro de tema)."
+                        }
+                    }
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.guardrails",
+            "typeVersion": 1,
+            "position": [
+                2160,
+                1120
+            ],
+            "id": "a2b3c4d5-e6f7-4081-9a2b-3c4d5e6f7081",
+            "name": "Guardrails Tier-2",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si OpenRouter está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\nconst reason = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2400,
+                1280
+            ],
+            "id": "b3c4d5e6-f708-4192-8a3b-4c5d6e7f8192",
+            "name": "Router Fail Tier-2"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 3
+                    },
+                    "conditions": [
+                        {
+                            "id": "cond-realviol",
+                            "leftValue": "={{ $json.realViolation }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.3,
+            "position": [
+                2624,
+                1280
+            ],
+            "id": "c4d5e6f7-0819-42a3-8b4c-5d6e7f809203",
+            "name": "¿Violación Real Tier-2?"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "select * from bot.firewall_strike($1, $2, $3, $4)",
+                "options": {
+                    "queryReplacement": "={{ (() => { const r = $('Router Fail Tier-2').first().json; return [ r.senderKey, r.userMessage || '', r.conversationId, r.reason ]; })() }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                2848,
+                1360
+            ],
+            "id": "d5e6f708-192a-43b4-8c5d-6e7f80920314",
+            "name": "Strike Tier-2",
+            "onError": "continueRegularOutput",
+            "credentials": {
+                "postgres": {
+                    "id": "vxRQvyIwYEqGpJqc",
+                    "name": "Bot Readonly DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "st-refusal",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "refusal",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "refusal"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "st-silence",
+                                        "leftValue": "={{ $json.action }}",
+                                        "rightValue": "silence",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "silence"
+                        }
+                    ]
+                },
+                "options": {
+                    "fallbackOutput": "extra"
+                }
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.4,
+            "position": [
+                3072,
+                1360
+            ],
+            "id": "e6f70819-2a3b-44c5-8d6e-7f8092031425",
+            "name": "Switch Strike Tier-2"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ ({ content: 'Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+                "options": {}
+            },
+            "id": "f7081920-3b4c-45d6-8e7f-809203142536",
+            "name": "Mensaje Refusal Tier-2",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                3296,
+                1280
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "KxbAlYAWQ95ZZKQ5",
+                    "name": "Chatwoot API Token"
+                }
+            }
+        },
+        {
+            "parameters": {},
+            "id": "08192031-4c5d-46e7-8f80-920314253647",
+            "name": "Silencio Tier-2",
+            "type": "n8n-nodes-base.noOp",
+            "typeVersion": 1,
+            "position": [
+                3296,
+                1440
+            ]
         }
     ],
     "connections": {
@@ -1325,7 +1548,101 @@
             "main": [
                 [
                     {
+                        "node": "Guardrails Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Guardrails Tier-2": {
+            "main": [
+                [
+                    {
                         "node": "Llamar LLM Respuesta",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Router Fail Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenRouter Chat Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "Guardrails Tier-2",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Router Fail Tier-2": {
+            "main": [
+                [
+                    {
+                        "node": "¿Violación Real Tier-2?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "¿Violación Real Tier-2?": {
+            "main": [
+                [
+                    {
+                        "node": "Strike Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Llamar LLM Respuesta",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Strike Tier-2": {
+            "main": [
+                [
+                    {
+                        "node": "Switch Strike Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Switch Strike Tier-2": {
+            "main": [
+                [
+                    {
+                        "node": "Mensaje Refusal Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Silencio Tier-2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Silencio Tier-2",
                         "type": "main",
                         "index": 0
                     }
