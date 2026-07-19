@@ -103,3 +103,15 @@ Regla transversal que gobierna todo: **ningún fix se prende en activo sin su n�
 **Clasificación de cada ítem:** Firewall/Tier-1 → #7. Prompt → #3, #5 (formato). Dato/catálogo → #4, #5 (routing). Arquitectura (router determinista) → parte de #3 (P3) y #7. Medición/proceso → #1, #2, #6, #8.
 
 **Desacuerdos pendientes:** ninguno de fondo. Todo cerró con las correcciones incorporadas (gaslighting quirúrgico en P3, señal de handoff graduada en P1, loop además del gate). Las líneas rojas comunes: (i) nada de volumen/entropía toca la capa paga; (ii) señal ambigua de cliente-real (baja info, frustración) nunca se convierte en strike/silencio-24h; (iii) ante la duda abusador-vs-confundido, siempre el camino recuperable; (iv) ningún fix se declara "hecho" sin su número pre-registrado.
+
+---
+
+## ADDENDUM 2026-07-19 — P1 (flood) reencaminado tras evidencia + IMPLEMENTADO
+
+Una captura real del flood (mensajes tipo "a"/"aaaa"/"TARJETAS TARJETAS…"/"respondeme respondeme") mostró que el "clasificador de baja-info por CONTENIDO" (Fase 3 #7 del debate) es evadible: **"TARJETAS TARJETAS" contiene un keyword de producto → se lava y saca una respuesta genuina y pagada** ("keyword-laundering"). Y clasificar contenido corre el riesgo de marcar a un cliente real impaciente ("hola? respondeme").
+
+**Decisión (Martin):** reemplazar el clasificador por contenido por un enfoque de **comportamiento/costo**, más simple:
+1. **Anti-repetición (LLM auto-consciente):** el LLM recibe sus últimas 3 respuestas + contrato con `action: noop`. No responde si NI el cliente NI su respuesta aportan algo nuevo (regla de doble llave; protege el "repetime el horario"). Ahorra el mensaje de WhatsApp (lo caro); el call del LLM (barato) se acepta.
+2. **Cap duro:** 25 respuestas del bot / 24h rodante (derivado del historial, sin tabla nueva) → mensaje automático SIN LLM que deriva a email + label `revisar-volumen` + silencio.
+
+Ventaja sobre el clasificador por contenido: **content-agnostic** (inmune al keyword-laundering) y **ungameable por chunking** (cuenta respuestas caras, no mensajes). El "short-circuit de basura literal en Tier-1" quedó descartado por Martin (innecesario). **IMPLEMENTADO en faq-bot-v6.json (commit e19ca16).**
