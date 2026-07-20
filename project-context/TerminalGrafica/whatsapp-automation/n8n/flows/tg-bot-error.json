@@ -1,0 +1,102 @@
+{
+    "name": "tg-bot-error",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "e1a2b3c4-d5e6-4f70-8a91-0b1c2d3e4f50",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// El Error Trigger recibe del engine el objeto estándar de error de la\n// ejecución fallida. Extraemos defensivamente (con fallbacks) los campos útiles\n// para diagnosticar. El conversation_id NO viene en este payload: se recupera\n// abriendo execution_url en n8n.\nconst j = $input.first().json || {};\nconst ex = j.execution || {};\nconst wf = j.workflow || {};\nconst err = ex.error || {};\nconst s = (v, n) => String(v == null ? '' : v).slice(0, n);\n\nreturn [{\n  json: {\n    workflow_nombre: s(wf.name, 200),\n    nodo_fallido:    s(ex.lastNodeExecuted, 200),\n    mensaje:         s(err.message, 2000),\n    stack:           s(err.stack, 4000),\n    execution_id:    s(ex.id, 100),\n    execution_url:   s(ex.url, 500),\n    modo:            s(ex.mode, 50),\n  },\n}];\n"
+            },
+            "id": "a2b3c4d5-e6f7-4081-9a02-1b2c3d4e5f61",
+            "name": "Armar Error",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                224,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "schema": {
+                    "__rl": true,
+                    "value": "bot",
+                    "mode": "list"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "errores",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "workflow_nombre": "={{ $json.workflow_nombre }}",
+                        "nodo_fallido": "={{ $json.nodo_fallido }}",
+                        "mensaje": "={{ $json.mensaje }}",
+                        "stack": "={{ $json.stack }}",
+                        "execution_id": "={{ $json.execution_id }}",
+                        "execution_url": "={{ $json.execution_url }}",
+                        "modo": "={{ $json.modo }}"
+                    },
+                    "matchingColumns": [],
+                    "schema": []
+                },
+                "options": {}
+            },
+            "id": "b3c4d5e6-f708-4192-8a13-2c3d4e5f6072",
+            "name": "Log Error",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                448,
+                0
+            ],
+            "onError": "continueRegularOutput",
+            "credentials": {
+                "postgres": {
+                    "id": "vxRQvyIwYEqGpJqc",
+                    "name": "Bot Readonly DB"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Armar Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Armar Error": {
+            "main": [
+                [
+                    {
+                        "node": "Log Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "a18a1dce7d6fb5066fa6591a3d77dd7bd18bd70e74e97821001c8e1146e3f536"
+    }
+}
