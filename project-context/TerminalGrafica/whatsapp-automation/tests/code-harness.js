@@ -79,5 +79,10 @@ async function main() {
 
   r = await armar(pBase, [base, { ...base, match_rank: 2, variante: 'A3', producto_id: 'u2' }], decidir({ userMessage: 'precio?' }));
   console.log('A7 rank filter:', r[0].json.reply.includes('$13.000,00') && r[0].json.filasSql === 2 ? 'OK' : 'FAIL ' + r[0].json.estado + ' ' + r[0].json.filasSql);
+
+  r = await armar({ ...pBase, template: 'El precio de lista es {{PRECIO}}.' },
+    [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 2200 }], decidir({ userMessage: 'precio?' }));
+  const rep3 = r[0].json.reply;
+  console.log('A8 anti-eco:', rep3.includes('$2.200,00 (el precio final') && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
