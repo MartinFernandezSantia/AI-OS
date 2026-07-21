@@ -215,6 +215,36 @@ o al menos el precio por página para que calcule él. Descomposición (contrast
    en `producto_meta`. Esta feature le manda tráfico a la zona sucia de IMPRESIONES →
    dedupe priorizado + monitoreo de `fallback: ambiguo` (ver handoff).
 
+## Ronda 6 — respuestas de Martin a las 13 preguntas → v10.7 (2026-07-21) — APLICADA
+
+Martin respondió el paquete completo de preguntas (las 3 de go-live las decidió él como
+dueño del producto). Paquete contrastado con Fable y aplicado:
+
+1. **Cantidad-first (r2):** las opciones de tabla ahora se anotan `**` en el catálogo
+   (Parsear ya strippeaba `\*+$` del eco → backstop gratis). El LLM pregunta cuántas
+   (UNA pregunta) y emite `cantidad` (entero) en action precio; `Armar` hace el lookup
+   **espejo del motor** (primer rango en ORDEN ORIGINAL del array, bordes inclusive)
+   → estado `ok_bracket`: número único con la cantidad DENTRO de la frase (protección
+   screenshot — la tabla completa casi no se expone). Gap entre brackets o cantidad
+   inválida → tabla completa, NUNCA el precio base (zona de negociación del mostrador).
+   Cantidad sobre precio fijo → se ignora en render, queda en notas (telemetría).
+   Rechazada la variante sin marcador: preguntar cantidad y después ignorarla (precios
+   fijos) es peor que no preguntar.
+2. **Check stale ELIMINADO (r1):** la lista está conectada al sistema diario del
+   mostrador → la fuente es viva y el bot no es el eslabón débil; se desarma la bomba
+   ~20-ago. Airbag: tag `(precio>90d)` en notas (sin efecto al cliente) — si aparece,
+   la conexión con el sistema diario dejó de ser verdad. Columna+trigger quedan.
+3. **Datos operativos al prompt (r5/r7/r8/r11):** plazos NO se informan (answer con
+   derivación, ya no handoff — la consulta #2 deja de escalar; anillados exceptuados y
+   blindados contra extrapolación); envíos no hay (certeza); USB/celular sí en mostrador
+   (email sigue primario); medidas grandes solo para productos por m² (nunca convertir
+   ni confirmar factibilidad — alcance quirúrgico para no romper la regla 4 del laser).
+4. **Gremio (r1): cubierto por construcción** — los precios gremio viven en categorías
+   `audience='gremio'` que las vistas bot filtran; el "GREMIO 10% OFF" sobre Plastificado
+   solo genera caveat (muestra lista pública). Regla a futuro: precio gremio = categoría gremio.
+5. Vegetal x10 (r12): sigue `precio_cero→email` (deliberado). Preguntas que quedan a TG
+   (r6/r10/r13 + servicios implícitos): ver paquete en handoff.
+
 ## Qué NO entra en v1 (diferido)
 
 - Motor de reglas compartido (endpoint) → fase 2, con política de confirmación + KVM 4.

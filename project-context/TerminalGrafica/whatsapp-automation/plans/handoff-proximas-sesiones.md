@@ -43,7 +43,7 @@ Plan y decisiones: [`increment-b-precios.md`](./increment-b-precios.md). Resumen
 2. Re-importar `faq-bot-v6.json` (v10.3 + v10.4). Verificar creds (`Get Precio`/`Log Precio` → Bot Readonly DB; `Enviar Precio` → Chatwoot API Token; `OpenRouter Chat Model` → cred openRouter) y **abrir y guardar los 3 nodos Log** (el nodo Postgres cachea el schema; sin eso no toma execution_id). Togglear el workflow (resetea cache de catálogo).
 3. Correr la **Ronda 2** de [`tests/suite-3-precios.md`](../tests/suite-3-precios.md) (§R1-R9: libro, clase ".", multi-precio, 1ª mención, D4). Lo que pasó en ronda 1 no se repite.
 4. Re-correr suite-2 (no-regresión: prompt v9→v10.4) vigilando que las preguntas de desambiguación de producto no se hayan suprimido.
-5. **Gate de go-live (no bloquea el test):** mandar a TG las TRES preguntas del plan: (a) ¿precio de lista con caveat sí o no? ¿lista al día? + foto de la lista del mostrador (cierra el gap fotocopias); (b) ¿tabla de cantidad completa por WhatsApp (screenshoteable por la competencia) o solo "desde $X según cantidad"? ¿precio base para los ítems con adicionales? (c) para quien trae un libro/apuntes: ¿el bot puede pasarle la tabla de precio por página para que el cliente saque su propia cuenta (el total real lo cotizan ustedes), o ni eso y todo va directo a cotización? Nota interna: aunque TG apruebe a futuro estimados con cantidad (opción C), los trabajos compuestos quedan EXCLUIDOS de ese alcance — doble faz, brackets por carilla y terminaciones hacen deshonesta cualquier multiplicación.
+5. **Gate de go-live: RESUELTO por Martin (2026-07-21).** (a) Precios de lista SÍ (nunca gremio — cubierto por construcción: `audience='gremio'` filtrado en las vistas; lo que no vaya se limpia en el catálogo del bot); la lista actual está bien y va a conectarse al sistema diario del mostrador. (b) Cantidad-first: preguntar cuántas y dar el bracket exacto; sin cantidad → tabla (aplicado como v10.7). (c) Precio por página para libros SÍ, con "el precio final se cotiza vía mail" (= v10.5). Nota interna vigente: los trabajos compuestos quedan EXCLUIDOS de cualquier estimado con cantidad — doble faz, brackets por carilla y terminaciones hacen deshonesta cualquier multiplicación.
 
 ---
 
@@ -67,19 +67,40 @@ TG no quiere empleados mirando Chatwoot; un humano lento tras una charla fluida 
 ### Archivos (audio / imagen / otros)
 Hoy hay un solo "no puedo procesar archivos". flash-lite tiene **audio nativo** → transcribir/entender sin servicio extra; imagen (foto de lo que quieren imprimir) → describir. Rutas nuevas por tipo. Plan propio.
 
-### Frescura de precios — REPENSAR, posiblemente eliminar (pedido Martin 2026-07-21)
-La lógica actual del check de precio viejo hay que cambiarla y posiblemente eliminar esos checks. Motivo estructural: `price_updated_at` nació `default now()` al aplicar la migración y el trigger solo la renueva ante cambio REAL de precio → **~30 días después de la migración (~20-ago-2026), todo el catálogo que no cambió de precio cae en `fallback: stale` y el bot deja de cotizar TODO**. Opciones a evaluar: eliminar el check (la escalera + caveat ya cubren la honestidad), subir `DIAS_FRESCURA`, o atarlo a una señal de vigencia real que TG mantenga (se decide junto con el catálogo refinado). Mientras no se toque: vigilar `fallback: stale` en `bot.decisiones` — si aparece en masa, es esto.
+### Frescura de precios — RESUELTO: check ELIMINADO (2026-07-21, v10.7)
+Martin confirmó que la lista de precios va a estar conectada al sistema que la gráfica
+usa todos los días → la fuente es viva y el bot no es el eslabón débil. Se eliminó la
+rama `fallback: stale` de la escalera (desarma la bomba del ~20-ago: todo `price_updated_at`
+nació en el now() de la migración). Queda el **airbag**: tag `(precio>90d)` en `notas`
+de `bot.decisiones`, sin efecto al cliente — si aparece, la conexión con el sistema
+diario dejó de ser verdad y hay que revisar. Columna y trigger quedan en la DB.
 
-### Paquete de preguntas a TG — info del negocio + catálogo (matriz 2026-07-21)
-Una sola lista para mandar junta (fuente: `plans/matriz-situaciones-universidad.md`; las
-filas "C-caras" convierten handoffs recurrentes en answers): (1) foto de la lista de
-precios del mostrador (fotocopias = consulta #1); (2) **plazos estándar por rubro**
-(consulta #2 del mostrador — hoy escala SIEMPRE; anillados muestra el patrón:
-plazo-como-dato = certeza); (3) medios de pago y seña; (4) ¿hacen envíos?; (5) ¿reciben
-USB/archivo en mostrador?; (6) ¿escanean?; (7) ¿imanes se venden? (existe Iman con tabla
-— confirmar mapeo); (8) medidas reales de ploteo (¿A1?); (9) precio real del Papel
-Vegetal x10 (hoy $0 en la BD); (10) sobres ingleses duplicados (¿unidad vs pack?).
-Las respuestas van a "Información del negocio" del prompt o a `producto_meta`, según corresponda.
+### Paquete de preguntas a TG — versión FINAL post-respuestas de Martin (2026-07-21)
+Ya respondidas por Martin y aplicadas (v10.7): plazos (no se informan → answer derivando),
+envíos (no hay), USB (sí en mostrador), medidas grandes (por m²), vegetal x10 (sigue a
+email). Quedan para TG, en una sola conversación:
+
+**Directas:** (1) medios de pago y seña (Martin consulta); (2) ¿imanes se venden al
+público? (existe Iman con tabla — confirmar); (3) sobres ingleses duplicados en el
+sistema (¿unidad vs pack? ¿cuál va?).
+
+**Servicios implícitos** (Martin r4: TG calcula internamente trabajos comunes no
+cargados, ej. "fotocopia = valor impresión" — preguntar cómo se calcula cada uno y
+desde cuántas unidades; lista podada con criterio de mostrador universitario):
+fotocopias b/n y color (¿= valor impresión?); escaneo/digitalización (¿por hoja? ¿lo
+mandan por mail?); **impresión de diapositivas/PowerPoint 2-4-6 por hoja** (clásico
+universitario — ¿se cobra por hoja o por slide?); plegado/doblado (trípticos — pega con
+Folletos); **empastado/tapa dura** (tesis de posgrado) + termoencuadernado; tapas para
+anillados (¿EXISTEN como producto? — cierra con datos la confabulación del test 1.2);
+foto carnet 4x4; impresión de fotos 10x15/13x18; **póster académico de congreso A0/A1**
+(¿se hace en lona/PVC por m²?); impresión en el acto desde mail/WhatsApp/celular
+(proceso de mostrador); espiralado (¿sinónimo de anillado? → producto_meta); enmicado
+(¿sinónimo de plastificado? → producto_meta); guillotinado/corte chico suelto.
+Segunda línea (si la reunión da): sellos, diseño/ajuste de archivo, talonarios AFIP,
+transparencias/filminas, papel fotográfico, mapas/planos plegados.
+
+**Criterio transversal:** cada respuesta aterriza como DATO (producto nuevo, sinónimo
+en producto_meta, o línea de Info del negocio) — nunca como regla nueva de prompt.
 
 ### Limpieza sistemática del catálogo (idea B)
 - Descubrir faltantes (fotocopias = consulta #1, y otros): **foto de la lista de precios del mostrador** (pedir a TG) + minar la casilla de mail; `bot.decisiones` como red reactiva permanente.
