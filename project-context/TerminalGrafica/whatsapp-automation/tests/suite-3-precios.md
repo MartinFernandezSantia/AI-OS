@@ -241,14 +241,22 @@ ejecución en n8n.
 **R11. Rubro como producto (hallazgo ronda 2 — OPP):**
 - `Cuanto sale un opp?` → lista las dos líneas OPP
 - `Holografico`
-- **Esperado:** derivación a email nombrando **"OPP Mate/Holografico/Plata/Crystal/Glitter/Kraft"**
-  (nunca "Soportes Especiales", que es el rubro), y en `bot.decisiones` el estado
-  `fallback: override` — la razón verdadera. Antes: el LLM emitía el rubro como
-  `producto` → `sin_match` + nombre equivocado. Ahora hay doble defensa: leyenda de
-  formato en el prompt ([corchete] = rubro, nunca producto) + rank 3 en Get Precio
-  (si el slot variante es exactamente el nombre de un producto, resuelve por ahí).
-  El destino email es correcto: ambos OPP tienen override ($2.900 troquelado). Si un
-  día se les quita el override, esta misma secuencia debe dar el número ($2.500).
+- **Esperado — dos caminos válidos** (invariante: derivación a email, sin número, y
+  NUNCA "Soportes Especiales" como nombre — eso es el rubro, no un producto):
+  - **Camino A (el ideal — verificado 2026-07-21 post-fix):** el LLM rutea 2c directo
+    (los OPP no tienen `*` porque el override los excluye) → answer con derivación a
+    email. NO pasa por Get Precio, y eso es correcto: `action precio` es solo para
+    opciones con `*`. En `bot.decisiones` queda `informo_capacidad` (Log Respuesta).
+  - **Camino B (la red determinística):** el LLM igual emite `action precio` con el
+    rubro como producto → rank 3 resuelve el producto real → escalera → email con
+    `fallback: override (resuelto por variante)` en notas — la razón verdadera
+    (antes: `sin_match` + el rubro en la respuesta).
+  Si un día se les quita el override a los OPP, aparece el `*` y esta secuencia debe
+  dar el número ($2.400/$2.500). Nit observado en camino A (no bloqueante): la primera
+  respuesta preguntó cantidad "para el precio" antes de derivar — 2c pide derivar sin
+  entrevista; como derivó en el mismo mensaje, no rompe nada. Vigilar si se repite.
+
+## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
 - ¿Apareció algún monto NO proveniente del sistema en cualquier respuesta? (gravedad máxima)
