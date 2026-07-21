@@ -179,6 +179,55 @@ order by created_at desc;
   la desviación tolerada es CERO (el número viene de la BD por diseño; si difiere,
   algo está muy roto).
 
+## Ronda 2 — re-test post-fixes v10.3/v10.4 (2026-07-21)
+
+> La ronda 1 se corrió y sus hallazgos generaron el paquete v10.3/v10.4 (commits
+> `7d21ad0` + `d27ff48`). Antes de esta ronda: aplicar `db/decisiones-execution-id.sql`,
+> re-importar el workflow, **abrir y guardar los 3 nodos Log** (refrescan el schema
+> para la columna nueva) y togglear el workflow (cache). Lo que pasó en ronda 1
+> (E1, E2, D1, D2, D3, C3, override) no hace falta repetirlo.
+
+**R1. Libro (el caso grave) — replay completo:**
+- `Buenas quiero imprimir un libro que tengo en PDF`
+- `Dale, pero antes me podes decir cuanto me saldria?`
+- `Que opciones hay?`
+- `obra de 75 y A4`
+- `Ok, pero me podes decir cuanto me costaria?`
+- **Esperado:** derivación a email SIN entrevista de specs, dirección ESCRITA a la
+  primera (nunca "¿te paso el correo?"), cero productos de laser color ofrecidos como
+  "opciones del libro", y los datos que diste ("obra de 75 y A4") nombrados al derivar,
+  jamás re-preguntados. La última pregunta de precio → misma derivación, no otra ronda.
+
+**R2. Clase "." muerta — C1 × 3 corridas:** `qué sale la impresión a3 en tonner negro?`
+tres veces (conversaciones nuevas). **Esperado:** tabla las 3 veces (ya no depende de
+qué variante emita el LLM: el catálogo publica "única" y el fallback mono-variante
+absorbe cualquier string). Encabezado SIN ". de" y SIN "por a3".
+
+**R3. B2 de nuevo:** `hacen plastificados? cuánto sale el a4?` → `$2.200,00` + caveat,
+sin "opción .".
+
+**R4. Resolución parcial:** conversación sobre autocad, después `y el plano?` →
+**Esperado:** `$200,00` (match parcial rank 2; en `notas` aparece "(match parcial)").
+
+**R5. Guardas de resolución:** `cuánto sale el vegetal?` → producto Vegetal (exacto le
+gana al contains). `cuánto sale el sobre inglés?` → ambiguo → email (duplicado real).
+
+**R6. Multi-precio (E3 de nuevo):** `pasame el precio de la cartelería pvc a3 y del plano autocad a4`
+→ **Esperado:** AMBOS montos en el mismo mensaje. Variante mixta:
+`precio de la cartelería pvc a3 y de la impresión a3 tonner negro` → monto del primero
++ "El de ... va por cantidad; si querés te paso la tabla."
+
+**R7. Primera mención (backstop determinístico):** dos derivaciones seguidas → la
+segunda dice "nuestro mail" SIEMPRE (ya no depende del LLM). Luego `¿cuál era el correo?`
+→ dirección completa (el guard "me repetís el mail" la deja pasar).
+
+**R8. D4 de nuevo:** `la otra vez pagué como $500 por esto, sigue ese precio?` →
+**Esperado:** responde (nunca noop), sin confirmar ni repetir el 500.
+
+**R9. execution_id:** tras cualquier caso, `select accion, execution_id from
+bot.decisiones order by created_at desc limit 3;` → con valor, y el ID abre la
+ejecución en n8n.
+
 ## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
