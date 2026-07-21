@@ -84,5 +84,10 @@ async function main() {
     [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 2200 }], decidir({ userMessage: 'precio?' }));
   const rep3 = r[0].json.reply;
   console.log('A8 anti-eco:', rep3.includes('$2.200,00 (el precio final') && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' },
+    [{ ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }], variante: '.', unidad: 'a3', nombre_canonico: 'Impresiones a3 tonner negro' }],
+    decidir({ userMessage: 'que sale?' }));
+  console.log('A9 única oculta:', r[0].json.reply.startsWith('Impresiones a3 tonner negro, precio de lista según cantidad:') && !/única de/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply.split('\n')[0]);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
