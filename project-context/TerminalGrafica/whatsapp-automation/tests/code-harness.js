@@ -55,6 +55,12 @@ async function main() {
   r = await parsear(JSON.stringify({ action: 'answer', reply: 'Escribinos a nuestra dirección de correo terminalgrafica@gmail.com con el detalle.', motivo: '' }), decidir({ avisoDado: true }));
   console.log('P8 lead-in dirección:', r[0].json.reply.includes('a nuestro mail con el detalle') && !r[0].json.reply.includes('dirección') && !r[0].json.reply.includes('@') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
+  // P9/P10: campo cantidad (v10.7) — entero valido pasa (tambien como string numerica); basura -> null.
+  r = await parsear(JSON.stringify({ action: 'precio', producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 200, reply: 'Salen {{PRECIO}}.' }), decidir());
+  console.log('P9 cantidad:', r[0].json.precio.cantidad === 200 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.precio.cantidad));
+  r = await parsear(JSON.stringify({ action: 'precio', producto: 'X', variante: 'A4', cantidad: 'unas 200', reply: '{{PRECIO}}' }), decidir());
+  console.log('P10 cantidad basura:', r[0].json.precio.cantidad === null ? 'OK' : 'FAIL ' + r[0].json.precio.cantidad);
+
   // ===== ARMAR =====
   const armar = (precioObj, rows, dec, errored) => runNodeCode('armar.js', {
     $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
@@ -133,6 +139,26 @@ async function main() {
     [{ ...base, variante: '.', match_rank: 3, nombre_canonico: 'OPP Brillo', precio_lista: 2400 }],
     decidir({ userMessage: 'el brillo' }));
   console.log('A14 rank3 numero:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$2.400,00') && r[0].json.notas.includes('(resuelto por variante)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A15: cantidad-first (v10.7) — borde INCLUSIVE del bracket (50 = maxQty del 1er rango)
+  // -> numero unico con la cantidad DENTRO de la frase, nunca la tabla.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 50 },
+    [rangosRow], decidir({ userMessage: 'necesito 50 impresiones a3 en negro' }));
+  console.log('A15 bracket borde:', r[0].json.estado === 'ok_bracket' && r[0].json.reply.includes('Por 50 unidades') && r[0].json.reply.includes('$500,00 c/u') && r[0].json.notas.includes('(cantidad=50)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A16: GAP entre brackets (rangosRow no cubre 151-500) -> tabla completa, NUNCA el precio base.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 200 },
+    [rangosRow], decidir({ userMessage: 'necesito 200' }));
+  console.log('A16 gap→tabla:', r[0].json.estado === 'ok_rangos' && r[0].json.reply.includes('según cantidad:') && !r[0].json.reply.includes('Por 200') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply.split('\n')[0]);
+
+  // A17: cantidad sobre precio FIJO -> se ignora en el render, queda en notas (telemetria
+  // para la futura pregunta de descuentos por cantidad).
+  r = await armar({ ...pBase, cantidad: 300 }, [base], decidir({ userMessage: '300 de la a3' }));
+  console.log('A17 cantidad en fijo:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$13.000,00') && r[0].json.notas.includes('(cantidad=300)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // A18: stale ELIMINADO (fuente viva) — precio viejo ya no bloquea; airbag (precio>90d) en notas.
+  r = await armar(pBase, [{ ...base, precio_actualizado: '2026-01-01T00:00:00Z' }], decidir({ userMessage: 'precio a3?' }));
+  console.log('A18 sin stale + airbag:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$13.000,00') && r[0].json.notas.includes('(precio>90d)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

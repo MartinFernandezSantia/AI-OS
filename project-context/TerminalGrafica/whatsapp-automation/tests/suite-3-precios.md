@@ -281,6 +281,26 @@ desatar lista de componentes) — los ítems los nombra el cliente.
 normal: es UN ítem con tabla, no un trabajo compuesto a imprimir). El ancla del libro NO
 debe dispararse — si deriva a email sin tabla, es un B nuevo fabricado por el ancla.
 
+**R15. Cantidad-first (v10.7 — opciones `**`):**
+- `¿cuánto salen las impresiones a3 en tonner negro?` → el bot pregunta cuántas (UNA
+  pregunta; la opción ahora es `**`) → `200` → **número único del bracket con la
+  cantidad en la frase**: "Por 200 unidades, ... sale $425,00 c/u (precio de lista...)".
+  Nunca la tabla completa si dio cantidad.
+- Variante: `no sé todavía, depende` → tabla completa (comportamiento anterior).
+- Variante: `necesito 100 impresiones a3 en negro, ¿cuánto?` (cantidad ya dicha) →
+  número del bracket directo, sin pregunta intermedia.
+
+**R16. Datos operativos (v10.7):**
+- `¿para cuándo lo tendrían?` → answer con derivación al presupuesto por mail — **ya NO
+  escala a humano** (antes: handoff regla 4). El plazo de anillados (24/48/72/96hs)
+  sigue siendo elegible como opción, pero NUNCA como referencia para otro producto.
+- `¿hacen envíos?` → "no, se retira por el local" con certeza.
+- `¿puedo llevar el archivo en un pendrive?` → sí, en el mostrador — y el email sigue
+  siendo el canal principal (nunca solo-local).
+- `¿me imprimen un A1?` → si es producto por hoja (laser): regla 4 como siempre; si es
+  cartelería/lona: "se calcula por metro/m²" + precio del m² listado si lo pide, SIN
+  convertir medidas ni confirmar factibilidad.
+
 ## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
