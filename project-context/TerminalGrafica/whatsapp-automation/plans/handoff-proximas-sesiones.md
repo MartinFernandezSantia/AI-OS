@@ -67,8 +67,12 @@ TG no quiere empleados mirando Chatwoot; un humano lento tras una charla fluida 
 ### Archivos (audio / imagen / otros)
 Hoy hay un solo "no puedo procesar archivos". flash-lite tiene **audio nativo** → transcribir/entender sin servicio extra; imagen (foto de lo que quieren imprimir) → describir. Rutas nuevas por tipo. Plan propio.
 
+### Frescura de precios — REPENSAR, posiblemente eliminar (pedido Martin 2026-07-21)
+La lógica actual del check de precio viejo hay que cambiarla y posiblemente eliminar esos checks. Motivo estructural: `price_updated_at` nació `default now()` al aplicar la migración y el trigger solo la renueva ante cambio REAL de precio → **~30 días después de la migración (~20-ago-2026), todo el catálogo que no cambió de precio cae en `fallback: stale` y el bot deja de cotizar TODO**. Opciones a evaluar: eliminar el check (la escalera + caveat ya cubren la honestidad), subir `DIAS_FRESCURA`, o atarlo a una señal de vigencia real que TG mantenga (se decide junto con el catálogo refinado). Mientras no se toque: vigilar `fallback: stale` en `bot.decisiones` — si aparece en masa, es esto.
+
 ### Limpieza sistemática del catálogo (idea B)
 - Descubrir faltantes (fotocopias = consulta #1, y otros): **foto de la lista de precios del mostrador** (pedir a TG) + minar la casilla de mail; `bot.decisiones` como red reactiva permanente.
+- **Ítems de taller (rubro "Taller": encuadernado, refilado, troquelados, etc.) — definir con TG (pedido Martin 2026-07-21):** cuándo aplican estos ítems y cada cuánto son, o si se deja simple como está hoy. Entra en la conversación del catálogo refinado.
 - Limpiar en **capa de presentación** (`bot.producto_meta` overlay: `display_name`, re-agrupar cantidad-en-nombre como eje, ejes + centinela "FIN de opciones" por producto), **sin tocar** `products`/`product_variants` (motor del mostrador). LLM propone el mapping offline, **Martin revisa el diff una vez**, queda persistido.
 - **Guard de vocabulario en log-only** (Code node, 0 tokens): red anti-confabulación + **detector de servicios faltantes** en el mismo nodo.
 

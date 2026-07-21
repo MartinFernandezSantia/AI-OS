@@ -197,6 +197,11 @@ Cobertura: harness `tests/code-harness.js` 20/20 (A10-A14 nuevos); casos vivos R
 - Cantidad extraída + bracket lookup en JS → refinamiento de la tabla, si los datos lo piden.
 - Varios precios por turno.
 - Frescura de `pricing_rules` (tablas de rangos sin gate de 30d, solo el precio base lo tiene).
+- **Check de precio viejo (stale) — REPENSAR, posiblemente eliminar (Martin, 2026-07-21):**
+  tal como está, `price_updated_at` arrancó en `now()` al migrar y solo se renueva ante
+  cambio real de precio → a los ~30 días TODO el catálogo sin cambios cae en
+  `fallback: stale` y el bot deja de cotizar. Cambiar la lógica o eliminar el check
+  (detalle en handoff, sección "Frescura de precios — REPENSAR").
 
 ## Validación (ronda de Martin tras aplicar migración + re-importar)
 
