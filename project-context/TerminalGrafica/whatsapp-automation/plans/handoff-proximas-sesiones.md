@@ -39,7 +39,7 @@ Plan y decisiones: [`increment-b-precios.md`](./increment-b-precios.md). Resumen
 ### Pendiente de Martin para activar Increment B
 1. Aplicar `db/precio-freshness.sql` como migración timestamped en el quote-system (recrea `bot.variantes` con `precio_actualizado` + `solo_descuentos` + `tiene_override` + `n_reglas_cantidad` + `rangos_cantidad` → re-grant incluido). Sanity: ~79 mostrable / ~54 solo_descuentos / ~25 con 1 regla de cantidad / ~2 override.
 2. Re-importar `faq-bot-v6.json` (prompt v10.1 + escalera v10.2). Verificar que `Get Precio`/`Log Precio` tomaron la cred **Bot Readonly DB** y `Enviar Precio` la de **Chatwoot API Token**.
-3. Correr la ronda de validación del plan (§Validación, 15 casos — OJO: bustear/esperar el cache de catálogo 10 min tras aplicar la migración, si no la ronda corre sin `*`).
+3. Correr [`tests/suite-3-precios.md`](../tests/suite-3-precios.md) (mensajes listos para pegar, catálogo real, prerequisitos incluidos — OJO: bustear/esperar el cache de catálogo 10 min tras aplicar la migración, si no la ronda corre sin `*`).
 4. Re-correr suite-2 (no-regresión: el prompt cambió v9→v10.1) vigilando que las preguntas de desambiguación de producto no se hayan suprimido.
 5. **Gate de go-live (no bloquea el test):** mandar a TG las DOS preguntas del plan: (a) ¿precio de lista con caveat sí o no? ¿lista al día? + foto de la lista del mostrador (cierra el gap fotocopias); (b) ¿tabla de cantidad completa por WhatsApp (screenshoteable por la competencia) o solo "desde $X según cantidad"? ¿precio base para los ítems con adicionales?
 
