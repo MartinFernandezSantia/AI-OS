@@ -14,13 +14,19 @@
 --   3. bot.variantes recreada exponiendo precio_actualizado + solo_descuentos.
 --      Va DROP + CREATE (CREATE OR REPLACE no permite insertar columnas) → re-grant.
 --
--- solo_descuentos (revisión adversarial Fable 2026-07-21): true si TODAS las
--- reglas activas que alcanzan la variante son rule_type='discount'. El motor
--- aplica discount siempre con signo negativo (quote-utils.ts) → precio_lista es
--- TECHO garantizado → el bot puede mostrarlo con caveat neutro ("precio de
--- lista; el final lo confirma el equipo"). quantity_range/override/supercharge
--- siguen bloqueando. Nota anotada (no accionar): un discount con value negativo
--- sumaría y el bool_and no lo detectaría — hoy no existe ninguno en el ruleset.
+-- Clasificación de reglas (revisión adversarial Fable + decisión Martin
+-- "desbloquear todo" 2026-07-21). La vista clasifica cada variante y n8n decide
+-- determinísticamente (el LLM nunca ve reglas, solo el * del catálogo):
+--   · tiene_override            → nunca mostrar número (el empleado pisa el precio)
+--   · n_reglas_cantidad = 1     → tabla de rangos verbatim (rangos_cantidad) + caveat
+--   · n_reglas_cantidad > 1     → ambiguo (precedencia del motor) → sin número
+--   · sin reglas (mostrable)    → número limpio
+--   · resto (discount/supercharge) → número de lista + caveat neutro
+-- Los quantity_range del ruleset real son confirmation=false y REEMPLAZAN el
+-- precio → la tabla verbatim es exactamente lo que cobra el mostrador.
+-- solo_descuentos queda para telemetría (discount = signo negativo garantizado,
+-- precio_lista es techo). Nota anotada (no accionar): un discount con value
+-- negativo sumaría y el bool_and no lo detectaría — hoy no existe en el ruleset.
 -- Backfill: default now() = asumimos que los precios vigentes hoy son válidos.
 -- =============================================================================
 
@@ -89,7 +95,46 @@ from (
            or t.product_id         = v.product_id
            or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
         )
-    ), false) as solo_descuentos
+    ), false) as solo_descuentos,
+    exists (
+      select 1
+      from public.pricing_rule_targets t
+      join public.pricing_rules r on r.id = t.pricing_rule_id
+      where r.is_active = true
+        and r.rule_type = 'override'
+        and (
+              t.product_variant_id = v.id
+           or t.product_id         = v.product_id
+           or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
+        )
+    ) as tiene_override,
+    (
+      select count(*)::int
+      from public.pricing_rule_targets t
+      join public.pricing_rules r on r.id = t.pricing_rule_id
+      where r.is_active = true
+        and r.rule_type = 'quantity_range'
+        and (
+              t.product_variant_id = v.id
+           or t.product_id         = v.product_id
+           or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
+        )
+    ) as n_reglas_cantidad,
+    -- Solo confiable cuando n_reglas_cantidad = 1 (con >1 el motor resuelve
+    -- precedencia de scope que acá no replicamos → n8n hace fallback).
+    (
+      select r.effect->'ranges'
+      from public.pricing_rule_targets t
+      join public.pricing_rules r on r.id = t.pricing_rule_id
+      where r.is_active = true
+        and r.rule_type = 'quantity_range'
+        and (
+              t.product_variant_id = v.id
+           or t.product_id         = v.product_id
+           or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
+        )
+      limit 1
+    ) as rangos_cantidad
   from public.product_variants v
   join public.products  p on p.id = v.product_id
   join public.categories c on c.id = p.category_id
@@ -111,10 +156,14 @@ end $$;
 
 -- =============================================================================
 -- Sanity check (tras aplicar):
---   select variante, precio_lista, tiene_reglas, mostrable, solo_descuentos, precio_actualizado
+--   select variante, precio_lista, tiene_reglas, mostrable, solo_descuentos,
+--          tiene_override, n_reglas_cantidad, rangos_cantidad, precio_actualizado
 --   from bot.variantes limit 5;                       -- precio_actualizado ≈ now()
---   select count(*) filter (where mostrable),         -- esperado ~79
---          count(*) filter (where solo_descuentos)    -- esperado ~54
+--   select count(*) filter (where mostrable),             -- esperado ~79
+--          count(*) filter (where solo_descuentos),       -- esperado ~54
+--          count(*) filter (where n_reglas_cantidad = 1), -- esperado ~25
+--          count(*) filter (where n_reglas_cantidad > 1), -- esperado pocas (Carpetas a4)
+--          count(*) filter (where tiene_override)         -- esperado ~2
 --   from bot.variantes;
 --   update public.product_variants set price = price + 1
 --     where id = (select variante_id from bot.variantes where mostrable limit 1);
