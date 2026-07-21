@@ -18,3 +18,6 @@ tmp/
 *.tmp
 # QR generation venv (local tooling)
 .qr-venv/
+
+# Supabase CLI ephemeral state (supabase link droppings)
+**/supabase/.temp/
