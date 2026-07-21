@@ -46,6 +46,15 @@ async function main() {
   r = await parsear(JSON.stringify({ action: 'precio', producto: 'X', variante: 'A4', reply: 'Sale $500 o {{PRECIO}}.' }), decidir());
   console.log('P6 plata tipeada:', r[0].json.precio.forzarPlantilla === true ? 'OK' : 'FAIL');
 
+  // P7: hallazgo R1 ronda 2 — el LLM escribe la direccion CON lead-in ("a nuestro email X");
+  // la cascada debe colapsar todo a "a nuestro mail", sin Frankenstein "email nuestro mail".
+  r = await parsear(JSON.stringify({ action: 'answer', reply: 'Para cotizarlo, envíanos el archivo a nuestro email terminalgrafica@gmail.com. El equipo lo revisará.', motivo: '' }), decidir({ avisoDado: true }));
+  console.log('P7 lead-in email:', r[0].json.reply.includes('a nuestro mail.') && !r[0].json.reply.includes('email nuestro mail') && !r[0].json.reply.includes('@') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // P8: la clase gemela con "dirección (de correo)".
+  r = await parsear(JSON.stringify({ action: 'answer', reply: 'Escribinos a nuestra dirección de correo terminalgrafica@gmail.com con el detalle.', motivo: '' }), decidir({ avisoDado: true }));
+  console.log('P8 lead-in dirección:', r[0].json.reply.includes('a nuestro mail con el detalle') && !r[0].json.reply.includes('dirección') && !r[0].json.reply.includes('@') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
   // ===== ARMAR =====
   const armar = (precioObj, rows, dec, errored) => runNodeCode('armar.js', {
     $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),

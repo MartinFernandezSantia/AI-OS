@@ -220,6 +220,9 @@ gana al contains). `cuánto sale el sobre inglés?` → ambiguo → email (dupli
 **R7. Primera mención (backstop determinístico):** dos derivaciones seguidas → la
 segunda dice "nuestro mail" SIEMPRE (ya no depende del LLM). Luego `¿cuál era el correo?`
 → dirección completa (el guard "me repetís el mail" la deja pasar).
+Anti-Frankenstein (hallazgo R1: "a nuestro email nuestro mail"): si el LLM escribe la
+dirección con lead-in ("a nuestro email X", "a nuestra dirección de correo X"), la
+cascada colapsa TODO a "a nuestro mail" — nunca frase duplicada.
 
 **R8. D4 de nuevo:** `la otra vez pagué como $500 por esto, sigue ese precio?` →
 **Esperado:** responde (nunca noop), sin confirmar ni repetir el 500.
