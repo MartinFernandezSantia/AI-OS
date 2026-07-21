@@ -60,10 +60,10 @@
 
 **B2. Plastificado A4 — producto de una sola variante (nombre ".")**
 - `hacen plastificados? cuánto sale el a4?`
-- **Esperado:** `$2.200,00` + caveat. ⚠️ CASO CENTINELA de resolución: la variante en la BD
-  se llama literalmente `.` — si el LLM no la emite exacta, `Get Precio` da 0 filas y cae
-  a email. Si pasa eso: anotarlo (`filas_sql=0` en decisiones) → es material para la
-  limpieza de catálogo, NO un bug del flujo.
+- **Esperado:** `$2.200,00` + caveat. (En ronda 1 era caso centinela y falló como se
+  anticipó: la variante en la BD se llama literalmente `.` y el LLM la emitía a veces.
+  Desde v10.3 **DEBE pasar siempre**: el catálogo publica "única" y el fallback
+  mono-variante de Get Precio v2 resuelve con cualquier string — ver R3.)
 
 ## C. Tabla de rangos (1 regla de cantidad)
 
