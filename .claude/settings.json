@@ -78,5 +78,8 @@
       "Bash(python -c *)",
       "Bash(python3 -c *)"
     ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true
   }
 }
