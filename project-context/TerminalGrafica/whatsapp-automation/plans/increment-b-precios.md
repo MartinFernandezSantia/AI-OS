@@ -129,11 +129,47 @@ frescura la da por buena hoy). Pregunta sugerida por WhatsApp:
 > sistema están al día? Si me mandás una foto de la lista del mostrador, de paso
 > cargo lo que falta (fotocopias, por ejemplo).
 
+## Ronda 3 — desbloqueo total (decisión Martin, 2026-07-21) — APLICADA (v10.2)
+
+Martin decidió que la integración de precios con reglas es "sí o sí". Se contrastaron
+5 opciones con el agente Fable (tabla de rangos / pseudo-variantes en catálogo /
+cantidad+lookup JS / endpoint del motor / workflow materializador). Ganadora: **tabla
+de rangos determinística** — los `quantity_range` del ruleset son `confirmation=false`
+y REEMPLAZAN el precio en el motor → la tabla verbatim es exactamente la lista del
+mostrador. Descartado: pseudo-variantes (el LLM mapeando "200 → bracket 11-1000" es
+un precio equivocado indetectable), números en el prompt (rompe 6 defensas), workflow
+materializador (vista SQL siempre-fresca lo reemplaza; workflow solo para curación
+offline). En cola: cantidad extraída + lookup JS (si `bot.decisiones` muestra que los
+clientes dicen cantidades); endpoint del motor = fase 2 (gates: política de
+confirmación con TG + quote-system en el KVM 4).
+
+**La escalera determinística** (n8n, en orden; el LLM nunca ve reglas, solo el `*`):
+
+| Clase | n (seed real) | Bot responde |
+|---|---|---|
+| `override` (empleado pisa el precio) | 2 | Sin número → email |
+| 2+ reglas de cantidad (precedencia del motor no replicada) | 0 hoy (guarda estructural) | Sin número → email |
+| Exactamente 1 regla de cantidad | 25 | Tabla de rangos verbatim (cap 6, guion por línea) + "el precio final lo confirma el equipo" |
+| Sin reglas y precio > 0 | 77 | Número limpio |
+| Sin reglas y precio $0 (Papel Vegetal x10 — bug real detectado) | 2 | Sin número → email |
+| Resto: descuentos y/o adicionales | 79 | Número de lista + caveat neutro |
+
+Cobertura: **181/185 variantes públicas con respuesta de precio** (las 2 override + 2
+precio-cero van a cotización, correcto). Las preguntas de Martin quedaron respondidas
+en el diseño: reglas a nivel categoría/producto se heredan y resuelven EN LA VISTA
+(CTE recursivo, mismo recorrido que el motor) antes de que el LLM vea nada; override
+nunca muestra número; el descuento onNth (DORSO) jamás se explica al cliente — cae en
+el caveat neutro y su único filo (d/f más caro que lista) lo cierra el backstop doble faz.
+
+Diferido a pedido de Martin: frescura/vigencia de las reglas (`pricing_rules` sin
+`updated_at`, `valid_from/to` ignorados) — "después vemos cómo lo acomodamos".
+
 ## Qué NO entra en v1 (diferido)
 
-- Motor de reglas compartido (`lib/quote-utils.ts`) en n8n → fase 2, si TG lo pide.
-- Rango de precios para `quantity_range`/`override`/`supercharge` → v1 redirige a cotización.
+- Motor de reglas compartido (endpoint) → fase 2, con política de confirmación + KVM 4.
+- Cantidad extraída + bracket lookup en JS → refinamiento de la tabla, si los datos lo piden.
 - Varios precios por turno.
+- Frescura de `pricing_rules` (tablas de rangos sin gate de 30d, solo el precio base lo tiene).
 
 ## Validación (ronda de Martin tras aplicar migración + re-importar)
 
@@ -153,3 +189,9 @@ frescura la da por buena hoy). Pregunta sugerida por WhatsApp:
 10. Re-medir caching de prompt (el prefijo cambió con v10.1) y correr suite-2 vigilando
     que las preguntas de desambiguación de producto sigan apareciendo (no sobre-supresión por el fix 2c).
 11. Telemetría: `filas_sql=0` en `bot.decisiones` = miss de resolución de nombre → candidatos a sinónimos.
+12. Tabla de rangos: "¿cuánto salen las impresiones en obra 75 simple faz?" → tabla completa
+    (1 a 10 / 11 a 1000 / 1001 o más) + cierre "el precio final lo confirma el equipo".
+13. Precio cero: "¿cuánto sale el papel vegetal a4 x10?" → SIN número, a email (no "$0,00").
+14. Override: variante de Iman → SIN número, a email.
+15. Impresión color obra 106 A4 (caveat) vs impresiones inkjet obra 75 (tabla): verificar
+    que cada clase renderiza lo suyo y el número/tabla coincide con la BD.
