@@ -32,12 +32,14 @@ Plan y decisiones: [`increment-b-precios.md`](./increment-b-precios.md). Resumen
 - **Rama nueva:** `Switch Acción → Get Precio → Armar Respuesta Precio → Enviar Precio → Log Precio` (`accion='informo_precio'`, `filas_sql`, notas con resultado). Fallbacks determinísticos: sin match / ambiguo / `tiene_reglas` / stale (>30d) → redirect a email respetando `avisoDado`; patrón de plata tipeado por el LLM → plantilla fija.
 - **Formato (decisión Martin):** `$12.345,67` (es-AR, dos decimales), SIN leyenda de IVA (lo maneja la gráfica al tomar el pedido).
 - **Frescura:** columna nueva `price_updated_at` + trigger (solo ante cambio real de `price`; `bulk_upsert_products` usa UPDATE plano así que no re-fresca sin cambio) + `bot.variantes` recreada con `precio_actualizado`.
+- **v10.1 (revisión adversarial Fable 2026-07-21, tras el test en vivo de Martin):** el gate estricto dejaba sin número a TODO el laser color (la consulta #1). Desbloqueo de las 54 variantes bloqueadas SOLO por reglas `discount` (el motor solo puede bajar ese precio → techo garantizado): columna `solo_descuentos` en la vista, mismo `*` en el catálogo, **caveat neutro** inyectado dentro de `{{PRECIO}}` ("precio de lista; el precio final del trabajo te lo confirma el equipo" — sin prometer descuentos: son `confirmation=true`, discrecionales). + **Backstop doble faz** (pedido d/f sobre variante no-d/f → sin número) + **agujero 2a cerrado** (spec extra no listada sobre opción `*` → 2c sin número) + **fix funnel 2c** (sin candidatos con `*` → derivar apenas identificado el producto). Detalle completo en el plan.
 
 ### Pendiente de Martin para activar Increment B
-1. Aplicar `db/precio-freshness.sql` como migración timestamped en el quote-system (recrea `bot.variantes` → re-grant incluido).
-2. Re-importar `faq-bot-v6.json` (prompt v10 + rama precio). Verificar que `Get Precio`/`Log Precio` tomaron la cred **Bot Readonly DB** y `Enviar Precio` la de **Chatwoot API Token**.
-3. Correr la ronda de validación del plan (§Validación): seed exacto $30,00 fotocopia A4, regla→email sin número, inyección, stale.
-4. Re-correr suite-2 (no-regresión del árbol: el prompt cambió v9→v10).
+1. Aplicar `db/precio-freshness.sql` como migración timestamped en el quote-system (recrea `bot.variantes` con `precio_actualizado` + `solo_descuentos` → re-grant incluido). Sanity: ~79 mostrable / ~54 solo_descuentos.
+2. Re-importar `faq-bot-v6.json` (prompt v10.1 + rama precio). Verificar que `Get Precio`/`Log Precio` tomaron la cred **Bot Readonly DB** y `Enviar Precio` la de **Chatwoot API Token**.
+3. Correr la ronda de validación del plan (§Validación, 11 casos — OJO: bustear/esperar el cache de catálogo 10 min tras aplicar la migración, si no la ronda corre sin `*`).
+4. Re-correr suite-2 (no-regresión: el prompt cambió v9→v10.1) vigilando que las preguntas de desambiguación de producto no se hayan suprimido.
+5. **Gate de go-live (no bloquea el test):** mandar a TG la pregunta del plan (¿precio de lista con caveat, sí o no? ¿lista al día? + foto de la lista del mostrador → de paso cierra el gap fotocopias).
 
 ---
 
