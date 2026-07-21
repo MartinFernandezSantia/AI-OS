@@ -191,6 +191,30 @@ del **eco del LLM** en vez de la DB. Paquete (cada pieza contrastada con Fable):
 
 Cobertura: harness `tests/code-harness.js` 20/20 (A10-A14 nuevos); casos vivos R10/R11 en suite-3.
 
+## Ronda 5 — costo por página para trabajos compuestos (pedido Martin, 2026-07-21) — APLICADA (v10.5)
+
+Pedido: que el cliente del libro no se vaya sin NINGUNA idea de costo — estimado del bot,
+o al menos el precio por página para que calcule él. Descomposición (contrastada con Fable):
+
+1. **Estimado multiplicado por el LLM: rechazado.** Rompe el principio rector, y además
+   multiplicar está MAL para esta clase: las tablas reemplazan por bracket (no lineales),
+   un libro va típicamente doble faz (regla DORSO cambia el costo por carilla) y suma
+   encuadernado/tapa/refilado con tablas propias.
+2. **Estimado determinístico (opción C): diferido a pregunta (c) de TG** por riesgo de
+   anclaje comercial. Y aunque TG apruebe C, los trabajos compuestos quedan EXCLUIDOS
+   de su alcance (la aritmética es deshonesta para ellos aunque el código sea perfecto);
+   C sería solo para consultas limpias producto+cantidad.
+3. **Lo shippeado (v10.5): excepción acotada del ancla libro.** SOLO compuestos que se
+   imprimen por página (libro/apuntes/tesis/revista; lista negativa explícita: NO
+   banners/tarjetas/cartelería/gigantografía): tras derivar al email, UNA frase ofreciendo
+   la referencia de costo por página; si el cliente acepta, es un 2a/2b normal → tabla
+   verbatim del sistema. Nunca total, nunca multiplicar, ni con cantidad dada.
+   Contención estructural (Fable): la oferta es POST-derivación — el peor caso cuesta un
+   turno suave y termina donde el cliente ya estaba; no reabre el funnel v10.3.
+4. **La salida de fondo es de datos, no de prompt:** cluster impresión-por-página limpio
+   en `producto_meta`. Esta feature le manda tráfico a la zona sucia de IMPRESIONES →
+   dedupe priorizado + monitoreo de `fallback: ambiguo` (ver handoff).
+
 ## Qué NO entra en v1 (diferido)
 
 - Motor de reglas compartido (endpoint) → fase 2, con política de confirmación + KVM 4.

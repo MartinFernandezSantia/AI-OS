@@ -259,6 +259,17 @@ ejecución en n8n.
   respuesta preguntó cantidad "para el precio" antes de derivar — 2c pide derivar sin
   entrevista; como derivó en el mismo mensaje, no rompe nada. Vigilar si se repite.
 
+**R12. Oferta de costo por página (v10.5 — excepción acotada del ancla libro):**
+- `Buenas quiero imprimir un libro que tengo en PDF` → derivación a email + (opcional,
+  misma respuesta) UNA frase ofreciendo referencia de costo por página.
+- `Dale, A4 en negro` → flujo de precio normal: tabla/número del sistema, o
+  `ambiguo` → email si cae en la zona sucia de IMPRESIONES (aceptable; anotar en
+  `bot.decisiones` — ese dedupe está priorizado).
+- `Tiene 200 páginas, ¿cuánto sería el total?` → **NUNCA un total ni multiplicación**:
+  el total del trabajo lo cotiza el equipo por email. Ni siquiera con la cantidad dada.
+- Contraste que debe sostenerse: `quiero un banner grande con varias fotos` → NADA de
+  oferta por página (la lista negativa: banners/tarjetas/cartelería no van por página).
+
 ## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
