@@ -11,8 +11,16 @@
 --      mostrador no la lee ni la escribe: cero impacto en el quote-system.
 --   2. Trigger que la bumpea SOLO cuando cambia price (bulk_upsert_products usa
 --      UPDATE plano → un upsert sin cambio de precio NO renueva la frescura).
---   3. bot.variantes recreada exponiendo precio_actualizado. Va DROP + CREATE
---      (CREATE OR REPLACE no permite insertar columnas en el medio) → re-grant.
+--   3. bot.variantes recreada exponiendo precio_actualizado + solo_descuentos.
+--      Va DROP + CREATE (CREATE OR REPLACE no permite insertar columnas) → re-grant.
+--
+-- solo_descuentos (revisión adversarial Fable 2026-07-21): true si TODAS las
+-- reglas activas que alcanzan la variante son rule_type='discount'. El motor
+-- aplica discount siempre con signo negativo (quote-utils.ts) → precio_lista es
+-- TECHO garantizado → el bot puede mostrarlo con caveat neutro ("precio de
+-- lista; el final lo confirma el equipo"). quantity_range/override/supercharge
+-- siguen bloqueando. Nota anotada (no accionar): un discount con value negativo
+-- sumaría y el bool_and no lo detectaría — hoy no existe ninguno en el ruleset.
 -- Backfill: default now() = asumimos que los precios vigentes hoy son válidos.
 -- =============================================================================
 
@@ -70,7 +78,18 @@ from (
            or t.product_id         = v.product_id
            or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
         )
-    ) as tiene_reglas
+    ) as tiene_reglas,
+    coalesce((
+      select bool_and(r.rule_type = 'discount')
+      from public.pricing_rule_targets t
+      join public.pricing_rules r on r.id = t.pricing_rule_id
+      where r.is_active = true
+        and (
+              t.product_variant_id = v.id
+           or t.product_id         = v.product_id
+           or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
+        )
+    ), false) as solo_descuentos
   from public.product_variants v
   join public.products  p on p.id = v.product_id
   join public.categories c on c.id = p.category_id
@@ -92,8 +111,11 @@ end $$;
 
 -- =============================================================================
 -- Sanity check (tras aplicar):
---   select variante, precio_lista, tiene_reglas, mostrable, precio_actualizado
+--   select variante, precio_lista, tiene_reglas, mostrable, solo_descuentos, precio_actualizado
 --   from bot.variantes limit 5;                       -- precio_actualizado ≈ now()
+--   select count(*) filter (where mostrable),         -- esperado ~79
+--          count(*) filter (where solo_descuentos)    -- esperado ~54
+--   from bot.variantes;
 --   update public.product_variants set price = price + 1
 --     where id = (select variante_id from bot.variantes where mostrable limit 1);
 --   -- → esa fila debe mostrar precio_actualizado nuevo; revertir el +1 después.
