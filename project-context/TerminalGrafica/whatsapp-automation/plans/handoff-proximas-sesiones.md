@@ -18,39 +18,26 @@ Núcleo del bot **completo y calibrado**: `Webhook HMAC → Firewall Tier-1 → 
 - **Firewall Tier-1 + Tier-2** (jailbreak+topical) construidos; `retryOnFail` en los refusals para no re-strikear desde el historial (`d0e9691`).
 - **Error workflow** `tg-bot-error.json` + tabla `bot.errores` (`fc769e9`).
 - **Motivo del handoff** logueado en `bot.decisiones.notas` (`7dd335f`).
-
-### Pendiente de Martin para cerrar lo ya construido
-1. Crear cred `openRouterApi` en n8n + seleccionarla en `OpenRouter Chat Model` (hoy placeholder).
-2. Aplicar migraciones: `db/firewall-tier2-strike.sql`, `db/firewall-tier1-patterns-jailbreak.sql`, `db/bot-errores.sql`.
-3. Importar `faq-bot-v6.json` + `tg-bot-error.json`; en el workflow principal setear **Settings → Error Workflow → tg-bot-error**.
-4. Correr las rondas de test (suite-2 + ronda v9).
+- ✅ Cierre de Martin 2026-07-21: cred openRouter creada, migraciones aplicadas, workflows importados (error workflow seteado), rondas suite-2 + v9 corridas.
 
 ---
 
-## ⭐ PRÓXIMO A ATACAR: Precios (Increment B)
+## Precios (Increment B) — CONSTRUIDO 2026-07-21, pendiente de aplicar/testear
 
-**Objetivo:** que el bot pueda dar info de **precios** de los productos del catálogo.
+Plan y decisiones: [`increment-b-precios.md`](./increment-b-precios.md). Resumen del diseño:
 
-### Contexto y restricciones duras (de memoria)
-- Las filas de precio son **las MISMAS que usa el motor del mostrador** (sistema de presupuestos). **NUNCA recalcular en n8n** = precio fantasma.
-- Con el ruleset real: **57% de las variantes (106/185) tienen precio por REGLA** (`tiene_reglas`) → no hay número directo. Solo **~79 (43%) son "mostrable"** (número de lista directo).
-- Diseño previo (decisión 2026-06-29): mostrable → mostrar número (plantilla fija); `tiene_reglas` → motor compartido (`lib/quote-utils.ts`) **o** rango + captura; `updated_at > 30d` → auto-silencio; variable sin poder calcular → rango, **nunca número pelado**.
-- La vista `bot.variantes` ya existe (nombres/opciones, SIN precio hoy); falta traer el **precio** on-demand.
+- **Alcance v1 (decisión Martin):** solo `mostrable`; `tiene_reglas` sigue a cotización por email. Motor de reglas NO entra en n8n.
+- **Catálogo anotado:** `Get Catálogo` marca con `*` las opciones con precio de lista → el LLM sabe QUÉ tiene número (nunca CUÁNTO) y redirige el resto a email con sus palabras.
+- **Contrato:** nueva action `precio` (`producto` + `variante` + reply con marcador `{{PRECIO}}`). **El LLM nunca tipea el número**: lo inyecta n8n desde `bot.variantes` (mismas filas que el motor del mostrador).
+- **Rama nueva:** `Switch Acción → Get Precio → Armar Respuesta Precio → Enviar Precio → Log Precio` (`accion='informo_precio'`, `filas_sql`, notas con resultado). Fallbacks determinísticos: sin match / ambiguo / `tiene_reglas` / stale (>30d) → redirect a email respetando `avisoDado`; patrón de plata tipeado por el LLM → plantilla fija.
+- **Formato (decisión Martin):** `$12.345,67` (es-AR, dos decimales), SIN leyenda de IVA (lo maneja la gráfica al tomar el pedido).
+- **Frescura:** columna nueva `price_updated_at` + trigger (solo ante cambio real de `price`; `bulk_upsert_products` usa UPDATE plano así que no re-fresca sin cambio) + `bot.variantes` recreada con `precio_actualizado`.
 
-### Choques con el estado actual (a resolver en el plan)
-- **El prompt v9 dice hoy "NO das precios, NO cotizás".** Increment B **relaja** eso para los `mostrable` → hay que reescribir esa parte con cuidado y **re-testear** (y respetar el caching: cambio de prompt = re-medir).
-- Nueva rama/nodo: traer el precio **on-demand** solo para el/los producto(s) que el cliente pregunta (no volcar toda la lista: tokens + no exponer la lista completa).
-- Interacción con el árbol: hoy la **regla 2** manda "precio → answer + email". Con Increment B, precio de un `mostrable` pasa a **answer CON número**; `tiene_reglas` sigue derivando a cotización.
-
-### Decisiones a tomar en la sesión de plan
-1. **Alcance del MVP:** ¿v1 muestra solo `mostrable` (número) y para `tiene_reglas` deriva a cotización por mail? (recomendado — **no** meter el motor de reglas en n8n en v1). ¿O se llama al motor compartido para las reglas? (más complejo, fase posterior).
-2. **Cómo se trae el precio:** on-demand por producto mencionado (tipo scoping) vs todo. → on-demand.
-3. **Frescura:** `updated_at > 30d` → no mostrar → cotización.
-4. **Formato del número:** moneda, ¿IVA incluido?, redondeo — **confirmar con TG**.
-5. **Prompt:** cómo relajar "no precios" solo para `mostrable` sin reabrir confabulación de precios inventados (el mundo cerrado también aplica a precios: si no hay número mostrable, NO inventar).
-
-### Archivos/objetos relevantes
-- Vistas `bot.taxonomia` / `bot.variantes`; `Get Catálogo` node; `seed-prod-catalog.sql` (catálogo real); motor `lib/quote-utils.ts` (`collectCategoryRules`).
+### Pendiente de Martin para activar Increment B
+1. Aplicar `db/precio-freshness.sql` como migración timestamped en el quote-system (recrea `bot.variantes` → re-grant incluido).
+2. Re-importar `faq-bot-v6.json` (prompt v10 + rama precio). Verificar que `Get Precio`/`Log Precio` tomaron la cred **Bot Readonly DB** y `Enviar Precio` la de **Chatwoot API Token**.
+3. Correr la ronda de validación del plan (§Validación): seed exacto $30,00 fotocopia A4, regla→email sin número, inyección, stale.
+4. Re-correr suite-2 (no-regresión del árbol: el prompt cambió v9→v10).
 
 ---
 
