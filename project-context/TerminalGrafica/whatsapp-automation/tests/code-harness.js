@@ -89,5 +89,18 @@ async function main() {
     decidir({ userMessage: 'que sale?' }));
   console.log('A9 única oculta:', r[0].json.reply.startsWith('Impresiones a3 tonner negro, precio de lista según cantidad:') && !/única de/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply.split('\n')[0]);
 
+  // A10: replay del hallazgo de Martin (ronda 2) — el LLM ecoa el nombre COMPLETO del
+  // producto como variante sobre un mono-variante "." -> el encabezado no debe duplicar
+  // ("X de X"). vv se resuelve SOLO desde row.variante (DB), nunca desde el eco.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'Impresiones a3 tonner negro' },
+    [rangosRow], decidir({ userMessage: 'necesito 200 impresiones a3 en tonner negro, cuánto me sale?' }));
+  console.log('A10 eco producto como variante:', r[0].json.reply.startsWith('Impresiones a3 tonner negro, precio de lista según cantidad:') && !r[0].json.reply.includes(' de Impresiones') ? 'OK' : 'FAIL ' + r[0].json.reply.split('\n')[0]);
+
+  // A11: mismo eco pero en un extra de 'mas' (camino vvx).
+  r = await armar({ ...pBase, mas: [{ producto: 'Sellos automáticos', variante: 'Sellos automáticos' }] },
+    [base, { ...base, idx: 2, variante: '.', nombre_canonico: 'Sellos automáticos', precio_lista: 9000, producto_id: 'u3' }],
+    decidir({ userMessage: 'precios?' }));
+  console.log('A11 eco extra:', r[0].json.reply.includes('Sellos automáticos sale $9.000,00') && !r[0].json.reply.includes('La opción Sellos') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

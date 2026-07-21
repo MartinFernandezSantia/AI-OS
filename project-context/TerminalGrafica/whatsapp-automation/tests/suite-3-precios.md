@@ -228,6 +228,16 @@ segunda dice "nuestro mail" SIEMPRE (ya no depende del LLM). Luego `¿cuál era 
 bot.decisiones order by created_at desc limit 3;` → con valor, y el ID abre la
 ejecución en n8n.
 
+**R10. Eco del producto como variante (hallazgo ronda 2, misma conversación):**
+- `hacen plastificados? cuánto sale el a4?` (B2)
+- `qué sale la impresión a3 en tonner negro?` (C1)
+- `necesito 200 impresiones a3 en tonner negro, cuánto me sale?`
+- **Esperado:** el tercer mensaje devuelve la tabla con encabezado
+  `Impresiones a3 tonner negro, precio de lista según cantidad:` — el nombre UNA sola
+  vez (antes: "X de X" porque el render caía al eco del LLM cuando la variante real
+  es la clase "."; ahora `vv` sale SOLO de la DB). Y sin cálculo para 200: la tabla
+  verbatim es la respuesta (C2 sigue igual).
+
 ## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
