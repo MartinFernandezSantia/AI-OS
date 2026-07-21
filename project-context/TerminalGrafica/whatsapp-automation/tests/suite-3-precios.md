@@ -270,6 +270,17 @@ ejecución en n8n.
 - Contraste que debe sostenerse: `quiero un banner grande con varias fotos` → NADA de
   oferta por página (la lista negativa: banners/tarjetas/cartelería no van por página).
 
+**R13. Multi-ítem reactivo (v10.6):** `necesito una lona de 2x1 con ojales, ¿cuánto sale?`
+→ **Esperado:** DOS precios en el mismo mensaje (lona con caveat + ojales limpio, vía
+`mas`), SIN total, sin sumar. Variante: `¿cuánto sale anillar apuntes? ¿y el emblocado a4?`
+→ ambos números. Contra-caso: el bot NUNCA propone el desglose él ("un banner" no debe
+desatar lista de componentes) — los ítems los nombra el cliente.
+
+**R14. Anti-sobre-disparo del ancla (golden de la matriz):** `tengo mi tesis ya impresa,
+¿me la encuadernan? ¿cuánto sale?` → **Esperado:** tabla de Encuadernado DIRECTA (2a
+normal: es UN ítem con tabla, no un trabajo compuesto a imprimir). El ancla del libro NO
+debe dispararse — si deriva a email sin tabla, es un B nuevo fabricado por el ancla.
+
 ## Qué anotar (→ memoria)
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?

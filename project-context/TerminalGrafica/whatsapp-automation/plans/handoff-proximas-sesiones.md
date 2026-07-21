@@ -70,6 +70,17 @@ Hoy hay un solo "no puedo procesar archivos". flash-lite tiene **audio nativo** 
 ### Frescura de precios — REPENSAR, posiblemente eliminar (pedido Martin 2026-07-21)
 La lógica actual del check de precio viejo hay que cambiarla y posiblemente eliminar esos checks. Motivo estructural: `price_updated_at` nació `default now()` al aplicar la migración y el trigger solo la renueva ante cambio REAL de precio → **~30 días después de la migración (~20-ago-2026), todo el catálogo que no cambió de precio cae en `fallback: stale` y el bot deja de cotizar TODO**. Opciones a evaluar: eliminar el check (la escalera + caveat ya cubren la honestidad), subir `DIAS_FRESCURA`, o atarlo a una señal de vigencia real que TG mantenga (se decide junto con el catálogo refinado). Mientras no se toque: vigilar `fallback: stale` en `bot.decisiones` — si aparece en masa, es esto.
 
+### Paquete de preguntas a TG — info del negocio + catálogo (matriz 2026-07-21)
+Una sola lista para mandar junta (fuente: `plans/matriz-situaciones-universidad.md`; las
+filas "C-caras" convierten handoffs recurrentes en answers): (1) foto de la lista de
+precios del mostrador (fotocopias = consulta #1); (2) **plazos estándar por rubro**
+(consulta #2 del mostrador — hoy escala SIEMPRE; anillados muestra el patrón:
+plazo-como-dato = certeza); (3) medios de pago y seña; (4) ¿hacen envíos?; (5) ¿reciben
+USB/archivo en mostrador?; (6) ¿escanean?; (7) ¿imanes se venden? (existe Iman con tabla
+— confirmar mapeo); (8) medidas reales de ploteo (¿A1?); (9) precio real del Papel
+Vegetal x10 (hoy $0 en la BD); (10) sobres ingleses duplicados (¿unidad vs pack?).
+Las respuestas van a "Información del negocio" del prompt o a `producto_meta`, según corresponda.
+
 ### Limpieza sistemática del catálogo (idea B)
 - Descubrir faltantes (fotocopias = consulta #1, y otros): **foto de la lista de precios del mostrador** (pedir a TG) + minar la casilla de mail; `bot.decisiones` como red reactiva permanente.
 - **Ítems de taller (rubro "Taller": encuadernado, refilado, troquelados, etc.) — definir con TG (pedido Martin 2026-07-21):** cuándo aplican estos ítems y cada cuánto son, o si se deja simple como está hoy. Entra en la conversación del catálogo refinado.
