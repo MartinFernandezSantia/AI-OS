@@ -70,9 +70,9 @@
 **C1. Impresión A3 tonner negro — tabla completa**
 - `qué sale la impresión a3 en tonner negro?`
 - **Esperado:** tabla verbatim, formato guion por línea:
-  encabezado con el producto + "precio de lista por <unidad> según cantidad:", una línea
-  por rango (`- 1 a 10: $X c/u`), cierre "El precio final del trabajo te lo confirma el
-  equipo." Los números deben coincidir EXACTO con el effect JSON de la regla `a3 tonner
+  encabezado con el producto + "precio de lista según cantidad:" (con unidad si es
+  legible), una línea por rango (`- 1 a 10: $X c/u`), SIN pie (el hedge es el "precio de
+  lista" del encabezado). Los números deben coincidir EXACTO con el effect JSON de la regla `a3 tonner
   negro` (verificar contra la BD). NUNCA un número solo sin la tabla.
 - **BD:** notas `... | ok_rangos`.
 

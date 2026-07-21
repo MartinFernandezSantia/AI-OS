@@ -64,7 +64,7 @@ async function main() {
   const rangosRow = { ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }, { value: 450, minQty: 51, maxQty: 150 }, { value: 400, minQty: 501, maxQty: null }], variante: '.', unidad: 'a3', precio_lista: 500, nombre_canonico: 'Impresiones a3 tonner negro' };
   r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' }, [rangosRow], decidir({ userMessage: 'cuanto salen?' }));
   const rep = r[0].json.reply;
-  console.log('A3 rangos:', rep.includes('- 1 a 50: $500,00 c/u') && rep.includes('501 o más') && !rep.includes('. de') && !rep.includes('por a3') ? 'OK' : 'FAIL\n' + rep);
+  console.log('A3 rangos:', rep.includes('- 1 a 50: $500,00 c/u') && rep.includes('501 o más') && !rep.includes('. de') && !rep.includes('por a3') && !rep.includes('El precio final') ? 'OK' : 'FAIL\n' + rep);
 
   r = await armar({ ...pBase, mas: [{ producto: 'Impresiones a3 tonner negro', variante: 'única' }, { producto: 'NoExiste', variante: 'X' }] },
     [base, { ...rangosRow, idx: 2 }], decidir({ userMessage: 'precios?' }));
