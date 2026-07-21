@@ -238,7 +238,17 @@ ejecución en n8n.
   es la clase "."; ahora `vv` sale SOLO de la DB). Y sin cálculo para 200: la tabla
   verbatim es la respuesta (C2 sigue igual).
 
-## Qué anotar (→ memoria)
+**R11. Rubro como producto (hallazgo ronda 2 — OPP):**
+- `Cuanto sale un opp?` → lista las dos líneas OPP
+- `Holografico`
+- **Esperado:** derivación a email nombrando **"OPP Mate/Holografico/Plata/Crystal/Glitter/Kraft"**
+  (nunca "Soportes Especiales", que es el rubro), y en `bot.decisiones` el estado
+  `fallback: override` — la razón verdadera. Antes: el LLM emitía el rubro como
+  `producto` → `sin_match` + nombre equivocado. Ahora hay doble defensa: leyenda de
+  formato en el prompt ([corchete] = rubro, nunca producto) + rank 3 en Get Precio
+  (si el slot variante es exactamente el nombre de un producto, resuelve por ahí).
+  El destino email es correcto: ambos OPP tienen override ($2.900 troquelado). Si un
+  día se les quita el override, esta misma secuencia debe dar el número ($2.500).
 - Misses de resolución (B2, y cualquier `filas_sql=0`): ¿qué nombre emitió el LLM vs el canónico?
 - ¿El LLM eligió bien entre action `precio` y 2c en los bordes (D1, D2)?
 - ¿Apareció algún monto NO proveniente del sistema en cualquier respuesta? (gravedad máxima)

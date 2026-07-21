@@ -102,5 +102,28 @@ async function main() {
     decidir({ userMessage: 'precios?' }));
   console.log('A11 eco extra:', r[0].json.reply.includes('Sellos automáticos sale $9.000,00') && !r[0].json.reply.includes('La opción Sellos') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
+  // A12: replay OPP (ronda 2) — el LLM emite el RUBRO como producto y el producto como
+  // variante; Get Precio v3 resuelve via rank 3. Mono "." con override -> email con la
+  // razon VERDADERA (override, no sin_match) y el nombre canonico, no el rubro.
+  r = await armar({ ...pBase, producto: 'Soportes Especiales', variante: 'OPP Mate/Holografico/Plata/Crystal/Glitter/Kraft' },
+    [{ ...base, variante: '.', tiene_override: true, match_rank: 3, nombre_canonico: 'OPP Mate/Holografico/Plata/Crystal/Glitter/Kraft', precio_lista: 2500 }],
+    decidir({ userMessage: 'Holografico' }));
+  console.log('A12 rank3 override:', r[0].json.estado === 'fallback: override' && r[0].json.reply.includes('OPP Mate/Holografico') && !r[0].json.reply.includes('Soportes Especiales') && r[0].json.notas.includes('(resuelto por variante)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply + ' | ' + r[0].json.notas);
+
+  // A13: rank 3 sobre multi-variante -> TODAS las filas del producto = ambiguo honesto,
+  // nombrando el producto resuelto (todas las filas comparten producto_id).
+  r = await armar({ ...pBase, producto: 'Soportes Especiales', variante: 'Vinilos de Corte' },
+    [{ ...base, variante: 'Chico', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9' },
+     { ...base, variante: 'Grande', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9', precio_lista: 15000 }],
+    decidir({ userMessage: 'vinilos' }));
+  console.log('A13 rank3 ambiguo:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('Vinilos de Corte') && !r[0].json.reply.includes('Soportes Especiales') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A14: rank 3 sobre mono-variante SIN override -> numero real (la clase que antes
+  // perdia un precio que el sistema si tenia).
+  r = await armar({ ...pBase, producto: 'Soportes Especiales', variante: 'OPP Brillo' },
+    [{ ...base, variante: '.', match_rank: 3, nombre_canonico: 'OPP Brillo', precio_lista: 2400 }],
+    decidir({ userMessage: 'el brillo' }));
+  console.log('A14 rank3 numero:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$2.400,00') && r[0].json.notas.includes('(resuelto por variante)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

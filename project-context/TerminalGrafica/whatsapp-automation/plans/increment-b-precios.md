@@ -164,6 +164,33 @@ el caveat neutro y su único filo (d/f más caro que lista) lo cierra el backsto
 Diferido a pedido de Martin: frescura/vigencia de las reglas (`pricing_rules` sin
 `updated_at`, `valid_from/to` ignorados) — "después vemos cómo lo acomodamos".
 
+## Ronda 4 — render honesto desde la DB (suite-3 ronda 2, 2026-07-21) — APLICADA
+
+Los hallazgos vivos de Martin en ronda 2 compartían una causa: partes del render salían
+del **eco del LLM** en vez de la DB. Paquete (cada pieza contrastada con Fable):
+
+1. **"X de X" en encabezado de tabla**: `vv`/`vvx` caían al eco (`p.variante`) cuando la
+   variante real es la clase "."; el eco puede ser el nombre entero del producto. Fix:
+   el nombre de variante sale SOLO de `row.variante` (DB). Prueba Fable: el fallback solo
+   era alcanzable exactamente cuando su output es ruido.
+2. **Rubro como producto (clase OPP)**: el LLM emitió `producto: "Soportes Especiales"`
+   (rubro) + `variante: "OPP Mate/…"` (producto) → `sin_match` + nombre equivocado, y en
+   un producto sin override habría perdido un precio real. Triple fix:
+   - Prompt: leyenda de formato ante `__CATALOGO__` — `[corchete]` = rubro, NUNCA va en
+     `producto`; si elige entre líneas ofrecidas, `producto` = la línea completa.
+   - Get Precio **rank 3**: slot variante == nombre exacto (o sinónimo) de un producto →
+     resuelve por ahí devolviendo TODAS sus variantes (mono → escalera normal con la razón
+     verdadera; multi → `ambiguo` honesto). Solo igualdad exacta, sin contains: el filtro
+     best-rank poda rank 3 si el slot producto matcheó algo.
+   - Render: fallbacks y plantillas nombran `nombre_canonico` de la DB cuando las filas
+     resueltas son de un mismo producto (`nombreProd()`); tag `(resuelto por variante)` en notas.
+   - Reagrupar el catálogo por rubro (mata la confusión estructuralmente) → track
+     `producto_meta`, no ahora.
+3. Cosmética previa de la misma ronda: anti-eco del caveat (`CAVEAT_CORTO`), "única"
+   filtrada del render, tabla sin pie.
+
+Cobertura: harness `tests/code-harness.js` 20/20 (A10-A14 nuevos); casos vivos R10/R11 en suite-3.
+
 ## Qué NO entra en v1 (diferido)
 
 - Motor de reglas compartido (endpoint) → fase 2, con política de confirmación + KVM 4.
@@ -190,7 +217,7 @@ Diferido a pedido de Martin: frescura/vigencia de las reglas (`pricing_rules` si
     que las preguntas de desambiguación de producto sigan apareciendo (no sobre-supresión por el fix 2c).
 11. Telemetría: `filas_sql=0` en `bot.decisiones` = miss de resolución de nombre → candidatos a sinónimos.
 12. Tabla de rangos: "¿cuánto salen las impresiones en obra 75 simple faz?" → tabla completa
-    (1 a 10 / 11 a 1000 / 1001 o más) + cierre "el precio final lo confirma el equipo".
+    (1 a 10 / 11 a 1000 / 1001 o más), SIN pie (el hedge vive en el "precio de lista" del encabezado).
 13. Precio cero: "¿cuánto sale el papel vegetal a4 x10?" → SIN número, a email (no "$0,00").
 14. Override: variante de Iman → SIN número, a email.
 15. Impresión color obra 106 A4 (caveat) vs impresiones inkjet obra 75 (tabla): verificar
