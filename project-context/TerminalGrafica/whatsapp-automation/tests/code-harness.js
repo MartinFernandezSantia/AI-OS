@@ -210,7 +210,7 @@ async function main() {
   // A25: ok_caveat con solo_descuentos=true -> total permitido (lista = techo garantizado),
   // plantilla FORZADA aunque haya template.
   r = await armar({ ...pBase, cantidad: 100 },
-    [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 800 }], decidir({ userMessage: '100 en obra 106, total?' }));
+    [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 800 }], decidir({ userMessage: '100 unidades, total?' }));
   console.log('A25 caveat total:', r[0].json.estado === 'ok_caveat' && r[0].json.reply.includes('$800,00 c/u — por 100 unidades, total estimado $80.000,00') && !r[0].json.reply.includes('¿Algo más?') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
   // A26: ok_caveat con RECARGO posible (solo_descuentos=false) -> unitario + caveat, JAMAS total
@@ -267,6 +267,68 @@ async function main() {
     decidir({ userMessage: 'cuanto sale el anillado 48hs?' }));
   const okMain = r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('La opción Anillado');
   console.log('A33 variante==producto:', okExtra && okMain ? 'OK' : 'FAIL extra=' + okExtra + ' main=' + okMain + ' | ' + r[0].json.reply);
+
+  // ===== v7 ronda 4: guards post suite-5 real =====
+  // P14: Frankenstein del backstop 1a mencion — "por email a <dir>" se absorbe entero.
+  r = await parsear(JSON.stringify({ action: 'answer', reply: 'Necesitaría que nos envíes el archivo por email a terminalgrafica@gmail.com para cotizarlo.', motivo: '' }), decidir({ avisoDado: true }));
+  console.log('P14 por email:', r[0].json.reply.includes('el archivo a nuestro mail') && !r[0].json.reply.includes('por email a nuestro mail') && !r[0].json.reply.includes('@') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // A34: papel especial en el mensaje ANTERIOR (ventana K=3) — el follow-up sin
+  // palabras de papel NO recupera el numero (el momentum real de suite-5).
+  const conv2 = [
+    { role: 'user', content: 'necesito 300 impresiones simple faz b/n en bookcel de color, ¿cuánto en total?' },
+    { role: 'assistant', content: 'Tenemos estas opciones...' },
+    { role: 'user', content: 'precio para obra 80gr' },
+  ];
+  r = await armar({ ...pBase, cantidad: 300 },
+    [{ ...base, por_pagina: true }], decidir({ userMessage: 'precio para obra 80gr', conversation: conv2 }));
+  console.log('A34 papel historial:', r[0].json.estado === 'fallback: papel_especial' && r[0].json.notas.includes('(papel_historial)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // A35: la correccion explicita en el turno actual DESBLOQUEA el hit de historial.
+  const conv3 = [
+    { role: 'user', content: 'lo quiero en bookcel de color' },
+    { role: 'assistant', content: 'Ese material lo ve el equipo...' },
+    { role: 'user', content: 'dale, en papel común entonces, 200 simple faz b/n' },
+  ];
+  r = await armar({ ...pBase, cantidad: 200 },
+    [{ ...base, por_pagina: true }], decidir({ userMessage: 'dale, en papel común entonces, 200 simple faz b/n', conversation: conv3 }));
+  console.log('A35 correccion desbloquea:', r[0].json.estado === 'ok' && r[0].json.reply.includes('total estimado') ? 'OK' : 'FAIL ' + r[0].json.estado);
+
+  // A36: GUARD NUMERALES — cliente anclo "obra de 75", fila resuelta 106 -> sin numero
+  // (el numero correcto del producto equivocado, visto dos veces en suite-5).
+  r = await armar({ ...pBase, producto: 'Impresiones a4 papel obra 106 gr', variante: 'simple faz color' },
+    [{ ...base, variante: 'simple faz color', nombre_canonico: 'Impresiones a4 papel obra 106 gr', precio_lista: 480 }],
+    decidir({ userMessage: 'simple faz color, ni idea cuántas', conversation: [
+      { role: 'user', content: 'cuánto me salen las impresiones en obra de 75?' },
+      { role: 'assistant', content: 'Tenemos estas opciones...' },
+      { role: 'user', content: 'simple faz color, ni idea cuántas' },
+    ] }));
+  console.log('A36 numerales incoherentes:', r[0].json.estado === 'fallback: producto_incoherente' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.estado);
+
+  // A37: numerales COHERENTES — cliente compara 75 y 106, resuelve 106 -> el numero va
+  // (el gramaje resuelto esta ENTRE los mencionados: no es incoherencia).
+  r = await armar({ ...pBase, producto: 'Impresiones a4 papel obra 106 gr', variante: 'simple faz b/n' },
+    [{ ...base, variante: 'simple faz b/n', nombre_canonico: 'Impresiones a4 papel obra 106 gr', precio_lista: 120 }],
+    decidir({ userMessage: 'dale el de 106 gr entonces', conversation: [
+      { role: 'user', content: '¿qué diferencia hay entre el obra de 75 y el de 106 gr?' },
+      { role: 'assistant', content: 'La diferencia es el gramaje...' },
+      { role: 'user', content: 'dale el de 106 gr entonces' },
+    ] }));
+  console.log('A37 numerales coherentes:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$120,00') ? 'OK' : 'FAIL ' + r[0].json.estado);
+
+  // A38: POR_PACK — la cantidad del cliente jamas multiplica ni elige bracket
+  // (el $4.200.000 de suite-5). Render del estado base + nota.
+  r = await armar({ ...pBase, producto: '500 Tarjetas Color/Negro', variante: 'Simple Faz', cantidad: 150 },
+    [{ ...base, por_pack: true, variante: 'Simple Faz', nombre_canonico: '500 Tarjetas Color/Negro', precio_lista: 28000 }],
+    decidir({ userMessage: 'necesito 150 tarjetas, cuánto?' }));
+  console.log('A38 por_pack:', r[0].json.estado === 'ok' && !r[0].json.reply.includes('total estimado') && !r[0].json.reply.includes('4.200.000') && r[0].json.notas.includes('(cantidad ignorada: pack)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply + ' | ' + r[0].json.notas);
+
+  // A39: pack SIN flag (columna aun no seedeada) -> telemetria '(pack?)' en notas
+  // (cola de curacion), el render no cambia todavia.
+  r = await armar({ ...pBase, producto: '500 Tarjetas Color/Negro', variante: 'Simple Faz', cantidad: 150 },
+    [{ ...base, variante: 'Simple Faz', nombre_canonico: '500 Tarjetas Color/Negro', precio_lista: 28000 }],
+    decidir({ userMessage: 'necesito 150 tarjetas, cuánto?' }));
+  console.log('A39 pack telemetria:', r[0].json.notas.includes('(pack?)') ? 'OK' : 'FAIL ' + r[0].json.notas);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
