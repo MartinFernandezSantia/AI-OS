@@ -29,6 +29,9 @@ el nombre visible, vía overlay, sin tocar el motor del mostrador.
    contrato de columnas intacto → Get Catálogo renderiza y Get Precio matchea la misma
    columna coalesced: coherencia por construcción, **cero cambios en nodos Code**.
    `bot.variantes` suma `variante_origen` (nombre vivo, solo telemetría/reconciliación).
+   Ambas metas guardan además `nombre_origen` (nombre vivo al momento de curar):
+   insumo del watchdog `tg-catalogo-sync` para detectar renames post-curación
+   (plan aparte: [`catalogo-sync-workflow.md`](./catalogo-sync-workflow.md)).
 5. **Auto-sinónimo del nombre viejo**: cuando hay `display_name`, la vista appendea
    `p.name` a los sinónimos (trackea el nombre VIVO → anti-drift), con dedupe
    normalizado y **gated por `auto_sinonimo`**. Se apaga SOLO para IMPRESIONES:

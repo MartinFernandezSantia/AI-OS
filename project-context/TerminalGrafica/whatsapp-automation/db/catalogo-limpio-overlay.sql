@@ -45,7 +45,10 @@ as $f$ select coalesce(array_agg(s), '{}') from (select min(u.s) as s from unnes
 alter table bot.producto_meta
   add column if not exists display_name  text,
   add column if not exists auto_sinonimo boolean not null default true,
-  add column if not exists oculto        boolean not null default false;
+  add column if not exists oculto        boolean not null default false,
+  -- nombre vivo al momento de curar: el watchdog tg-catalogo-sync (plan aparte)
+  -- compara contra el nombre actual para detectar renames post-curación
+  add column if not exists nombre_origen text;
 
 -- ON DELETE CASCADE deliberado (NUNCA restrict: un delete del admin del mostrador
 -- no puede fallar por una tabla nuestra). Si el motor algún día borra-y-recrea
@@ -55,6 +58,7 @@ alter table bot.producto_meta
 create table if not exists bot.variante_meta (
   variante_id      uuid primary key references public.product_variants(id) on delete cascade,
   display_variante text not null,
+  nombre_origen    text,
   oculto           boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
@@ -508,6 +512,14 @@ begin
   values (pobra80, array['para imprimir un currículum / cv'], now())
   on conflict (producto_id) do update
     set casos_de_uso = pg_temp.union_sin(bot.producto_meta.casos_de_uso, excluded.casos_de_uso), updated_at = now();
+
+  -- ==== nombre_origen: foto del nombre vivo al curar (insumo del watchdog) ====
+  -- El sync semanal compara nombre vivo vs origen: si difieren, hubo rename del
+  -- motor post-curación y el display/sinónimos curados pueden estar mintiendo.
+  update bot.variante_meta vm set nombre_origen = pv.name
+    from public.product_variants pv where pv.id = vm.variante_id;
+  update bot.producto_meta m set nombre_origen = p.name
+    from public.products p where p.id = m.producto_id;
 
   -- ==== rubro_meta: solo jerga → humano ====
   insert into bot.rubro_meta (categoria_id, display_name) values (cinkjet, 'Impresiones (Riso/inkjet)')
