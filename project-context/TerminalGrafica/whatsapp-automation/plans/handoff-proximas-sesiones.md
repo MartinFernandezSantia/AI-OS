@@ -170,7 +170,11 @@ Durante la ronda suite-3, OpenRouter tiró "google/gemini-2.5-flash-lite is temp
 Se corre cuando Martin dé por cerrado el build. Golden cases: confabulación (regex `tapa|cartulina|metálico|\d+ ?gr`), JSON siempre parseable, los casos del árbol de ruteo, la costura 4/5. Es el gate anti-regresión de todo lo calibrado.
 
 ### Futuro lejano (no antes de prod)
-- Auto-sync del catálogo/metadata cuando TG cambia la BD de quote-system (hoy pull con cache 10min; gap real = sinónimos/usos curados a mano → check semanal de 1 línea alcanza, no un workflow).
+- ~~Auto-sync del catálogo/metadata~~ → **PLANEADO 2026-07-22** como watchdog
+  semanal + redactor de curación: [`catalogo-sync-workflow.md`](./catalogo-sync-workflow.md)
+  (contraste Fable ronda 5; stateless + nombre_origen, 9 checks determinísticos,
+  LLM solo redactor con filtro word-subset, email SIEMPRE, Martin aplica).
+  Prerrequisitos: aplicar catálogo limpio + deliverability Brevo. Build = sesión propia.
 - Deploy a prod en **KVM 4 de TG** (sin contratar aún) + avisar a TG del cobro Meta por mensaje desde **1-oct-2026**.
 
 ---
