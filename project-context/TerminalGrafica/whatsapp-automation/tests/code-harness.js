@@ -1,13 +1,14 @@
-// Harness de runtime para los nodos Code de faq-bot-v6.json (Parsear Respuesta +
+// Harness de runtime para los nodos Code de faq-bot-v7.json (Parsear Respuesta +
 // Armar Respuesta Precio). node --check solo valida sintaxis; esto EJECUTA el codigo
 // con mocks de $ / $input y cubre los caminos: answer, backstop 1a mencion, precio
 // single, campo mas, JSON ilegible, plata tipeada, limpio, caveat, tabla de rangos,
-// mas mixto, sql_error, backstop dorso y rank filter.
+// mas mixto, sql_error, backstop dorso, rank filter y el cotizador v7 (totales,
+// paginas/copias, gates df/cap/por_pagina, extras con cantidad).
 // Correr tras CUALQUIER edicion de esos nodos:  node tests/code-harness.js
 // (Nacido del incidente 2026-07-21: "obj is not defined" — scope bug invisible para --check.)
 const fs = require('fs');
 const path = require('path');
-const WF = path.join(__dirname, '..', 'n8n', 'flows', 'faq-bot-v6.json');
+const WF = path.join(__dirname, '..', 'n8n', 'flows', 'faq-bot-v7.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
 const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio') };
@@ -67,7 +68,7 @@ async function main() {
     $input: { all: () => rows.map((j) => ({ json: j })).concat(errored ? [{ json: { error: { message: 'column x does not exist' } } }] : []), first: () => ({ json: rows[0] || {} }) },
   });
 
-  const base = { idx: 1, mostrable: true, solo_descuentos: false, tiene_reglas: false, tiene_override: false, n_reglas_cantidad: 0, rangos_cantidad: null, unidad: 'Hoja', precio_actualizado: new Date().toISOString(), producto_id: 'u1', variante: 'A3', nombre_canonico: 'Carteleria en Pvc c/ Papel obra/130 gr', match_rank: 1, precio_lista: 13000 };
+  const base = { idx: 1, mostrable: true, por_pagina: false, solo_descuentos: false, tiene_reglas: false, tiene_override: false, n_reglas_cantidad: 0, rangos_cantidad: null, unidad: 'Hoja', precio_actualizado: new Date().toISOString(), producto_id: 'u1', variante: 'A3', nombre_canonico: 'Carteleria en Pvc c/ Papel obra/130 gr', match_rank: 1, precio_lista: 13000 };
   const pBase = { producto: 'Carteleria en Pvc c/ Papel obra/130 gr', variante: 'A3', template: 'La A3 sale {{PRECIO}}. ¿Algo más?', forzarPlantilla: false, mas: [] };
 
   r = await armar(pBase, [base], decidir({ userMessage: 'precio a3?' }));
@@ -159,6 +160,75 @@ async function main() {
   // A18: stale ELIMINADO (fuente viva) — precio viejo ya no bloquea; airbag (precio>90d) en notas.
   r = await armar(pBase, [{ ...base, precio_actualizado: '2026-01-01T00:00:00Z' }], decidir({ userMessage: 'precio a3?' }));
   console.log('A18 sin stale + airbag:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$13.000,00') && r[0].json.notas.includes('(precio>90d)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // ===== v7 COTIZADOR =====
+  // P11: paginas/copias validos (tambien como string numerica).
+  r = await parsear(JSON.stringify({ action: 'precio', producto: 'IMPRESIONES', variante: 'simple faz b/n', paginas: '180', copias: 2, reply: 'Sale {{PRECIO}}.' }), decidir());
+  console.log('P11 paginas/copias:', r[0].json.precio.paginas === 180 && r[0].json.precio.copias === 2 && r[0].json.precio.flags.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.precio));
+
+  // P12: copias SIN paginas -> se ignoran ambos + flag de telemetria.
+  r = await parsear(JSON.stringify({ action: 'precio', producto: 'X', variante: 'A4', copias: 3, reply: '{{PRECIO}}' }), decidir());
+  console.log('P12 copias sin paginas:', r[0].json.precio.copias === null && r[0].json.precio.paginas === null && r[0].json.precio.flags.includes('copias_sin_paginas') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.precio));
+
+  // P13: cantidad en items de 'mas' (validacion tolerante; basura -> null).
+  r = await parsear(JSON.stringify({ action: 'precio', producto: 'X', variante: 'A4', reply: '{{PRECIO}}', mas: [{ producto: 'Y', variante: 'B', cantidad: '150' }, { producto: 'Z', variante: 'C', cantidad: 'muchas' }] }), decidir());
+  console.log('P13 mas cantidad:', r[0].json.precio.mas[0].cantidad === 150 && r[0].json.precio.mas[1].cantidad === null ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.precio.mas));
+
+  // A19: ok_bracket ahora con TOTAL estimado (50 x $500 = $25.000) en la misma frase.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 50 },
+    [rangosRow], decidir({ userMessage: 'necesito 50 impresiones a3 en negro, total?' }));
+  console.log('A19 bracket total:', r[0].json.estado === 'ok_bracket' && r[0].json.reply.includes('$500,00 c/u — total estimado $25.000,00') && r[0].json.notas.includes('(total=25000)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A20: modo paginas — bracket key = paginas, max() contra el lookup del total,
+  // hint de volumen (copias>=2 y u(total)<u(paginas)). 30 pag x 2 copias: b1=$500
+  // (1-50), b2(60)=$450 -> unit max = $500, total 60x500 = $30.000 + linea volumen.
+  const ppRow = { ...rangosRow, por_pagina: true };
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', paginas: 30, copias: 2 },
+    [ppRow], decidir({ userMessage: 'apuntes de 30 paginas, 2 copias' }));
+  console.log('A20 paginas max+hint:', r[0].json.estado === 'ok_paginas' && r[0].json.reply.includes('Por 30 páginas x 2 copias (60 impresiones)') && r[0].json.reply.includes('$500,00 c/u — total estimado $30.000,00') && r[0].json.reply.includes('volumen total puede quedar mas abajo') && r[0].json.notas.includes('(paginas=30x2)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply + ' | ' + r[0].json.notas);
+
+  // A21: GAP en la key paginas (200 cae en 151-500) -> tabla completa, sin total, sin rescate.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', paginas: 200, copias: 1 },
+    [ppRow], decidir({ userMessage: 'libro de 200 paginas' }));
+  console.log('A21 gap paginas:', r[0].json.estado === 'ok_rangos' && !r[0].json.reply.includes('total estimado') && r[0].json.notas.includes('(gap paginas)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // A22: paginas sobre producto NO por_pagina -> se ignoran (jamas lona x 6 panios).
+  r = await armar({ ...pBase, paginas: 6, copias: 1 }, [base], decidir({ userMessage: 'mi banner tiene 6 panios' }));
+  console.log('A22 no por_pagina:', r[0].json.estado === 'ok' && !r[0].json.reply.includes('total estimado') && r[0].json.notas.includes('(paginas ignoradas: no por_pagina)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // A23: gate doble faz — variante d/f + paginas -> TABLA sin total ni bracket + linea fija
+  // (unidad pagina-vs-hoja desconocida hasta TG; ni el unitario del bracket es honesto).
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'doble faz b/n', paginas: 40, copias: 1 },
+    [{ ...ppRow, variante: 'doble faz b/n' }], decidir({ userMessage: 'son 40 paginas doble faz' }));
+  console.log('A23 df gate:', r[0].json.estado === 'ok_rangos' && r[0].json.reply.includes('El total del doble faz te lo confirma el equipo') && !r[0].json.reply.includes('total estimado') && r[0].json.notas.includes('(df_gate)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply.split('\n').pop());
+
+  // A24: cap comercial — cantidad absurda (20000 > 10000) -> tabla + linea volumen, sin total gigante.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 20000 },
+    [rangosRow], decidir({ userMessage: 'necesito 20000, total?' }));
+  console.log('A24 cap volumen:', r[0].json.estado === 'ok_rangos' && r[0].json.reply.includes('Para ese volumen, el total te lo cotiza el equipo') && !r[0].json.reply.includes('total estimado') && r[0].json.notas.includes('(cap_volumen)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.notas);
+
+  // A25: ok_caveat con solo_descuentos=true -> total permitido (lista = techo garantizado),
+  // plantilla FORZADA aunque haya template.
+  r = await armar({ ...pBase, cantidad: 100 },
+    [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 800 }], decidir({ userMessage: '100 en obra 106, total?' }));
+  console.log('A25 caveat total:', r[0].json.estado === 'ok_caveat' && r[0].json.reply.includes('$800,00 c/u — por 100 unidades, total estimado $80.000,00') && !r[0].json.reply.includes('¿Algo más?') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A26: ok_caveat con RECARGO posible (solo_descuentos=false) -> unitario + caveat, JAMAS total
+  // (la lista seria piso: un total grande sub-cotiza — el agujero que cazo Fable r1).
+  r = await armar({ ...pBase, cantidad: 100 },
+    [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: false, precio_lista: 800 }], decidir({ userMessage: '100 unidades, total?' }));
+  console.log('A26 caveat sin total:', r[0].json.estado === 'ok_caveat' && !r[0].json.reply.includes('total estimado') && r[0].json.reply.includes('$800,00') && r[0].json.notas.includes('(cantidad=100)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A27: extra de 'mas' con cantidad y tabla -> bracket + total corto por item, sin gran total.
+  r = await armar({ ...pBase, mas: [{ producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 50 }] },
+    [base, { ...rangosRow, idx: 2 }], decidir({ userMessage: 'la carteleria y 50 impresiones a3' }));
+  console.log('A27 extra total:', r[0].json.reply.includes('$13.000,00') && r[0].json.reply.includes('por 50 unidades sale $500,00 c/u — total estimado $25.000,00') && !/total combinado|suma/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // A28: paginas con precio FIJO por_pagina (sin tabla), copias=1 -> total = paginas x lista,
+  // plantilla forzada con el detalle en la frase.
+  r = await armar({ ...pBase, paginas: 180, copias: 1 },
+    [{ ...base, por_pagina: true, precio_lista: 100 }], decidir({ userMessage: 'documento de 180 paginas' }));
+  console.log('A28 paginas fijo:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$100,00 c/u — por 180 páginas, total estimado $18.000,00') && !r[0].json.reply.includes('x 1 copias') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
