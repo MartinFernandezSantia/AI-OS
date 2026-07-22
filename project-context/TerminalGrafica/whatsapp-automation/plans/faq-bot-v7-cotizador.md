@@ -1,7 +1,10 @@
 # Plan faq-bot-v7 — cotizador por WhatsApp (Increment C1)
 
-> Estado: **PLAN validado (Fable rondas 1-2 + verificación en el motor real), pendiente
-> de OK de Martin. NO construido.**
+> Estado: **CONSTRUIDO 2026-07-22 (OK de Martin + Fable rondas 1-2 + verificación en
+> el motor real). Pendiente de APLICAR — runbook en la sección ⭐ del handoff.**
+> Artefactos: `db/cotizador-v7.sql` · `n8n/flows/faq-bot-v7.json` (v6 intacto como
+> rollback) · `tests/code-harness.js` 41/41 · `tests/suite-5-cotizador.md` (14 casos)
+> · suite-3/suite-2 auditadas y anotadas.
 > Decisión de producto (Martin, 2026-07-22): el cliente se informa TODO lo necesario en
 > materia de precios y servicios por WhatsApp; el email queda SOLO para concretar el
 > pedido (mandar el archivo). El comportamiento v10.x de R1 (libro → email sin cotizar)

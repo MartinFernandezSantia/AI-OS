@@ -9,27 +9,44 @@
 
 ---
 
-## ⭐ PRÓXIMA SESIÓN — Build faq-bot-v7 "cotizador" (plan listo, falta OK de Martin)
+## ⭐ faq-bot-v7 "cotizador" — CONSTRUIDO 2026-07-22 (OK de Martin), pendiente de APLICAR
 
 **Decisión de producto (Martin, 2026-07-22, logueada en `decisions/log.md` del AIOS):**
 el cliente se informa TODO (precios, opciones, totales estimados) por WhatsApp; el
 email queda SOLO para concretar el pedido. R1 v10.x (libro → email sin cotizar) era el
 comportamiento diseñado y Martin lo rechazó como producto tras el replay real.
 
-**Plan completo y validado (Fable rondas 1-2 + verificación en `quote-utils.ts` del
-motor): [`faq-bot-v7-cotizador.md`](./faq-bot-v7-cotizador.md).** Núcleo: recolección
-de datos mínimos en UN mensaje (por OPCIÓN listada, nunca por ejes) + total
-determinístico precio × cantidad con brackets en `Armar Respuesta Precio` (el LLM
-sigue sin tipear montos) + campos `paginas`/`copias` (n8n multiplica) + flag
-`por_pagina` + gate `solo_descuentos` (los recargos NUNCA reciben total: sub-cotizaría)
-+ doble faz → tabla sin total (gate TG ítem 31) + email reposicionado. Sin nodos LLM
-nuevos (C1); split a especialista (C2) con gate numérico fijado en el plan.
+**Plan validado y aplicado al build: [`faq-bot-v7-cotizador.md`](./faq-bot-v7-cotizador.md)**
+(Fable rondas 1-2 + verificación en `quote-utils.ts`). Núcleo: recolección de datos
+mínimos en UN mensaje (por OPCIÓN listada, nunca por ejes) + total determinístico
+precio × cantidad con brackets en `Armar Respuesta Precio` (el LLM sigue sin tipear
+montos) + campos `paginas`/`copias` (n8n multiplica, max() de dos lookups) + flag
+`por_pagina` + gate `solo_descuentos` (los recargos NUNCA reciben total) + doble faz
+→ tabla sin total (gate TG ítem 31) + cap 10.000 + email reposicionado. Sin nodos
+LLM nuevos (C1); split a especialista (C2) con gate numérico fijado en el plan §2.
 
-**Orden cuando Martin dé el OK:** `db/cotizador-v7.sql` (Martin aplica; correr la
-query de recargos coexistentes ANTES) → editar `faq-bot-v7.json` + harness → import
-(v6 desactivado como rollback) + toggle → suite-5 (14 casos) → re-escritos de suite-3
-(R1, R12, C2, B1, E1) → regresión suite-2/matriz con expectativas AUDITADAS → evaluar
-gate C2 → promptfoo al cierre.
+**Build (todo commiteado):** `db/cotizador-v7.sql` · `n8n/flows/faq-bot-v7.json`
+(v6 INTACTO como rollback) · harness 41/41 (13 casos v7 nuevos, 28 v10.x intactos) ·
+`tests/suite-5-cotizador.md` (14 casos) · suite-3 anotada ([SUPERSEDED v7] en R1,
+R12, C2, B1; E1 promovido a golden principal de primera mención) · suite-2 auditada
+(solo 2.3 cambió de sentido).
+
+**RUNBOOK MARTIN (en orden):**
+1. Aplicar `db/cotizador-v7.sql` (transaccional; sanity a: 4 productos por_pagina).
+2. Correr la **query de verificación b)** del final del SQL: DEBE dar 0 filas
+   (recargo coexistiendo con tabla). Si da filas, frenar y revisarlas antes de
+   la ronda de totales.
+3. Importar `faq-bot-v7.json` como workflow NUEVO y DESACTIVAR faq-bot-v6 (queda de
+   rollback — mismo webhook path: nunca los dos activos a la vez). Verificar creds
+   (Get Precio/Log → Bot Readonly DB; Enviar → Chatwoot; OpenRouter en Tier-2) +
+   abrir/guardar los 3 nodos Log si la BD cambió + **TOGGLE** (cache de catálogo).
+4. Correr `tests/suite-5-cotizador.md` (14 casos) → después la regresión: suite-3
+   vigente (todo lo NO marcado SUPERSEDED; R5 debe seguir dando ambiguo, R14 sin
+   ancla, D1 dorso) + suite-2 auditada + matriz golden.
+5. Evaluar el **gate C2** con los números del plan §2 (>3 goldens no-precio rotos /
+   1 fallo de plata / prompt >27k / oscilación 2 rondas). Reportar hallazgos para
+   el loop de fixes en vivo (como ronda 2 de v10.x).
+6. promptfoo cuando declares el build cerrado.
 
 ---
 
