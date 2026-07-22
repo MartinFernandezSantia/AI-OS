@@ -256,5 +256,17 @@ async function main() {
     [{ ...rangosRow, por_pagina: true }], decidir({ userMessage: 'y si me lo haces en un papel mas grueso, cuanto sale?' }));
   console.log('A32 mas grueso:', r[0].json.estado === 'fallback: papel_especial' ? 'OK' : 'FAIL ' + r[0].json.estado);
 
+  // A33 (hallazgo suite-5 real): variante de la DB que se llama IGUAL que el producto
+  // -> jamas "La opción X de X", ni en main ni en extras.
+  r = await armar({ ...pBase, mas: [{ producto: 'Anillado Plastico a4/oficio 48 hs', variante: 'Anillado Plastico a4/oficio 48 hs' }] },
+    [base, { ...base, idx: 2, variante: 'Anillado Plastico a4/oficio 48 hs', nombre_canonico: 'Anillado Plastico a4/oficio 48 hs', precio_lista: 2400, producto_id: 'u7' }],
+    decidir({ userMessage: 'y el anillado?' }));
+  const okExtra = r[0].json.reply.includes('Anillado Plastico a4/oficio 48 hs sale $2.400,00') && !r[0].json.reply.includes('de Anillado Plastico');
+  r = await armar({ ...pBase, producto: 'Anillado Plastico a4/oficio 48 hs', variante: 'Anillado Plastico a4/oficio 48 hs' },
+    [{ ...base, variante: 'Anillado Plastico a4/oficio 48 hs', nombre_canonico: 'Anillado Plastico a4/oficio 48 hs', precio_lista: 2400 }],
+    decidir({ userMessage: 'cuanto sale el anillado 48hs?' }));
+  const okMain = r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('La opción Anillado');
+  console.log('A33 variante==producto:', okExtra && okMain ? 'OK' : 'FAIL extra=' + okExtra + ' main=' + okMain + ' | ' + r[0].json.reply);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
