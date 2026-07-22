@@ -31,25 +31,35 @@ LLM nuevos (C1); split a especialista (C2) con gate numérico fijado en el plan 
 R12, C2, B1; E1 promovido a golden principal de primera mención) · suite-2 auditada
 (solo 2.3 cambió de sentido).
 
+**ESTADO POST-RONDA 1 DE SUITE-5 (2026-07-22, tarde):** Martin corrió la suite en
+WhatsApp real. Maquinaria determinística OK (total, cap, papel_especial, render
+páginas); LLM falló en resolución/recolección (12 incidentes I1-I12). **Fable r4:
+el gate C2 SE DISPARÓ** (I2 producto equivocado + I8 pack = clase plata; I1 =
+oscilación C2(c)). Veredicto: guards = piso (APLICADOS, `cd790a9`: numerales →
+`producto_incoherente`, ventana papel K=3 + corrección, `por_pack` v7b, cascada
+"por email", regateo/cross-sell al prompt; harness 53/53), C2 = spec lista en el
+plan §Ronda 4 (nodo especialista + router determinístico vía bot.decisiones +
+action `opciones` con menú renderizado por Code node), refinar el mono-prompt =
+descartado para conducta monetaria. Herramienta visual de curación: spec validada
+en plan §Ronda 4, build pendiente.
+
 **RUNBOOK MARTIN (en orden):**
-1. Aplicar `db/cotizador-v7.sql` (transaccional; sanity a: 4 productos por_pagina).
-2. ✅ Query de verificación b) CORRIDA (2026-07-22): dio 16 filas conocidas
-   (IMPRESIONES 75/106 × 2 adicionales opt-in de papel). Veredicto Fable r3: NO
-   bloquea — backstop `papel_especial` aplicado en Armar (scopeado por_pagina,
-   harness 45/45), casos 15-17 en suite-5, pregunta TG 33 (a/b/c) con ROLLBACK
-   pre-decidido si 33b sale mal (plan §Ronda 3). Solo frenar si la query devuelve
-   filas NUEVAS distintas de estas.
-3. Importar `faq-bot-v7.json` como workflow NUEVO y DESACTIVAR faq-bot-v6 (queda de
-   rollback — mismo webhook path: nunca los dos activos a la vez). Verificar creds
-   (Get Precio/Log → Bot Readonly DB; Enviar → Chatwoot; OpenRouter en Tier-2) +
-   abrir/guardar los 3 nodos Log si la BD cambió + **TOGGLE** (cache de catálogo).
-4. Correr `tests/suite-5-cotizador.md` (14 casos) → después la regresión: suite-3
-   vigente (todo lo NO marcado SUPERSEDED; R5 debe seguir dando ambiguo, R14 sin
-   ancla, D1 dorso) + suite-2 auditada + matriz golden.
-5. Evaluar el **gate C2** con los números del plan §2 (>3 goldens no-precio rotos /
-   1 fallo de plata / prompt >27k / oscilación 2 rondas). Reportar hallazgos para
-   el loop de fixes en vivo (como ronda 2 de v10.x).
-6. promptfoo cuando declares el build cerrado.
+1. Aplicar `db/cotizador-v7b.sql` (por_pack + seeds candidatos — REVISAR la lista
+   de NOTICEs: si algo no es pack, `set por_pack=false`).
+2. Re-importar `faq-bot-v7.json` (guards r4 + SELECT con por_pack) + TOGGLE.
+   v6 sigue desactivado como rollback.
+3. Verificar el dato del anillado 24hs (query en plan §Ronda 4 tabla I12) y
+   confirmar si entre los casos 5→7 de la ronda 1 hubo conversación nueva (si sí,
+   la "dirección repetida" fue comportamiento correcto per-conversation).
+4. **NO re-correr la ronda completa todavía**: I1/I2/I3 de fondo se arreglan con
+   C2, no con otra vuelta de prompt. Con los guards puestos, los mismos fallos
+   degradan a email honesto (seguro pero no resuelto).
+5. **Decisiones que esperan tu OK:** (a) build del split C2 (spec §Ronda 4 del
+   plan); (b) build de la herramienta visual de curación (spec ahí mismo) y en
+   qué orden — recomendación: C2 primero (cierra la clase plata de raíz), curación
+   después (los displays 75/106 y los flags se editan mejor con la herramienta).
+6. Tras C2 + curación: ronda 2 de suite-5 completa (20 casos) + regresión + gate
+   C2 re-evaluado + promptfoo al cierre.
 
 ---
 

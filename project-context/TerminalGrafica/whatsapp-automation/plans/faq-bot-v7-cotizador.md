@@ -357,3 +357,99 @@ de color bookcel" y "Adicional papel obra a4/oficio 106 gr".
   descartada pasa a ser LA respuesta). Si 33(b) = "solo a pedido" → el backstop
   queda, y el monitoreo de `fallback: papel_especial` en `bot.decisiones` decide
   con datos reales si la regex se poda o se extiende.
+
+## Ronda 4 (suite-5 CORRIDA en WhatsApp real) — veredicto de arquitectura
+
+**Resultado de la ronda 1 de suite-5 (Martin, 2026-07-22):** la maquinaria
+determinística ANDA (caso 1 total exacto, caso 9 cap, caso 16 papel_especial,
+render páginas×copias). El LLM falló feo en resolución y recolección: 12
+incidentes inventariados (I1-I12, detalle en la memoria de sesión). Los graves:
+I1 recolección nunca ocurre (oscila email-viejo / tabla de variante arbitraria);
+I2 resolución errática 75↔106↔80 (números correctos del producto EQUIVOCADO, dos
+veces); I3 marcas `*` filtradas + etiquetas inventadas → cascada sin_match; I8
+"500 Tarjetas" × 150 unidades = $4.200.000 (precio POR PACK multiplicado).
+
+**Veredicto Fable r4 a la pregunta de Martin (¿refinar el nodo o guards?): tres
+capas con jerarquía fija, dos ya no opcionales.**
+
+1. **Guards determinísticos = el PISO** (construidos YA, commit `cd790a9`): todo
+   lo que toca plata debe sobrevivir a un LLM que resuelve mal — esta ronda probó
+   que resuelve mal incluso emitiendo nombres canónicos válidos.
+2. **El gate C2 SE DISPARÓ** — con las reglas de r2, no con opinión: la clase
+   plata es "el monto mostrado NO es verdad para el pedido del cliente" (un número
+   correcto del producto equivocado — I2 — o con unidad equivocada — I8 — es
+   exactamente el screenshot-compromiso del kill-switch). I2+I8 = gate. E I1 =
+   ronda 1 de C2(c) (oscilación). Dos vías independientes al mismo gate.
+3. **Refinar el mono-prompt como estrategia queda descartado por evidencia**: 5+
+   rondas calibraron precio y UNA función nueva (recolección) desestabilizó la
+   resolución. 21k chars = techo de interferencia. El prompt solo se refina para
+   conducta no-monetaria (regateo I7, cross-sell I10 — líneas ya aplicadas).
+
+### Spec C2 (pendiente de OK de Martin — sesión de build propia)
+
+- **Nodo LLM especialista "Cotizador"** (~4k chars): SOLO líneas cotizables
+  (productos con `*`/`**` + por_pagina) + contrato precio/opciones + reglas de
+  recolección. Sin reglas de email viejas, sin árbol completo.
+- **Router DETERMINÍSTICO, sin LLM** (muere la objeción r1): Decidir consulta la
+  última `accion` de `bot.decisiones` para ESA conversación (roundtrip Postgres
+  ya existe pre-LLM: Firewall Tier-1); si fue `pregunto_opciones`/cotización
+  dentro de N minutos → el turno va al especialista. Stateless intacto: el estado
+  ES la telemetría que ya escribimos.
+- **Action `opciones` con render determinístico** (la pieza que mata I3/I4 por
+  construcción, mismo truco que `{{PRECIO}}`): el LLM emite
+  `{"action":"opciones","productos":[...]}` y un Code node arma el menú desde las
+  filas de la DB — nombres display verbatim, marcas `*`/`**` stripped, estructura
+  de DOS niveles (producto → opción), checklist páginas/copias/cantidad en la
+  plantilla. El LLM nunca tipea el menú → no puede filtrar marcas ni inventar
+  etiquetas; el cliente responde citando strings exactos (lo que el LLM SÍ hace
+  bien es ecoar).
+- Nodo principal conserva info/FAQ/derivación/reglas 1-7 no-precio.
+
+### Guards aplicados (r4, commit `cd790a9` — valen bajo cualquier arquitectura)
+
+| Incidente | Mecanismo | Estado |
+|---|---|---|
+| I2 producto equivocado (plata) | Guard numerales: gramaje anclado del cliente (`75 gr`/`obra de 75`, ventana 3 msgs) ≠ gramaje de la fila → `fallback: producto_incoherente`. Comparaciones (75 vs 106) no disparan. | ✅ harness A36/A37 |
+| I8 pack (plata) | Flag `por_pack` (migración `db/cotizador-v7b.sql` + seeds candidatos con NOTICE): cantidad JAMÁS multiplica ni elige bracket. Regex solo telemetría `(pack?)`. | ✅ A38/A39 |
+| I11 momentum papel | Ventana K=3 mensajes entrantes + desbloqueo por corrección explícita ("papel común", "sin color"). | ✅ A34/A35 |
+| I1-Frankenstein | Cascada de Parsear absorbe "por email a <dir>" completo. | ✅ P14 |
+| I5 'X de X' | `nombreVar` oculta variante == canónico (normalizado). | ✅ A33 (commit `182ab2c`) |
+| I7 regateo → handoff | Línea de prompt: regateo = regla 2, answer, nunca handoff ni repetir el número. | ✅ aplicada |
+| I10 cross-sell | Línea regla 5: nunca ofrecer materiales como equivalente del no listado. | ✅ aplicada |
+| I6 primera mención | Per-conversation correcto SI hubo conversación nueva entre casos — confirmar con Martin, no tocar. | ⏸ verificar |
+| I9 `mas` perdido | Sin detección determinística posible; prompt del especialista (C2) + telemetría. Riesgo residual de dirección segura. | ⏸ C2 |
+| I12 anillado 24hs | Verificar dato: `select v.variante, v.precio_lista, v.tiene_override from bot.variantes v join bot.taxonomia t using (producto_id) where t.nombre_canonico ~* 'anillado.*24';` — si hay override legítimo, la conducta fue CORRECTA. | ⏸ dato |
+| I1/I2/I3 de fondo | Solo C2 + action opciones + curación de displays. | ⏸ C2 + curación |
+
+### Herramienta visual de curación (pedido de Martin — spec validada r4, build pendiente)
+
+**Flujo:** (1) query de export → JSON del estado completo (taxonomia + variantes +
+metas + candidatos); (2) **HTML self-contained** en el repo (un solo archivo, JSON
+INLINEADO por el generador — `fetch()` local muere por CORS; alternativa: input
+file); (3) Martin revisa grupo por grupo / uno a uno: actual vs propuesto,
+aprueba/rechaza/edita; (4) exporta **.sql de upserts OPTIMISTAS** (cada upsert
+condicionado al valor original vía el patrón `nombre_origen`; si la fila viva
+cambió → 0 rows + NOTICE, nunca pisar al mostrador en silencio) + **.md de
+decisiones** (trazabilidad). localStorage keyeado por timestamp del export
+(sesiones interrumpidas). Martin aplica el SQL, como siempre.
+
+**Lo que la UI DEBE mostrar para decidir bien:**
+- Chequeo de colisión EN VIVO con la MISMA semántica que Get Precio (translate +
+  lower + ranks exacto/sinónimo=1, contains≥4=2, variante=3): "este término
+  rank-1ea a X" mientras se tipea. Con otra normalización, la herramienta miente.
+- Alerta de casi-idénticos por rubro (la clase I2): overlap de tokens entre
+  displays del mismo grupo ("...papel obra 75 gr" vs "...papel obra 106 gr" =
+  4/6 tokens → rojo).
+- La línea del catálogo RENDERIZADA como la ve el LLM (con `— también/usos/
+  opciones`), no una celda de tabla.
+- Estado de precio por variante (`*`/`**`, tabla/override/$0) y los flags
+  `por_pagina`/`por_pack` EDITABLES ahí (acá vive el refinamiento de I8).
+- Sinónimos y casos_de_uso como campos SEPARADOS (nombres matchean, intención
+  solo guía — principio v10.8).
+- Nice-to-have: qué goldens de tests/*.md referencian el nombre actual.
+
+**Scope de la PASADA 1 (sesgado a lo que causó bugs de plata):** displays 75/106 a
+máxima distintividad (interim sin TG: reordenar tokens; calificadores de papel =
+afirmaciones físicas → gate TG); flags `por_pack` (refinar los candidatos del
+seed v7b); completar `por_pagina`; dato del anillado 24hs; Tier B de v10.8 solo
+si la pasada viene fluida. NO re-curar sinónimos ya podados (calibración viva).

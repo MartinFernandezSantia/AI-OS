@@ -141,10 +141,34 @@
 
 **17. Negación — falso positivo ACEPTADO (documentado, no es bug):**
 - `no quiero papel de color, dale en blanco común, 200 simple faz b/n`
-- **Esperado:** puede derivar al equipo sin número (el backstop no distingue
-  negación — mismo trade-off aceptado que el dorso: dirección segura, costo UX
-  menor). NO anotar como bug nuevo en la ronda; si aparece seguido en
-  `bot.decisiones`, se afina la regex con datos reales.
+- **Esperado (actualizado r4):** con la corrección explícita ("blanco común") el
+  desbloqueo de la ventana SÍ recupera el número si el hit era del historial;
+  si "papel de color" va en el MISMO mensaje, dispara igual (negación ciega
+  aceptada). Ninguno de los dos es bug.
+
+**18. Papel especial multi-turno (r4 — el momentum real de la ronda 1):**
+- `necesito 300 impresiones simple faz b/n en bookcel de color, ¿cuánto en total?`
+- (respuesta sin número)
+- `precio para obra 80gr`
+- **Esperado:** SIGUE sin número (la ventana de 3 mensajes retiene el contexto de
+  papel especial; en ronda 1 este follow-up recibió un total del 106).
+- **BD:** `fallback: papel_especial` + `(papel_historial)`.
+
+**19. Guard de numerales (r4 — el 75→106 de la ronda 1):**
+- `cuánto me salen las impresiones en obra de 75?`
+- (lo que responda)
+- `simple faz color, dale`
+- **Esperado:** si el LLM resuelve el producto 106 (u 80, o cualquiera con OTRO
+  gramaje), el guard lo caza: SIN número, derivación honesta. Solo puede salir un
+  número de un producto cuyo gramaje sea 75.
+- **BD:** `fallback: producto_incoherente` si el LLM pifió; número del 75 si acertó.
+
+**20. Pack (r4 — el $4.200.000 de la ronda 1):**
+- `necesito 150 tarjetas, ¿cuánto me salen?`
+- **Esperado:** JAMÁS precio-pack × 150. Con `por_pack` seedeado (v7b): precio del
+  pack con su nombre completo ("500 Tarjetas ... sale $28.000,00") sin total
+  multiplicado; la aclaración de que el precio es del pack de 500 la da el nombre.
+- **BD:** `(cantidad ignorada: pack)`.
 
 ---
 
