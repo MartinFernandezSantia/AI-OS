@@ -9,43 +9,48 @@
 
 ---
 
-## ⭐ PRÓXIMA SESIÓN — Catálogo limpio (`producto_meta`): planear y construir
+## ⭐ Catálogo limpio (`producto_meta`) — CONSTRUIDO 2026-07-22, pendiente de APLICAR
 
-**Objetivo:** la capa de presentación limpia del catálogo — el fix de más valor que queda
-(la matriz mostró que la zona sucia mata las consultas del corazón universitario:
-apuntes, exámenes, CV, tesis). **Primero PLAN, contraste con Fable, y recién después build.**
+**Sesión 2026-07-22: plan + build completos, contraste Fable en 4 rondas (build go).**
+Todo el detalle y el diff para revisión está en
+[`catalogo-limpio-producto-meta.md`](./catalogo-limpio-producto-meta.md). Resumen:
 
-**Alcance (por valor):**
-1. **Dedupe zona sucia IMPRESIONES** — variantes duplicadas: "IMPRESIONES" tiene
-   OBRA 75 GR D/F ×2 y S/F ×2; "Impresión a4 106gr" ídem. Toda consulta da 2 filas →
-   `ambiguo` → email TENIENDO tabla. Fix #1 absoluto.
-2. **Sinónimos de mostrador** — CV/currículum, fotos, stickers, pasacalle, espiralado
-   (→anillado), enmicado (→plastificado)… + los que salgan de las respuestas de TG.
-3. **Renombres/display** — "única"/"." mono-variantes, Sobre Ingles duplicado
-   (Librería vs Soportes — esperar respuesta TG), unidades sucias ("a3" como unidad),
-   nombres slash-dump (OPP Mate/Holografico/...).
-4. **Reagrupado por rubro como encabezado** (rubro una vez, productos debajo): mata
-   estructuralmente la confusión rubro-como-producto Y ahorra tokens (hoy el rubro se
-   repite por línea). Ojo: re-renderiza el catálogo entero → recalibrar lo que lee
-   formato de línea (leyendas de `*`/`**`/corchetes en el prompt) y re-correr goldens.
-5. **Carga de lo nuevo de TG** — fotocopias, escaneo, PPT por hoja, etc. (según respuestas).
-6. **Suite-4 en lenguaje de mostrador** — casos escritos en palabras de cliente real,
-   no en nombres de catálogo (los gaps de sinónimos son invisibles a las suites actuales).
+- **Hallazgo clave:** las "duplicadas" de IMPRESIONES/106gr NO eran duplicados — se
+  distinguen por la columna `color` ('false'=b/n, 'true'=color) que nada usaba. El
+  dedupe = exponer el eje en el nombre (8 renames vía `bot.variante_meta` nueva),
+  con tripwire de orden de precios como única confirmación válida de la semántica.
+- **Overlay completo en vistas** (contrato n8n intacto, cero cambios en nodos Code):
+  `display_name`/`auto_sinonimo`/`oculto` en producto_meta + `variante_meta` +
+  `rubro_meta` + auto-sinónimo del nombre viejo (gated: false en IMPRESIONES — el
+  hijack rank-1 de la ronda 3) + `variante_origen` para telemetría.
+- **Podas anti-hijack:** rubro-genéricos de IMPRESIONES y 106gr (display del 106 en
+  PLURAL deliberado), 'apuntes' pelado de medicina (bug vivo: precio especial a
+  cualquiera), + **Tier A del seed legacy** (scan Fable R4: 'lona mate' rompía la
+  resolución exacta de Lona Mate, 'perforado', 'troquelado', 'tacos', 'folletos',
+  OPP holografico/plata/etc.) + duplicación deliberada de 'volantes' en los 3
+  folletos. Altas: espiralado→anillados, enmicado→plastificados, stickers, CV como
+  caso de uso ×2, sinónimos anti-header ×6.
+- **v10.8 en `faq-bot-v6.json`:** catálogo reagrupado por rubro (`RUBRO: X` +
+  productos con `- ` debajo, bloque separado por línea en blanco) + leyenda nueva
+  en el prompt. Harness 28/28.
+- **`tests/suite-4-mostrador.md`:** 23 casos en lenguaje de cliente.
 
-**Diseño ya acordado (no rediscutir de cero):** capa OVERLAY `bot.producto_meta` —
-`display_name`, sinónimos extra, dedupe/merge, re-agrupado — **sin tocar**
-`products`/`product_variants` (el motor del mostrador no se entera). El LLM propone el
-mapping offline, **Martin revisa el diff UNA vez**, queda persistido como migración que
-aplica Martin. Las vistas `bot.taxonomia`/`bot.variantes` pasan a leer el overlay.
+**RUNBOOK MARTIN (en orden):**
+1. Revisar el diff del plan (sección "EL DIFF") — tu revisión única.
+2. Aplicar `db/catalogo-limpio-overlay.sql` (transaccional: si un assert falla no
+   aplica nada; mirar los NOTICE de podas y HAZARD LEGACY del output).
+3. Si quedó pendiente de la sesión anterior: `db/precio-freshness.sql` +
+   `db/decisiones-execution-id.sql` van ANTES (la overlay recrea `bot.variantes`
+   sobre la versión con `precio_actualizado`).
+4. Re-importar `faq-bot-v6.json` (v10.8) + verificar creds + abrir/guardar los 3
+   nodos Log + **toggle** (cache).
+5. Correr: Ronda 2 de suite-3 (R1-R16) + **suite-4** + regresión suite-2. R5 debe
+   SEGUIR dando ambiguo para "sobre inglés".
 
-**Insumos:** `plans/matriz-situaciones-universidad.md` (34 casos con veredictos) ·
-respuestas de TG al paquete (sección más abajo; si aún no llegaron, el dedupe y los
-sinónimos NO dependen de ellas — arrancar igual) · el método del "catálogo anotado"
-(script que reconstruye la foto real desde el seed — regenerable, pedirle a Claude que
-lo rearme desde `seed-prod-catalog.sql` con audience='publico').
-
-**Al terminar:** re-import + toggle (cache), correr suite-4 + regresión de goldens
-(R2, R10, R11, R15), y recién ahí promptfoo.
+**Próxima sesión (según lleguen respuestas TG):** gates del plan (a4 → poda-o-
+duplicación ya decidida, imanes, Sobre Ingles, módulos solo-medicina, 106 laser vs
+Riso) + carga de servicios nuevos (fotocopias, escaneo, PPT por hoja) + Tier B de
+sinónimos flaggeados + revisar NOTICEs HAZARD LEGACY como input del próximo tier.
 
 ---
 
@@ -147,7 +152,14 @@ email). Quedan para TG, en una sola conversación:
 
 **Directas:** (1) medios de pago y seña (Martin consulta); (2) ¿imanes se venden al
 público? (existe Iman con tabla — confirmar); (3) sobres ingleses duplicados en el
-sistema (¿unidad vs pack? ¿cuál va?).
+sistema (¿unidad vs pack? ¿cuál va?); **(4) ¿el papel obra 75 gr de IMPRESIONES es
+A4? ¿hay otros tamaños?** (gate del dedupe — decisión ya tomada: si es a4, los
+sinónimos a4 se duplican en 75 y 106, nunca retención en uno); (5) ¿el precio de
+módulos/apuntes es SOLO para medicina o para cualquiera?; (6) el 106 b/n S/F tiene
+precio de lista $120 pero su tabla arranca en $180 — ¿cuál vale? (dato sucio
+latente); (7) papel obra 106: ¿cuándo va por laser ($800/hoja) y cuándo por Riso
+(tabla desde $180)? (dos productos post-limpieza, el sinónimo del laser rank-1ea
+único).
 
 **Servicios implícitos** (Martin r4: TG calcula internamente trabajos comunes no
 cargados, ej. "fotocopia = valor impresión" — preguntar cómo se calcula cada uno y
@@ -172,7 +184,9 @@ en producto_meta, o línea de Info del negocio) — nunca como regla nueva de pr
 - **Ítems de taller (rubro "Taller": encuadernado, refilado, troquelados, etc.) — definir con TG (pedido Martin 2026-07-21):** cuándo aplican estos ítems y cada cuánto son, o si se deja simple como está hoy. Entra en la conversación del catálogo refinado.
 - Limpiar en **capa de presentación** (`bot.producto_meta` overlay: `display_name`, re-agrupar cantidad-en-nombre como eje, ejes + centinela "FIN de opciones" por producto), **sin tocar** `products`/`product_variants` (motor del mostrador). LLM propone el mapping offline, **Martin revisa el diff una vez**, queda persistido.
 - **Guard de vocabulario en log-only** (Code node, 0 tokens): red anti-confabulación + **detector de servicios faltantes** en el mismo nodo.
-- **Dedupe del cluster IMPRESIONES — prioridad SUBIDA (2026-07-21):** la oferta de costo por página del ancla libro (v10.5) va a dirigir tráfico exacto a la zona sucia conocida (variantes duplicadas de IMPRESIONES → `ambiguo` → email). Monitorear `filas_sql` y `fallback: ambiguo` en `bot.decisiones`; ese dedupe va primero en la limpieza.
+- **Dedupe del cluster IMPRESIONES — ✅ HECHO 2026-07-22** (sección ⭐; pendiente de
+  aplicar). Post-aplicación: `fallback: ambiguo` debe DESAPARECER de las consultas de
+  impresiones con producto+variante definidos — vigilarlo en `bot.decisiones`.
 
 ### Resiliencia LLM — dato de campo 2026-07-21
 Durante la ronda suite-3, OpenRouter tiró "google/gemini-2.5-flash-lite is temporarily rate-limited upstream" (pool compartido saturado, no la cuenta de Martin). El path de degradación funcionó como se diseñó (retry 3x → escalar a humano; ojo: deja la conversación ASIGNADA y el bot no la retoma hasta desasignar). Levers para antes de prod, decidir junto con la sucesión de modelo (flash-lite muere 16-oct): **BYOK** (key propia de Google AI Studio en OpenRouter, ~5% fee, límites propios) y/o **array `models` de fallback** de OpenRouter (ojo: un modelo distinto corre sin calibrar — solo si el fallback pasa promptfoo).
@@ -185,6 +199,14 @@ Se corre cuando Martin dé por cerrado el build. Golden cases: confabulación (r
 - Deploy a prod en **KVM 4 de TG** (sin contratar aún) + avisar a TG del cobro Meta por mensaje desde **1-oct-2026**.
 
 ---
+
+## Mapa de commits — sesión 2026-07-22 (catálogo limpio v10.8)
+
+`6c758bc` plan catálogo limpio (diff + log Fable 4 rondas) · `3e8e750` migración
+overlay (`db/catalogo-limpio-overlay.sql`) · `e68ceab` v10.8 reagrupado por rubro ·
+`f435f92` suite-4 mostrador (23 casos).
+Estado al cierre: build completo y harness 28/28; TODO pendiente de aplicación por
+Martin (runbook en la sección ⭐).
 
 ## Mapa de commits — sesión 2026-07-21/22 (ronda 2 en vivo → v10.7)
 
