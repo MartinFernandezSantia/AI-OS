@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-22 — Bot TG: WhatsApp informa TODO (precios y totales); el email queda solo para encargar
+
+**Decision:** Cambio de producto en el bot de TG. El funnel v10.x "precio/cotización → email" se reemplaza: el cliente se informa todo (precios, opciones, totales estimados por cantidad) por WhatsApp; el email queda solo para concretar el pedido (mandar el archivo). Se implementa como faq-bot-v7 "cotizador" (plan validado en `project-context/TerminalGrafica/whatsapp-automation/plans/faq-bot-v7-cotizador.md`): recolección de datos mínimos en UN mensaje + total determinístico precio × cantidad con brackets. El LLM sigue sin tipear montos; n8n multiplica.
+
+**Why:** Martin corrió el replay real de R1 (libro en PDF) contra v10.8 y la derivación a email sin cotizar — el comportamiento diseñado — esquiva dos veces la pregunta de precio del cliente. El valor del canal es informar; el ancla al email era fricción sin retorno. Resuelve además el P0 "email-only funnel realignment" del prod-readiness. Cambiaría la decisión: si los totales estimados generan conflicto en mostrador (screenshot del total vs precio final), se recorta el alcance de los totales, no el funnel.
+
+**Alternatives considered:** Mantener el funnel y solo ampliar la oferta por página (v10.5) — rechazado por Martin tras el replay. AI-Agent con tools donde el LLM copia el número calculado — rompe "el LLM nunca tipea montos".
+
+**Owner:** Martin.
+
 ## 2026-07-07 — Bot de WhatsApp VENDIDO a TG: USD 400 desarrollo + USD 30/mes (o 300/año)
 
 **Decision:** TG confirmó el proyecto de automatización de WhatsApp (cierre ~fin de junio 2026). Acuerdo: **USD 400** de desarrollo (única vez) + mantenimiento **USD 30/mes o USD 300/año** (moneda registrada como USD; corregir acá si fuera ARS). El proyecto pasa de demo-sin-confirmar a cliente confirmado → el prod target **Hostinger KVM 4 a nombre de TG** queda habilitado (aún sin contratar). Go-live gates = lista P0 de `project-context/TerminalGrafica/whatsapp-automation/prod-readiness-review.md`.
