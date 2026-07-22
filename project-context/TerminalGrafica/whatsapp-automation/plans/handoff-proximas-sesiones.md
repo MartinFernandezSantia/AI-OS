@@ -145,39 +145,14 @@ nació en el now() de la migración). Queda el **airbag**: tag `(precio>90d)` en
 de `bot.decisiones`, sin efecto al cliente — si aparece, la conexión con el sistema
 diario dejó de ser verdad y hay que revisar. Columna y trigger quedan en la DB.
 
-### Paquete de preguntas a TG — versión FINAL post-respuestas de Martin (2026-07-21)
-Ya respondidas por Martin y aplicadas (v10.7): plazos (no se informan → answer derivando),
-envíos (no hay), USB (sí en mostrador), medidas grandes (por m²), vegetal x10 (sigue a
-email). Quedan para TG, en una sola conversación:
-
-**Directas:** (1) medios de pago y seña (Martin consulta); (2) ¿imanes se venden al
-público? (existe Iman con tabla — confirmar); (3) sobres ingleses duplicados en el
-sistema (¿unidad vs pack? ¿cuál va?); **(4) ¿el papel obra 75 gr de IMPRESIONES es
-A4? ¿hay otros tamaños?** (gate del dedupe — decisión ya tomada: si es a4, los
-sinónimos a4 se duplican en 75 y 106, nunca retención en uno); (5) ¿el precio de
-módulos/apuntes es SOLO para medicina o para cualquiera?; (6) el 106 b/n S/F tiene
-precio de lista $120 pero su tabla arranca en $180 — ¿cuál vale? (dato sucio
-latente); (7) papel obra 106: ¿cuándo va por laser ($800/hoja) y cuándo por Riso
-(tabla desde $180)? (dos productos post-limpieza, el sinónimo del laser rank-1ea
-único).
-
-**Servicios implícitos** (Martin r4: TG calcula internamente trabajos comunes no
-cargados, ej. "fotocopia = valor impresión" — preguntar cómo se calcula cada uno y
-desde cuántas unidades; lista podada con criterio de mostrador universitario):
-fotocopias b/n y color (¿= valor impresión?); escaneo/digitalización (¿por hoja? ¿lo
-mandan por mail?); **impresión de diapositivas/PowerPoint 2-4-6 por hoja** (clásico
-universitario — ¿se cobra por hoja o por slide?); plegado/doblado (trípticos — pega con
-Folletos); **empastado/tapa dura** (tesis de posgrado) + termoencuadernado; tapas para
-anillados (¿EXISTEN como producto? — cierra con datos la confabulación del test 1.2);
-foto carnet 4x4; impresión de fotos 10x15/13x18; **póster académico de congreso A0/A1**
-(¿se hace en lona/PVC por m²?); impresión en el acto desde mail/WhatsApp/celular
-(proceso de mostrador); espiralado (¿sinónimo de anillado? → producto_meta); enmicado
-(¿sinónimo de plastificado? → producto_meta); guillotinado/corte chico suelto.
-Segunda línea (si la reunión da): sellos, diseño/ajuste de archivo, talonarios AFIP,
-transparencias/filminas, papel fotográfico, mapas/planos plegados.
-
-**Criterio transversal:** cada respuesta aterriza como DATO (producto nuevo, sinónimo
-en producto_meta, o línea de Info del negocio) — nunca como regla nueva de prompt.
+### Paquete de preguntas a TG — MOVIDO a `preguntas-tg.md` (2026-07-22)
+Única fuente de verdad: [`../preguntas-tg.md`](../preguntas-tg.md) — consolidado de
+TODAS las sesiones: 4 gates del catálogo limpio, 7 directas de catálogo, 11 servicios
+implícitos, segunda línea, foto de la lista del mostrador, y los 3 temas comerciales
+a avisar (cobro Meta 1-oct, handoff asíncrono como cambio de alcance, SLA de
+reclamos). Incluye la tabla de "ya resuelto — no re-preguntar" (plazos, envíos, USB,
+medidas, espiralado/enmicado, etc.). Criterio transversal intacto: cada respuesta
+aterriza como DATO, nunca como regla nueva de prompt.
 
 ### Limpieza sistemática del catálogo (idea B)
 - Descubrir faltantes (fotocopias = consulta #1, y otros): **foto de la lista de precios del mostrador** (pedir a TG) + minar la casilla de mail; `bot.decisiones` como red reactiva permanente.
