@@ -74,7 +74,17 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 30. **Foto de la lista de precios del mostrador** — descubre fotocopias y todo lo
     que falta cargar de una sola vez (insumo #1 de la limpieza).
 
-## 6. Temas comerciales para avisar (no son preguntas de catálogo)
+## 6. Cotizador v7 (bloquean los TOTALES del bot — plan `plans/faq-bot-v7-cotizador.md`)
+
+31. **Unidad del doble faz** — el precio de la variante doble faz de impresiones,
+    ¿es por página (carilla) o por hoja? Hasta la respuesta, el bot da la tabla sin
+    total para todo pedido doble faz.
+32. **Práctica de carga con copias** — para N copias de un documento de P páginas,
+    ¿el mostrador carga UN ítem con N×P impresiones (bracket del total) o carga por
+    copia? Hoy el bot usa un techo conservador que nunca sub-cotiza; con la
+    respuesta pasa a total exacto.
+
+## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
 - **Cobro de Meta por mensaje desde el 1-oct-2026**: cada respuesta del bot va a
   costar plata (rate AR se publica antes del 1-sep). La propuesta decía USD 0 de

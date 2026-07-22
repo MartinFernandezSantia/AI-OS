@@ -9,7 +9,31 @@
 
 ---
 
-## ⭐ Catálogo limpio (`producto_meta`) — CONSTRUIDO 2026-07-22, pendiente de APLICAR
+## ⭐ PRÓXIMA SESIÓN — Build faq-bot-v7 "cotizador" (plan listo, falta OK de Martin)
+
+**Decisión de producto (Martin, 2026-07-22, logueada en `decisions/log.md` del AIOS):**
+el cliente se informa TODO (precios, opciones, totales estimados) por WhatsApp; el
+email queda SOLO para concretar el pedido. R1 v10.x (libro → email sin cotizar) era el
+comportamiento diseñado y Martin lo rechazó como producto tras el replay real.
+
+**Plan completo y validado (Fable rondas 1-2 + verificación en `quote-utils.ts` del
+motor): [`faq-bot-v7-cotizador.md`](./faq-bot-v7-cotizador.md).** Núcleo: recolección
+de datos mínimos en UN mensaje (por OPCIÓN listada, nunca por ejes) + total
+determinístico precio × cantidad con brackets en `Armar Respuesta Precio` (el LLM
+sigue sin tipear montos) + campos `paginas`/`copias` (n8n multiplica) + flag
+`por_pagina` + gate `solo_descuentos` (los recargos NUNCA reciben total: sub-cotizaría)
++ doble faz → tabla sin total (gate TG ítem 31) + email reposicionado. Sin nodos LLM
+nuevos (C1); split a especialista (C2) con gate numérico fijado en el plan.
+
+**Orden cuando Martin dé el OK:** `db/cotizador-v7.sql` (Martin aplica; correr la
+query de recargos coexistentes ANTES) → editar `faq-bot-v7.json` + harness → import
+(v6 desactivado como rollback) + toggle → suite-5 (14 casos) → re-escritos de suite-3
+(R1, R12, C2, B1, E1) → regresión suite-2/matriz con expectativas AUDITADAS → evaluar
+gate C2 → promptfoo al cierre.
+
+---
+
+## Catálogo limpio (`producto_meta`) — ✅ APLICADO 2026-07-22 (runbook ejecutado por Martin)
 
 **Sesión 2026-07-22: plan + build completos, contraste Fable en 4 rondas (build go).**
 Todo el detalle y el diff para revisión está en
@@ -35,7 +59,9 @@ Todo el detalle y el diff para revisión está en
   en el prompt. Harness 28/28.
 - **`tests/suite-4-mostrador.md`:** 23 casos en lenguaje de cliente.
 
-**RUNBOOK MARTIN (en orden):**
+**RUNBOOK MARTIN — ejecutado 2026-07-22 (queda como referencia).** Nota del replay:
+R1 dio la derivación a email tal como estaba diseñado; ese resultado disparó la
+decisión de producto del v7 (sección ⭐).
 1. Revisar el diff del plan (sección "EL DIFF") — tu revisión única.
 2. Aplicar `db/catalogo-limpio-overlay.sql` (transaccional: si un assert falla no
    aplica nada; mirar los NOTICE de podas y HAZARD LEGACY del output).
