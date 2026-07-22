@@ -322,3 +322,38 @@ R15, R16, prohibición m² (nuevo golden explícito).
   OBLIGATORIO + hazard cantidad=páginas con su golden); gate C2 sin filtro de
   atribución + kill-switch de clase plata + cláusula anti-gaming del límite de chars +
   definición observable de oscilación.
+
+## Ronda 3 (post-build) — la query de verificación dio 16 filas
+
+**Hallazgo (Martin aplicó la migración y corrió la query b, 2026-07-22):** las 8
+variantes de IMPRESIONES 75/106 (exactamente los productos `por_pagina`) tienen
+tabla de cantidad Y son alcanzadas por dos recargos de categoría: "Adicional papel
+de color bookcel" y "Adicional papel obra a4/oficio 106 gr".
+
+**Veredicto (Fable r3): NO bloquea la ronda de totales.** Fundamentos y acciones:
+
+- La exposición NO la crean los totales: esas variantes muestran tabla verbatim
+  desde Increment B con los mismos recargos coexistiendo. Los totales solo
+  amplifican el monto del error si el LLM pifia la regla 5.
+- Los adicionales son **opt-in** en el CÓDIGO (el motor solo aplica reglas
+  seleccionadas por el operador — `selectedRules`). PERO la práctica del operador
+  no es verificable en código: **la lectura opt-in es media verdad hasta la
+  respuesta de TG (pregunta 33b)**. El "adicional 106 alcanza al propio 106" es
+  targeting grueso por herencia de categoría, consistente con opt-in — no lo
+  refuta ni lo prueba.
+- **Backstop `papel_especial` APLICADO en Armar** (espejo del dorso), scopeado a
+  filas `por_pagina` (cero falsos positivos fuera): pedido de bookcel / papel de
+  color / color nombrado sin la palabra "color" (celeste, amarillo, rosa, crema…,
+  siempre con ancla papel/hojas) / "más grueso"/"mejor papel" → sin número, email.
+  "simple faz color", "impresión a color" y "a color en papel de obra" JAMÁS
+  matchean (goldens de la regex en el harness, A29-A32; harness 45/45). El caso
+  crítico es el "momentum": el cliente responde a la PREGUNTA de recolección con
+  "simple faz color en papel celeste, 300" (suite-5 caso 16).
+- Falso positivo aceptado y documentado: la negación ("no quiero papel de color")
+  deriva a email — mismo trade-off que el dorso (suite-5 caso 17).
+- **ROLLBACK PRE-DECIDIDO** (para no improvisarlo un viernes por WhatsApp): si TG
+  responde 33(b) = "hay trabajos donde el adicional va siempre" → se apagan
+  número/tabla/total de las variantes afectadas hasta re-modelar (la alternativa
+  descartada pasa a ser LA respuesta). Si 33(b) = "solo a pedido" → el backstop
+  queda, y el monitoreo de `fallback: papel_especial` en `bot.decisiones` decide
+  con datos reales si la regex se poda o se extiende.

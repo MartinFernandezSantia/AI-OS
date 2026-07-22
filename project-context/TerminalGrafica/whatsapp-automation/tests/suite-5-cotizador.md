@@ -15,8 +15,13 @@
 ## Prerrequisitos
 
 1. `db/cotizador-v7.sql` aplicado. Sanity a) del final: 4 productos `por_pagina`.
-2. **Query de verificación b) corrida: DEBE dar 0 filas** (recargo coexistiendo con
-   tabla de cantidad). Si da filas, NO correr la ronda de totales: revisar cada una.
+2. **Query de verificación b) corrida (2026-07-22): dio 16 filas CONOCIDAS** — las 8
+   variantes de IMPRESIONES 75/106 × 2 recargos opt-in de papel ("Adicional papel de
+   color bookcel" y "Adicional 106"). Veredicto Fable r3: NO bloquea — los recargos
+   son a-pedido (el motor solo aplica reglas seleccionadas por el operador) y el
+   backstop `papel_especial` cubre el pedido de papel no listado (casos 15-17).
+   Rollback pre-decidido si TG contesta distinto: plan §Ronda 3. Si la query algún
+   día devuelve filas NUEVAS (otro producto/regla), ahí sí frenar y revisar.
 3. `faq-bot-v7.json` importado (v6 queda DESACTIVADO como rollback), creds
    verificadas (Get Precio/Log → Bot Readonly DB; Enviar → Chatwoot; OpenRouter),
    nodos Log abiertos/guardados si la BD cambió, workflow TOGGLEADO (cache).
@@ -117,6 +122,29 @@
   — SIN segundo número. Es el caso apunte de cátedra: el techo evita sub-cotizar y
   la línea evita espantar.
 - **BD:** `(volumen_hint)`.
+
+**15. Papel especial — pregunta directa (backstop papel_especial):**
+- `necesito 300 impresiones simple faz b/n en bookcel de color, ¿cuánto en total?`
+- **Esperado:** SIN número ni total (el adicional de papel lo suma el mostrador; un
+  total estándar sub-cotizaría) → derivación al equipo.
+- **BD:** `fallback: papel_especial`.
+
+**16. Papel especial — el caso momentum (respuesta a la recolección):**
+- `cuánto salen las impresiones en obra de 75?`
+- (respuesta de recolección: opciones + cuántas)
+- `simple faz color en papel celeste, 300`
+- **Esperado:** SIN número. El LLM acaba de pedir esos datos y tiene momentum de
+  completar la cotización; "color" matchea variante legítima y "celeste" sería
+  ruido — el backstop lo caza aunque el LLM pifie la regla 5.
+- **BD:** `fallback: papel_especial` (si el LLM emitió precio) o answer derivando
+  (regla 5 correcta) — ambos válidos, lo INACEPTABLE es un monto.
+
+**17. Negación — falso positivo ACEPTADO (documentado, no es bug):**
+- `no quiero papel de color, dale en blanco común, 200 simple faz b/n`
+- **Esperado:** puede derivar al equipo sin número (el backstop no distingue
+  negación — mismo trade-off aceptado que el dorso: dirección segura, costo UX
+  menor). NO anotar como bug nuevo en la ronda; si aparece seguido en
+  `bot.decisiones`, se afina la regex con datos reales.
 
 ---
 

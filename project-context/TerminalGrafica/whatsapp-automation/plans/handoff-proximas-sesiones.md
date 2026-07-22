@@ -33,9 +33,12 @@ R12, C2, B1; E1 promovido a golden principal de primera mención) · suite-2 aud
 
 **RUNBOOK MARTIN (en orden):**
 1. Aplicar `db/cotizador-v7.sql` (transaccional; sanity a: 4 productos por_pagina).
-2. Correr la **query de verificación b)** del final del SQL: DEBE dar 0 filas
-   (recargo coexistiendo con tabla). Si da filas, frenar y revisarlas antes de
-   la ronda de totales.
+2. ✅ Query de verificación b) CORRIDA (2026-07-22): dio 16 filas conocidas
+   (IMPRESIONES 75/106 × 2 adicionales opt-in de papel). Veredicto Fable r3: NO
+   bloquea — backstop `papel_especial` aplicado en Armar (scopeado por_pagina,
+   harness 45/45), casos 15-17 en suite-5, pregunta TG 33 (a/b/c) con ROLLBACK
+   pre-decidido si 33b sale mal (plan §Ronda 3). Solo frenar si la query devuelve
+   filas NUEVAS distintas de estas.
 3. Importar `faq-bot-v7.json` como workflow NUEVO y DESACTIVAR faq-bot-v6 (queda de
    rollback — mismo webhook path: nunca los dos activos a la vez). Verificar creds
    (Get Precio/Log → Bot Readonly DB; Enviar → Chatwoot; OpenRouter en Tier-2) +

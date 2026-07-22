@@ -230,5 +230,31 @@ async function main() {
     [{ ...base, por_pagina: true, precio_lista: 100 }], decidir({ userMessage: 'documento de 180 paginas' }));
   console.log('A28 paginas fijo:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$100,00 c/u — por 180 páginas, total estimado $18.000,00') && !r[0].json.reply.includes('x 1 copias') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
+  // ===== v7 ronda 3: backstop papel_especial (recargos opt-in de papel) =====
+  // A29: bookcel pedido sobre por_pagina -> sin numero (el recargo lo suma el mostrador).
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única', cantidad: 300 },
+    [{ ...rangosRow, por_pagina: true }], decidir({ userMessage: 'necesito 300 impresiones simple faz b/n en bookcel de color, total?' }));
+  console.log('A29 bookcel:', r[0].json.estado === 'fallback: papel_especial' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.estado);
+
+  // A30: color nombrado SIN la palabra color (papel celeste) — el agujero grande de la regex corta.
+  r = await armar({ ...pBase, cantidad: 300 },
+    [{ ...base, por_pagina: true }], decidir({ userMessage: 'simple faz color en papel celeste, 300' }));
+  console.log('A30 papel celeste:', r[0].json.estado === 'fallback: papel_especial' ? 'OK' : 'FAIL ' + r[0].json.estado);
+
+  // A31: goldens de NO-match de la regex — variantes color legitimas y B1 no disparan;
+  // y FUERA de por_pagina el backstop no existe (scope).
+  r = await armar(pBase, [{ ...base, por_pagina: true }], decidir({ userMessage: 'la impresión a color simple faz color, cuánto sale?' }));
+  const noMatch1 = r[0].json.estado === 'ok';
+  r = await armar(pBase, [{ ...base, por_pagina: true }], decidir({ userMessage: 'a color en papel de obra, precio?' }));
+  const noMatch2 = r[0].json.estado === 'ok';
+  r = await armar(pBase, [base], decidir({ userMessage: 'carteleria en papel de color, precio?' }));
+  const scopeOut = r[0].json.estado === 'ok';
+  console.log('A31 regex goldens:', noMatch1 && noMatch2 && scopeOut ? 'OK' : 'FAIL ' + [noMatch1, noMatch2, scopeOut].join(','));
+
+  // A32: upgrade vago de gramaje ("mas grueso") sobre por_pagina -> sin numero.
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' },
+    [{ ...rangosRow, por_pagina: true }], decidir({ userMessage: 'y si me lo haces en un papel mas grueso, cuanto sale?' }));
+  console.log('A32 mas grueso:', r[0].json.estado === 'fallback: papel_especial' ? 'OK' : 'FAIL ' + r[0].json.estado);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

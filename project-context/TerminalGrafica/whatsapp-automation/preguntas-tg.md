@@ -83,6 +83,16 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     ¿el mostrador carga UN ítem con N×P impresiones (bracket del total) o carga por
     copia? Hoy el bot usa un techo conservador que nunca sub-cotiza; con la
     respuesta pasa a total exacto.
+33. **Adicionales de papel (bookcel / "Adicional 106")** — tres sub-preguntas que
+    deciden si las tablas y totales de impresiones son confiables:
+    (a) ¿el "Adicional papel obra 106" se selecciona ALGUNA VEZ sobre trabajos del
+    propio producto 106? ¿en qué caso concreto?;
+    (b) ¿existe alguna clase de trabajo donde un adicional de papel se aplique
+    SIEMPRE (es decir: el papel se cobra aparte de la impresión)? — **si la
+    respuesta es sí, hay rollback pre-decidido**: se apagan número/tabla/total de
+    las variantes afectadas hasta re-modelar (plan v7 §Ronda 3);
+    (c) el "a4/oficio" del nombre del adicional, ¿es el tamaño del papel del
+    adicional, o un upgrade de tamaño que se le vende a trabajos a4?
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
