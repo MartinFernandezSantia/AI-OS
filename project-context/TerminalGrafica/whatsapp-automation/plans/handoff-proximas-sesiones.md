@@ -173,8 +173,9 @@ Se corre cuando Martin dé por cerrado el build. Golden cases: confabulación (r
 - ~~Auto-sync del catálogo/metadata~~ → **PLANEADO 2026-07-22** como watchdog
   semanal + redactor de curación: [`catalogo-sync-workflow.md`](./catalogo-sync-workflow.md)
   (contraste Fable ronda 5; stateless + nombre_origen, 9 checks determinísticos,
-  LLM solo redactor con filtro word-subset, email SIEMPRE, Martin aplica).
-  Prerrequisitos: aplicar catálogo limpio + deliverability Brevo. Build = sesión propia.
+  LLM solo redactor con filtro word-subset, **Telegram a Martin SIEMPRE** (decisión
+  Martin: reemplaza Brevo), Martin aplica). Prerrequisitos: aplicar catálogo limpio
+  + bot de Telegram (BotFather + chat_id + cred n8n). Build = sesión propia.
 - Deploy a prod en **KVM 4 de TG** (sin contratar aún) + avisar a TG del cobro Meta por mensaje desde **1-oct-2026**.
 
 ---

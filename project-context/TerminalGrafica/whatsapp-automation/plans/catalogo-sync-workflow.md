@@ -41,12 +41,17 @@ siempre revisa y aplica** — el workflow jamás escribe la curación.
 - **Permisos**: 1-2 vistas nuevas `bot.sync_reporte_*` con grant a `bot_readonly`.
   Cero grants directos sobre `public`; la cred del workflow no puede escribir la
   curación ni comprometida.
-- **Salida: email a Martin vía Brevo, SIEMPRE** (Fable rechazó el silencio-en-vacío):
-  - `[TG sync] OK — sin anomalías` (cuerpo de una línea), o
-  - `[TG sync] N anomalías` (el reporte).
-  Si un lunes NO llega mail, ESO es la alerta (cubre workflow apagado, Brevo en
-  spam y VM muerta — casos donde el error workflow también está muerto porque vive
-  en la misma caja). Gate conocido: deliverability de Brevo (SPF pendiente).
+- **Salida: mensaje de TELEGRAM a Martin, SIEMPRE** (decisión Martin 2026-07-22:
+  reemplaza el email Brevo del diseño original; el principio de Fable — nada de
+  silencio-en-vacío — se mantiene, y Telegram lo mejora al eliminar el modo de
+  falla del spam):
+  - `[TG sync] OK — sin anomalías` (una línea), o
+  - `[TG sync] N anomalías` (el reporte; si el draft SQL es largo, va como
+    documento adjunto vía sendDocument, no como texto).
+  Si un lunes NO llega el mensaje, ESO es la alerta (cubre workflow apagado y VM
+  muerta — caso donde el error workflow también está muerto porque vive en la
+  misma caja). Implementación: nodo Telegram nativo de n8n (bot vía BotFather +
+  chat_id de Martin como credencial del repo de flujos).
 
 ## L1 — Detección determinística (sin LLM): 9 checks
 
@@ -116,7 +121,9 @@ pan de verdad. **Frontera v1/L4: los números en v1, la interpretación en L4.**
 
 1. Aplicar primero la migración del catálogo limpio (`catalogo-limpio-overlay.sql`,
    que ya incluye `nombre_origen`) + suites. El watchdog vigila ESE estado.
-2. Confirmar deliverability de Brevo (SPF) — gate del canal de salida.
+2. Canal de salida: crear el bot de Telegram (BotFather), obtener el chat_id de
+   Martin y cargar la credencial en n8n. (Reemplaza el gate de deliverability de
+   Brevo del diseño original.)
 3. Recién entonces: sesión de build de `tg-catalogo-sync` (vistas sync_reporte +
    workflow n8n + prompt del redactor + filtro en Code node + harness de los Code
    nodes nuevos).
