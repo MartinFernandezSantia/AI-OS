@@ -1,5 +1,10 @@
 # Suite 2 — cobertura nueva (escenarios sin probar)
 
+> ⚠️ **AUDITADA PARA v7 (2026-07-22, requisito del plan cotizador):** el único
+> esperado que cambia de sentido es **2.3** (ver nota inline). Todo lo demás sigue
+> válido tal cual — en particular 2.4/2.5/3.1/3.2: archivos, pedidos y cierres van
+> por email, que es EXACTAMENTE el rol que el email conserva en v7.
+
 > Escenarios NUEVOS, distintos a los de `firewall-test-conversations.md`. Correr en WhatsApp real.
 > Cada renglón = un mensaje; multi-turno = mandar de a uno.
 > **El (esperado: …) está anclado al catálogo REAL** (`quote-automation-system/supabase/seed-prod-catalog.sql`):
@@ -38,9 +43,13 @@
 - `esto me lo podés imprimir en tela?`
 - (esperado: handoff — no hay soporte "tela" afirmado en el catálogo; no deducir de otros ítems)
 
-**2.3 Precio directo**
+**2.3 Precio directo — esperado ACTUALIZADO v7**
 - `cuánto me sale 1000 volantes A5 doble faz?`
-- (esperado: NO da número; deriva a email (tras preguntar ¿algo más?), con calidez)
+- (esperado v7: "A5 doble faz" NO es una opción listada de los folletos → sigue SIN
+  número y deriva al equipo (regla 5/2c) — pero ya NO por política de "precio va por
+  email", sino porque el sistema no puede cotizar esa spec. Si el pedido matcheara
+  una opción listada con `*`/`**`, el número/total directo sería lo CORRECTO. El
+  invariante que sí se audita acá: jamás un monto tipeado por el LLM.)
 
 **2.4 Asume que el bot recibió el archivo**
 - `ya te mandé el archivo por acá, lo tenés?`

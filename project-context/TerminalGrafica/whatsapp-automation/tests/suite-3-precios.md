@@ -1,5 +1,13 @@
 # Suite 3 — Precios (Increment B, v10.1/v10.2)
 
+> ⚠️ **AUDITADA PARA v7 (2026-07-22).** El cambio de producto del cotizador
+> ([`../plans/faq-bot-v7-cotizador.md`](../plans/faq-bot-v7-cotizador.md)) invalida
+> el "Esperado" de los casos marcados **[SUPERSEDED v7]** abajo (R1, R12, C2, B1):
+> su conducta nueva vive en [`suite-5-cotizador.md`](./suite-5-cotizador.md). TODO
+> el resto sigue vigente TAL CUAL y es la regresión que v7 no puede romper (en
+> particular: R5 ambiguo, R14 anti-ancla, D1 dorso, D3/D4 sin montos inventados,
+> E4 sin-`*`-sin-entrevista, R7 primera mención, R13 sin sumar).
+>
 > Valida la escalera determinística de precios: número limpio / número + caveat /
 > tabla de rangos / fallbacks (override, $0, doble faz, spec extra). Correr en
 > **WhatsApp real** contra el catálogo REAL del Supabase de testing.
@@ -47,7 +55,9 @@
 
 ## B. Número + caveat (bloqueadas solo por descuentos/adicionales)
 
-**B1. El replay del chat original (impresión color en obra) — AHORA con número**
+**B1. [SUPERSEDED v7 → suite-5 caso 2/3] El replay del chat original (impresión color en obra)**
+> v7: las preguntas intermedias colapsan a UNA respuesta de recolección (opciones
+> listadas + cantidad si `**`, en un mensaje). El número final y su caveat no cambian.
 - `hola`
 - `cuánto sale una impresión?`
 - `a color en papel de obra`
@@ -76,7 +86,10 @@
   negro` (verificar contra la BD). NUNCA un número solo sin la tabla.
 - **BD:** notas `... | ok_rangos`.
 
-**C2. Cantidad dicha por el cliente — la tabla NO calcula**
+**C2. [SUPERSEDED v10.7+v7 → suite-5 caso 1] Cantidad dicha por el cliente**
+> v10.7 ya daba el unitario del bracket (R15); v7 suma el TOTAL estimado en la misma
+> frase. El "PROHIBIDO calcular" de abajo era la política vieja: hoy la cuenta la
+> hace el sistema (nunca el LLM) y el esperado vive en suite-5.
 - `necesito 200 impresiones a3 en tonner negro, cuánto me sale?`
 - **Esperado:** misma tabla completa (v1 no hace bracket lookup). PROHIBIDO que el bot
   diga "a 200 te queda en $X" o calcule un total: eso sería el LLM haciendo matemática.
@@ -128,7 +141,9 @@
 
 ## E. Conversación completa / regresión
 
-**E1. Precio → algo más → cierre (costura con la regla del email)**
+**E1. Precio → algo más → cierre (costura con la regla del email) — ⭐ v7: golden
+PRINCIPAL de primera mención** (con el email fuera de la fase de precios, la
+dirección completa aparece típicamente ACÁ, en el cierre; sigue válido tal cual)
 - `cuánto sale la cartelería pvc en 35x50?`
 - (respuesta con `$20.000,00`)
 - `no, nada más, gracias`
@@ -187,7 +202,11 @@ order by created_at desc;
 > para la columna nueva) y togglear el workflow (cache). Lo que pasó en ronda 1
 > (E1, E2, D1, D2, D3, C3, override) no hace falta repetirlo.
 
-**R1. Libro (el caso grave) — replay completo:**
+**R1. [SUPERSEDED v7 → suite-5 caso 5] Libro (el caso grave) — replay completo:**
+> Martin corrió este replay contra v10.8 real (2026-07-22): el bot derivó a email
+> tal como este Esperado pedía, y esa conducta fue RECHAZADA como producto → v7.
+> Los invariantes internos PERSISTEN en suite-5: no ofrecer productos ajenos como
+> "opciones del libro", datos ya dados jamás re-preguntados, dirección escrita.
 - `Buenas quiero imprimir un libro que tengo en PDF`
 - `Dale, pero antes me podes decir cuanto me saldria?`
 - `Que opciones hay?`
@@ -259,7 +278,10 @@ ejecución en n8n.
   respuesta preguntó cantidad "para el precio" antes de derivar — 2c pide derivar sin
   entrevista; como derivó en el mismo mensaje, no rompe nada. Vigilar si se repite.
 
-**R12. Oferta de costo por página (v10.5 — excepción acotada del ancla libro):**
+**R12. [SUPERSEDED v7 → suite-5 casos 4/6/7/14] Oferta de costo por página (v10.5):**
+> v7 reemplaza la "oferta de referencia" por la cotización real con `paginas`/`copias`
+> (total de la IMPRESIÓN sí; total del trabajo ARMADO no; doble faz → tabla sin total
+> hasta TG ítem 31; el "NUNCA total" de abajo era la política vieja).
 - `Buenas quiero imprimir un libro que tengo en PDF` → derivación a email + (opcional,
   misma respuesta) UNA frase ofreciendo referencia de costo por página.
 - `Dale, A4 en negro` → flujo de precio normal: tabla/número del sistema, o
