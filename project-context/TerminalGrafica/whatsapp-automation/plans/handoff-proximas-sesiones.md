@@ -3,9 +3,74 @@
 > Estado y roadmap **forward-looking** para las próximas sesiones.
 > El log histórico detallado vive en la memoria `chatwoot-whatsapp-impl-status`.
 > El plan de build original está en [`v6-build-plan.md`](./v6-build-plan.md).
-> Última actualización: **2026-07-21**.
+> Última actualización: **2026-07-22**.
 >
-> **Reglas de trabajo que no cambian:** rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot) · Claude prepara migraciones, **Martin las aplica** (Claude no toca la BD) · el bot corre en la VM de dev con el número de test, NO es prod de TG · commits en rama, nunca a `main` de `projects/`.
+> **Reglas de trabajo que no cambian:** rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot) · Claude prepara migraciones, **Martin las aplica** (Claude no toca la BD) · el bot corre en la VM de dev con el número de test, NO es prod de TG · commits en rama, nunca a `main` de `projects/` · **toda decisión de diseño se contrasta con un agente Fable ANTES de aplicarla; Claude aplica** (ver "Cómo usamos a Fable") · tras editar un nodo Code, correr `node tests/code-harness.js` SIEMPRE.
+
+---
+
+## ⭐ PRÓXIMA SESIÓN — Catálogo limpio (`producto_meta`): planear y construir
+
+**Objetivo:** la capa de presentación limpia del catálogo — el fix de más valor que queda
+(la matriz mostró que la zona sucia mata las consultas del corazón universitario:
+apuntes, exámenes, CV, tesis). **Primero PLAN, contraste con Fable, y recién después build.**
+
+**Alcance (por valor):**
+1. **Dedupe zona sucia IMPRESIONES** — variantes duplicadas: "IMPRESIONES" tiene
+   OBRA 75 GR D/F ×2 y S/F ×2; "Impresión a4 106gr" ídem. Toda consulta da 2 filas →
+   `ambiguo` → email TENIENDO tabla. Fix #1 absoluto.
+2. **Sinónimos de mostrador** — CV/currículum, fotos, stickers, pasacalle, espiralado
+   (→anillado), enmicado (→plastificado)… + los que salgan de las respuestas de TG.
+3. **Renombres/display** — "única"/"." mono-variantes, Sobre Ingles duplicado
+   (Librería vs Soportes — esperar respuesta TG), unidades sucias ("a3" como unidad),
+   nombres slash-dump (OPP Mate/Holografico/...).
+4. **Reagrupado por rubro como encabezado** (rubro una vez, productos debajo): mata
+   estructuralmente la confusión rubro-como-producto Y ahorra tokens (hoy el rubro se
+   repite por línea). Ojo: re-renderiza el catálogo entero → recalibrar lo que lee
+   formato de línea (leyendas de `*`/`**`/corchetes en el prompt) y re-correr goldens.
+5. **Carga de lo nuevo de TG** — fotocopias, escaneo, PPT por hoja, etc. (según respuestas).
+6. **Suite-4 en lenguaje de mostrador** — casos escritos en palabras de cliente real,
+   no en nombres de catálogo (los gaps de sinónimos son invisibles a las suites actuales).
+
+**Diseño ya acordado (no rediscutir de cero):** capa OVERLAY `bot.producto_meta` —
+`display_name`, sinónimos extra, dedupe/merge, re-agrupado — **sin tocar**
+`products`/`product_variants` (el motor del mostrador no se entera). El LLM propone el
+mapping offline, **Martin revisa el diff UNA vez**, queda persistido como migración que
+aplica Martin. Las vistas `bot.taxonomia`/`bot.variantes` pasan a leer el overlay.
+
+**Insumos:** `plans/matriz-situaciones-universidad.md` (34 casos con veredictos) ·
+respuestas de TG al paquete (sección más abajo; si aún no llegaron, el dedupe y los
+sinónimos NO dependen de ellas — arrancar igual) · el método del "catálogo anotado"
+(script que reconstruye la foto real desde el seed — regenerable, pedirle a Claude que
+lo rearme desde `seed-prod-catalog.sql` con audience='publico').
+
+**Al terminar:** re-import + toggle (cache), correr suite-4 + regresión de goldens
+(R2, R10, R11, R15), y recién ahí promptfoo.
+
+---
+
+## Cómo usamos a Fable (workflow vigente — pedido de Martin)
+
+Instrucción original de Martin (2026-07-21, verbatim): *"Desplegá un bot Fable para
+contrastar tus decisiones sobre las soluciones a los problemas que vamos encontrando,
+vos las aplicas."*
+
+**El patrón:** al inicio de la sesión, Claude despliega UN agente Fable (Agent tool) y
+lo **continúa vía SendMessage durante toda la sesión** (mantiene el contexto acumulado
+de todas las rondas — no spawnear uno nuevo por pregunta). Para cada problema:
+1. Claude diagnostica y arma una propuesta CON alternativas y su descarte razonado.
+2. Se la manda a Fable pidiéndole explícitamente que **refute** (no que valide): bordes,
+   falsos positivos, casos que la propuesta fabrica.
+3. Fable valida, enmienda o rechaza; **Claude aplica** lo que sobrevive, con caso de
+   harness + golden de suite + commit por tema.
+
+**Por qué funciona (evidencia de la sesión 2026-07-21):** Fable enmendó o mejoró casi
+todas las propuestas — rank 3 devolviendo TODAS las variantes (ambiguo honesto en vez
+de sin_match), el gap "dirección de correo" en la cascada de 1ª mención ANTES de que
+apareciera en un test, el rechazo de cantidad-first sin marcador (trampa UX de preguntar
+e ignorar), el sobre-disparo del ancla libro (encuadernar-ya-impreso), la clase C-cara
+de la matriz, y el lookup de brackets como espejo del motor (orden original del array).
+El costo es ~1-3 min por contraste; el retorno fue real en cada ronda.
 
 ---
 
@@ -120,6 +185,18 @@ Se corre cuando Martin dé por cerrado el build. Golden cases: confabulación (r
 - Deploy a prod en **KVM 4 de TG** (sin contratar aún) + avisar a TG del cobro Meta por mensaje desde **1-oct-2026**.
 
 ---
+
+## Mapa de commits — sesión 2026-07-21/22 (ronda 2 en vivo → v10.7)
+
+`c532533` "única" oculta en render · `ae448fb` tabla sin pie · `4ae7d32` variante solo
+desde DB (fix "X de X") · `e8ad5a0` rank 3 + leyenda rubro + nombre canónico (clase OPP) ·
+`162bf82` R11 recalibrado (2c directo = camino ideal) · `d184220` log stale/taller ·
+`06dccef` cascada 1ª mención (fix "a nuestro email nuestro mail") · `debc09a` v10.5
+oferta por página (libros) · `f1da716` matriz 34 situaciones universitarias · `1723fa3`
+v10.6 multi-ítem reactivo · `39ff2d5` v10.7 cantidad-first + stale out + datos
+operativos · `04f81e2` ronda 6 docs (13 respuestas de Martin).
+Estado al cierre: harness 28/28; workflow con TODO aplicado pendiente de re-import +
+toggle + Ronda 2 (R1-R16) + regresión suite-2.
 
 ## Mapa de commits de la última tanda (2026-07-20/21)
 `7dd335f` motivo handoff · `674fd2d` backstop anti-repetición · `fdc0e9c` v7 · `dad26d6` v8 · `d0e9691` retry firewall · `1f36c0b` v9 · `fc769e9` error workflow.
