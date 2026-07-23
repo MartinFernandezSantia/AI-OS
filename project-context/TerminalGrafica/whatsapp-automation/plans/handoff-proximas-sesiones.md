@@ -60,26 +60,45 @@ natural replayable en prod.
    guardado, no-op si el rol no existe). Sanity post-ronda sigue vigente: debe
    aparecer `pregunto_opciones`/`cotizador_answer` en `bot.decisiones` y el
    menú numerado en WhatsApp.
-3. Re-importar `faq-bot-v7.json` (C2: 7 nodos nuevos — Get Ruta Cotizador, Prompt
+3. Re-importar `faq-bot-v7.json` (60 nodos: C2 = Get Ruta Cotizador, Prompt
    Cotizador, Get Opciones, Armar Menu Opciones, Enviar Menu, Log Menu, Forzar
-   Ruta General). Verificar creds de los Postgres nuevos (Bot Readonly DB) y de
-   Enviar Menu (Chatwoot API Token); abrir/guardar **Log Menu** (schema cache) +
-   **TOGGLE**. v6 sigue desactivado de rollback.
+   Ruta General + **isla refrescar-catalogo**, ver abajo). Verificar creds de los
+   Postgres nuevos (Bot Readonly DB) y de Enviar Menu (Chatwoot API Token);
+   abrir/guardar **Log Menu** (schema cache) + **TOGGLE**. v6 sigue desactivado
+   de rollback.
+   - **Isla refrescar-catalogo (commit 6710925):** 3 nodos SIN conexión al flujo
+     principal. Bookmark `http://localhost:5678/webhook/refrescar-catalogo` (GET)
+     → purga el cache del catálogo al instante (responde `cache_purgado: true`).
+     OJO: solo la URL de PRODUCCIÓN persiste el purgado (staticData no se guarda
+     en ejecuciones manuales) — el botón Execute del editor NO sirve. Reemplaza
+     el toggle post-SQL. En prod: cerrar el path por firewall o header secreto.
 4. Verificar el dato del anillado 24hs (query §Ronda 4 tabla I12) y confirmar si
    entre los casos 5→7 de ronda 1 hubo conversación nueva (si sí, la "dirección
    repetida" fue correcta per-conversation).
 5. **Ronda 2 de suite-5**: casos C2 (22-29) primero, después 1-21 completos +
    regresión suite-3 vigente / suite-2 / matriz. Reportar para el loop de fixes.
-6. **Pasada 1 de curación** — PIVOT 2026-07-23 (decisión Martin): la curación la
-   propone una sesión de Claude vía skill **`/tg-curar-catalogo`** (Claude propone
-   displays gramaticalmente correctos de cara al cliente, sin inventar datos,
-   genera preguntas a TG donde falte info, verifica colisiones y emite el .sql
-   por clave natural; Martin aprueba por tandas y aplica). Insumo: correr
-   `db/curador-export.sql` → `catalogo-export.json`. Scope §Ronda 4 sigue:
-   displays 75/106, por_pack, por_pagina, anillados sin plazo I14 (los 4 valen
-   $2.400 → línea única sin conflicto de precio). `tools/curador-catalogo.html`
-   queda como fallback visual si Martin prefiere clickear.
+6. **Pasada 1 de curación — ✅ HECHA Y APLICADA 2026-07-23** con la skill
+   `/tg-curar-catalogo` (pivot del curador visual, que queda de fallback).
+   Artefactos: `db/curacion-2026-07-23.sql` (aplicado) + `.md` de decisiones +
+   preguntas 35-41 en `preguntas-tg.md`. Verificado contra export post-aplicación:
+   displays con acento, anillados I14 consolidados en línea única «Anillado
+   plástico a4/oficio» (48/72/96 hs ocultos), 3 ocultos, por_pack refinado.
 7. promptfoo cuando declares el build cerrado.
+
+**PRÓXIMA SESIÓN — contexto listo (dejado 2026-07-23 noche):**
+- Martin trae los **resultados de la ronda 2 de suite-5** (paso 5) → loop de
+  fixes. Antes de diagnosticar cualquier incidente de resolución/render, cargar
+  **`db/export-actualizado-catalogo.json`** — es el catálogo CURADO Y APLICADO
+  (export 2026-07-23 21:25, post-curación, sin mojibake, 88 productos, 3 ocultos):
+  el estado real que el bot ve en la ronda 2. No pedir re-export salvo sospecha
+  de cambios del mostrador posteriores.
+- Complementos: `db/curacion-2026-07-23.md` (qué se decidió y por qué),
+  preguntas 35-41 pendientes de TG (gates de datos), plan
+  `plans/faq-bot-v7-cotizador.md` §Rondas 4-6 (guards, C2, semántica REAL de
+  Get Precio: rank 2 = LIKE contiguo sin word-subset).
+- Recordatorios para el loop de fixes: correr `node tests/code-harness.js` tras
+  tocar Code nodes; contraste Fable para todo cambio de diseño; cache se purga
+  con el bookmark de la isla (no toggle).
 
 ---
 
