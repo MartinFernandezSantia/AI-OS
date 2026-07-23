@@ -11,7 +11,7 @@ const path = require('path');
 const WF = path.join(__dirname, '..', 'n8n', 'flows', 'faq-bot-v7.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
-const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio') };
+const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM') };
 
 function runNodeCode(file, mocks) {
   const code = CODES[file];
@@ -329,6 +329,86 @@ async function main() {
     [{ ...base, variante: 'Simple Faz', nombre_canonico: '500 Tarjetas Color/Negro', precio_lista: 28000 }],
     decidir({ userMessage: 'necesito 150 tarjetas, cuánto?' }));
   console.log('A39 pack telemetria:', r[0].json.notas.includes('(pack?)') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // ===== C2: parsear opciones/volver + menu deterministico + ruta =====
+  const parsearC2 = (llmContent, dec, ruta) => runNodeCode('parsear.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { rutaCotizador: !!ruta } : {} }) }),
+    $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
+  });
+
+  // P15: action opciones — productos slice 3, faltan filtrado por whitelist.
+  r = await parsearC2(JSON.stringify({ action: 'opciones', productos: ['A', 'B', 'C', 'D'], faltan: ['cantidad', 'basura', 'paginas'] }), decidir(), false);
+  console.log('P15 opciones:', r[0].json.action === 'opciones' && r[0].json.opciones.productos.length === 3 && JSON.stringify(r[0].json.opciones.faltan) === '["cantidad","paginas"]' && r[0].json.reply === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.opciones));
+
+  // P16: volver EN ruta cotizador -> pasa.
+  r = await parsearC2(JSON.stringify({ action: 'volver', reply: '', motivo: '' }), decidir(), true);
+  console.log('P16 volver en ruta:', r[0].json.action === 'volver' ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // P17: volver FUERA de ruta (main) -> handoff con motivo (cota del ciclo).
+  r = await parsearC2(JSON.stringify({ action: 'volver', reply: '', motivo: '' }), decidir(), false);
+  console.log('P17 volver fuera de ruta:', r[0].json.action === 'handoff' && r[0].json.motivo.includes('fuera de ruta') ? 'OK' : 'FAIL ' + r[0].json.action + ' ' + r[0].json.motivo);
+
+  // helper menu
+  const menu = (opcionesObj, rows, dec) => runNodeCode('menu.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { opciones: opcionesObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    $input: { all: () => rows.map((j) => ({ json: j })), first: () => ({ json: rows[0] || {} }) },
+  });
+  const vRow = (prod, vari, extra = {}) => ({ producto_id: 'p-' + prod, nombre_canonico: prod, variante: vari, por_pagina: false, n_reglas_cantidad: 1, tiene_override: false, precio_lista: 100, ...extra });
+
+  // M1: 1 producto, 4 variantes -> menu numerado + pregunta de cantidad (qr=1).
+  r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: [] },
+    ['simple faz b/n', 'simple faz color', 'doble faz b/n', 'doble faz color'].map((v) => vRow('Impresiones papel obra 75 gr', v)),
+    decidir({ userMessage: 'cuanto salen las impresiones?' }));
+  console.log('M1 menu numerado:', r[0].json.reply.includes('1. simple faz b/n') && r[0].json.reply.includes('4. doble faz color') && r[0].json.reply.includes('número de la opción') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M2: 2 productos -> dos niveles (header por producto) + numeracion continua.
+  r = await menu({ productos: ['A', 'B'], faltan: [] },
+    [vRow('Prod A', 'x'), vRow('Prod A', 'y'), vRow('Prod B', 'z')],
+    decidir({ userMessage: 'precio?' }));
+  console.log('M2 dos niveles:', r[0].json.reply.includes('Prod A:') && r[0].json.reply.includes('Prod B:') && r[0].json.reply.includes('3. z') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M3: faltan solo-datos con producto definido -> pregunta unica, SIN menu.
+  r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: ['paginas', 'copias'] },
+    [vRow('Impresiones papel obra 75 gr', 'simple faz b/n', { por_pagina: true })],
+    decidir({ userMessage: 'simple faz b/n' }));
+  console.log('M3 faltan targeted:', r[0].json.reply.includes('cuántas páginas') && r[0].json.reply.includes('cuántas copias') && !r[0].json.reply.includes('Tenemos estas opciones') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M4: 0 filas (nombres irresolubles) -> reply fijo + telemetria de curacion.
+  r = await menu({ productos: ['Impresiones a4 s/f color'], faltan: [] }, [], decidir({ userMessage: 'A4 sf color' }));
+  console.log('M4 sin match:', r[0].json.reply.includes('qué producto querés cotizar') && r[0].json.notas.includes('menu_sin_match') && r[0].json.notas.includes('Impresiones a4 s/f color') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // M5: anti-loop — el mismo menu ya salio 2 veces -> derivacion fija, antiLoop true.
+  const rowsLoop = [vRow('Prod A', 'x')];
+  const primera = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?' }));
+  const menuTxt = primera[0].json.reply;
+  r = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?', lastBotReplies: [menuTxt, menuTxt] }));
+  console.log('M5 anti-loop:', r[0].json.antiLoop === true && r[0].json.reply.includes('terminalgrafica@gmail.com') && r[0].json.notas.includes('anti-loop') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // helper mensajes (ruta)
+  const CATALOGO_MOCK = 'RUBRO: Impresiones\n- Prod A — opciones: x**, y*\n- Prod SinPrecio — opciones: z\n\nRUBRO: Otros\n- Prod B — opciones: w*';
+  const mensajes = (rutaRow, inputJson, dec) => runNodeCode('mensajes.js', {
+    $: (name) => ({ first: () => ({ json:
+      name === 'Decidir' ? dec :
+      name === 'Get Ruta Cotizador' ? rutaRow :
+      name === 'Prompt Cotizador' ? { promptCotizador: 'PROMPT_COT __CATALOGO__' } :
+      name === 'System Prompt' ? { systemPrompt: 'PROMPT_MAIN __CATALOGO__' } : {} }) }),
+    $input: { first: () => ({ json: inputJson }) },
+  });
+
+  // M6: ruta activa (pregunto_opciones reciente) -> prompt especialista + catalogo
+  // FILTRADO (solo lineas con *, sin Prod SinPrecio) y sin avisoNote.
+  r = await mensajes({ accion: 'pregunto_opciones', edad_seg: 120 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [{ role: 'user', content: 'hola' }] }));
+  let sys = r[0].json.llmMessages[0].content;
+  console.log('M6 ruta especialista:', r[0].json.rutaCotizador === true && sys.startsWith('PROMPT_COT') && sys.includes('Prod A') && sys.includes('Prod B') && !sys.includes('SinPrecio') && r[0].json.llmMessages.length === 3 ? 'OK' : 'FAIL ruta=' + r[0].json.rutaCotizador + ' msgs=' + r[0].json.llmMessages.length + '\n' + sys);
+
+  // M7: ruta vieja (edad > TTL) o accion no-cotizadora -> main; forzarGeneral pisa.
+  r = await mensajes({ accion: 'pregunto_opciones', edad_seg: 5000 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [] }));
+  const mainOk = r[0].json.rutaCotizador === false && r[0].json.llmMessages[0].content.startsWith('PROMPT_MAIN');
+  r = await mensajes({ accion: 'cotizador_answer', edad_seg: 60 }, { _catalogo: CATALOGO_MOCK, forzarGeneral: true }, decidir({ conversation: [] }));
+  const forzOk = r[0].json.rutaCotizador === false;
+  r = await mensajes({ accion: 'cotizador_answer', edad_seg: 60 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [] }));
+  const stickyOk = r[0].json.rutaCotizador === true;
+  console.log('M7 ruta ttl/forzar/sticky:', mainOk && forzOk && stickyOk ? 'OK' : 'FAIL ' + [mainOk, forzOk, stickyOk].join(','));
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
