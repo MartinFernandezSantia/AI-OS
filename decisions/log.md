@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-23 — Bot TG: los fallos de resolución repreguntan por WhatsApp (nunca email) y el menú se humaniza
+
+**Decision:** Dos derivadas de la ronda 2 de suite-5 (notas de Martin). (1) Cuando el sistema no puede resolver la clave producto/variante que emitió el LLM (`sin_match`/`ambiguo`) o un guard bloquea el número (nicho medicina, faz incoherente), el bot REPREGUNTA por WhatsApp y la ruta queda en el especialista — la derivación a email se reserva para precios que el sistema legítimamente no puede dar (override, multi-regla, precio $0, dorso, papel especial). (2) El menú de opciones se humaniza determinísticamente: elección por nombre con el número como atajo ("vale mandar solo el número"), orden natural de números, packs de la misma familia pivotados (variantes una vez + packs en el header), y una sola opción = frase natural sin menú. La idea alternativa de una 2ª llamada LLM post-menú queda descartada por ahora.
+
+**Why:** En la ronda 2, cada `sin_match` moría en "escribinos al email" — exactamente el funnel que la decisión 2026-07-22 eliminó, reapareciendo por la puerta de atrás. Repreguntar cuesta un mensaje pero mantiene viva la cotización, y el anti-loop (2 repreguntas iguales → email) acota el costo. El menú de 12 líneas en orden 100/1000/500 y los menús de 1 opción se sentían de robot (nota de Martin: las interacciones deben sentirse humanas y cada mensaje de WhatsApp cuesta plata desde oct-2026 — menos mensajes, más densos). Todo lo del menú se resolvió sin tokens nuevos; cambiaría la decisión del pivot si el LLM chico no logra mapear "<pack> <familia>" de vuelta (marcador: `sin_match` creciendo tras menús `menu_pack`).
+
+**Alternatives considered:** 2ª instancia LLM que post-procese menús (costo/latencia/riesgo de hallucination en paso monetario; reevaluar en ronda 3 si los menús siguen torpes). Dejar `sin_match` → email (mata la conversación). Word-subset matching en Get Precio para rescatar claves inventadas (riesgo de match equivocado con plata; la repregunta es más segura).
+
+**Owner:** Martin.
+
 ## 2026-07-22 — Bot TG: WhatsApp informa TODO (precios y totales); el email queda solo para encargar
 
 **Decision:** Cambio de producto en el bot de TG. El funnel v10.x "precio/cotización → email" se reemplaza: el cliente se informa todo (precios, opciones, totales estimados por cantidad) por WhatsApp; el email queda solo para concretar el pedido (mandar el archivo). Se implementa como faq-bot-v7 "cotizador" (plan validado en `project-context/TerminalGrafica/whatsapp-automation/plans/faq-bot-v7-cotizador.md`): recolección de datos mínimos en UN mensaje + total determinístico precio × cantidad con brackets. El LLM sigue sin tipear montos; n8n multiplica.
