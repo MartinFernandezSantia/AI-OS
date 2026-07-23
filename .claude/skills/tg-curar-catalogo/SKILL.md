@@ -41,8 +41,9 @@ ruta). Al leerlo:
 
 1. **No inventar datos.** El display solo puede reordenar, completar gramaticalmente o
    clarificar información que YA está en la fila (nombre vivo, variante, color, unidad,
-   categoría). Si un nombre AFIRMA algo que nadie confirmó, o falta un dato para
-   nombrar bien, NO lo horneés en el display: display neutro + pregunta al negocio.
+   categoría). Ojo: la DB NO es el catálogo original de TG — es una transcripción
+   manual, y un nombre puede AFIRMAR algo que nadie confirmó (ver sección siguiente).
+   Lo no corroborado no se hornea en el display: display neutro + pregunta al negocio.
    Caso canónico: módulos de medicina — la única variante dice "Impresion a4 s/f color"
    pero nadie confirmó que sea el único formato (pregunta 34 de `preguntas-tg.md`).
 2. **No perder calificadores que desambiguan.** El incidente I2 (75 gr ↔ 106 gr) nació
@@ -57,6 +58,36 @@ ruta). Al leerlo:
    precio es por pack?, ¿estos dos productos son lo mismo?) va a `preguntas-tg.md`
    (única fuente; numeración continua; sección 2 catálogo o 6 cotizador según pegue).
    Mientras tanto el display queda neutro o el producto se oculta si es basura.
+
+## Detección de datos no corroborados (sin el catálogo original)
+
+No existe versión digitalizada del catálogo original de TG: `public.products` es la
+única copia, cargada a mano. Verificar por comparación es imposible hasta que llegue
+la **foto de la lista de precios del mostrador (pregunta 30 de `preguntas-tg.md`)** —
+si ya existe, pedila y cotejá nombre por nombre; es la fuente de corroboración real.
+
+Mientras no esté, la regla operativa es: **un atributo está corroborado solo si la
+propia familia lo respalda desde ≥2 lugares independientes**. Señales estructurales
+de "dato afirmado, no corroborado" — barrer TODAS en cada pasada:
+
+- **Afirmación sin eje** (la clase medicina): variante ÚNICA cuyo nombre afirma
+  valores de un eje (simple/doble faz, color/b-n, tamaño) sin hermanas que ofrezcan
+  la alternativa. Si el producto no expone la elección, ¿quién dijo que ese es el
+  formato? → pregunta a TG + display neutro.
+- **Contradicción interna**: la unidad dice una cosa y el nombre otra (unidad PAGINA
+  con nombre que afirma tamaño+faz+color); gramaje del producto ≠ gramaje de la
+  variante; atributo del nombre del producto que ninguna variante refleja.
+- **Variantes `.` o iguales al producto**: toda la información vive en el nombre del
+  producto → cada atributo ahí es afirmación única, sin segunda fuente. Máxima
+  sospecha antes de expandirlo en un display.
+- **Fuera del patrón del rubro**: todos los hermanos exponen el eje sf/df y este no;
+  precio fuera de la escala de la familia; nombre que mezcla ejes de otro rubro.
+- **Duplicados** (p. ej. "Sobre Ingles" en dos rubros con precios distintos): ¿cuál
+  vive? → pregunta u ocultar uno, nunca adivinar.
+- **El precio no corrobora nada** si es $0, tiene override o reglas de cantidad.
+
+Salida de este barrido: cada señal se resuelve como pregunta a TG o como ocultamiento
+propuesto — nunca como un display que "completa" la información faltante.
 
 ## Proceso
 

@@ -557,3 +557,12 @@ sesión propone por rubro → OK Martin → `db/curacion-YYYY-MM-DD.sql` + `.md`
 decisiones + diff de preguntas → aplicar + TOGGLE + replay. La herramienta
 `tools/curador-catalogo.html` queda como fallback visual (loader ya robusto a
 envoltura del SQL editor y mojibake, commit ffbc2bf).
+
+**Enmienda r6 (objeción de Martin):** el export no trae el catálogo original de TG
+(no existe digitalizado; `public.*` es transcripción manual), así que la skill no
+puede detectar invención POR COMPARACIÓN. Mecanismo agregado a la skill: barrido de
+**señales estructurales de dato no corroborado** (afirmación sin eje = clase
+medicina, contradicción unidad/nombre, variantes `.`, fuera del patrón del rubro,
+duplicados) — cada señal termina en pregunta a TG u ocultamiento, nunca en un
+display que "completa" info. Upgrade real: la foto de la lista del mostrador
+(pregunta 30) habilita el cotejo nombre por nombre.
