@@ -2,8 +2,10 @@
 // Armar Respuesta Precio). node --check solo valida sintaxis; esto EJECUTA el codigo
 // con mocks de $ / $input y cubre los caminos: answer, backstop 1a mencion, precio
 // single, campo mas, JSON ilegible, plata tipeada, limpio, caveat, tabla de rangos,
-// mas mixto, sql_error, backstop dorso, rank filter y el cotizador v7 (totales,
-// paginas/copias, gates df/cap/por_pagina, extras con cantidad).
+// mas mixto, sql_error, backstop dorso, rank filter, el cotizador v7 (totales,
+// paginas/copias, gates df/cap/por_pagina, extras con cantidad) y r6 (faz inversa,
+// nicho medicina, sin_match/ambiguo -> repregunta con ruta, orden natural, pivot
+// de packs, opcion unica, repeatNote).
 // Correr tras CUALQUIER edicion de esos nodos:  node tests/code-harness.js
 // (Nacido del incidente 2026-07-21: "obj is not defined" — scope bug invisible para --check.)
 const fs = require('fs');
@@ -336,9 +338,10 @@ async function main() {
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
   });
 
-  // P15: action opciones — productos slice 3, faltan filtrado por whitelist.
-  r = await parsearC2(JSON.stringify({ action: 'opciones', productos: ['A', 'B', 'C', 'D'], faltan: ['cantidad', 'basura', 'paginas'] }), decidir(), false);
-  console.log('P15 opciones:', r[0].json.action === 'opciones' && r[0].json.opciones.productos.length === 3 && JSON.stringify(r[0].json.opciones.faltan) === '["cantidad","paginas"]' && r[0].json.reply === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.opciones));
+  // P15: action opciones — productos slice 4 (r6: 3 packs de tarjetas llenaban el
+  // cupo y el 2do item del pedido quedaba afuera), faltan filtrado por whitelist.
+  r = await parsearC2(JSON.stringify({ action: 'opciones', productos: ['A', 'B', 'C', 'D', 'E'], faltan: ['cantidad', 'basura', 'paginas'] }), decidir(), false);
+  console.log('P15 opciones:', r[0].json.action === 'opciones' && r[0].json.opciones.productos.length === 4 && JSON.stringify(r[0].json.opciones.faltan) === '["cantidad","paginas"]' && r[0].json.reply === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.opciones));
 
   // P16: volver EN ruta cotizador -> pasa.
   r = await parsearC2(JSON.stringify({ action: 'volver', reply: '', motivo: '' }), decidir(), true);
@@ -359,7 +362,7 @@ async function main() {
   r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: [] },
     ['simple faz b/n', 'simple faz color', 'doble faz b/n', 'doble faz color'].map((v) => vRow('Impresiones papel obra 75 gr', v)),
     decidir({ userMessage: 'cuanto salen las impresiones?' }));
-  console.log('M1 menu numerado:', r[0].json.reply.includes('1. simple faz b/n') && r[0].json.reply.includes('4. doble faz color') && r[0].json.reply.includes('número de la opción') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('M1 menu numerado:', r[0].json.reply.includes('1. simple faz b/n') && r[0].json.reply.includes('4. doble faz color') && r[0].json.reply.includes('cuál opción querés') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M2: 2 productos -> dos niveles (header por producto) + numeracion continua.
   r = await menu({ productos: ['A', 'B'], faltan: [] },
@@ -409,6 +412,142 @@ async function main() {
   r = await mensajes({ accion: 'cotizador_answer', edad_seg: 60 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [] }));
   const stickyOk = r[0].json.rutaCotizador === true;
   console.log('M7 ruta ttl/forzar/sticky:', mainOk && forzOk && stickyOk ? 'OK' : 'FAIL ' + [mainOk, forzOk, stickyOk].join(','));
+
+  // ===== r6 (fixes ronda 2 suite-5) =====
+
+  // A40: guard faz INVERSA (caso 14 real) — cliente pidio simple faz, el LLM
+  // resolvio doble faz -> repregunta, jamas el numero del doble faz.
+  r = await armar({ ...pBase, variante: 'doble faz b/n' },
+    [{ ...base, variante: 'doble faz b/n' }],
+    decidir({ userMessage: 'apuntes de 30 páginas, 50 copias, simple faz b/n, ¿total?' }));
+  console.log('A40 faz inversa:', r[0].json.estado === 'fallback: faz_incoherente' && r[0].json.reply.includes('¿Lo querés simple faz o doble faz?') && r[0].json.accionLog === 'pregunto_opciones' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A41: sin_match -> repregunta SIN email (decision "WhatsApp informa todo"),
+  // accionLog pregunto_opciones (la ruta queda en el especialista) + telemetria.
+  r = await armar({ ...pBase, producto: 'Impresiones a4 s/f color', variante: 'simple faz b/n' },
+    [], decidir({ userMessage: 'quiero imprimir unos apuntes en PDF, 180 páginas' }));
+  console.log('A41 sin_match repregunta:', r[0].json.estado === 'fallback: sin_match' && r[0].json.reply.includes('¿Me lo decís de nuevo') && !r[0].json.reply.includes('@') && r[0].json.accionLog === 'pregunto_opciones' && r[0].json.notas.includes('(repregunta)') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A42: guard NICHO (casos 4/5 reales) — resolvio medicina sin que el cliente
+  // dijera medicina -> repregunta del nicho, jamas el precio especial.
+  const rowMed = { ...base, variante: '.', nombre_canonico: 'Impresión de módulos/apuntes de medicina', por_pagina: true, tiene_reglas: true, solo_descuentos: true, mostrable: false, precio_lista: 45 };
+  r = await armar({ ...pBase, producto: 'Impresión de módulos/apuntes de medicina', variante: '', paginas: 180, copias: 2 },
+    [rowMed], decidir({ userMessage: 'quiero imprimir unos apuntes en PDF, 180 páginas, 2 copias' }));
+  console.log('A42 nicho bloqueado:', r[0].json.estado === 'fallback: producto_nicho' && r[0].json.reply.includes('medicina') && !r[0].json.reply.includes('$') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A43: nicho MENCIONADO -> el precio especial fluye normal (total por paginas
+  // con solo_descuentos=true como techo permitido).
+  r = await armar({ ...pBase, producto: 'Impresión de módulos/apuntes de medicina', variante: '', paginas: 180, copias: 2, template: 'Sale {{PRECIO}}.' },
+    [rowMed], decidir({ userMessage: 'necesito imprimir los módulos de medicina, 180 páginas, 2 copias' }));
+  console.log('A43 nicho mencionado:', r[0].json.estado === 'ok_caveat' && r[0].json.reply.includes('$45,00') && r[0].json.reply.includes('total estimado $16.200,00') && r[0].json.accionLog === 'informo_precio' ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A44: anti-loop de repregunta — la misma repregunta ya salio 2 veces -> email.
+  const repregunta = 'No estoy seguro de qué producto es. ¿Me lo decís de nuevo o me contás para qué lo necesitás? Así te paso las opciones y el precio.';
+  r = await armar({ ...pBase, producto: 'Zzz', variante: '' },
+    [], decidir({ userMessage: 'zzz', lastBotReplies: [repregunta, repregunta] }));
+  console.log('A44 repregunta anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica@gmail.com') ? 'OK' : 'FAIL ' + r[0].json.accionLog + ' | ' + r[0].json.reply);
+
+  // A45: sobre una repregunta NO se renderizan extras (reapareceran en el
+  // follow-up; una pregunta con precios colgados es sopa).
+  r = await armar({ ...pBase, producto: 'Zzz', variante: '', mas: [{ producto: 'Impresiones a3 tonner negro', variante: 'única' }] },
+    [{ ...rangosRow, idx: 2 }], decidir({ userMessage: 'zzz y a3' }));
+  console.log('A45 extras en repregunta:', r[0].json.estado === 'fallback: sin_match' && !r[0].json.reply.includes('El de ') && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // A46: ambiguo (rank 3 multi-variante) -> menu rescate numerado nombrando el
+  // producto, accionLog pregunto_opciones (antes: email).
+  r = await armar({ ...pBase, producto: 'Soportes Especiales', variante: 'Vinilos de Corte' },
+    [{ ...base, variante: 'Chico', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9' },
+     { ...base, variante: 'Grande', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9', precio_lista: 15000 }],
+    decidir({ userMessage: 'vinilos' }));
+  console.log('A46 ambiguo menu rescate:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('opciones de Vinilos de Corte:') && r[0].json.reply.includes('1. Chico') && r[0].json.reply.includes('2. Grande') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // A47: los fallbacks legitimos de precio SIGUEN derivando a email con accionLog
+  // informo_precio (override: el sistema de verdad no puede dar ese numero).
+  r = await armar({ ...pBase }, [{ ...base, tiene_override: true }], decidir({ userMessage: 'precio a3?' }));
+  console.log('A47 override sigue email:', r[0].json.estado === 'fallback: override' && r[0].json.reply.includes('te lo cotiza el equipo') && r[0].json.accionLog === 'informo_precio' ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.accionLog);
+
+  // M8: orden natural (caso 21 real) — 100/500/1000 como numeros, no como strings.
+  r = await menu({ productos: ['100 Tarjetas Color/Negro', '1000 Tarjetas Color/Negro', '500 Tarjetas Color/Negro'], faltan: [] },
+    [vRow('1000 Tarjetas Color/Negro', 'Doble Faz'), vRow('1000 Tarjetas Color/Negro', 'Simple Faz'),
+     vRow('100 Tarjetas Color/Negro', 'Doble Faz'),
+     vRow('500 Tarjetas Color/Negro', 'Doble Faz'), vRow('500 Tarjetas Color/Negro', 'Simple Faz')],
+    decidir({ userMessage: 'tarjetas?' }));
+  let i100 = r[0].json.reply.indexOf('100 Tarjetas'), i500 = r[0].json.reply.indexOf('500 Tarjetas'), i1000 = r[0].json.reply.indexOf('1000 Tarjetas');
+  console.log('M8 orden natural:', i100 >= 0 && i100 < i500 && i500 < i1000 ? 'OK' : 'FAIL ' + [i100, i500, i1000].join(',') + '\n' + r[0].json.reply);
+
+  // M9: pivot de packs (caso 21 real) — misma familia + variantes identicas ->
+  // variantes UNA vez, packs en el header, 12 lineas colapsan a 4.
+  const varsTarj = ['Doble Faz', 'Doble Faz Encapsuladas', 'Simple Faz', 'Simple Faz Encapsuladas'];
+  r = await menu({ productos: ['100 Tarjetas Color/Negro', '1000 Tarjetas Color/Negro', '500 Tarjetas Color/Negro'], faltan: [] },
+    ['100', '500', '1000'].flatMap((p) => varsTarj.map((v) => vRow(p + ' Tarjetas Color/Negro', v))),
+    decidir({ userMessage: 'cuánto salen las tarjetas personales?' }));
+  console.log('M9 pivot packs:', r[0].json.reply.includes('Tarjetas Color/Negro — packs de 100, 500 o 1000:') && r[0].json.reply.includes('4. Simple Faz Encapsuladas') && !r[0].json.reply.includes('5.') && r[0].json.reply.includes('de qué pack') && r[0].json.notas.includes('menu_pack') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M10: opcion UNICA (caso 5 real) -> frase natural, sin menu numerado.
+  r = await menu({ productos: ['Anillado plástico a4/oficio'], faltan: [] },
+    [vRow('Anillado plástico a4/oficio', '.', { n_reglas_cantidad: 0 })],
+    decidir({ userMessage: 'cuánto sale anillar?' }));
+  console.log('M10 opcion unica:', !r[0].json.reply.includes('1.') && r[0].json.reply.includes('Para eso tenemos Anillado plástico a4/oficio') && r[0].json.notas.includes('menu_unico') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M11: guard nicho en menu — medicina sin mencion -> repregunta del nicho;
+  // con mencion -> el producto entra normal.
+  const rowsMed = [vRow('Impresión de módulos/apuntes de medicina', '.', { por_pagina: true, n_reglas_cantidad: 0 })];
+  r = await menu({ productos: ['Impresión de módulos/apuntes de medicina'], faltan: [] }, rowsMed,
+    decidir({ userMessage: 'quiero imprimir un libro que tengo en PDF' }));
+  const nichoOk = r[0].json.reply.includes('medicina (módulos/apuntes de la facultad)') && r[0].json.notas.includes('menu_nicho');
+  r = await menu({ productos: ['Impresión de módulos/apuntes de medicina'], faltan: [] }, rowsMed,
+    decidir({ userMessage: 'apuntes de medicina, 180 páginas' }));
+  const nichoPasa = r[0].json.notas.includes('menu_unico') && r[0].json.reply.includes('cuántas páginas');
+  console.log('M11 nicho menu:', nichoOk && nichoPasa ? 'OK' : 'FAIL ' + nichoOk + ',' + nichoPasa);
+
+  // ===== r6-review (ronda adversarial): H1/H2/H3/H6 =====
+
+  // A48 (H1): el eco del LLM ('doble faz') NO bypasea el guard dorso — con el
+  // escape mono, un pedido doble faz sobre la mono '.' daba el total simple-faz.
+  r = await armar({ ...pBase, producto: 'Impresión de módulos/apuntes de medicina', variante: 'doble faz', paginas: 180, copias: 2 },
+    [rowMed], decidir({ userMessage: 'necesito imprimir los módulos de medicina, 180 páginas, 2 copias, doble faz' }));
+  console.log('A48 dorso solo-DB:', r[0].json.estado === 'fallback: dorso' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A49 (H2): "folletos / flyers" ya no dispara pidioSF por substring — el pedido
+  // doble faz sobre fila doble faz fluye normal.
+  r = await armar({ ...pBase, variante: 'doble faz color', template: 'Sale {{PRECIO}}.' },
+    [{ ...base, variante: 'doble faz color' }],
+    decidir({ userMessage: 'quiero folletos / flyers doble faz, ¿precio?' }));
+  console.log('A49 s/f substring:', r[0].json.estado === 'ok' && r[0].json.reply.includes('$13.000,00') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A50 (H3): "medicina" dicho 4 mensajes atras sigue contando (ventana = toda la
+  // conversacion capeada por Decidir, no slice(-3)).
+  r = await armar({ ...pBase, producto: 'Impresión de módulos/apuntes de medicina', variante: '', paginas: 180, copias: 2, template: 'Sale {{PRECIO}}.' },
+    [rowMed], decidir({ userMessage: '2 copias', conversation: [
+      { role: 'user', content: 'hola, ¿imprimís apuntes de medicina?' },
+      { role: 'assistant', content: 'Sí.' },
+      { role: 'user', content: '¿y cuánto tardan?' },
+      { role: 'assistant', content: 'Lo confirma el equipo.' },
+      { role: 'user', content: 'son 180 páginas' },
+      { role: 'user', content: '2 copias' },
+    ] }));
+  console.log('A50 nicho ventana larga:', r[0].json.estado === 'ok_caveat' && r[0].json.reply.includes('total estimado $16.200,00') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // A51 (H6b): rescate de ambiguo con dos monos '.' -> una linea por producto,
+  // sin header duplicado ("Lona Mate: / 1. Lona Mate").
+  r = await armar({ ...pBase, producto: 'lona', variante: '' },
+    [{ ...base, variante: '.', match_rank: 2, nombre_canonico: 'Lona Mate', producto_id: 'L1' },
+     { ...base, variante: '.', match_rank: 2, nombre_canonico: 'Lona front brillo (ancho máx 1,52 m)', producto_id: 'L2', precio_lista: 16000 }],
+    decidir({ userMessage: 'una lona de 3x2' }));
+  console.log('A51 rescate sin header dup:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('1. Lona Mate') && r[0].json.reply.includes('2. Lona front brillo') && !r[0].json.reply.includes('Lona Mate:') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // A52 (H6a): el rescate tambien filtra el nicho — medicina no se OFRECE a quien
+  // nunca la nombro.
+  r = await armar({ ...pBase, producto: 'impresión', variante: '' },
+    [{ ...rowMed, match_rank: 2, producto_id: 'm1' },
+     { ...base, variante: '.', match_rank: 2, nombre_canonico: 'Impresiones a3 tonner negro', producto_id: 'a3' }],
+    decidir({ userMessage: 'cuánto sale una impresión?' }));
+  console.log('A52 rescate filtra nicho:', r[0].json.estado === 'fallback: ambiguo' && !r[0].json.reply.includes('medicina') && r[0].json.reply.includes('Impresiones a3 tonner negro') ? 'OK' : 'FAIL ' + r[0].json.estado + '\n' + r[0].json.reply);
+
+  // M12: repeatNote con la excepcion r6 (pregunta repetida / "???" nunca noop).
+  r = await mensajes({ accion: 'x', edad_seg: 9999 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [], lastBotReplies: ['Hoy estamos hasta las 20:00.'] }));
+  const noteRep = r[0].json.llmMessages[2].content;
+  console.log('M12 repeatNote excepcion:', noteRep.includes('REPITE') && noteRep.includes('NUNCA noop') ? 'OK' : 'FAIL ' + noteRep.slice(0, 200));
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
