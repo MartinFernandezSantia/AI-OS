@@ -170,6 +170,13 @@
   multiplicado; la aclaración de que el precio es del pack de 500 la da el nombre.
 - **BD:** `(cantidad ignorada: pack)`.
 
+**21. Variante presupuesta (I13, nota de Martin ronda 1):**
+- `¿cuánto salen las tarjetas personales?`
+- **Esperado:** si el producto tiene VARIAS variantes (simple faz / doble faz...)
+  y el cliente no eligió, va recolección 2b (opciones listadas verbatim), NUNCA el
+  precio directo de una variante supuesta (en ronda 1 asumió "Simple Faz" sin
+  preguntar). El precio recién sale cuando el cliente eligió.
+
 ---
 
 ## Verificación en BD (después de la ronda)

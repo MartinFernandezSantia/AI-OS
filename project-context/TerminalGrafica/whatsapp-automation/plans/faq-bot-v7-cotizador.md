@@ -421,6 +421,34 @@ capas con jerarquía fija, dos ya no opcionales.**
 | I12 anillado 24hs | Verificar dato: `select v.variante, v.precio_lista, v.tiene_override from bot.variantes v join bot.taxonomia t using (producto_id) where t.nombre_canonico ~* 'anillado.*24';` — si hay override legítimo, la conducta fue CORRECTA. | ⏸ dato |
 | I1/I2/I3 de fondo | Solo C2 + action opciones + curación de displays. | ⏸ C2 + curación |
 
+### Notas de Martin post-ronda (2026-07-23 — refinan el diagnóstico)
+
+- **El JSON del caso libro confirma que el CONTRATO funciona:** el LLM emitió
+  `paginas: 120, copias: 1` correctos — la extracción de campos es confiable. Lo
+  único roto es el naming: `producto: "Impresiones a4 s/f color"` (etiqueta
+  inventada) → 0 filas de Get Precio → email. Refuerza el diseño C2: con el menú
+  renderizado por Code node (strings reales), el eco del cliente resuelve y el
+  resto de la cadena YA anda. Además el menú fabricado era INCOMPLETO (solo s/f,
+  sin doble faz): otro argumento para el render determinístico.
+- **I13 — variante presupuesta sin preguntar:** en tarjetas el bot asumió "Simple
+  Faz" sin encapsular la pregunta (misma clase que la tabla d/f arbitraria de I1
+  corrida B). Multi-variante sin elección del cliente → recolección 2b, nunca
+  supuesto. Sin guard determinístico limpio (el vocabulario del cliente no mapea
+  verificablemente a nombres de variante) → mecanismo: C2/action opciones +
+  golden (suite-5 caso 21).
+- **I14 — tiempos incrustados en nombres (anillados 24/48/72/96 hs):** Martin no
+  quiere que el bot esté COMPROMETIENDO plazos vía nombre de producto. Va a la
+  pasada de curación: consolidar la visibilidad del anillado (ocultar los
+  por-tiempo y/o display sin plazo, una sola línea). **Decisión de producto
+  pendiente de Martin: qué precio muestra la línea consolidada** (¿el del plazo
+  estándar? ¿derivar el plazo al equipo?). OJO: esto MODIFICA la excepción v10.7
+  ("el plazo del anillado es opción elegible del catálogo") — al consolidar, esa
+  excepción muere y los plazos vuelven a ser 100% del equipo. Pega con I12 (el
+  24hs que derivó sin número: verificar si es override).
+- **Test 15:** el flujo mandó a Get Precio un producto distinto del pedido —
+  confirma la clase I2; cubierto por ventana papel + guard numerales donde hay
+  gramaje anclado; el resto de la clase se cierra con C2.
+
 ### Herramienta visual de curación (pedido de Martin — spec validada r4, build pendiente)
 
 **Flujo:** (1) query de export → JSON del estado completo (taxonomia + variantes +
@@ -451,5 +479,7 @@ decisiones** (trazabilidad). localStorage keyeado por timestamp del export
 **Scope de la PASADA 1 (sesgado a lo que causó bugs de plata):** displays 75/106 a
 máxima distintividad (interim sin TG: reordenar tokens; calificadores de papel =
 afirmaciones físicas → gate TG); flags `por_pack` (refinar los candidatos del
-seed v7b); completar `por_pagina`; dato del anillado 24hs; Tier B de v10.8 solo
-si la pasada viene fluida. NO re-curar sinónimos ya podados (calibración viva).
+seed v7b); completar `por_pagina`; dato del anillado 24hs; **consolidación de los
+anillados por-tiempo (I14: display sin plazo / ocultar duplicados — decisión de
+Martin sobre qué precio muestra la línea única)**; Tier B de v10.8 solo si la
+pasada viene fluida. NO re-curar sinónimos ya podados (calibración viva).
