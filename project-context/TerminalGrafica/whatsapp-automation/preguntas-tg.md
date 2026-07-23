@@ -1,6 +1,7 @@
 # Preguntas pendientes a TG — consolidado
 
-> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-23).
+> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-23,
+> incluye pasada 1 de curación: 35-41).
 > Ideal: UNA sola conversación. **Criterio transversal:** cada respuesta aterriza como
 > DATO (producto nuevo, sinónimo/display en el overlay, o línea de Info del negocio),
 > nunca como regla nueva de prompt.
@@ -40,6 +41,17 @@
 11. **Ítems de taller (encuadernado, refilado, troquelados, ojales, etc.):
     ¿cuándo aplican y cada cuánto son?** — ¿O se deja simple como está hoy?
     (pedido de Martin 2026-07-21).
+36. **"A5 ILUST. MATE 250 GR": la única variante cargada es "A4" ($600)** — y el
+    A4 de "Ilustración Mate 250 gr" sale $900. ¿La variante es en realidad A5
+    (mal cargada) o el producto duplica al otro? (pasada 1 de curación).
+37. **"Anillado Plastico a3": única variante "A4" ($3.200)** — ¿es A3 o A4?
+    (el a4/oficio sale $2.400). (pasada 1 de curación).
+38. **"Vinilo, Lona Brillo/Mate Uv" ($22.000, unidad "metro")** — ¿el precio es
+    por metro LINEAL o por m²? (el resto del UV va por m²). ¿Y se imprime en
+    lona además de vinilo? (ninguna variante lo refleja). (pasada 1).
+39. **Folios a4/oficio ($500 c/u): ¿son fundas plásticas o papel/hojas sueltas?**
+    — define sinónimos y casos de uso; en la pasada 1 se podaron "hojas a4" /
+    "papeles a4" / "papel bond", que cotizaban folios a quien pedía hojas.
 
 ## 3. Servicios implícitos (TG los calcula internamente y no están cargados)
 
@@ -68,11 +80,13 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 26. Transparencias/filminas. 27. Papel fotográfico. 28. Mapas/planos plegados.
 29. "Vinilo brillo" está en dos rubros (Solvente y UV): ¿hay un default de mostrador
     cuando el cliente no especifica?
+40. "Papel Autoadhesivo Brillo / Split": ¿qué es "Split"? (pasada 1).
+41. "Papel Obra Vegetal Color/Negro" (ploteo): ¿es papel obra y/o vegetal? (pasada 1).
 
 ## 5. Material a pedir
 
-30. **Foto de la lista de precios del mostrador** — descubre fotocopias y todo lo
-    que falta cargar de una sola vez (insumo #1 de la limpieza).
+30. ~~Foto de la lista de precios del mostrador~~ — **RESUELTA 2026-07-23, ver
+    tabla de abajo**: no va a existir; la fuente viva es el sistema quote-automation.
 
 ## 6. Cotizador v7 (bloquean los TOTALES del bot — plan `plans/faq-bot-v7-cotizador.md`)
 
@@ -98,6 +112,11 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     (siempre a4, siempre simple faz, siempre color)? ¿O existen b/n, doble faz u
     otros tamaños con precio especial de medicina que faltan cargar? Hasta la
     respuesta, el bot presupone ese único formato sin decírselo al cliente.
+35. **Promo Inmobiliarias: ¿$15.000 es por cartel llevando 6, o por el pack
+    completo de 6?** — el cartel suelto 1×0,65 sale $19.500; un pack de 6 a
+    $15.000 no cierra (87% off). Define `por_pack`: hoy está en true (el bot
+    muestra $15.000 como precio del conjunto); si es por cartel, sub-cotiza 6×
+    y hay que pasarlo a false. (pasada 1 de curación).
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
@@ -126,3 +145,4 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Espiralado / enmicado | Aplicados como sinónimos de anillado plástico / plastificado (decisión propia 2026-07-22; estándar rioplatense, no requiere a TG). |
 | Cantidad-first | Preguntar cuántas y dar el bracket exacto; sin cantidad → tabla (Martin, v10.7). |
 | Costo por página para libros | Sí, con "el precio final se cotiza vía mail" (Martin, v10.5). Compuestos excluidos de todo estimado con cantidad. |
+| Foto de la lista del mostrador (ex-30) | **No va a existir.** El catálogo y la lista de precios salen del sistema quote-automation, que está al día (Martin, 2026-07-23). La corroboración de datos del bot es 100% estructural (señales del barrido de la skill); el descubrimiento de faltantes queda en §3 + `bot.decisiones`. |
