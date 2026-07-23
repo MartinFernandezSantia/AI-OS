@@ -1,6 +1,6 @@
 # Preguntas pendientes a TG — consolidado
 
-> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-22).
+> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-23).
 > Ideal: UNA sola conversación. **Criterio transversal:** cada respuesta aterriza como
 > DATO (producto nuevo, sinónimo/display en el overlay, o línea de Info del negocio),
 > nunca como regla nueva de prompt.
@@ -93,6 +93,11 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     las variantes afectadas hasta re-modelar (plan v7 §Ronda 3);
     (c) el "a4/oficio" del nombre del adicional, ¿es el tamaño del papel del
     adicional, o un upgrade de tamaño que se le vende a trabajos a4?
+34. **Formato de los apuntes/módulos de medicina** — la única variante cargada es
+    "Impresion a4 s/f color" ($45/página). ¿Es el único formato en que se imprimen
+    (siempre a4, siempre simple faz, siempre color)? ¿O existen b/n, doble faz u
+    otros tamaños con precio especial de medicina que faltan cargar? Hasta la
+    respuesta, el bot presupone ese único formato sin decírselo al cliente.
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
