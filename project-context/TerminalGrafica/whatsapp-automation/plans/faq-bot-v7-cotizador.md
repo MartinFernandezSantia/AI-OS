@@ -449,6 +449,54 @@ capas con jerarquía fija, dos ya no opcionales.**
   confirma la clase I2; cubierto por ventana papel + guard numerales donde hay
   gramaje anclado; el resto de la clase se cierra con C2.
 
+## Ronda 5 — C2 y curador CONSTRUIDOS (2026-07-23, OK de Martin)
+
+**Contraste Fable r5 sobre el diseño concreto (wiring real), enmiendas aplicadas:**
+
+- **C2 = split de PROMPT+CONTEXTO, no de infraestructura:** cero nodos LLM nuevos.
+  `Armar Mensajes LLM` es route-aware: con ruta activa arma los mensajes con el
+  `Prompt Cotizador` (Set nuevo, ~3.5k chars: solo reglas de cotización +
+  seguridad mínima + spec-no-listada) + catálogo COTIZABLE derivado del mismo
+  cache (headers RUBRO + líneas con `*`). Mismo Guardrails Tier-2, mismo Llamar
+  LLM, mismo Parsear.
+- **Router determinístico** (`Get Ruta Cotizador`, Postgres post-debounce): última
+  `accion` de la conversación en `bot.decisiones` ∈ {pregunto_opciones,
+  **cotizador_answer**} y < 30 min → especialista. El `cotizador_answer` fue LA
+  enmienda r5: `Log Respuesta` ahora es route-aware — sin eso, la primera
+  repregunta (regateo) rompía la ruta y la oscilación I1 volvía por atrás.
+  `informo_precio` NO ancla (el follow-up de un precio es tema libre).
+- **Action `opciones`**: `{productos:[...máx 3], faltan:[whitelist]}` → `Get
+  Opciones` (match exacto/sinónimo, MISMA normalización que Get Precio, sin
+  contains) → `Armar Menu Opciones` (Code): menú **NUMERADO** (r5: el eco de un
+  número es más robusto que el de un string), dos niveles si >1 producto,
+  checklist según `por_pagina`/tabla; `faltan` solo-datos → pregunta targeted
+  ecoando lo elegido (jamás re-listar lo dado); 0 filas → reply fijo +
+  `menu_sin_match` en notas (input de curación); **anti-loop** (mismo menú 2× →
+  derivación, y su Log baja a `informo_capacidad` para despegar la ruta) →
+  `Enviar Menu` → `Log Menu` (`pregunto_opciones` + notas + execution_id).
+- **Action `volver`** (cambio de tema): Switch → `Forzar Ruta General` (Set) →
+  re-entra a Armar Mensajes con ruta general (2ª llamada solo en ese caso).
+  Cota estructural: Parsear acepta `volver` SOLO en ruta cotizador; fuera →
+  handoff con motivo. Post-volver la ruta queda rota (answer → informo_capacidad)
+  — si el cliente retoma, lo agarra el general (golden 25, no bug).
+- **Main prompt**: 2b y el ancla ahora EMITEN `action opciones` (el LLM nunca
+  tipea menús — muere I3/I4 por construcción); contrato con la tercera forma.
+- Convergencia de guards verificada nodo por nodo (r5): todos route-agnósticos.
+- **Harness 63/63** (P15-17 opciones/volver/gate, M1-M7 menú numerado / dos
+  niveles / faltan / sin_match / anti-loop / ruta especialista / TTL-forzar-sticky).
+- Casos 22-29 en suite-5 (ronda 2 del split).
+
+**Curador visual — CONSTRUIDO** (`db/curador-export.sql` + `tools/curador-catalogo.html`):
+flujo export-JSON → HTML (input file; CORS mata fetch local) → decisiones con
+localStorage + **merge por clave natural entre sesiones** (r5) → exporta `.sql`
+por **CLAVE NATURAL, sin uuids** (r5: el mismo .sql se replayea en prod; nombre+
+rubro normalizados como en las migraciones v10.8; variantes por nombre+color; 0
+filas o 2+ → SKIP con NOTICE, la transacción sigue) + `.md` de decisiones.
+UI: colisión EN VIVO con la semántica de Get Precio (rank1/rank2/word-subset),
+alerta de casi-idénticos por rubro (clase 75/106), línea renderizada como la ve
+el LLM (marcas `*`/`**` por la escalera), flags `por_pagina`/`por_pack`/`oculto`/
+`auto_sinonimo` editables, sinónimos y casos SEPARADOS.
+
 ### Herramienta visual de curación (pedido de Martin — spec validada r4, build pendiente)
 
 **Flujo:** (1) query de export → JSON del estado completo (taxonomia + variantes +

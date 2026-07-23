@@ -43,23 +43,36 @@ action `opciones` con menú renderizado por Code node), refinar el mono-prompt =
 descartado para conducta monetaria. Herramienta visual de curación: spec validada
 en plan §Ronda 4, build pendiente.
 
+**C2 Y CURADOR CONSTRUIDOS (2026-07-23, OK de Martin, Fable r5 — plan §Ronda 5):**
+split del cotizador (Prompt Cotizador + router determinístico + action opciones
+con menú renderizado + volver), harness 63/63; curador visual
+(`db/curador-export.sql` + `tools/curador-catalogo.html`) con SQL por clave
+natural replayable en prod.
+
 **RUNBOOK MARTIN (en orden):**
-1. Aplicar `db/cotizador-v7b.sql` (por_pack + seeds candidatos — REVISAR la lista
-   de NOTICEs: si algo no es pack, `set por_pack=false`).
-2. Re-importar `faq-bot-v7.json` (guards r4 + SELECT con por_pack) + TOGGLE.
-   v6 sigue desactivado como rollback.
-3. Verificar el dato del anillado 24hs (query en plan §Ronda 4 tabla I12) y
-   confirmar si entre los casos 5→7 de la ronda 1 hubo conversación nueva (si sí,
-   la "dirección repetida" fue comportamiento correcto per-conversation).
-4. **NO re-correr la ronda completa todavía**: I1/I2/I3 de fondo se arreglan con
-   C2, no con otra vuelta de prompt. Con los guards puestos, los mismos fallos
-   degradan a email honesto (seguro pero no resuelto).
-5. **Decisiones que esperan tu OK:** (a) build del split C2 (spec §Ronda 4 del
-   plan); (b) build de la herramienta visual de curación (spec ahí mismo) y en
-   qué orden — recomendación: C2 primero (cierra la clase plata de raíz), curación
-   después (los displays 75/106 y los flags se editan mejor con la herramienta).
-6. Tras C2 + curación: ronda 2 de suite-5 completa (20 casos) + regresión + gate
-   C2 re-evaluado + promptfoo al cierre.
+1. Si quedó pendiente: aplicar `db/cotizador-v7b.sql` (por_pack + seeds — REVISAR
+   los NOTICEs; si algo no es pack, `set por_pack=false`).
+2. **Grant del router** (el Get Ruta lee telemetría con la cred del bot):
+   `grant select on bot.decisiones to bot_readonly;`
+   Sin esto NO rompe nada pero el router degrada EN SILENCIO a ruta general
+   (sanity post-ronda: debe aparecer `pregunto_opciones`/`cotizador_answer` en
+   `bot.decisiones` y el menú numerado en WhatsApp).
+3. Re-importar `faq-bot-v7.json` (C2: 7 nodos nuevos — Get Ruta Cotizador, Prompt
+   Cotizador, Get Opciones, Armar Menu Opciones, Enviar Menu, Log Menu, Forzar
+   Ruta General). Verificar creds de los Postgres nuevos (Bot Readonly DB) y de
+   Enviar Menu (Chatwoot API Token); abrir/guardar **Log Menu** (schema cache) +
+   **TOGGLE**. v6 sigue desactivado de rollback.
+4. Verificar el dato del anillado 24hs (query §Ronda 4 tabla I12) y confirmar si
+   entre los casos 5→7 de ronda 1 hubo conversación nueva (si sí, la "dirección
+   repetida" fue correcta per-conversation).
+5. **Ronda 2 de suite-5**: casos C2 (22-29) primero, después 1-21 completos +
+   regresión suite-3 vigente / suite-2 / matriz. Reportar para el loop de fixes.
+6. **Pasada 1 de curación** con la herramienta: correr `db/curador-export.sql` →
+   guardar `catalogo-export.json` → abrir `tools/curador-catalogo.html` → scope
+   §Ronda 4 (displays 75/106, refinar por_pack, completar por_pagina, anillados
+   sin plazo I14 — decidir qué precio muestra la línea única) → exportar .sql →
+   revisarlo → aplicarlo → TOGGLE. El .md de decisiones va commiteado al repo.
+7. promptfoo cuando declares el build cerrado.
 
 ---
 
