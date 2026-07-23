@@ -160,6 +160,58 @@ begin
   end if;
 end $curador$;
 
+-- ---------------------------------------------------------------------------
+-- 5. Anclaje de documentos GENÉRICOS a las impresiones comunes (nota Martin
+--    post-r6: "apuntes"/"libro" resolvían a medicina como ÚNICO candidato).
+--    La línea de medicina era la única del catálogo con "apuntes" en el nombre;
+--    obra 75 tenía sinónimos VACÍOS. Con esto el catálogo que ve el LLM dice
+--    "también: apuntes, libro" en las comunes, y "apuntes"/"libro" quedan como
+--    rank-1 exacto de las comunes en Get Precio/Get Opciones.
+--    OJO: se preserva por_pagina=true (seed de cotizador-v7.sql) y el
+--    auto_sinonimo=false del obra 75 (su nombre vivo "IMPRESIONES" es genérico).
+-- ---------------------------------------------------------------------------
+
+-- IMPRESIONES (obra 75): + apuntes, libro
+do $curador$
+declare pid uuid; ids uuid[];
+begin
+  select array_agg(p.id) into ids
+  from public.products p join public.categories c on c.id = p.category_id
+  where p.is_active and translate(lower(trim(p.name)), 'áéíóúñ', 'aeioun') = 'impresiones'
+    and translate(lower(trim(c.name)), 'áéíóúñ', 'aeioun') = 'impresiones inkjet/ricoh/riso/epson';
+  if ids is null then
+    raise notice 'SKIPPED (producto no encontrado o renombrado): %', 'IMPRESIONES (obra 75)';
+  elsif array_length(ids, 1) > 1 then
+    raise notice 'SKIPPED (clave natural ambigua, % filas): %', array_length(ids, 1), 'IMPRESIONES (obra 75)';
+  else
+    pid := ids[1];
+    insert into bot.producto_meta as m (producto_id, display_name, sinonimos, casos_de_uso, auto_sinonimo, oculto, por_pagina, por_pack, nombre_origen, updated_at)
+    values (pid, 'Impresiones papel obra 75 gr', array['apuntes','libro']::text[], array['para imprimir apuntes','para imprimir exámenes o parciales','para trabajos de la facultad','para imprimir un currículum / cv']::text[], false, false, true, false, 'IMPRESIONES', now())
+    on conflict (producto_id) do update set display_name = excluded.display_name, sinonimos = excluded.sinonimos, casos_de_uso = excluded.casos_de_uso, auto_sinonimo = excluded.auto_sinonimo, oculto = excluded.oculto, por_pagina = excluded.por_pagina, por_pack = excluded.por_pack, nombre_origen = excluded.nombre_origen, updated_at = excluded.updated_at;
+  end if;
+end $curador$;
+
+-- Impresión a4 papel obra 106 gr: + libro (ambas comunes matchean "libro" →
+-- menú de dos niveles, el cliente elige gramaje)
+do $curador$
+declare pid uuid; ids uuid[];
+begin
+  select array_agg(p.id) into ids
+  from public.products p join public.categories c on c.id = p.category_id
+  where p.is_active and translate(lower(trim(p.name)), 'áéíóúñ', 'aeioun') = 'impresion a4 papel obra de 106 gr'
+    and translate(lower(trim(c.name)), 'áéíóúñ', 'aeioun') = 'impresiones inkjet/ricoh/riso/epson';
+  if ids is null then
+    raise notice 'SKIPPED (producto no encontrado o renombrado): %', 'Impresión a4 Papel obra de 106 gr';
+  elsif array_length(ids, 1) > 1 then
+    raise notice 'SKIPPED (clave natural ambigua, % filas): %', array_length(ids, 1), 'Impresión a4 Papel obra de 106 gr';
+  else
+    pid := ids[1];
+    insert into bot.producto_meta as m (producto_id, display_name, sinonimos, casos_de_uso, auto_sinonimo, oculto, por_pagina, por_pack, nombre_origen, updated_at)
+    values (pid, 'Impresiones a4 papel obra 106 gr', array['impresion a4','hoja a4 impresa','libro']::text[], array['para documentos','para folleteria']::text[], true, false, true, false, 'Impresión a4 Papel obra de 106 gr', now())
+    on conflict (producto_id) do update set display_name = excluded.display_name, sinonimos = excluded.sinonimos, casos_de_uso = excluded.casos_de_uso, auto_sinonimo = excluded.auto_sinonimo, oculto = excluded.oculto, por_pagina = excluded.por_pagina, por_pack = excluded.por_pack, nombre_origen = excluded.nombre_origen, updated_at = excluded.updated_at;
+  end if;
+end $curador$;
+
 commit;
 
 -- ---------------------------------------------------------------------------
@@ -170,4 +222,10 @@ commit;
 --   -- esperado: anillado a4/oficio, medicina, Lona Mate y Lona front brillo
 --   -- (ancho máx 1,52 m) con variante '.'
 -- select count(*) from bot.variante_meta where display_variante = '.';  -- esperado: 4
+-- select t.nombre_canonico, t.sinonimos, bool_and(v.por_pagina) as por_pagina
+--   from bot.taxonomia t join bot.variantes v using (producto_id)
+--   where t.nombre_canonico ilike 'impresiones%obra%'
+--   group by 1, 2;
+--   -- esperado: obra 75 con {apuntes,libro} y 106 con {...,libro}; AMBOS por_pagina
+--   -- true (si alguno da false, el seed de cotizador-v7.sql fue pisado: re-correrlo)
 -- ---------------------------------------------------------------------------

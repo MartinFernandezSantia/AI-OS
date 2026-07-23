@@ -52,13 +52,24 @@ no pueda dar: es recuperable repreguntando. Ahora en `Armar Respuesta Precio`:
 - Sobre una repregunta NO se renderizan los extras de `mas` (reaparecen en el
   follow-up vía "los datos ya dados no se re-preguntan").
 
-### RC-2 — Guard de NICHO (medicina)
-El precio especial de medicina ($45/pág) salía para cualquier "apuntes". Guard
-determinístico en render Y menú: producto cuyo nombre matchea `/medicin/i` solo
-fluye si el cliente nombró el nicho en sus últimos 3 mensajes; si no, repregunta
-honesta ("¿Es material de medicina...? Tenemos un precio especial para eso...").
-Config = lista `NICHOS` en los dos Code nodes (hoy solo medicina). Gate de datos
-sigue siendo la pregunta TG 34; el alcance comercial es la nueva pregunta TG 36.
+### RC-2 — Guard de NICHO (medicina) + selección de candidatos genéricos (r6d)
+El precio especial de medicina ($45/pág) salía para cualquier "apuntes", y en el
+caso 5 medicina fue el ÚNICO candidato del menú (ni siquiera aparecían las
+impresiones comunes). Dos capas:
+- **Guard determinístico** en render Y menú: producto cuyo nombre matchea
+  `/medicin/i` solo fluye si el cliente nombró el nicho en la conversación; si
+  no, repregunta honesta ("¿Es material de medicina...?"). Config = lista
+  `NICHOS` en los dos Code nodes. Esto CIERRA el resultado grave (medicina no
+  llega al cliente sin mención) pero solo recupera, no ofrece lo correcto.
+- **Selección (r6d, nota de Martin post-review):** la raíz era que la línea de
+  medicina es la única del catálogo con "apuntes" en el NOMBRE (obra 75 tenía
+  sinónimos vacíos) → el LLM la elegía como único candidato. Fix en las dos
+  capas: (a) regla explícita en ambos prompts — los candidatos de un documento
+  GENÉRICO son las impresiones por página COMUNES; medicina solo si el cliente
+  la nombró y NUNCA como reemplazo de las comunes; (b) curación b §5 — sinónimos
+  `apuntes`/`libro` en obra 75 y `libro` en 106 (rank-1 exacto + anclaje visible
+  en la línea "también:" del catálogo), preservando `por_pagina=true`.
+Gate de datos sigue siendo la pregunta TG 34; el alcance comercial es la 36.
 
 ### RC-3 — Prompts: anti-fusión, multi-ítem, escape del menú
 - **Anti-fusión** (especialista + general): "producto" es la línea `- ` verbatim;
