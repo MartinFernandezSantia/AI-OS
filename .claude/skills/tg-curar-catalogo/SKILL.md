@@ -34,6 +34,11 @@ ruta). Al leerlo:
 - El LLM ve el catálogo como líneas `RUBRO` + `- Producto: variante*, variante**, ...`
   (`*` = precio de lista mostrable, `**` = precio por cantidad, cantidad-first). Los
   displays que propongas son EXACTAMENTE lo que el bot pega en mensajes al cliente.
+- **Variante única**: el render usa el nombre del producto e ignora el de la variante
+  (confirmado por Martin, 2026-07-23). Pero la variante SIGUE viva en las queries
+  (elección de variante en Get Precio, rank-3 slot-swap) y puede citarse en respuestas
+  de precio → curar `display_variante` vale cuando el nombre de la variante confunde
+  (p. ej. repite el nombre de OTRO producto); no hace falta para esconderla del render.
 - Vos preparás el SQL; **Martin lo aplica** y hace TOGGLE del workflow (cache).
   Deny list vigente: nada de psql/supabase CLI/.env.
 
@@ -52,8 +57,14 @@ ruta). Al leerlo:
 3. **Gramática de cara al cliente.** El criterio: el display tiene que leer bien dentro
    de la frase «Tenemos {display} a ${precio}». Nada de copy/paste del nombre interno.
    Ejemplo: `Promocion Inmobiliarias 6 carteles 1 x 0.65 mt` → `Promoción para
-   inmobiliarias: 6 carteles de 1 × 0,65 m`. Acentos correctos, preposiciones,
+   inmobiliarias (6 carteles de 1 × 0,65 m)`. Acentos correctos, preposiciones,
    unidades bien escritas. Español rioplatense neutro, sin diminutivos.
+   Los acentos son SEGUROS: todos los caminos de matching normalizan ambos lados
+   (`áéíóúñ→aeioun`); no usar otros diacríticos (ü, ç) que el translate no cubre.
+   OJO: el rank 2 real es un LIKE CONTIGUO — una palabra conectora o un signo pegado
+   al token («para», «:») rompen las consultas que hoy resuelven por contains. Si la
+   gramática pide el conector, rescatá la consulta con un sinónimo (caso aplicado:
+   display «Promoción para inmobiliarias (…)» + sinónimo `promocion inmobiliarias`).
 4. **Preguntas al negocio en vez de suposiciones.** Toda duda real (¿qué formato?, ¿el
    precio es por pack?, ¿estos dos productos son lo mismo?) va a `preguntas-tg.md`
    (única fuente; numeración continua; sección 2 catálogo o 6 cotizador según pegue).
@@ -61,12 +72,12 @@ ruta). Al leerlo:
 
 ## Detección de datos no corroborados (sin el catálogo original)
 
-No existe versión digitalizada del catálogo original de TG: `public.products` es la
-única copia, cargada a mano. Verificar por comparación es imposible hasta que llegue
-la **foto de la lista de precios del mostrador (pregunta 30 de `preguntas-tg.md`)** —
-si ya existe, pedila y cotejá nombre por nombre; es la fuente de corroboración real.
+No existe NI VA A EXISTIR otra fuente contra la cual verificar: el catálogo y la
+lista de precios se obtienen del sistema quote-automation, que está al día, y
+`public.*` ES esa data (Martin, 2026-07-23 — la ex-pregunta 30, foto del mostrador,
+quedó resuelta como "no habrá"). La corroboración es SIEMPRE estructural.
 
-Mientras no esté, la regla operativa es: **un atributo está corroborado solo si la
+La regla operativa: **un atributo está corroborado solo si la
 propia familia lo respalda desde ≥2 lugares independientes**. Señales estructurales
 de "dato afirmado, no corroborado" — barrer TODAS en cada pasada:
 
@@ -93,21 +104,29 @@ propuesto — nunca como un display que "completa" la información faltante.
 
 1. **Cargar y mapear.** Leé el export completo. Armá el estado por rubro: nombre vivo,
    display actual, variantes, flags, precio/mostrable (para saber qué marca lleva).
-2. **Proponer por rubro, en tandas.** Para cada producto: display propuesto, displays
-   de variantes, sinónimos a agregar/sacar, flags (`por_pagina`/`por_pack`), candidatos
-   a ocultar (duplicados tipo "Sobre Ingles" ×2, filas basura), y las dudas → preguntas.
-   Presentale a Martin una tabla por rubro: actual → propuesto → motivo (una línea).
-   Marcá aparte lo que NO proponés cambiar y por qué no. **Nada queda aprobado sin OK
-   explícito de Martin por tanda**; acepta ediciones puntuales sobre tu propuesta.
-3. **Verificar colisiones ANTES de generar el SQL.** Escribí un script throwaway
+2. **Verificar colisiones ANTES de presentar.** Escribí un script throwaway
    (scratchpad) que replique la resolución de Get Precio sobre el catálogo CON tus
-   cambios aplicados:
-   - normalización: `lower(trim(x))` + `áéíóúñ→aeioun`;
-   - rank 1: match exacto de nombre efectivo o sinónimo;
-   - rank 2: contains (≥4 chars) y subset de palabras.
-   Cada display/sinónimo nuevo se prueba como si fuera un mensaje del cliente: si
-   resuelve a OTRO producto, o dos productos quedan a distancia de un token, es
-   colisión → ajustar antes de mostrar la tanda final.
+   cambios aplicados, con la **semántica REAL del motor** (verificada 2026-07-23 en
+   `faq-bot-v7.json` — si dudás, releé el nodo Get Precio, no esta lista):
+   - normalización: `lower(trim(x))` + `áéíóúñ→aeioun` en AMBOS lados;
+   - rank 1: igualdad exacta de nombre efectivo o sinónimo;
+   - rank 2: `nombre_efectivo LIKE '%query%'` — CONTIGUO, ≥4 chars, una sola
+     dirección (la query adentro del nombre). NO existe word-subset en el motor;
+     usalo solo como señal conservadora extra, nunca para concluir "sigue resolviendo";
+   - rank 3: slot-swap exacto (variante == nombre/sinónimo de un producto).
+   Probá cada display/sinónimo nuevo como eco del cliente Y las consultas que HOY
+   resuelven al producto (que ninguna se pierda). Colisión o pérdida de funnel →
+   ajustar antes de presentar.
+3. **Presentar TODO junto, numerado, y esperar la elección de Martin.** UN solo
+   mensaje con TODOS los cambios propuestos, numerados correlativamente, agrupados
+   por tema (flags / ocultamientos / sinónimos / displays / preguntas nuevas), cada
+   uno con su razón en una línea (tabla: cambio → razón). Cerrá con la lista de lo
+   que NO proponés tocar y por qué. Martin elige por número («van todos menos 13»)
+   y edita puntualmente. **Nada de widgets de aprobación (AskUserQuestion) ni de
+   generar SQL antes de su respuesta** — el formato es conversacional (pedido de
+   Martin, 2026-07-23). Si una verificación posterior obliga a enmendar un cambio
+   aprobado (p. ej. una poda que resulta no-op), aplicá la enmienda pero marcala
+   EXPLÍCITA en el .md y en el mensaje de cierre.
 4. **Generar salidas** (solo lo aprobado):
    - `db/curacion-YYYY-MM-DD.sql` — patrón de CLAVE NATURAL (nunca uuids), mismo
      esqueleto que `generarSql()` en `tools/curador-catalogo.html`: por producto un
