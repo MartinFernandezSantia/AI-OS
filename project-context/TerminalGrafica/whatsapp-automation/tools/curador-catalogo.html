@@ -135,15 +135,47 @@ $('file').onchange = (e) => leer(e.target.files[0]);
 
 function leer(f) {
   if (!f) return;
-  f.text().then((t) => {
-    const j = JSON.parse(t);
-    if (!j.productos || !j.exportado) { alert('Ese JSON no parece un export del curador (falta productos/exportado).'); return; }
+  f.arrayBuffer().then((buf) => {
+    let t = new TextDecoder('utf-8').decode(buf);
+    if (t.includes('�')) t = new TextDecoder('windows-1252').decode(buf);
+    t = repararMojibake(t);
+    const j = desenvolver(JSON.parse(t));
+    if (!j || !j.productos || !j.exportado) { alert('Ese JSON no parece un export del curador (falta productos/exportado).'); return; }
     data = j;
     const key = 'curador-' + j.exportado;
     state = JSON.parse(localStorage.getItem(key) || 'null') || { key, dec: {} };
     state.key = key;
     iniciar();
   }).catch((e) => alert('No pude leer el JSON: ' + e.message));
+}
+
+// El SQL editor de Supabase entrega el resultado como filas: [{"export": {...}}].
+// Aceptar esa envoltura (y variantes de un solo valor) sin recortarla a mano.
+function desenvolver(j) {
+  for (let i = 0; i < 4; i++) {
+    if (j && j.productos && j.exportado) return j;
+    if (Array.isArray(j) && j.length) { j = j[0]; continue; }
+    if (j && typeof j === 'object' && Object.keys(j).length === 1) { j = Object.values(j)[0]; continue; }
+    break;
+  }
+  return j;
+}
+
+// UTF-8 leído como latin1/win-1252 ("ImpresiÃ³n"): con eso las claves naturales
+// del SQL generado no matchearían ninguna fila de la DB — reparar antes de parsear.
+const W1252 = { '€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159 };
+function repararMojibake(t) {
+  if (!/Ã[-¿ŒœŽžŠšŸƒ‘’‚“”„†‡•…‰‹›€™ˆ˜]/.test(t)) return t;
+  try {
+    const bytes = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i);
+      bytes[i] = c <= 0xFF ? c : (W1252[t[i]] !== undefined ? W1252[t[i]] : 63);
+    }
+    const rep = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    alert('Aviso: el archivo venía con el encoding roto (Ã³ en vez de ó). Lo reparé al cargar — verificá que los acentos se vean bien.');
+    return rep;
+  } catch (e) { return t; }
 }
 
 // estado por producto: { status: 'pendiente'|'aprobado'|'rechazado', display, sinonimos[], casos[], auto_sinonimo, oculto, por_pagina, por_pack, variantes: {vid: {display, oculto}} }

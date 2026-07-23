@@ -3,8 +3,10 @@
 -- =============================================================================
 -- Uso (Martin):
 --   1. Correr esta query en el SQL editor del Supabase de testing.
---   2. Copiar el valor de la única celda y guardarlo como `catalogo-export.json`
---      (tal cual, es un JSON válido).
+--   2. Guardar el resultado como `catalogo-export.json` — sirve tanto el
+--      "download JSON" del editor (viene envuelto como [{"export": {...}}])
+--      como copiar la celda pelada; el curador acepta ambas formas y repara
+--      solo el encoding si el archivo se guardó roto (Ã³ en vez de ó).
 --   3. Abrir tools/curador-catalogo.html en el navegador y cargar ese archivo.
 --
 -- La query es SOLO SELECT (no toca nada). Trae TODO lo visible al público,
