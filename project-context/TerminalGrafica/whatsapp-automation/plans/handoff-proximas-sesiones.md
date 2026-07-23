@@ -52,11 +52,14 @@ natural replayable en prod.
 **RUNBOOK MARTIN (en orden):**
 1. Si quedó pendiente: aplicar `db/cotizador-v7b.sql` (por_pack + seeds — REVISAR
    los NOTICEs; si algo no es pack, `set por_pack=false`).
-2. **Grant del router** (el Get Ruta lee telemetría con la cred del bot):
-   `grant select on bot.decisiones to bot_readonly;`
-   Sin esto NO rompe nada pero el router degrada EN SILENCIO a ruta general
-   (sanity post-ronda: debe aparecer `pregunto_opciones`/`cotizador_answer` en
-   `bot.decisiones` y el menú numerado en WhatsApp).
+2. **Grant del router — RESUELTO 2026-07-23:** el grant pelado falló con
+   `role "bot_readonly" does not exist` porque en TESTING ese rol nunca se creó:
+   la cred "Bot Readonly DB" conecta como owner (ya inserta en `bot.decisiones`
+   vía Log Respuesta), así que `Get Ruta Cotizador` lee SIN ningún grant.
+   Nada que hacer en testing. Para prod quedó `db/c2-router-grant.sql` (bloque
+   guardado, no-op si el rol no existe). Sanity post-ronda sigue vigente: debe
+   aparecer `pregunto_opciones`/`cotizador_answer` en `bot.decisiones` y el
+   menú numerado en WhatsApp.
 3. Re-importar `faq-bot-v7.json` (C2: 7 nodos nuevos — Get Ruta Cotizador, Prompt
    Cotizador, Get Opciones, Armar Menu Opciones, Enviar Menu, Log Menu, Forzar
    Ruta General). Verificar creds de los Postgres nuevos (Bot Readonly DB) y de
