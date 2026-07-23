@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curador de catálogo — bot TG</title>
+<!--
+  CURADOR VISUAL DEL CATÁLOGO (paso 2 de 3) — self-contained, sin backend.
+  1. Correr db/curador-export.sql en el Supabase de testing → guardar la celda
+     como catalogo-export.json
+  2. Abrir este archivo en el navegador y cargar ese JSON.
+  3. Revisar producto por producto (aprobar / rechazar / editar). El progreso se
+     guarda solo en localStorage (keyeado por el timestamp del export).
+  4. "Exportar SQL" genera el .sql de upserts OPTIMISTAS (cada fila condicionada
+     al nombre vivo del export: si el mostrador cambió algo en el medio, esa fila
+     se saltea con NOTICE). "Exportar decisiones" genera el .md de trazabilidad.
+     El SQL lo revisa y aplica Martin, como siempre.
+  Chequeos en vivo: colisiones con la MISMA semántica que Get Precio (norm +
+  rank1 exacto/sinónimo, rank2 contains>=4, word-subset), overlap de tokens
+  dentro del rubro (clase 75/106), marcas */** según la escalera determinística.
+-->
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1c1b1a; --mut:#6b675f; --line:#dad6cd;
+          --acc:#C2255C; --ok:#2b8a3e; --warn:#e8590c; --bad:#c92a2a; --chip:#efece6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#191817; --panel:#211f1e; --ink:#ece9e4; --mut:#a09a90; --line:#3a3733;
+            --acc:#f06595; --ok:#69db7c; --warn:#ffa94d; --bad:#ff8787; --chip:#2e2c29; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:2px solid var(--acc); background:var(--panel); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 12px 0 0; }
+  header .prog { color:var(--mut); font-size:12px; }
+  button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button.ok { background:var(--ok); border-color:var(--ok); color:#fff; }
+  button.bad { background:var(--bad); border-color:var(--bad); color:#fff; }
+  #drop { margin:60px auto; max-width:520px; padding:48px; border:2px dashed var(--line); border-radius:12px; text-align:center; color:var(--mut); }
+  #drop.over { border-color:var(--acc); }
+  main { display:none; grid-template-columns:320px 1fr; gap:0; height:calc(100vh - 54px); }
+  #lista { border-right:1px solid var(--line); overflow-y:auto; background:var(--panel); }
+  #lista .rubro { padding:8px 12px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); position:sticky; top:0; background:var(--panel); }
+  #lista .item { padding:7px 12px; cursor:pointer; border-left:3px solid transparent; display:flex; gap:8px; align-items:center; }
+  #lista .item:hover { background:var(--chip); }
+  #lista .item.sel { border-left-color:var(--acc); background:var(--chip); }
+  #lista .item .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--line); flex:none; }
+  .dot.aprobado { background:var(--ok); } .dot.rechazado { background:var(--bad); } .dot.editado { background:var(--warn); }
+  #detalle { overflow-y:auto; padding:18px 22px 120px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .card h3 { margin:0 0 8px; font-size:13px; color:var(--mut); text-transform:uppercase; letter-spacing:.05em; }
+  .linea { font:13px/1.5 ui-monospace, monospace; white-space:pre-wrap; word-break:break-word; background:var(--chip); padding:10px; border-radius:6px; }
+  .linea.vieja { opacity:.55; text-decoration:line-through; }
+  label { display:block; font-size:12px; color:var(--mut); margin:10px 0 3px; }
+  input[type=text] { width:100%; font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .chip { background:var(--chip); border:1px solid var(--line); border-radius:99px; padding:2px 10px; font-size:12px; display:flex; gap:6px; align-items:center; }
+  .chip.col1 { border-color:var(--bad); color:var(--bad); }
+  .chip.col2 { border-color:var(--warn); color:var(--warn); }
+  .chip b { cursor:pointer; font-weight:700; }
+  .flags { display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
+  .flags label { display:flex; gap:6px; align-items:center; margin:0; color:var(--ink); }
+  .warn { color:var(--warn); font-size:12px; margin-top:6px; }
+  .bad { color:var(--bad); }
+  .okt { color:var(--ok); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { font-size:11px; color:var(--mut); text-transform:uppercase; }
+  td input[type=text] { padding:4px 6px; }
+  .marca { font:12px ui-monospace,monospace; color:var(--acc); }
+  #acciones { position:fixed; bottom:0; right:0; left:320px; background:var(--panel); border-top:1px solid var(--line); padding:10px 22px; display:flex; gap:10px; align-items:center; }
+  .filtros { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:6px; }
+  .filtros input { flex:1; }
+  .avisos { font-size:12px; }
+  .avisos li { margin:2px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Curador de catálogo <span style="color:var(--acc)">bot TG</span></h1>
+  <span class="prog" id="prog"></span>
+  <span style="flex:1"></span>
+  <button id="btnSql" class="primary" style="display:none">Exportar SQL</button>
+  <button id="btnMd" style="display:none">Exportar decisiones (.md)</button>
+</header>
+
+<div id="drop">
+  <p><b>Cargá el export del catálogo</b></p>
+  <p>Corré <code>db/curador-export.sql</code> en el Supabase de testing, guardá la celda como <code>catalogo-export.json</code> y arrastralo acá (o hacé click).</p>
+  <input type="file" id="file" accept=".json,application/json" style="display:none">
+</div>
+
+<main id="main">
+  <div id="lista">
+    <div class="filtros">
+      <input type="text" id="buscar" placeholder="buscar producto…">
+      <button id="soloPend" title="mostrar solo pendientes">◌</button>
+    </div>
+    <div id="items"></div>
+  </div>
+  <div id="detalle"></div>
+</main>
+<div id="acciones" style="display:none">
+  <button class="ok" id="btnAprobar">✓ Aprobar</button>
+  <button class="bad" id="btnRechazar">✗ Rechazar (dejar como está)</button>
+  <button id="btnPend">◌ Pendiente</button>
+  <span style="flex:1"></span>
+  <button id="btnPrev">← Anterior</button>
+  <button id="btnNext">Siguiente →</button>
+</div>
+
+<script>
+'use strict';
+// ===== normalización IDÉNTICA a Get Precio (translate + lower) =====
+const AC = { 'á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n','Á':'a','É':'e','Í':'i','Ó':'o','Ú':'u','Ñ':'n' };
+const norm = (s) => String(s || '').replace(/[áéíóúñÁÉÍÓÚÑ]/g, (c) => AC[c]).toLowerCase().replace(/\s+/g, ' ').trim();
+const toks = (s) => norm(s).split(/[^a-z0-9]+/).filter(Boolean).map((t) => t.replace(/s$/, ''));
+// clave natural para el SQL: espeja EXACTAMENTE translate(lower(trim(x))) de Postgres
+// (sin colapsar espacios internos — el SQL tampoco lo hace)
+const normKey = (s) => String(s || '').replace(/[áéíóúñÁÉÍÓÚÑ]/g, (c) => AC[c]).toLowerCase().trim();
+const nkProd = (p) => normKey(p.nombre_vivo) + '|' + normKey(p.categoria);
+const nkVar = (v) => normKey(v.nombre_vivo) + '|' + (v.color === null || v.color === undefined ? '∅' : String(v.color));
+
+let data = null, state = null, sel = 0, soloPendientes = false, filtro = '';
+const $ = (id) => document.getElementById(id);
+
+// ===== carga =====
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); leer(e.dataTransfer.files[0]); };
+$('file').onchange = (e) => leer(e.target.files[0]);
+
+function leer(f) {
+  if (!f) return;
+  f.text().then((t) => {
+    const j = JSON.parse(t);
+    if (!j.productos || !j.exportado) { alert('Ese JSON no parece un export del curador (falta productos/exportado).'); return; }
+    data = j;
+    const key = 'curador-' + j.exportado;
+    state = JSON.parse(localStorage.getItem(key) || 'null') || { key, dec: {} };
+    state.key = key;
+    iniciar();
+  }).catch((e) => alert('No pude leer el JSON: ' + e.message));
+}
+
+// estado por producto: { status: 'pendiente'|'aprobado'|'rechazado', display, sinonimos[], casos[], auto_sinonimo, oculto, por_pagina, por_pack, variantes: {vid: {display, oculto}} }
+function st(p) {
+  if (!state.dec[p.producto_id]) {
+    state.dec[p.producto_id] = {
+      status: 'pendiente',
+      nk: nkProd(p),
+      display: p.display_name || '',
+      sinonimos: [...p.sinonimos],
+      casos: [...p.casos_de_uso],
+      auto_sinonimo: p.auto_sinonimo, oculto: p.oculto,
+      por_pagina: p.por_pagina, por_pack: p.por_pack,
+      variantes: Object.fromEntries(p.variantes.map((v) => [v.variante_id, { display: v.display_variante || '', oculto: v.oculto, nk: nkVar(v) }])),
+    };
+  }
+  return state.dec[p.producto_id];
+}
+
+// Re-export con sesión previa: migrar decisiones por CLAVE NATURAL (los uuids no
+// importan; lo que ya no matchea queda listado como huérfano).
+function mergeSesionPrevia() {
+  const claves = Object.keys(localStorage).filter((k) => k.startsWith('curador-') && k !== state.key).sort();
+  if (!claves.length || Object.keys(state.dec).length) return;
+  const prevKey = claves[claves.length - 1];
+  let prev;
+  try { prev = JSON.parse(localStorage.getItem(prevKey)); } catch (e) { return; }
+  if (!prev || !prev.dec || !Object.keys(prev.dec).length) return;
+  if (!confirm('Hay una sesión de curación previa (' + prevKey.slice(8, 24) + '). ¿Migrar sus decisiones a este export (match por clave natural)?')) return;
+  const porNk = {};
+  for (const d of Object.values(prev.dec)) if (d.nk) porNk[d.nk] = d;
+  const huerfanos = new Set(Object.keys(porNk));
+  for (const p of data.productos) {
+    const viejo = porNk[nkProd(p)];
+    if (!viejo) continue;
+    huerfanos.delete(nkProd(p));
+    const nuevo = st(p);
+    Object.assign(nuevo, { status: viejo.status, display: viejo.display, sinonimos: [...viejo.sinonimos], casos: [...viejo.casos], auto_sinonimo: viejo.auto_sinonimo, oculto: viejo.oculto, por_pagina: viejo.por_pagina, por_pack: viejo.por_pack });
+    const vPorNk = {};
+    for (const sv of Object.values(viejo.variantes || {})) if (sv.nk) vPorNk[sv.nk] = sv;
+    for (const v of p.variantes) {
+      const svv = vPorNk[nkVar(v)];
+      if (svv) nuevo.variantes[v.variante_id] = { display: svv.display, oculto: svv.oculto, nk: nkVar(v) };
+    }
+  }
+  guardar();
+  if (huerfanos.size) alert('Decisiones previas SIN match en este export (revisar a mano):\n' + [...huerfanos].join('\n'));
+}
+function guardar() { localStorage.setItem(state.key, JSON.stringify(state)); pintarLista(); pintarProg(); }
+
+// ===== helpers de dominio =====
+const nombreEf = (p, s) => (s.display || '').trim() || p.nombre_vivo;
+function sinonimosEf(p, s) {
+  const out = [...s.sinonimos];
+  const d = (s.display || '').trim();
+  if (d && d !== p.nombre_vivo && s.auto_sinonimo && !out.some((x) => norm(x) === norm(p.nombre_vivo))) out.push(p.nombre_vivo + ' ⟲auto');
+  return out;
+}
+// marca de la escalera: '' override / qr>1 / $0; '**' 1 regla qr; '*' resto con precio
+function marca(v) {
+  if (v.tiene_override) return '';
+  if ((v.n_reglas_cantidad || 0) > 1) return '';
+  if ((v.n_reglas_cantidad || 0) === 1) return '**';
+  if (!(Number(v.precio_lista) > 0)) return '';
+  return '*';
+}
+function lineaLLM(p, s, usarPropuesto) {
+  const nombre = usarPropuesto ? nombreEf(p, s) : (p.display_name || p.nombre_vivo);
+  const sin = usarPropuesto ? sinonimosEf(p, s).map((x) => x.replace(' ⟲auto', '')) : p.sinonimos;
+  const casos = usarPropuesto ? s.casos : p.casos_de_uso;
+  const vars = p.variantes.filter((v) => !(usarPropuesto ? s.variantes[v.variante_id].oculto : v.oculto));
+  const ops = vars.map((v) => ((usarPropuesto ? (s.variantes[v.variante_id].display || '').trim() : (v.display_variante || '').trim()) || v.nombre_vivo) + marca(v));
+  let l = '- ' + nombre;
+  if (sin.length) l += ' — también: ' + sin.join(', ');
+  if (casos.length) l += ' — usos: ' + casos.join(', ');
+  if (ops.length) l += ' — opciones: ' + ops.join(', ');
+  return l;
+}
+
+// ===== chequeos =====
+// colisiones de un término contra los OTROS productos (semántica Get Precio)
+function colision(term, selfId) {
+  const t = norm(term);
+  if (!t) return null;
+  const out = { r1: [], r2: [], ws: [] };
+  const tt = toks(term);
+  for (const q of data.productos) {
+    if (q.producto_id === selfId) continue;
+    const qs = st(q);
+    const nombres = [nombreEf(q, qs), ...sinonimosEf(q, qs).map((x) => x.replace(' ⟲auto', ''))];
+    for (const n of nombres) {
+      const nn = norm(n);
+      if (!nn) continue;
+      if (nn === t) out.r1.push(nombreEf(q, qs));
+      else if (t.length >= 4 && nn.includes(t)) out.r2.push(nombreEf(q, qs) + ' (lo contiene)');
+      else if (nn.length >= 4 && t.includes(nn)) out.r2.push(nombreEf(q, qs) + ' (está contenido)');
+    }
+    const qt = new Set(toks(nombreEf(q, qs)));
+    if (tt.length >= 2 && tt.every((x) => qt.has(x))) out.ws.push(nombreEf(q, qs));
+  }
+  return (out.r1.length || out.r2.length || out.ws.length) ? out : null;
+}
+// overlap de tokens contra el MISMO rubro (clase 75/106)
+function overlapRubro(p, s) {
+  const mios = new Set(toks(nombreEf(p, s)));
+  const out = [];
+  for (const q of data.productos) {
+    if (q.producto_id === p.producto_id || q.categoria_id !== p.categoria_id) continue;
+    const qs = st(q);
+    const suyos = new Set(toks(nombreEf(q, qs)));
+    const inter = [...mios].filter((t) => suyos.has(t)).length;
+    const ratio = inter / Math.max(mios.size, 1);
+    if (mios.size >= 3 && ratio >= 0.6) out.push(nombreEf(q, qs) + ' (' + inter + '/' + mios.size + ' tokens)');
+  }
+  return out;
+}
+function cambio(p, s) {
+  const v0 = (p.display_name || '');
+  if ((s.display || '') !== v0) return true;
+  if (JSON.stringify(s.sinonimos) !== JSON.stringify(p.sinonimos)) return true;
+  if (JSON.stringify(s.casos) !== JSON.stringify(p.casos_de_uso)) return true;
+  if (s.auto_sinonimo !== p.auto_sinonimo || s.oculto !== p.oculto || s.por_pagina !== p.por_pagina || s.por_pack !== p.por_pack) return true;
+  for (const v of p.variantes) {
+    const sv = s.variantes[v.variante_id];
+    if ((sv.display || '') !== (v.display_variante || '') || sv.oculto !== v.oculto) return true;
+  }
+  return false;
+}
+
+// ===== UI =====
+function iniciar() {
+  drop.style.display = 'none';
+  $('main').style.display = 'grid';
+  $('acciones').style.display = 'flex';
+  $('btnSql').style.display = $('btnMd').style.display = 'inline-block';
+  mergeSesionPrevia();
+  pintarLista(); pintarProg(); ver(0);
+}
+function visibles() {
+  return data.productos
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !filtro || norm(p.nombre_vivo + ' ' + (p.display_name || '')).includes(norm(filtro)))
+    .filter(({ p }) => !soloPendientes || st(p).status === 'pendiente');
+}
+function pintarLista() {
+  const el = $('items');
+  el.innerHTML = '';
+  let rubro = null;
+  for (const { p, i } of visibles()) {
+    if (p.categoria !== rubro) {
+      rubro = p.categoria;
+      const r = document.createElement('div');
+      r.className = 'rubro'; r.textContent = p.categoria_display || p.categoria;
+      el.appendChild(r);
+    }
+    const s = st(p);
+    const d = document.createElement('div');
+    d.className = 'item' + (i === sel ? ' sel' : '');
+    const cls = s.status === 'pendiente' && cambio(p, s) ? 'editado' : s.status;
+    d.innerHTML = '<span class="dot ' + cls + '"></span><span class="nm">' + esc(nombreEf(p, s)) + '</span>';
+    d.onclick = () => ver(i);
+    el.appendChild(d);
+  }
+}
+function pintarProg() {
+  const tot = data.productos.length;
+  const ap = data.productos.filter((p) => st(p).status === 'aprobado').length;
+  const re = data.productos.filter((p) => st(p).status === 'rechazado').length;
+  $('prog').textContent = tot + ' productos · ' + ap + ' aprobados · ' + re + ' rechazados · ' + (tot - ap - re) + ' pendientes · export ' + data.exportado.slice(0, 16);
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function chips(arr, cls, onDel) {
+  return arr.map((x, i) => {
+    const col = colisionClase(x);
+    return '<span class="chip ' + col + '" title="' + (col ? 'colisión: ver avisos' : '') + '">' + esc(x) + ' <b data-i="' + i + '" data-k="' + cls + '">×</b></span>';
+  }).join('');
+}
+let colCache = {};
+function colisionClase(term) {
+  const c = colCache[term];
+  if (!c) return '';
+  return c.r1.length ? 'col1' : (c.r2.length || c.ws.length) ? 'col2' : '';
+}
+
+function ver(i) {
+  sel = i;
+  const p = data.productos[i];
+  const s = st(p);
+  colCache = {};
+  const avisos = [];
+  // colisiones del nombre + cada sinónimo nuevo/actual
+  for (const term of [nombreEf(p, s), ...s.sinonimos]) {
+    const c = colision(term, p.producto_id);
+    if (c) {
+      colCache[term] = c;
+      if (c.r1.length) avisos.push('<li class="bad">“' + esc(term) + '” RANK-1EA también a: ' + esc(c.r1.join(', ')) + ' — mismo término en dos productos = ambiguo o hijack.</li>');
+      if (c.r2.length) avisos.push('<li>“' + esc(term) + '” contains-hitea (rank 2): ' + esc(c.r2.join(', ')) + '</li>');
+      if (c.ws.length) avisos.push('<li>“' + esc(term) + '” es word-subset de: ' + esc(c.ws.join(', ')) + ' (anatomía del hijack R4)</li>');
+    }
+  }
+  const ov = overlapRubro(p, s);
+  if (ov.length) avisos.push('<li class="bad">Display CASI IDÉNTICO en el rubro (clase 75↔106): ' + esc(ov.join(' · ')) + '</li>');
+
+  const vRows = p.variantes.map((v) => {
+    const sv = s.variantes[v.variante_id];
+    const estado = v.tiene_override ? 'override' : (v.n_reglas_cantidad === 1 ? 'tabla' : (v.n_reglas_cantidad > 1 ? 'qr×' + v.n_reglas_cantidad : (!(Number(v.precio_lista) > 0) ? '$0' : (v.solo_descuentos ? 'lista+desc' : (v.mostrable ? 'lista' : 'reglas')))));
+    return '<tr>' +
+      '<td>' + esc(v.nombre_vivo) + '</td>' +
+      '<td><input type="text" data-vid="' + v.variante_id + '" data-f="display" value="' + esc(sv.display) + '" placeholder="(sin rename)"></td>' +
+      '<td class="marca">' + (marca(v) || '—') + '</td>' +
+      '<td>' + estado + '</td>' +
+      '<td>$' + Number(v.precio_lista || 0).toLocaleString('es-AR') + '</td>' +
+      '<td><label style="margin:0"><input type="checkbox" data-vid="' + v.variante_id + '" data-f="oculto" ' + (sv.oculto ? 'checked' : '') + '> oculta</label></td>' +
+    '</tr>';
+  }).join('');
+
+  $('detalle').innerHTML =
+    '<div class="card"><h3>Línea como la ve el LLM — actual → propuesta</h3>' +
+      '<div class="linea vieja">' + esc(lineaLLM(p, s, false)) + '</div>' +
+      '<div style="height:6px"></div>' +
+      '<div class="linea">' + esc(lineaLLM(p, s, true)) + '</div>' +
+    '</div>' +
+    '<div class="card"><h3>Producto <span style="color:var(--mut);font-weight:400">· vivo: ' + esc(p.nombre_vivo) + ' · rubro: ' + esc(p.categoria) + '</span></h3>' +
+      '<label>Display (vacío = usa el nombre vivo)</label><input type="text" id="fDisplay" value="' + esc(s.display) + '">' +
+      '<label>Sinónimos (nombran el producto → matchean en SQL)</label><div class="chips" id="chSin">' + chips(s.sinonimos, 'sin') + '</div>' +
+      '<input type="text" id="addSin" placeholder="agregar sinónimo y Enter">' +
+      '<label>Casos de uso (intención → solo guían al LLM, no matchean)</label><div class="chips" id="chCasos">' + chips(s.casos, 'casos') + '</div>' +
+      '<input type="text" id="addCaso" placeholder="agregar caso de uso y Enter">' +
+      '<div class="flags">' +
+        '<label><input type="checkbox" id="fAuto" ' + (s.auto_sinonimo ? 'checked' : '') + '> auto-sinónimo del nombre viejo</label>' +
+        '<label><input type="checkbox" id="fOculto" ' + (s.oculto ? 'checked' : '') + '> oculto (no existe para el bot)</label>' +
+        '<label><input type="checkbox" id="fPagina" ' + (s.por_pagina ? 'checked' : '') + '> por_página (docs multipágina)</label>' +
+        '<label><input type="checkbox" id="fPack" ' + (s.por_pack ? 'checked' : '') + '> por_pack (cantidad en el nombre)</label>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h3>Variantes</h3><table><tr><th>vivo</th><th>display</th><th>marca</th><th>estado precio</th><th>lista</th><th></th></tr>' + vRows + '</table></div>' +
+    '<div class="card"><h3>Avisos</h3><ul class="avisos">' + (avisos.join('') || '<li class="okt">Sin colisiones detectadas.</li>') + '</ul></div>';
+
+  // wiring de inputs
+  $('fDisplay').oninput = (e) => { s.display = e.target.value; refrescar(p, s); };
+  $('fAuto').onchange = (e) => { s.auto_sinonimo = e.target.checked; refrescar(p, s); };
+  $('fOculto').onchange = (e) => { s.oculto = e.target.checked; guardar(); };
+  $('fPagina').onchange = (e) => { s.por_pagina = e.target.checked; guardar(); };
+  $('fPack').onchange = (e) => { s.por_pack = e.target.checked; guardar(); };
+  $('addSin').onkeydown = (e) => { if (e.key === 'Enter' && e.target.value.trim()) { s.sinonimos.push(e.target.value.trim()); e.target.value = ''; refrescar(p, s); } };
+  $('addCaso').onkeydown = (e) => { if (e.key === 'Enter' && e.target.value.trim()) { s.casos.push(e.target.value.trim()); e.target.value = ''; refrescar(p, s); } };
+  $('detalle').querySelectorAll('.chip b').forEach((b) => {
+    b.onclick = () => { const k = b.dataset.k === 'sin' ? 'sinonimos' : 'casos'; s[k].splice(Number(b.dataset.i), 1); refrescar(p, s); };
+  });
+  $('detalle').querySelectorAll('input[data-vid]').forEach((inp) => {
+    const sv = s.variantes[inp.dataset.vid];
+    if (inp.dataset.f === 'display') inp.oninput = (e) => { sv.display = e.target.value; guardar(); };
+    else inp.onchange = (e) => { sv.oculto = e.target.checked; guardar(); };
+  });
+  pintarLista();
+}
+function refrescar(p, s) { guardar(); ver(sel); }
+
+// ===== navegación / decisiones =====
+$('btnAprobar').onclick = () => { st(data.productos[sel]).status = 'aprobado'; guardar(); siguiente(); };
+$('btnRechazar').onclick = () => { st(data.productos[sel]).status = 'rechazado'; guardar(); siguiente(); };
+$('btnPend').onclick = () => { st(data.productos[sel]).status = 'pendiente'; guardar(); };
+$('btnPrev').onclick = () => mover(-1);
+$('btnNext').onclick = () => mover(1);
+function mover(d) {
+  const vs = visibles();
+  const idx = vs.findIndex((x) => x.i === sel);
+  const nx = vs[idx + d];
+  if (nx) ver(nx.i);
+}
+function siguiente() {
+  const vs = visibles();
+  const after = vs.find((x) => x.i > sel && st(x.p).status === 'pendiente') || vs.find((x) => st(x.p).status === 'pendiente');
+  if (after) ver(after.i); else ver(sel);
+}
+$('buscar').oninput = (e) => { filtro = e.target.value; pintarLista(); };
+$('soloPend').onclick = () => { soloPendientes = !soloPendientes; $('soloPend').style.borderColor = soloPendientes ? 'var(--acc)' : 'var(--line)'; pintarLista(); };
+
+// ===== export SQL / MD =====
+const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+const arr = (a) => a.length ? 'array[' + a.map(q).join(',') + ']::text[]' : "'{}'::text[]";
+
+function generarSql() {
+  // CLAVE NATURAL, nunca uuids (principio v10.8): el mismo .sql sirve para testing
+  // HOY y para replay en prod MAÑANA. Pin + staleness en un solo mecanismo:
+  // 0 filas = renombrado/borrado -> SKIP con NOTICE; 2+ filas = clave ambigua ->
+  // SKIP con NOTICE. La transacción sigue: se aplica lo aplicable y se reporta.
+  const partes = [];
+  partes.push('-- ============================================================================');
+  partes.push('-- Curación generada por tools/curador-catalogo.html — ' + new Date().toISOString());
+  partes.push('-- Export base: ' + data.exportado);
+  partes.push('-- Resolución por CLAVE NATURAL (nombre+rubro normalizados; variantes por');
+  partes.push('-- nombre+color): replayable en prod. Filas renombradas/ambiguas se saltean');
+  partes.push('-- con NOTICE — revisar el output. Transaccional. REVISAR antes de aplicar.');
+  partes.push('-- ============================================================================');
+  partes.push('begin;');
+  let n = 0;
+  for (const p of data.productos) {
+    const s = st(p);
+    if (s.status !== 'aprobado' || !cambio(p, s)) continue;
+    n++;
+    partes.push('');
+    partes.push('-- ' + nombreEf(p, s) + (s.display && s.display !== (p.display_name || '') ? '  [display: ' + (p.display_name || p.nombre_vivo) + ' → ' + s.display + ']' : ''));
+    partes.push('do $curador$');
+    partes.push('declare pid uuid; ids uuid[];');
+    partes.push('begin');
+    partes.push('  select array_agg(p.id) into ids');
+    partes.push('  from public.products p join public.categories c on c.id = p.category_id');
+    partes.push("  where p.is_active and translate(lower(trim(p.name)), 'áéíóúñ', 'aeioun') = " + q(normKey(p.nombre_vivo)));
+    partes.push("    and translate(lower(trim(c.name)), 'áéíóúñ', 'aeioun') = " + q(normKey(p.categoria)) + ';');
+    partes.push('  if ids is null then');
+    partes.push("    raise notice 'SKIPPED (producto no encontrado o renombrado): %', " + q(p.nombre_vivo) + ';');
+    partes.push('  elsif array_length(ids, 1) > 1 then');
+    partes.push("    raise notice 'SKIPPED (clave natural ambigua, % filas): %', array_length(ids, 1), " + q(p.nombre_vivo) + ';');
+    partes.push('  else');
+    partes.push('    pid := ids[1];');
+    partes.push('    insert into bot.producto_meta as m (producto_id, display_name, sinonimos, casos_de_uso, auto_sinonimo, oculto, por_pagina, por_pack, nombre_origen, updated_at)');
+    partes.push('    values (pid, ' + (s.display.trim() ? q(s.display.trim()) : 'null') + ', ' + arr(s.sinonimos) + ', ' + arr(s.casos) + ', ' + s.auto_sinonimo + ', ' + s.oculto + ', ' + s.por_pagina + ', ' + s.por_pack + ', ' + q(p.nombre_vivo) + ', now())');
+    partes.push('    on conflict (producto_id) do update set display_name = excluded.display_name, sinonimos = excluded.sinonimos, casos_de_uso = excluded.casos_de_uso, auto_sinonimo = excluded.auto_sinonimo, oculto = excluded.oculto, por_pagina = excluded.por_pagina, por_pack = excluded.por_pack, nombre_origen = excluded.nombre_origen, updated_at = excluded.updated_at;');
+    for (const v of p.variantes) {
+      const sv = s.variantes[v.variante_id];
+      const cambioV = (sv.display || '') !== (v.display_variante || '') || sv.oculto !== v.oculto;
+      if (!cambioV) continue;
+      const colorCond = 'v.color is not distinct from ' + (v.color === null || v.color === undefined ? 'null' : q(String(v.color)));
+      partes.push('    select array_agg(v.id) into ids from public.product_variants v');
+      partes.push("    where v.product_id = pid and v.is_active and translate(lower(trim(v.name)), 'áéíóúñ', 'aeioun') = " + q(normKey(v.nombre_vivo)) + ' and ' + colorCond + ';');
+      partes.push('    if ids is null then');
+      partes.push("      raise notice 'SKIPPED (variante no encontrada o renombrada): % / %', " + q(p.nombre_vivo) + ', ' + q(v.nombre_vivo) + ';');
+      partes.push('    elsif array_length(ids, 1) > 1 then');
+      partes.push("      raise notice 'SKIPPED (variante ambigua por clave natural): % / %', " + q(p.nombre_vivo) + ', ' + q(v.nombre_vivo) + ';');
+      if (!(sv.display || '').trim() && !sv.oculto) {
+        partes.push('    else');
+        partes.push('      delete from bot.variante_meta where variante_id = ids[1];');
+        partes.push('    end if;');
+      } else {
+        partes.push('    else');
+        partes.push('      insert into bot.variante_meta as vm (variante_id, display_variante, nombre_origen, oculto, updated_at)');
+        partes.push('      values (ids[1], ' + q(((sv.display || '').trim() || v.nombre_vivo)) + ', ' + q(v.nombre_vivo) + ', ' + sv.oculto + ', now())');
+        partes.push('      on conflict (variante_id) do update set display_variante = excluded.display_variante, nombre_origen = excluded.nombre_origen, oculto = excluded.oculto, updated_at = excluded.updated_at;');
+        partes.push('    end if;');
+      }
+    }
+    partes.push('  end if;');
+    partes.push('end $curador$;');
+  }
+  partes.push('');
+  partes.push('commit;');
+  partes.push('-- Productos con cambios: ' + n + '. Después de aplicar: TOGGLE del workflow (cache de catálogo).');
+  if (!n) return null;
+  return partes.join('\n');
+}
+function generarMd() {
+  const l = ['# Decisiones de curación — ' + new Date().toISOString().slice(0, 10), '', 'Export base: ' + data.exportado, ''];
+  for (const p of data.productos) {
+    const s = st(p);
+    if (s.status === 'pendiente') continue;
+    l.push('## ' + (s.status === 'aprobado' ? '✅' : '✗') + ' ' + nombreEf(p, s) + '  `' + p.categoria + '`');
+    if (s.status === 'rechazado') { l.push('- Rechazado: queda como estaba.'); l.push(''); continue; }
+    if ((s.display || '') !== (p.display_name || '')) l.push('- display: `' + (p.display_name || p.nombre_vivo) + '` → `' + (s.display || '(vivo)') + '`');
+    const dsin = JSON.stringify(s.sinonimos) !== JSON.stringify(p.sinonimos);
+    if (dsin) l.push('- sinónimos: [' + p.sinonimos.join(', ') + '] → [' + s.sinonimos.join(', ') + ']');
+    if (JSON.stringify(s.casos) !== JSON.stringify(p.casos_de_uso)) l.push('- casos: [' + p.casos_de_uso.join(', ') + '] → [' + s.casos.join(', ') + ']');
+    for (const f of ['auto_sinonimo', 'oculto', 'por_pagina', 'por_pack']) {
+      const orig = { auto_sinonimo: p.auto_sinonimo, oculto: p.oculto, por_pagina: p.por_pagina, por_pack: p.por_pack }[f];
+      if (s[f] !== orig) l.push('- ' + f + ': ' + orig + ' → ' + s[f]);
+    }
+    for (const v of p.variantes) {
+      const sv = s.variantes[v.variante_id];
+      if ((sv.display || '') !== (v.display_variante || '') || sv.oculto !== v.oculto) l.push('- variante `' + v.nombre_vivo + '`: display `' + (v.display_variante || '(vivo)') + '` → `' + (sv.display || '(vivo)') + '`' + (sv.oculto !== v.oculto ? ', oculta: ' + sv.oculto : ''));
+    }
+    l.push('');
+  }
+  return l.join('\n');
+}
+function descargar(nombre, contenido) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([contenido], { type: 'text/plain' }));
+  a.download = nombre;
+  a.click();
+}
+$('btnSql').onclick = () => {
+  const sql = generarSql();
+  if (!sql) { alert('No hay productos APROBADOS con cambios todavía.'); return; }
+  descargar('curacion-' + new Date().toISOString().slice(0, 10) + '.sql', sql);
+};
+$('btnMd').onclick = () => descargar('curacion-decisiones-' + new Date().toISOString().slice(0, 10) + '.md', generarMd());
+</script>
+</body>
+</html>
