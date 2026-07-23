@@ -1803,6 +1803,51 @@
         "includeOtherFields": true,
         "options": {}
       }
+    },
+    {
+      "parameters": {
+        "content": "## Isla: refrescar cache del catálogo\n\nNO conectada al flujo principal. Purga `staticData.catalogo` para que el PRÓXIMO mensaje re-consulte el catálogo (tras aplicar SQL de curación/overlay).\n\n**Uso:** abrir la URL de PRODUCCIÓN (bookmark):\n`http://localhost:5678/webhook/refrescar-catalogo`\n\n**OJO:** el botón Execute del editor NO sirve — n8n no persiste staticData en ejecuciones manuales/test, solo en producción (workflow activo). Si responde `cache_purgado: true`, listo.\n\nEn prod: cerrar este path en el firewall o sumarle un header secreto.",
+        "height": 320,
+        "width": 400
+      },
+      "id": "sticky-isla-refresh",
+      "name": "LEEME Refresh Cache",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "refrescar-catalogo",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-refresh-cache",
+      "webhookId": "b7e2a3d4-1c5f-4e8a-9d20-7f6c3a1e5b90",
+      "name": "Refrescar Catálogo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1080,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Isla de mantenimiento (sin conexión al flujo principal): purga el cache del\n// catálogo en staticData. Solo persiste en ejecuciones de PRODUCCIÓN (URL de\n// producción con el workflow activo) — el botón Execute del editor no lo guarda.\nconst sd = $getWorkflowStaticData('global');\nconst habia = !!sd.catalogo;\nconst edadSeg = sd.catalogoTs ? Math.round((Date.now() - sd.catalogoTs) / 1000) : null;\ndelete sd.catalogo;\ndelete sd.catalogoTs;\nreturn [{ json: { ok: true, cache_purgado: habia, edad_cache_seg: edadSeg } }];"
+      },
+      "id": "code-purgar-cache",
+      "name": "Purgar Cache Catálogo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -200
+      ]
     }
   ],
   "connections": {
@@ -2409,6 +2454,17 @@
         [
           {
             "node": "Armar Mensajes LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refrescar Catálogo": {
+      "main": [
+        [
+          {
+            "node": "Purgar Cache Catálogo",
             "type": "main",
             "index": 0
           }
