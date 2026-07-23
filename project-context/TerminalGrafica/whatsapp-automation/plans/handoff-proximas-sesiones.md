@@ -70,11 +70,15 @@ natural replayable en prod.
    repetida" fue correcta per-conversation).
 5. **Ronda 2 de suite-5**: casos C2 (22-29) primero, después 1-21 completos +
    regresión suite-3 vigente / suite-2 / matriz. Reportar para el loop de fixes.
-6. **Pasada 1 de curación** con la herramienta: correr `db/curador-export.sql` →
-   guardar `catalogo-export.json` → abrir `tools/curador-catalogo.html` → scope
-   §Ronda 4 (displays 75/106, refinar por_pack, completar por_pagina, anillados
-   sin plazo I14 — decidir qué precio muestra la línea única) → exportar .sql →
-   revisarlo → aplicarlo → TOGGLE. El .md de decisiones va commiteado al repo.
+6. **Pasada 1 de curación** — PIVOT 2026-07-23 (decisión Martin): la curación la
+   propone una sesión de Claude vía skill **`/tg-curar-catalogo`** (Claude propone
+   displays gramaticalmente correctos de cara al cliente, sin inventar datos,
+   genera preguntas a TG donde falte info, verifica colisiones y emite el .sql
+   por clave natural; Martin aprueba por tandas y aplica). Insumo: correr
+   `db/curador-export.sql` → `catalogo-export.json`. Scope §Ronda 4 sigue:
+   displays 75/106, por_pack, por_pagina, anillados sin plazo I14 (los 4 valen
+   $2.400 → línea única sin conflicto de precio). `tools/curador-catalogo.html`
+   queda como fallback visual si Martin prefiere clickear.
 7. promptfoo cuando declares el build cerrado.
 
 ---

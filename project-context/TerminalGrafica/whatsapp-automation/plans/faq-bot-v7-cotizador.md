@@ -531,3 +531,29 @@ seed v7b); completar `por_pagina`; dato del anillado 24hs; **consolidación de l
 anillados por-tiempo (I14: display sin plazo / ocultar duplicados — decisión de
 Martin sobre qué precio muestra la línea única)**; Tier B de v10.8 solo si la
 pasada viene fluida. NO re-curar sinónimos ya podados (calibración viva).
+
+## Ronda 6 — pivot de la curación: de herramienta visual a skill (2026-07-23, decisión Martin)
+
+Martin probó el flujo del curador HTML y decidió que clickear campo por campo no es
+el mejor uso de su tiempo: la propuesta fina (redacción, detección de ambigüedades)
+la hace mejor una sesión de Claude. Nace la skill **`/tg-curar-catalogo`**
+(`.claude/skills/tg-curar-catalogo/SKILL.md`), que encapsula los principios ya
+contrastados en r5 y les suma los 4 requisitos de Martin:
+
+1. Mejorar la comprensión del producto por el bot (displays/sinónimos/flags).
+2. **No inventar datos** — el display solo reordena/corrige info que ya está en la
+   fila; lo no confirmado (caso medicina, pregunta 34) va como pregunta a TG con
+   display neutro mientras tanto.
+3. Proponer las preguntas necesarias al negocio (`preguntas-tg.md`, única fuente).
+4. Displays gramaticalmente correctos de cara al cliente (criterio: leer bien en
+   «Tenemos {display} a ${precio}»; ej. `Promocion Inmobiliarias 6 carteles 1 x
+   0.65 mt` → `Promoción para inmobiliarias: 6 carteles de 1 × 0,65 m`).
+
+Invariantes heredadas sin cambio: overlay only (nunca `public.*`), SQL por clave
+natural replayable (mismo esqueleto que `generarSql()`), verificación de colisiones
+con la semántica de Get Precio ANTES de emitir el SQL, no perder calificadores que
+desambiguan (clase I2), Martin aprueba por tandas y aplica. Flujo: export →
+sesión propone por rubro → OK Martin → `db/curacion-YYYY-MM-DD.sql` + `.md` de
+decisiones + diff de preguntas → aplicar + TOGGLE + replay. La herramienta
+`tools/curador-catalogo.html` queda como fallback visual (loader ya robusto a
+envoltura del SQL editor y mojibake, commit ffbc2bf).
