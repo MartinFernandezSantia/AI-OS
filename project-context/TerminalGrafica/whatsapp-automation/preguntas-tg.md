@@ -117,6 +117,12 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     $15.000 no cierra (87% off). Define `por_pack`: hoy está en true (el bot
     muestra $15.000 como precio del conjunto); si es por cartel, sub-cotiza 6×
     y hay que pasarlo a false. (pasada 1 de curación).
+36. **Precio especial de medicina: ¿para quién es?** — en la ronda 2 el bot le
+    ofreció el $45/página de medicina a un cliente que pidió "apuntes" genéricos.
+    Desde r6 el bot solo lo menciona si el cliente dice "medicina" (guard de
+    nicho) y ante la duda pregunta "¿es material de medicina?". ¿Es la conducta
+    correcta, o el precio especial se le da a cualquiera que imprima apuntes?
+    (Complementa la 34, que pregunta por el formato.)
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 

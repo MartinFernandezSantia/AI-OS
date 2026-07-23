@@ -233,6 +233,35 @@ directo si resuelve, o menú de nuevo). No es bug: la ruta expira por diseño.
 
 ---
 
+## Ronda 3 (post-paquete r6, 2026-07-23)
+
+Ronda 2 corrida y diagnosticada: [`../plans/suite5-ronda2-fixes.md`](../plans/suite5-ronda2-fixes.md).
+Cambios de conducta esperada respecto de lo escrito arriba:
+
+- **Fallo de resolución (`sin_match`/`ambiguo`) ya NO deriva a email**: repregunta
+  (o menú rescate numerado) y el follow-up lo toma el especialista. Un email en
+  esos casos ahora es FALLO. El email sigue siendo correcto para override,
+  multi-regla, precio $0, dorso, papel especial y producto incoherente.
+- **Medicina**: solo aparece si el cliente dijo "medicina"; si el LLM la resuelve
+  sin mención, el bot pregunta "¿es material de medicina?". Precio $45/pág a un
+  "apuntes" genérico = FALLO (`producto_nicho` en notas).
+- **Pedido simple faz que resuelve a doble faz** → repregunta simple/doble
+  (`faz_incoherente`), nunca el número del doble.
+- **Menú**: una sola opción = frase natural sin numerar (`menu_unico`); packs de
+  la misma familia = variantes una vez + "packs de 100, 500 o 1000" (`menu_pack`,
+  el "12" del caso 21 pasa a 4 líneas); orden 100 < 500 < 1000; el copy pide "cuál
+  opción querés (vale mandar solo el número)".
+- **Multi-ítem**: ningún ítem se descarta (cupo de opciones ahora 4); tras elegir
+  del menú, el segundo ítem debe reaparecer vía `mas`.
+- **Anillado**: sin "24 hs" en menús/render (curación b aplicada).
+- **Pregunta repetida o "???"**: el bot re-responde reformulado (el silencio del
+  repeatNote fue fix r6); 3 repeticiones textuales siguen muteando por backstop.
+
+Replay mínimo: 4, 5, 7, 11, 12, 13, 14, 15→18, 20, 21, 25 (repetido + "???"), 26,
+29 + regresión 1, 9, 10, 22-24, 27, 28.
+
+---
+
 ## Verificación en BD (después de la ronda)
 
 ```sql

@@ -3,7 +3,7 @@
 > Estado y roadmap **forward-looking** para las próximas sesiones.
 > El log histórico detallado vive en la memoria `chatwoot-whatsapp-impl-status`.
 > El plan de build original está en [`v6-build-plan.md`](./v6-build-plan.md).
-> Última actualización: **2026-07-22**.
+> Última actualización: **2026-07-23 (noche, paquete r6)**.
 >
 > **Reglas de trabajo que no cambian:** rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot) · Claude prepara migraciones, **Martin las aplica** (Claude no toca la BD) · el bot corre en la VM de dev con el número de test, NO es prod de TG · commits en rama, nunca a `main` de `projects/` · **toda decisión de diseño se contrasta con un agente Fable ANTES de aplicarla; Claude aplica** (ver "Cómo usamos a Fable") · tras editar un nodo Code, correr `node tests/code-harness.js` SIEMPRE.
 
@@ -75,8 +75,8 @@ natural replayable en prod.
 4. Verificar el dato del anillado 24hs (query §Ronda 4 tabla I12) y confirmar si
    entre los casos 5→7 de ronda 1 hubo conversación nueva (si sí, la "dirección
    repetida" fue correcta per-conversation).
-5. **Ronda 2 de suite-5**: casos C2 (22-29) primero, después 1-21 completos +
-   regresión suite-3 vigente / suite-2 / matriz. Reportar para el loop de fixes.
+5. **Ronda 2 de suite-5 — ✅ CORRIDA 2026-07-23** (ver bloque r6 abajo: el loop
+   de fixes de esta ronda ya está construido).
 6. **Pasada 1 de curación — ✅ HECHA Y APLICADA 2026-07-23** con la skill
    `/tg-curar-catalogo` (pivot del curador visual, que queda de fallback).
    Artefactos: `db/curacion-2026-07-23.sql` (aplicado) + `.md` de decisiones +
@@ -85,20 +85,47 @@ natural replayable en prod.
    plástico a4/oficio» (48/72/96 hs ocultos), 3 ocultos, por_pack refinado.
 7. promptfoo cuando declares el build cerrado.
 
-**PRÓXIMA SESIÓN — contexto listo (dejado 2026-07-23 noche):**
-- Martin trae los **resultados de la ronda 2 de suite-5** (paso 5) → loop de
-  fixes. Antes de diagnosticar cualquier incidente de resolución/render, cargar
-  **`db/export-actualizado-catalogo.json`** — es el catálogo CURADO Y APLICADO
-  (export 2026-07-23 21:25, post-curación, sin mojibake, 88 productos, 3 ocultos):
-  el estado real que el bot ve en la ronda 2. No pedir re-export salvo sospecha
-  de cambios del mostrador posteriores.
-- Complementos: `db/curacion-2026-07-23.md` (qué se decidió y por qué),
-  preguntas 35-41 pendientes de TG (gates de datos), plan
-  `plans/faq-bot-v7-cotizador.md` §Rondas 4-6 (guards, C2, semántica REAL de
-  Get Precio: rank 2 = LIKE contiguo sin word-subset).
-- Recordatorios para el loop de fixes: correr `node tests/code-harness.js` tras
-  tocar Code nodes; contraste Fable para todo cambio de diseño; cache se purga
-  con el bookmark de la isla (no toggle).
+**RONDA 2 CORRIDA + PAQUETE r6 CONSTRUIDO (2026-07-23 noche):** Martin corrió la
+ronda 2 completa (1-28). La maquinaria C2 funcionó (menú numerado, elección por
+número, stickiness, firewall, anti-regateo, cap); fallaron la RESOLUCIÓN del LLM
+(claves inventadas tipo "Impresiones a4 s/f b/n" → 0 filas → email, casos
+4/14/18), el escape mono-variante de Get Precio (el anillado curado no matcheaba:
+menú → "1" → email, caso 7), el descarte de ítems en multi-ítem (cupo 3, caso 11),
+la UX del menú (orden string, 12 líneas, menú de 1 opción, casos 5/12/21), el leak
+del "24 hs" (caso 13) y silencios del repeatNote ante pregunta repetida/"???".
+**Diagnóstico completo + fixes: [`suite5-ronda2-fixes.md`](./suite5-ronda2-fixes.md).**
+Paquete r6 (harness 81/81, contrastado con ronda adversarial r6-review — 7
+hallazgos, 5 corregidos en el mismo paquete, ver plan §4; vigilar H7 `(variante
+rescatada: mono)` en ronda 3): sin_match/ambiguo → REPREGUNTA ruteada al especialista
+(nunca email; email solo para precios que el sistema no puede dar), guard de nicho
+medicina, guard faz inversa, mono-variante siempre matchea, menú con orden
+natural + pivot de packs + colapso de opción única + "vale mandar solo el número",
+cupo opciones 4, prompts anti-fusión + multi-ítem + naturalidad, repeatNote con
+excepción de pregunta repetida, curación b (`db/curacion-2026-07-23b.sql`: 4
+variantes únicas → '.', ancho de lona al display del producto).
+
+**RUNBOOK MARTIN — aplicar r6 (en orden):**
+1. Aplicar `db/curacion-2026-07-23b.sql` (revisar NOTICEs: 0 SKIPPED esperados;
+   sanity del final: 4 variantes con display '.').
+2. GET `/webhook/refrescar-catalogo` (URL de producción de la isla — purga cache).
+3. Re-importar `n8n/flows/faq-bot-v7.json` (mismos 60 nodos; cambian Get Precio,
+   Armar Respuesta Precio, Log Precio, Get Opciones, Armar Menu Opciones, Parsear
+   Respuesta, Armar Mensajes LLM y los dos prompts). Verificar creds + abrir/
+   guardar Log Precio y Log Menu (schema cache) + TOGGLE del workflow.
+4. **Ronda 3**: replay mínimo del plan §5 (4, 5, 7, 11, 12, 13, 14, 15→18, 20,
+   21, 25 repetido + "???", C2 faltantes, regresión 1/9/10/22-24/27/28).
+   Marcadores nuevos en `bot.decisiones.notas`: `(repregunta)`, `(variante
+   rescatada: mono)`, `faz_incoherente`, `producto_nicho`, `menu_pack`,
+   `menu_unico`, `menu_nicho`.
+5. Pregunta TG nueva: **36** (¿el precio de medicina es solo para medicina?).
+6. promptfoo cuando declares el build cerrado.
+
+**PRÓXIMA SESIÓN:** Martin trae resultados de ronda 3 → loop de fixes. Contexto:
+`plans/suite5-ronda2-fixes.md` (diagnóstico + decisiones abiertas: pivot de packs
+ON, 2ª llamada LLM post-menú descartada por ahora), catálogo real en
+`db/export-actualizado-catalogo.json` (2026-07-23 21:25 — OJO: NO refleja la
+curación b; si hay que diagnosticar displays, pedir re-export), harness
+`node tests/code-harness.js` tras tocar Code nodes, cache vía isla (no toggle).
 
 ---
 
