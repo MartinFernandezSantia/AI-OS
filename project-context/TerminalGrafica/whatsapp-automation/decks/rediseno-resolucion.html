@@ -311,7 +311,7 @@
         <div class="step"><span class="n">PASO 7</span><span class="tag code">Código</span><h5>Motor de plata</h5><small>Packs y brackets; precio = token opaco</small></div>
         <div class="step llm"><span class="n">PASO 8</span><span class="tag ai">LLM</span><h5>Wordsmith (ciego)</h5><small>Redacta humano. No ve plata, no valida, no elige</small></div>
         <div class="step"><span class="n">PASO 9</span><span class="tag code">Código</span><h5>Re-estampado + guard</h5><small>Re-inyecta números; regex-gate; denylist</small></div>
-        <div class="step"><span class="n">PASO 10</span><span class="tag code">Código</span><h5>Instrumentación</h5><small>Log por turno + corrección humana</small></div>
+        <div class="step"><span class="n">PASO 10</span><span class="tag code">Código</span><h5>Instrumentación</h5><small>Log por turno + señales automáticas (sin humano)</small></div>
         <div class="step" style="border-style:dashed;background:transparent"><span class="n">INVARIANTE</span><h5 style="color:var(--teal)">La plata siempre es dato</h5><small>y ningún LLM lee el historial como instrucción</small></div>
       </div>
       <div class="legend"><span><i style="background:var(--teal)"></i>LLM (borde)</span><span><i style="background:var(--ink)"></i>Código (determinístico)</span></div>
@@ -441,7 +441,7 @@
       <div class="mine"><span class="warn">⚑ Landmine 1</span><h4>Los atributos son vaporware</h4>
         <p>El gate de validación asume campos como <code>ancho_max</code>, <code>faz</code>, <code>tiers_pack</code>. Hoy <b>no existen</b> en el overlay: viven como texto libre dentro del nombre en <code>public.products</code>. Sin modelarlos, INC-12 e INC-21 no cierran. Es un <b>proyecto de datos + firma de TG</b> que nadie scopeó.</p></div>
       <div class="mine"><span class="warn">⚑ Landmine 2</span><h4>El confident-wrong es invisible</h4>
-        <p>El flag de "falló la resolución" no dispara en INC-15 ni INC-21: el motor <b>creyó acertar</b>. La revisión semanal verá los sin_match ruidosos y ningún mis-quote silencioso. Única señal real: <b>loguear cuándo un humano en Chatwoot corrige al bot.</b></p></div>
+        <p>El flag de "falló la resolución" no dispara en INC-15 ni INC-21: el motor <b>creyó acertar</b>. Como TG <b>no monitorea Chatwoot</b>, la detección es 100% automática: <b>flags de baja confianza</b> + <b>rechazo del cliente</b> en el turno siguiente + <b>auditoría offline</b> de una muestra, que revisás vos desde los logs.</p></div>
     </div>
   </section>
 
@@ -471,7 +471,7 @@
       <div class="grid g3" style="gap:11px">
         <div class="dkey"><span class="lbl">Decisión 1</span><h4>¿Aprobás el contrato nuevo del LLM1? (frase+slots, no nombre)</h4></div>
         <div class="dkey"><span class="lbl">Decisión 2</span><h4>¿Scopeamos ya la auditoría de atributos con TG, o se difiere?</h4></div>
-        <div class="dkey"><span class="lbl">Decisión 3</span><h4>¿Cómo cazamos el confident-wrong? ¿Log de Chatwoot y/o muestreo?</h4></div>
+        <div class="dkey"><span class="lbl">Decisión 3</span><h4>¿Validás la detección automática del confident-wrong, sin humano en Chatwoot?</h4></div>
       </div>
       <p class="sec">Las otras cinco están en el plan: <b>defaults de oficio</b> firmados por TG · cuánto <b>forzar la ilusión humana</b> · <b>tope de LLM</b> + copy del handoff · <b>gate de reversión</b> del wordsmith · <b>migración a gemini-3.1</b>. Nada se construye sin tu OK.</p>
     </div>
@@ -489,7 +489,7 @@
         <div class="q"><span class="qn">4</span><span><b>Anillado:</b> ¿ejes reales (plástico/metálico, diámetro, tapas) y default sin especificar?</span></div>
         <div class="q"><span class="qn">5</span><span><b>Papeles especiales:</b> ¿cómo mapea obra 80, bookcel, ahuesado, ilustración al producto real?</span></div>
         <div class="q"><span class="qn">6</span><span><b>Ventana de 24 h:</b> ¿qué % de cotizaciones se retoman fuera de sesión?</span></div>
-        <div class="q"><span class="qn">7</span><span><b>Corrección humana:</b> ¿los agentes en Chatwoot editan la cotización del bot? ¿Podemos loguearlo?</span></div>
+        <div class="q"><span class="qn">7</span><span><b>Escalación a mail:</b> ¿todo lo que el bot no cierra va a mail, sin humano en WhatsApp? ¿Qué dirección y con qué frase?</span></div>
       </div>
     </div>
   </section>

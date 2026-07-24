@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-24 — Bot TG: sin humano en Chatwoot — escalación 100% a mail y detección automática del confident-wrong
+
+**Decision:** TG quiere automatizar al máximo y NO sumar Chatwoot a su carga de trabajo. El diseño no debe contar con interacción humana ni con correcciones al bot vía Chatwoot. Toda escalación/handoff va a **mail**. El *confident-wrong* (casos donde el motor cree que acertó, p. ej. INC-15 bookcel→a3 tonner, INC-21 total mal por packs) se detecta **100% automático**, revisado por Martin desde los logs: (a) flags de baja confianza en la resolución (margen fino entre candidatos, default de oficio aplicado, match débil rank-2/3); (b) clasificador barato de rechazo del cliente en el turno siguiente ("no, quería bookcel"); (c) auditoría offline de una muestra de TODAS las cotizaciones con LLM-juez batch (pedido vs producto+precio). El soft-handoff por asignación humano/bot en Chatwoot queda como **vestigio a retirar**.
+
+**Why:** Feedback directo de Martin (2026-07-24) sobre lo que quiere TG: máxima automatización, cero pendiente de Chatwoot. El consejo de arquitectura había apoyado por unanimidad "loguear la corrección humana en Chatwoot" como la única señal confiable del confident-wrong; esta restricción lo descarta de raíz. La detección automática es menos precisa que un humano atento, pero no agrega carga operativa a TG, que es el requisito no negociable. Cambiaría el enfoque si la auditoría offline resulta ciega a demasiados mis-quotes: ahí se sube el % de muestreo o se afina el clasificador de rechazo. Ver plan `plans/consejo-arquitectura-resolucion.md`.
+
+**Alternatives considered:** Human-in-the-loop en Chatwoot como señal/handoff (rechazado por Martin — carga operativa que TG no quiere). Muestreo 100% manual por Martin (se conserva como parte de la auditoría offline, pero asistido por LLM-juez para que escale). Handoff a un agente humano que tome la conversación en WhatsApp (descartado: nadie va a estar mirando).
+
+**Owner:** Martin.
+
 ## 2026-07-24 — Bot TG: nodo "Aclarador" (2ª llamada LLM) para resolución y ambigüedad, jailbreak-safe
 
 **Decision:** Reemplazar la repregunta fija de r6 (para los fallos de resolución) por un nodo **Aclarador**: una 2ª llamada LLM que se dispara solo cuando el sistema no resolvió de forma unívoca (`sin_match`, `ambiguo`, `faz_incoherente`, `producto_nicho`, `producto_incoherente`). Recibe el catálogo cerrado cotizable + los candidatos + el **mensaje actual del cliente como dato (NO la historia)**, y devuelve una acción de salida cerrada: `resolver` (mapea al producto real → 2º Get Precio determinístico → precio, el LLM nunca tipea el monto), `preguntar` (pregunta corta nombrando solo el eje que distingue), `opciones` (menú de los que matchean, para comparar) o `nada` (email). Con anti-loop y degradación fail-safe. Si varios productos matchean, **se presentan las opciones o se pide el dato — nunca se fuerza una sola y se descarta el resto** (para eso la curación 1c empata los gemelos kraft/folletos, haciéndolos visibles al Aclarador). Además: la excepción del repeatNote (B.7) se revierte — el silencio ante una pregunta ya respondida es deseado (ahorra un mensaje de WhatsApp pago), no un bug.

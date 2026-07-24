@@ -9,6 +9,13 @@ costo-ops, dominio-imprenta, red-team), 2 rondas de debate + síntesis del chair
 **Este doc es la recomendación del consejo, PENDIENTE de las decisiones de Martin
 (sección al final). No está aprobado para construir.**
 
+> **RESTRICCIÓN DURA (Martin, 2026-07-24):** TG quiere automatizar al máximo y NO
+> sumar Chatwoot a su carga de trabajo. No hay que contar con interacción humana ni
+> con correcciones al bot vía Chatwoot. Toda escalación va a **mail**. Esto descarta
+> el human-in-the-loop de Chatwoot como señal de mejora y como destino de handoff;
+> el confident-wrong se detecta 100% automático (flags de baja confianza + rechazo
+> del cliente + auditoría offline) y lo revisa Martin desde los logs, no TG.
+
 ---
 
 ## El giro grande: NO "vocero primero"
@@ -37,9 +44,14 @@ determinística rompe el propio loop de mejora.
    estados que el sistema SABE que fallaron (sin_match/ambiguo). Pero inc15 (match
    falso-confiado: el motor devolvió "1 ganador limpio") e inc21 (precio plausible
    pero MAL) NO se autoclasifican como falla. La revisión semanal verá todos los
-   sin_match ruidosos y NINGÚN mis-quote silencioso. Única señal real: corrección
-   humana en Chatwoot (agente que edita/contradice al bot) o muestreo de TODAS las
-   cotizaciones, no solo las fallas autodeclaradas. Esto reescribe el pedido del inc11.
+   sin_match ruidosos y NINGÚN mis-quote silencioso. Como TG no monitorea Chatwoot
+   (restricción de arriba), la detección es 100% automática, revisada por Martin desde
+   los logs: (a) **flags de baja confianza** en la resolución (margen fino entre
+   candidatos, default de oficio aplicado, match débil rank-2/3); (b) **clasificador de
+   rechazo del cliente** en el turno siguiente ("no, quería bookcel") como señal barata
+   que vive en el bot; (c) **auditoría offline** de una muestra de TODAS las
+   cotizaciones (LLM-juez batch pedido-vs-resultado), no solo las fallas autodeclaradas.
+   Esto reescribe el pedido del inc11 sin poner a nadie de TG a mirar Chatwoot.
 
 Otros dos riesgos operativos nuevos:
 - **Ventana de 24 h de WhatsApp:** fuera de sesión solo se mandan plantillas
@@ -96,8 +108,10 @@ Otros dos riesgos operativos nuevos:
   "el LLM nunca tipea plata" de eslogan en propiedad verificable.**
 - **PASO 10 — Instrumentación:** log estructurado por turno (distribución de ranks, si
   disparó selector/menú, motivo-de-falla enum, `default_aplicado`, re-estampe
-  rechazado, salientes facturables) + EVENTO de corrección-humana en Chatwoot (única
-  señal del confident-wrong). Plantilla determinística = golden del harness; el
+  rechazado, salientes facturables) + **señales automáticas del confident-wrong**
+  (flags de baja confianza + clasificador de rechazo del cliente en el turno
+  siguiente), para auditoría offline de Martin — NO corrección humana en Chatwoot.
+  Plantilla determinística = golden del harness; el
   wordsmith es capa cosmética verificada por re-estampado (no perder 94/94).
 
 **Invariantes transversales:** (1) la plata siempre llega calculada como dato y ningún
@@ -120,9 +134,9 @@ para desambiguar necesitaría historial = vector de jailbreak + modo de falla de
 ## Secuencia de construcción (reemplaza "vocero primero")
 
 1. **INSTRUMENTAR** (costo ~cero, ningún LLM): flag `resolution_outcome` + contador de
-   salientes facturables + evento de corrección-humana en Chatwoot + debounce de
-   entrantes. Baseline sin el cual no se justifica ningún LLM nuevo, y única forma de
-   cazar el confident-wrong (inc15/21).
+   salientes facturables + flags de baja confianza + clasificador de rechazo del
+   cliente + debounce de entrantes. Baseline sin el cual no se justifica ningún LLM
+   nuevo, y única forma AUTOMÁTICA de cazar el confident-wrong (inc15/21) sin Chatwoot.
 2. **FIXES DETERMINÍSTICOS PUROS** (cero-token): matemática pack/bracket con tests
    (inc21), piso de confianza en rank-2/3 (inc15), slot-carryover antes de armar menú
    (inc7), whitelist de campos internos (inc13), denylist anti-voz-de-máquina.
@@ -172,8 +186,9 @@ para desambiguar necesitaría historial = vector de jailbreak + modo de falla de
 4. Definir hasta dónde forzar la ilusión humana (política con TG + riesgo de confianza).
 5. Aprobar el tope de 2 LLM/turno (3 en desempate) y la copy exacta del handoff humano.
 6. Aprobar el gate de reversión del wordsmith (revertir si no baja el re-ask medido).
-7. Decidir el mecanismo de detección del confident-wrong (loguear corrección humana en
-   Chatwoot y/o muestrear TODAS las cotizaciones).
+7. Validar la detección AUTOMÁTICA del confident-wrong (flags de baja confianza +
+   rechazo del cliente + auditoría offline de una muestra) — sin humano en Chatwoot.
+   Confirmar que la escalación es 100% a mail y con qué frase/dirección.
 8. Programar la migración a gemini-3.1-flash-lite y re-correr el harness antes del 1-oct.
 
 ## Preguntas nuevas para TG (a foldear en preguntas-tg.md)
@@ -191,5 +206,6 @@ para desambiguar necesitaría historial = vector de jailbreak + modo de falla de
    bookcel, ahuesado, ilustración) al producto real? (inc15.)
 6. **Ventana de 24 h:** ¿% aprox de cotizaciones que se resuelven cuando el cliente
    retoma fuera de sesión? (Define cuántas plantillas humanas aprobadas preparar.)
-7. **Corrección humana:** ¿los agentes en Chatwoot editan/contradicen la cotización del
-   bot? ¿Podemos loguear ese evento como señal del confident-wrong?
+7. **Escalación a mail:** ¿confirmás que TODO lo que el bot no cierra va a mail, sin
+   humano tomando la conversación en WhatsApp? ¿Qué dirección y con qué frase exacta?
+   (TG ya definió: automatizar al máximo, no monitorear Chatwoot.)
