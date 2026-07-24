@@ -72,6 +72,9 @@ Otros dos riesgos operativos nuevos:
   slots:{cantidad,faz,color,tamano,material,gramaje}}}`, cada slot marcado
   `explicito|ausente`. NUNCA un nombre de catálogo, NUNCA plata. Segmenta ítems; NO
   resuelve productos. (Raíz de inc15 e inc20: hoy lo obligamos a emitir un nombre.)
+  También emite `situacion` (normal / info_no_disponible / fuera_de_alcance /
+  frustrado / enojo_extremo) para que el refinador final module el tono SIN re-leer el
+  historial — así la voz situacional no cuesta una 3ª llamada (se mantiene el tope de 2).
 - **PASO 2 — Tokenizador determinístico (Code):** separa cantidad/unidades del texto
   de producto ("150 tarjetas" → cantidad=150, producto="tarjetas"). Mata inc20.
 - **PASO 3 — Matcher/rank (Code):** por ítem devuelve un SET de candidatos con score +
@@ -96,10 +99,19 @@ Otros dos riesgos operativos nuevos:
 - **PASO 7 — Motor de plata (Code):** matemática pack/bracket correcta y testeada;
   subtotal por ítem; precio emitido como TOKEN OPACO. El LLM nunca lo ve como número
   editable. (Arregla inc21.)
-- **PASO 8 — WORDSMITH LLM (ciego a la plata):** input = payload ya resuelto + ya
-  validado + montos como tokens opacos + pedido. SIN historial. Redacta humano y
-  agrupado para WhatsApp, verbaliza el default aplicado y el handoff en lenguaje de
-  mostrador. Salida a UNA burbuja facturable. NO valida, NO elige producto, NO calcula.
+- **PASO 8 — REFINADOR final (LLM ciego a la plata), en TODO mensaje saliente:** input =
+  borrador determinístico + `situacion` (de PASO 1) + montos como tokens opacos. SIN
+  historial (el mensaje del cliente llega solo como etiqueta de tono, no como
+  instrucción). Humaniza y **varía** cada saliente según la situación (no repite siempre
+  lo mismo), agrupa multi-ítem, verbaliza el default y la derivación a mail en lenguaje
+  de mostrador. Salida a UNA burbuja facturable. NO valida, NO elige producto, NO
+  calcula. **Allowed-claims cerrado:** solo reformula lo que el pipeline calculó + las
+  líneas fijas de alcance y mail; no inventa plazos, descuentos ni productos.
+  **Política de voz:** dominio cerrado (el bot solo informa sobre TG y sus servicios);
+  ante `frustrado`/`enojo_extremo` se disculpa, aclara que solo puede informar de TG y
+  deriva a mail; en `enojo_extremo` puede revelar que es un bot; el humano real SIEMPRE
+  por mail (misma dirección, cubre reclamos y enojo). Si el gate (PASO 9) rechaza →
+  plantilla determinística, que por eso debe ser un piso aceptable de voz.
 - **PASO 9 — Re-estampado + guard (Code, post-LLM):** re-inyecta los números exactos;
   regex-gate verifica tokens de precio intactos; si no calzan → descarta el texto y
   manda la plantilla determinística. Denylist anti-voz-de-máquina ("el catálogo", "la

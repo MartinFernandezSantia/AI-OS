@@ -20,6 +20,16 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-24 — Bot TG: refinador LLM final en TODO mensaje + política de voz (dominio cerrado, frustración, mail)
+
+**Decision:** Todo mensaje saliente pasa por un **refinador LLM ligero final** que lo humaniza y lo **varía** según la situación (no solo el de precio, y sin repetir siempre lo mismo). La etiqueta de situación (`normal` / `info_no_disponible` / `fuera_de_alcance` / `frustrado` / `enojo_extremo`) la emite el LLM1 junto con la frase y los slots → NO agrega una 3ª llamada, se mantiene el tope de 2 LLM/turno. **Dominio cerrado:** el bot solo informa sobre TG y sus servicios. Ante frustración/enojo: se disculpa e informa que solo puede dar info de TG; en caso extremo **puede revelar que es un bot**; la escalación a un humano real es **siempre por mail** (misma dirección `terminalgrafica@gmail.com`), incluidos reclamos y clientes enojados. El refinador sigue **ciego a la plata** (montos como tokens opacos + re-estampado + regex-gate), **sin historial como instrucción** (el mensaje del cliente le llega solo como etiqueta de tono), con **allowed-claims cerrado** (no inventa plazos/descuentos/productos) y **fallback a la plantilla determinística** si el gate rechaza — por eso la plantilla debe ser un piso de voz aceptable.
+
+**Why:** Martin (2026-07-24): la frase de derivación depende del contexto (no es lo mismo un cliente enojado que alguien que pidió info que no tenemos) y no quiere que el bot repita siempre lo mismo; quiere que suene humano y variado. La restricción de que solo informa sobre TG evita que se lo lleve a temas fuera de alcance. Poner la clasificación de situación dentro del LLM1 respeta el tope de 2 LLM/turno que el consejo fijó por confiabilidad multiplicativa. Cambiaría el alcance si el refinador universal degrada la fiabilidad medida (gate rechazando seguido o latencia que rompe la ilusión): ahí se restringe a las rutas donde más aporta. Ver `plans/consejo-arquitectura-resolucion.md` (PASO 1 y PASO 8) y [[tg-bot-no-chatwoot-humano]].
+
+**Alternatives considered:** Refinador solo en la ruta de precio (rechazado: Martin lo quiere en TODO saliente). Plantillas fijas variadas por reglas sin LLM (menos humano, no modula por enojo). Un 3er LLM dedicado a clasificar el tono (rechazado: rompería el tope de 2 y sube P(error); se folda en el LLM1).
+
+**Owner:** Martin.
+
 ## 2026-07-24 — Bot TG: sin humano en Chatwoot — escalación 100% a mail y detección automática del confident-wrong
 
 **Decision:** TG quiere automatizar al máximo y NO sumar Chatwoot a su carga de trabajo. El diseño no debe contar con interacción humana ni con correcciones al bot vía Chatwoot. Toda escalación/handoff va a **mail**. El *confident-wrong* (casos donde el motor cree que acertó, p. ej. INC-15 bookcel→a3 tonner, INC-21 total mal por packs) se detecta **100% automático**, revisado por Martin desde los logs: (a) flags de baja confianza en la resolución (margen fino entre candidatos, default de oficio aplicado, match débil rank-2/3); (b) clasificador barato de rechazo del cliente en el turno siguiente ("no, quería bookcel"); (c) auditoría offline de una muestra de TODAS las cotizaciones con LLM-juez batch (pedido vs producto+precio). El soft-handoff por asignación humano/bot en Chatwoot queda como **vestigio a retirar**.

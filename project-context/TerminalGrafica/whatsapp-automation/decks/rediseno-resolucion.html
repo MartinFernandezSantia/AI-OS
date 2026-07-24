@@ -309,7 +309,7 @@
         <div class="step llm"><span class="n">PASO 5</span><span class="tag ai">Escalera</span><h5>Desambiguador</h5><small>Pregunta targeted; selector cerrado; menú</small></div>
         <div class="step"><span class="n">PASO 6</span><span class="tag code">Código</span><h5>Gate de factibilidad</h5><small>Ancho / faz / gramaje. La física no es juicio</small></div>
         <div class="step"><span class="n">PASO 7</span><span class="tag code">Código</span><h5>Motor de plata</h5><small>Packs y brackets; precio = token opaco</small></div>
-        <div class="step llm"><span class="n">PASO 8</span><span class="tag ai">LLM</span><h5>Wordsmith (ciego)</h5><small>Redacta humano. No ve plata, no valida, no elige</small></div>
+        <div class="step llm"><span class="n">PASO 8</span><span class="tag ai">LLM</span><h5>Refinador final</h5><small>Humaniza TODO saliente según la situación. Ciego a la plata</small></div>
         <div class="step"><span class="n">PASO 9</span><span class="tag code">Código</span><h5>Re-estampado + guard</h5><small>Re-inyecta números; regex-gate; denylist</small></div>
         <div class="step"><span class="n">PASO 10</span><span class="tag code">Código</span><h5>Instrumentación</h5><small>Log por turno + señales automáticas (sin humano)</small></div>
         <div class="step" style="border-style:dashed;background:transparent"><span class="n">INVARIANTE</span><h5 style="color:var(--teal)">La plata siempre es dato</h5><small>y ningún LLM lee el historial como instrucción</small></div>
@@ -323,7 +323,7 @@
     <div class="s-head"><span class="eyebrow"><b>06</b> Cambio clave · 1</span>
       <h2 class="s-title">El 1er LLM deja de resolver</h2></div>
     <div class="s-body grid" style="gap:18px;align-content:start">
-      <p class="lead">Pasa a emitir la <span class="k">frase del cliente + slots</span> (cada uno marcado <code>explícito|ausente</code>). <b>Nunca un nombre de catálogo. Nunca plata.</b> Solo segmenta ítems, que lo hace bien. La resolución baja a la capa determinística, donde vive toda la curación.</p>
+      <p class="lead">Pasa a emitir la <span class="k">frase del cliente + slots</span> (cada uno marcado <code>explícito|ausente</code>) y una <span class="k">etiqueta de situación</span> (info que no tenemos, cliente frustrado…) para el refinador final. <b>Nunca un nombre de catálogo. Nunca plata.</b> La resolución baja a la capa determinística, donde vive toda la curación. Sin sumar otra llamada LLM.</p>
       <div class="grid g2" style="gap:11px">
         <div class="card" style="border-left:3px solid var(--verm)"><h4 style="color:var(--verm)">Antes</h4><p><code>producto: "150 Tarjetas Color/Negro"</code> — el LLM eligió y erró.</p></div>
         <div class="card" style="border-left:3px solid var(--teal)"><h4 style="color:var(--teal)">Ahora</h4><p><code>frase:"150 tarjetas", slots:{cantidad:150}</code> — el matcher decide con datos.</p></div>
@@ -374,9 +374,10 @@
       <p class="lead">Tu idea del nodo LLM que valida y redacta era buena, pero un solo nodo mezcla dos trabajos que flash-lite no hace juntos bien. Se separan:</p>
       <div class="grid g2" style="gap:12px">
         <div class="card" style="border-left:3px solid var(--ink)"><h4>Validador — determinístico, ANTES</h4><p>Compara pedido vs atributo: ancho, faz, gramaje, tier. Una lona de 3 m contra 1,52 m es un <b>hard-fail, nunca cotiza</b>. Ningún LLM decide "3 &gt; 1,52".</p></div>
-        <div class="card" style="border-left:3px solid var(--teal)"><h4>Wordsmith — LLM ciego, DESPUÉS</h4><p>Redacta humano y agrupado, verbaliza el default y la derivación a mail. <b>No ve la plata, no valida, no elige.</b> Una sola burbuja.</p></div>
+        <div class="card" style="border-left:3px solid var(--teal)"><h4>Refinador — LLM ciego, en TODO mensaje</h4><p>Humaniza y <b>varía</b> cada saliente según la situación (info que no tenemos, cliente frustrado, cotización). <b>No ve la plata, no valida, no elige</b>; si el gate rechaza, cae a la plantilla. Una sola burbuja.</p></div>
       </div>
-      <div class="solves"><b>Resuelve</b> · INC-12 (lona que no entra) · INC-05 (agrupa + subtotal) · INC-15 (voz humana, mail explicado) · tu nota: la validación pedido-vs-respuesta se generaliza a todos los workflows</div>
+      <p class="sec" style="font-size:12px;margin-top:-4px"><b>Política de voz:</b> dominio cerrado (solo TG y sus servicios); ante frustración se disculpa y lo aclara; en caso extremo puede revelar que es un bot; el humano real, siempre por mail.</p>
+      <div class="solves"><b>Resuelve</b> · INC-12 (lona que no entra) · INC-05 (agrupa + subtotal) · INC-15 (voz humana, mail explicado) · tu nota: refinador en TODO saliente + validación pedido-vs-respuesta transversal</div>
     </div>
   </section>
 
