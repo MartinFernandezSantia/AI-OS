@@ -20,6 +20,41 @@ Keep it terse. Future-you will thank present-you for capturing the *why*, not ju
 
 ---
 
+## 2026-07-24 — Bot TG: lote de resoluciones de catálogo/resolución (no-defaults, pack por tier, atributos vía curación)
+
+**Decision:** Martin resolvió un lote de preguntas que fijan comportamiento del bot:
+(1) **No hay "defaults de oficio":** el bot NUNCA asume un eje que falta (gramaje, faz);
+**muestra todas las opciones o pregunta**. Esto REVIERTE la recomendación del consejo de
+cargar defaults con sello de TG (INC-04/14 se arreglan mostrando/preguntando, no
+defaulteando). (2) **Cuantización de pack = próximo tier hacia arriba** (150 con tiers
+100/500/1000 → el de 500; si supera el mayor tier, deriva al equipo). (3) **Atributos
+parseables vía curación, no esquema nuevo:** la estandarización (ancho_max, tiers de
+pack) se decide con un framework agregado a la skill `tg-curar-catalogo` (test: ¿un nodo
+de código compara/calcula con el valor? sí → dato estructurado en jsonb `atributos`; no →
+display), disolviendo el "landmine de atributos vaporware" como proyecto separado.
+(4) **Mono-variante = regla general:** con una única variante, el nombre que vale es el
+del producto; ante datos contradictorios de la variante gana el producto (ej. "Anillado
+Plástico a3" con variante mal cargada "A4" → es A3). (5) **Anillado:** se muestran
+plástico ($2.400) vs metálico ($3.200) como opciones, diámetros solo a pedido, y se
+**sacan** los sinónimos de urgencia (no se promete tiempo). (6) Verificado que "Adicional
+106"/bookcel NO existen en el catálogo (eran contexto viejo).
+
+**Why:** Respuestas directas de Martin (2026-07-24) sobre lo que hace y no hace el
+mostrador, que aterrizan como comportamiento del bot y curación, no como reglas de
+prompt. El no-defaults es coherente con su pedido previo ("si varios matchean, mostrar
+opciones, no forzar una"). La estandarización vía curación evita tocar `public.products`
+(que no controlamos) y mantiene el overlay como única capa editable. Cambiaría el pack
+por-tier si TG dice que algún producto se cobra por N packs sueltos en vez de por tier.
+Detalle en `preguntas-tg.md` (tabla de resueltas) y `plans/consejo-arquitectura-resolucion.md`
+(bloque de override 2026-07-24). Formato de medicina (pregunta 34) queda abierto.
+
+**Alternatives considered:** Defaults de oficio con sello de TG (recomendación del
+consejo, rechazada por Martin). Modelar atributos como columnas nuevas en un esquema
+aparte (rechazado: se hace en el overlay vía curación). Pack por múltiplos de 100
+(rechazado: es por tier disponible).
+
+**Owner:** Martin.
+
 ## 2026-07-24 — Bot TG: refinador LLM final en TODO mensaje + política de voz (dominio cerrado, frustración, mail)
 
 **Decision:** Todo mensaje saliente pasa por un **refinador LLM ligero final** que lo humaniza y lo **varía** según la situación (no solo el de precio, y sin repetir siempre lo mismo). La etiqueta de situación (`normal` / `info_no_disponible` / `fuera_de_alcance` / `frustrado` / `enojo_extremo`) la emite el LLM1 junto con la frase y los slots → NO agrega una 3ª llamada, se mantiene el tope de 2 LLM/turno. **Dominio cerrado:** el bot solo informa sobre TG y sus servicios. Ante frustración/enojo: se disculpa e informa que solo puede dar info de TG; en caso extremo **puede revelar que es un bot**; la escalación a un humano real es **siempre por mail** (misma dirección `terminalgrafica@gmail.com`), incluidos reclamos y clientes enojados. El refinador sigue **ciego a la plata** (montos como tokens opacos + re-estampado + regex-gate), **sin historial como instrucción** (el mensaje del cliente le llega solo como etiqueta de tono), con **allowed-claims cerrado** (no inventa plazos/descuentos/productos) y **fallback a la plantilla determinística** si el gate rechaza — por eso la plantilla debe ser un piso de voz aceptable.

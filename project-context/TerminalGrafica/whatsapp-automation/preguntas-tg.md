@@ -124,7 +124,7 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Ítems de taller (encuadernado, ojales, refilado…) | Se deja simple: se informa el precio del ítem aunque el cliente lo mencione en un trabajo combinado, pero NUNCA cómo se relaciona con otros ítems (Martin, 2026-07-24). |
 | A5 ILUST. MATE 250 GR (variante "A4") | La variante "A4" es error de carga: es A5, no duplica a Ilustración Mate 250. Con mono-variante el display usa el nombre del producto (Martin, 2026-07-24). |
 | Anillado Plástico a3 (variante "A4") | Es A3; con una sola variante se usa solo el nombre del producto, la "A4" se ignora (Martin, 2026-07-24). |
-| Mono-variante → display | Con una única variante, el bot nombra solo el producto (confirma regla vigente) (Martin, 2026-07-24). |
+| Mono-variante → display | **REGLA GENERAL:** con una única variante, el nombre que vale es el del producto; ante datos contradictorios de la variante gana el nombre del producto (Martin, 2026-07-24). |
 | Folios a4/oficio | Son fundas plásticas (Martin, 2026-07-24). |
 | Diapositivas / PowerPoint | Se cobran como impresión: si una slide = una hoja, cada diapositiva va al precio de la impresión según gramaje y faz elegidos (Martin, 2026-07-24). |
 | Tapas para anillados | No existen como producto (Martin, 2026-07-24). |
@@ -136,8 +136,8 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Vinilo brillo (dos rubros) | Mostrar las opciones al cliente, sin default de mostrador (Martin, 2026-07-24). |
 | "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
 | Promo Inmobiliarias | Es POR CARTEL (no por pack) → `por_pack=false`, el bot cotiza 6×. → curación pendiente (Martin, 2026-07-24). |
-| Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → se sacan los sinónimos de urgencia (a confirmar el alcance con Martin) (Martin, 2026-07-24). |
-| Cuantización de pack | Se explica que se trabaja por pack y se pasa el precio del próximo pack (falta confirmar la aritmética exacta) (Martin, 2026-07-24). |
+| Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → se **sacan** los sinónimos de urgencia (express/urgente/ya). Confirmado. → curación pendiente (Martin, 2026-07-24). |
+| Cuantización de pack | Se explica que se trabaja por pack y se cotiza el **próximo tier hacia arriba**: 150 con tiers 100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo (Martin, 2026-07-24). |
 | Defaults de oficio | **NO hay.** El bot no asume: muestra todo o pregunta (Martin, 2026-07-24). Revierte la recomendación de "defaults de oficio" del consejo. |
 | Anillado — ejes | Se distingue plástico ($2.400) vs metálico ($3.200): se muestran como opciones; las medidas (diámetro del anillo) solo si el cliente las especifica (Martin, 2026-07-24). |
 | Auditoría de atributos estructurados | No se modela un esquema nuevo: se resuelve limpiando/rediseñando el catálogo vía la skill de curación, para que el bot entienda nombres que hoy cargan las personas de TG para uso interno (Martin, 2026-07-24). |

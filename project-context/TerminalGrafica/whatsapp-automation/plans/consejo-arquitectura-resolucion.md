@@ -18,6 +18,30 @@ costo-ops, dominio-imprenta, red-team), 2 rondas de debate + síntesis del chair
 
 ---
 
+## Actualización 2026-07-24 — respuestas de Martin (OVERRIDE de lo de abajo)
+
+Martin resolvió preguntas clave que corrigen partes de este plan. Donde el texto de
+abajo diga otra cosa, MANDA esto:
+
+- **NO hay "defaults de oficio".** El bot NO asume un gramaje/eje cuando falta: **muestra
+  todas las opciones o pregunta** (pregunta 44). Elimina el PASO 4 "aplica defaults de
+  oficio" y la Decisión 2 "firmar la tabla de defaults": no van. INC-04/14 se arreglan
+  mostrando ambos gramajes / preguntando, no defaulteando.
+- **Atributos: no un esquema nuevo, curación.** La estandarización de atributos
+  parseables (ancho_max, tiers de pack) se hace vía la skill de curación, con un
+  framework de "cuándo estandarizar" ya agregado a `SKILL.md`. El landmine 1 no es un
+  proyecto de datos separado: es curación + un campo `atributos` jsonb en el overlay que
+  Martin aplica cuando haga falta.
+- **Cuantización de pack = próximo tier hacia arriba** (pregunta 43): 150 con tiers
+  100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo.
+- **Anillado:** se muestran plástico ($2.400) vs metálico ($3.200) como opciones; los
+  diámetros solo si el cliente los pide; se **sacan** los sinónimos de urgencia (no se
+  promete tiempo) (preguntas 45 y 38).
+- **Confident-wrong:** ya sin Chatwoot humano (ver restricción de arriba); detección
+  100% automática revisada por Martin desde los logs.
+
+---
+
 ## El giro grande: NO "vocero primero"
 
 Yo había recomendado construir el vocero primero. **Las 6 lentes, tras la ronda 2,
