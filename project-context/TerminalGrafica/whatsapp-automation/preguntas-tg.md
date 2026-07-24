@@ -133,6 +133,36 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     de plazo (que lo define el equipo, decisión I14). ¿Los dejamos (solo
     resuelven, no prometen tiempo) o los sacamos? Recomendación: dejarlos.
 
+## 8. Rediseño de resolución (consejo 2026-07-24 — bloquean el gate de factibilidad y los defaults de oficio)
+
+42. **Auditoría de atributos estructurados** — En `public.products` /
+    `product_variants`, ¿cuáles de estos existen HOY como CAMPO consultable (columna)
+    y cuáles viven enterrados en el texto del nombre?: ancho/alto máximo por material,
+    faz disponibles, gramajes válidos, tamaño de pack, diámetro/tipo de anillado. **Es
+    EL gate del rediseño:** sin estos como dato, el bot no puede validar "una lona de
+    3 m no entra en 1,52 m" (INC-12) ni cuantizar packs (INC-21) sin adivinar. Subyace
+    a 33, 37, 38 y 4.
+43. **Cuantización de pack** — Cuando el cliente pide una cantidad que no es múltiplo
+    exacto del pack (150 tarjetas con packs de 100): ¿se redondea al próximo pack
+    (2×100)? ¿al próximo tier? ¿se cotiza a medida? Es política de negocio, no sale de
+    la BD. (Causa de INC-21; generaliza la 35.)
+44. **Defaults de oficio por familia** — Cuando el cliente no especifica un eje que sí
+    cambia el precio, ¿qué asume el mostrador? Ej: apuntes/texto → ¿75gr obra simple
+    faz b/n? tapa/premium → ¿106gr? (Causa de INC-04/14; se cruza con 1, 2 y 36.) Cada
+    default confirmado se carga en el overlay con sello de TG y el bot lo verbaliza.
+45. **Ejes reales del anillado + default** — ¿Qué ejes distinguen los anillados
+    (plástico vs metálico/wire-o, diámetro del anillo, papel interior, tapas) y cuál es
+    el default cuando el cliente solo dice "anillado"? (Causa del flip-flop INC-07/13;
+    se cruza con 17, 37, 38.)
+46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
+    el cliente (obra 80, bookcel, ahuesado, ilustración, etc.) al producto de stock,
+    para disparar el fallback por NOMBRE y no por suerte de substring? (Causa de INC-15
+    "obra 80 no ruteó"; se cruza con 33, 4, 8, 41.)
+47. **% de cotizaciones fuera de la ventana de 24 h** — ¿Qué proporción de clientes
+    retoma al otro día / fuera de la sesión de atención? Fuera de ventana, WhatsApp solo
+    permite plantillas pre-aprobadas, no texto libre → define cuántas plantillas humanas
+    hay que preparar para que el bot no se caiga mudo. (Nuevo, del rediseño.)
+
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
 - **Cobro de Meta por mensaje desde el 1-oct-2026**: cada respuesta del bot va a
@@ -160,4 +190,5 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Espiralado / enmicado | Aplicados como sinónimos de anillado plástico / plastificado (decisión propia 2026-07-22; estándar rioplatense, no requiere a TG). |
 | Cantidad-first | Preguntar cuántas y dar el bracket exacto; sin cantidad → tabla (Martin, v10.7). |
 | Costo por página para libros | Sí, con "el precio final se cotiza vía mail" (Martin, v10.5). Compuestos excluidos de todo estimado con cantidad. |
+| Escalación a humano | Siempre por **mail** (misma dirección, incluye reclamos y clientes enojados); no hay takeover en Chatwoot (Martin, 2026-07-24). La frase la modula el refinador según contexto. |
 | Foto de la lista del mostrador (ex-30) | **No va a existir.** El catálogo y la lista de precios salen del sistema quote-automation, que está al día (Martin, 2026-07-23). La corroboración de datos del bot es 100% estructural (señales del barrido de la skill); el descubrimiento de faltantes queda en §3 + `bot.decisiones`. |
