@@ -1,0 +1,560 @@
+<style>
+  :root{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+      --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+      --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+      --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+      --amber:#d9a441;
+      --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a; --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  :root[data-theme="dark"]{
+    --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+    --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+    --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+    --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+    --amber:#d9a441; --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;
+    align-items:center;justify-content:center;padding:18px;
+    background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);
+    background-size:22px 22px;}
+
+  .stage{position:relative;width:min(1160px,96vw);height:min(710px,92vh);
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    box-shadow:var(--sh);overflow:hidden;}
+
+  /* crop marks */
+  .cm{position:absolute;width:16px;height:16px;z-index:6;opacity:.6}
+  .cm::before,.cm::after{content:"";position:absolute;background:var(--muted)}
+  .cm::before{width:16px;height:1px;top:0;left:0}
+  .cm::after{width:1px;height:16px;top:0;left:0}
+  .cm-tl{top:10px;left:10px}
+  .cm-tr{top:10px;right:10px;transform:scaleX(-1)}
+  .cm-bl{bottom:10px;left:10px;transform:scaleY(-1)}
+  .cm-br{bottom:10px;right:10px;transform:scale(-1)}
+
+  /* progress */
+  .bar{position:absolute;top:0;left:0;right:0;height:3px;background:transparent;z-index:7}
+  .bar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--verm),var(--teal));
+    transition:width .35s cubic-bezier(.4,0,.2,1)}
+
+  /* slides */
+  .slide{position:absolute;inset:0;padding:clamp(30px,4.6vh,58px) clamp(34px,4.8vw,72px) 78px;
+    display:none;flex-direction:column;opacity:0;overflow-y:auto;overflow-x:hidden;
+    transition:opacity .32s ease}
+  .slide.active{display:flex;opacity:1;animation:rise .4s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide.active{animation:none}.bar-fill{transition:none}}
+
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--muted);display:flex;align-items:center;gap:10px}
+  .eyebrow b{color:var(--teal);font-weight:700}
+  .s-head{margin-bottom:20px;flex:none}
+  .s-title{font-size:clamp(24px,3.3vw,38px);line-height:1.08;margin:12px 0 0;font-weight:800;
+    letter-spacing:-.02em;text-wrap:balance;max-width:22ch}
+  .s-body{flex:1;min-height:0}
+  .lead{font-size:clamp(15px,1.5vw,17px);color:var(--ink-soft);line-height:1.5;max-width:64ch}
+  .k{color:var(--teal);font-weight:700}
+  .kv{color:var(--verm);font-weight:700}
+  code,.mono{font-family:var(--mono);font-size:.88em}
+  .chip-code{font-family:var(--mono);background:var(--verm-soft);color:var(--verm);
+    padding:.08em .4em;border-radius:4px;font-size:.85em;font-weight:600;white-space:nowrap}
+
+  /* cover */
+  .cover{justify-content:center;gap:26px}
+  .cover .brandline{font-family:var(--mono);font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+  .cover h1{font-size:clamp(34px,6vw,66px);line-height:1;margin:0;font-weight:850;letter-spacing:-.03em;text-wrap:balance;max-width:16ch}
+  .cover .sub{font-size:clamp(16px,1.8vw,20px);color:var(--ink-soft);max-width:52ch;line-height:1.45}
+  .cover .meta{font-family:var(--mono);font-size:12.5px;color:var(--muted);letter-spacing:.04em}
+  .rule{height:2px;width:74px;background:var(--verm)}
+  .swatches{display:flex;gap:0;margin-top:6px}
+  .swatches span{width:34px;height:16px;display:block}
+
+  /* generic grids */
+  .grid{display:grid;gap:12px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  @media (max-width:720px){.g2,.g3,.g5{grid-template-columns:1fr 1fr}}
+
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:15px 16px}
+  .card h4{margin:0 0 6px;font-size:14.5px;letter-spacing:-.01em}
+  .card p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.45}
+
+  /* incident chips */
+  .inc{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--verm);
+    border-radius:7px;padding:11px 13px}
+  .inc .id{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--verm);letter-spacing:.04em}
+  .inc p{margin:5px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.38}
+
+  /* before/after rows */
+  .flowrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
+  .flowrow:last-child{border-bottom:0}
+  .flowrow .from{font-family:var(--mono);color:var(--ink)}
+  .flowrow .arr{color:var(--verm);font-weight:800}
+  .flowrow .to{font-family:var(--mono);color:var(--verm);background:var(--verm-soft);padding:.12em .45em;border-radius:4px}
+
+  /* pipeline steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+  @media (max-width:720px){.steps{grid-template-columns:1fr 1fr}}
+  .step{border:1px solid var(--line);border-radius:7px;padding:9px 11px;background:var(--paper);position:relative}
+  .step.llm{border-color:var(--teal-line);background:var(--teal-soft)}
+  .step .n{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.05em}
+  .step h5{margin:2px 0 3px;font-size:13px;letter-spacing:-.01em}
+  .step small{font-size:11px;color:var(--ink-soft);line-height:1.3;display:block}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:.15em .4em;border-radius:3px;font-weight:700;position:absolute;top:9px;right:9px}
+  .tag.code{background:var(--ink);color:var(--paper)}
+  .tag.ai{background:var(--teal);color:#fff}
+  :root[data-theme="dark"] .tag.ai,@media (prefers-color-scheme:dark){}
+  .tag.ai{color:#08201e}
+
+  .legend{display:flex;gap:18px;font-family:var(--mono);font-size:11px;color:var(--muted);
+    letter-spacing:.06em;margin-top:12px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+
+  /* solves tag */
+  .solves{margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--teal);
+    border-top:1px dashed var(--teal-line);padding-top:10px}
+  .solves b{color:var(--ink)}
+
+  /* ladder / numbered */
+  .steplist{display:flex;flex-direction:column;gap:10px;counter-reset:s}
+  .li{display:flex;gap:14px;align-items:flex-start}
+  .li .num{font-family:var(--mono);font-weight:800;color:var(--teal);font-size:15px;min-width:26px}
+  .li .txt{font-size:13.5px;color:var(--ink-soft);line-height:1.45}
+  .li .txt b{color:var(--ink)}
+
+  /* money strip */
+  .money{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+  .money .box{flex:1;min-width:120px;border:1px solid var(--line);border-radius:7px;padding:11px 12px;background:var(--paper)}
+  .money .box .step-n{font-family:var(--mono);font-size:10.5px;color:var(--teal);font-weight:700}
+  .money .box h5{margin:4px 0 3px;font-size:13px}
+  .money .box small{font-size:11px;color:var(--ink-soft);line-height:1.32;display:block}
+  .money .plus{display:flex;align-items:center;color:var(--muted);font-weight:800;font-size:18px}
+
+  /* map table */
+  .maptbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .maptbl th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);padding:0 10px 8px;border-bottom:1px solid var(--line);font-weight:600}
+  .maptbl td{padding:8px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.35}
+  .maptbl td:first-child{white-space:nowrap;font-family:var(--mono);font-weight:700;color:var(--verm);font-size:11.5px}
+  .maptbl td.fix{color:var(--ink)}
+  .maptbl td.fix b{color:var(--teal)}
+  .maptbl td.sym{color:var(--ink-soft)}
+  .tblscroll{height:100%;overflow:auto}
+
+  /* landmine */
+  .mine{border:1px solid var(--amber);border-radius:9px;padding:16px 18px;background:linear-gradient(180deg,var(--paper),transparent)}
+  .mine .warn{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:700}
+  .mine h4{margin:8px 0 7px;font-size:16px}
+  .mine p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+
+  /* decisions */
+  .dkey{border:1px solid var(--teal-line);background:var(--teal-soft);border-radius:8px;padding:13px 15px}
+  .dkey .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  .dkey h4{margin:5px 0 0;font-size:14.5px;line-height:1.25}
+  .sec{font-size:13px;color:var(--ink-soft);line-height:1.5;padding-left:2px}
+  .sec b{color:var(--ink)}
+
+  .qlist{display:grid;grid-template-columns:1fr 1fr;gap:9px 22px}
+  @media (max-width:720px){.qlist{grid-template-columns:1fr}}
+  .q{display:flex;gap:10px;font-size:12.8px;line-height:1.4;color:var(--ink-soft)}
+  .q .qn{font-family:var(--mono);color:var(--verm);font-weight:700;min-width:20px}
+  .q b{color:var(--ink)}
+
+  /* closing */
+  .close-big{font-size:clamp(20px,2.6vw,30px);font-weight:800;letter-spacing:-.02em;line-height:1.18;text-wrap:balance;max-width:24ch}
+
+  /* HUD */
+  .hud{position:absolute;left:0;right:0;bottom:0;height:54px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 clamp(20px,4vw,40px);
+    border-top:1px solid var(--line);background:var(--card);z-index:8}
+  .colorbar{display:flex;gap:0}
+  .colorbar span{width:22px;height:11px;display:block}
+  .colorbar b{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;margin-left:12px;align-self:center;text-transform:uppercase}
+  .navwrap{display:flex;align-items:center;gap:6px}
+  .dots{display:flex;gap:5px;margin-right:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:0;padding:0;cursor:pointer;transition:background .2s,transform .2s}
+  .dot.on{background:var(--teal);transform:scale(1.35)}
+  .dot:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+  .nb{width:32px;height:32px;border-radius:6px;border:1px solid var(--line);background:var(--paper);
+    color:var(--ink);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .2s,color .2s}
+  .nb:hover{border-color:var(--teal);color:var(--teal)}
+  .nb:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .nb:disabled{opacity:.35;cursor:default}
+
+  .hint{position:absolute;bottom:64px;right:clamp(20px,4vw,40px);font-family:var(--mono);
+    font-size:10px;color:var(--muted);letter-spacing:.08em;z-index:8;opacity:.7}
+</style>
+
+<div class="stage" role="region" aria-label="Deck: rediseño del bot TG">
+  <span class="cm cm-tl"></span><span class="cm cm-tr"></span>
+  <span class="cm cm-bl"></span><span class="cm cm-br"></span>
+  <div class="bar"><div class="bar-fill"></div></div>
+
+  <!-- 1 COVER -->
+  <section class="slide cover" data-t="Portada">
+    <div class="brandline">Terminal Gráfica · Bot de cotización WhatsApp</div>
+    <div class="rule"></div>
+    <h1>Rediseño de resolución, validación y voz</h1>
+    <p class="sub">Qué cambios propongo y cómo resuelven los 10 incidentes de la ronda 3, con lo que anotaste caso por caso.</p>
+    <div class="swatches" aria-hidden="true">
+      <span style="background:var(--verm)"></span><span style="background:var(--verm-soft)"></span>
+      <span style="background:var(--ink)"></span><span style="background:var(--teal-soft)"></span>
+      <span style="background:var(--teal)"></span>
+    </div>
+    <div class="meta">Consejo de 6 lentes · 2 rondas + síntesis · 24 jul 2026</div>
+  </section>
+
+  <!-- 2 VEREDICTO + GIRO -->
+  <section class="slide" data-t="El veredicto">
+    <div class="s-head"><span class="eyebrow"><b>01</b> El veredicto</span>
+      <h2 class="s-title">Falla en el centro, no en los bordes</h2></div>
+    <div class="s-body grid" style="gap:20px;align-content:start">
+      <p class="lead" style="font-size:clamp(17px,2vw,22px);color:var(--ink);max-width:34ch;font-weight:600;line-height:1.3">
+        La resolución del producto la hace el <span class="kv">1er LLM en su cabeza, y la hace mal</span>. Y el render es tan rígido que <span class="kv">se delata</span> como bot.</p>
+      <div class="card" style="border-left:3px solid var(--teal)">
+        <h4 style="color:var(--teal)">Un giro sobre lo que te había dicho</h4>
+        <p>Yo proponía <b>arrancar por el vocero</b>. El consejo lo dio vuelta: un redactor fluido encima de un número mal calculado lo <b>narra lindo y lo esconde</b> de la revisión semanal.
+        Nuevo orden → <span class="mono" style="color:var(--teal)">instrumentar → arreglar la plata → auditar datos con TG → recién ahí el LLM redacta.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 LOS 10 INCIDENTES -->
+  <section class="slide" data-t="Los 10 incidentes">
+    <div class="s-head"><span class="eyebrow"><b>02</b> Lo que reportaste</span>
+      <h2 class="s-title">Los 10 incidentes de la ronda 3</h2></div>
+    <div class="s-body">
+      <div class="grid g5" style="gap:9px">
+        <div class="inc"><span class="id">INC-04</span><p>Apuntes → defaultea a 106gr sin ofrecer gramaje</p></div>
+        <div class="inc"><span class="id">INC-05</span><p>Multi-ítem: no da monto ni agrupa</p></div>
+        <div class="inc"><span class="id">INC-07</span><p>No ofrece anillado metálico; menú redundante; hay que re-preguntar</p></div>
+        <div class="inc"><span class="id">INC-11</span><p>El 2º LLM (Aclarador) falló entero</p></div>
+        <div class="inc"><span class="id">INC-12</span><p>Ofrece lona de 1,52 m para un trabajo de 3 m</p></div>
+        <div class="inc"><span class="id">INC-13</span><p>Solo metálico + filtra <code>1"</code> al mensaje</p></div>
+        <div class="inc"><span class="id">INC-14</span><p>Otra vez default a 106gr</p></div>
+        <div class="inc"><span class="id">INC-15</span><p>Dice "el catálogo"; bookcel→a3 tonner; obra 80 sin fallback</p></div>
+        <div class="inc"><span class="id">INC-20</span><p>"150 Tarjetas Color/Negro"; vuelca todas las variantes</p></div>
+        <div class="inc"><span class="id">INC-21</span><p>Asume doble faz; total mal (packs)</p></div>
+      </div>
+      <div class="solves" style="color:var(--muted);border-color:var(--line)">Diez síntomas, dos enfermedades. Las próximas dos láminas.</div>
+    </div>
+  </section>
+
+  <!-- 4 CAUSA RAIZ 1 -->
+  <section class="slide" data-t="Causa raíz 1">
+    <div class="s-head"><span class="eyebrow"><b>03</b> Causa raíz · 1 de 2</span>
+      <h2 class="s-title">El 1er LLM resuelve el producto, y colapsa</h2></div>
+    <div class="s-body grid" style="gap:18px;align-content:start">
+      <p class="lead">Antes de tocar la base, el LLM ya convirtió la frase del cliente en un <span class="kv">nombre que se inventa</span>. Get Precio solo ejecuta ese nombre.</p>
+      <div class="card" style="background:var(--card)">
+        <div class="flowrow"><span class="from">"apuntes 180 pág, simple faz b/n"</span><span class="arr">→</span><span class="to">Impresiones a4 obra 106 gr</span></div>
+        <div class="flowrow"><span class="from">"150 tarjetas"</span><span class="arr">→</span><span class="to">"150 Tarjetas Color/Negro"</span></div>
+        <div class="flowrow"><span class="from">"bookcel de color"</span><span class="arr">→</span><span class="to">Impresiones a3 Negro Tonner</span></div>
+      </div>
+      <p class="lead" style="color:var(--ink)"><b>Toda la curación vive en el matcher de la DB. El LLM lo saltea.</b> Venimos afilando un cuchillo que el bot no agarra. <span class="mono" style="color:var(--muted)">(INC-15, INC-20, INC-04/14)</span></p>
+    </div>
+  </section>
+
+  <!-- 5 CAUSA RAIZ 2 -->
+  <section class="slide" data-t="Causa raíz 2">
+    <div class="s-head"><span class="eyebrow"><b>04</b> Causa raíz · 2 de 2</span>
+      <h2 class="s-title">El render es determinístico y rígido</h2></div>
+    <div class="s-body grid g2" style="gap:11px;align-content:start">
+      <div class="card"><h4>Menús de formulario</h4><p>"1) 100  2) 500  3) 1000". Nadie del mostrador te lee una lista numerada. <span class="mono">INC-20/21</span></p></div>
+      <div class="card"><h4>Habla como sistema</h4><p>"el catálogo menciona…" y nombres internos de SKU al mensaje. <span class="mono">INC-15</span></p></div>
+      <div class="card"><h4>No agrupa ni subtotaliza</h4><p>El multi-ítem no se junta ni da subtotal por ítem. <span class="mono">INC-05</span></p></div>
+      <div class="card"><h4>Filtra internos</h4><p>El <code>1"</code> (diámetro del anillo) se escapa crudo. <span class="mono">INC-13</span></p></div>
+      <div class="card"><h4>Deriva sin explicar</h4><p>"lo confirma el equipo" sin decir que es por mail → confunde a quien cree hablar con una persona. <span class="mono">INC-15</span></p></div>
+      <div class="card"><h4>Defaults en silencio</h4><p>Elige 106gr sin avisar ni preguntar. Un default confiado y equivocado. <span class="mono">INC-04/14</span></p></div>
+    </div>
+  </section>
+
+  <!-- 6 ARQUITECTURA -->
+  <section class="slide" data-t="La arquitectura nueva">
+    <div class="s-head"><span class="eyebrow"><b>05</b> La solución de fondo</span>
+      <h2 class="s-title" style="max-width:30ch">Pipeline determinístico, LLM solo en los bordes</h2></div>
+    <div class="s-body">
+      <div class="steps">
+        <div class="step"><span class="n">PASO 0</span><span class="tag code">Código</span><h5>Debounce de entrantes</h5><small>Junta mensajes goteados en una corrida</small></div>
+        <div class="step llm"><span class="n">PASO 1</span><span class="tag ai">LLM</span><h5>Extractor / router</h5><small>Frase + slots. Nunca un nombre, nunca plata</small></div>
+        <div class="step"><span class="n">PASO 2</span><span class="tag code">Código</span><h5>Tokenizador</h5><small>Separa cantidad del producto</small></div>
+        <div class="step"><span class="n">PASO 3</span><span class="tag code">Código</span><h5>Matcher / rank</h5><small>Un SET de candidatos + piso de confianza</small></div>
+        <div class="step"><span class="n">PASO 4</span><span class="tag code">Código</span><h5>Resolver</h5><small>Resta slots conocidos; aplica defaults de oficio</small></div>
+        <div class="step llm"><span class="n">PASO 5</span><span class="tag ai">Escalera</span><h5>Desambiguador</h5><small>Pregunta targeted; selector cerrado; menú</small></div>
+        <div class="step"><span class="n">PASO 6</span><span class="tag code">Código</span><h5>Gate de factibilidad</h5><small>Ancho / faz / gramaje. La física no es juicio</small></div>
+        <div class="step"><span class="n">PASO 7</span><span class="tag code">Código</span><h5>Motor de plata</h5><small>Packs y brackets; precio = token opaco</small></div>
+        <div class="step llm"><span class="n">PASO 8</span><span class="tag ai">LLM</span><h5>Wordsmith (ciego)</h5><small>Redacta humano. No ve plata, no valida, no elige</small></div>
+        <div class="step"><span class="n">PASO 9</span><span class="tag code">Código</span><h5>Re-estampado + guard</h5><small>Re-inyecta números; regex-gate; denylist</small></div>
+        <div class="step"><span class="n">PASO 10</span><span class="tag code">Código</span><h5>Instrumentación</h5><small>Log por turno + corrección humana</small></div>
+        <div class="step" style="border-style:dashed;background:transparent"><span class="n">INVARIANTE</span><h5 style="color:var(--teal)">La plata siempre es dato</h5><small>y ningún LLM lee el historial como instrucción</small></div>
+      </div>
+      <div class="legend"><span><i style="background:var(--teal)"></i>LLM (borde)</span><span><i style="background:var(--ink)"></i>Código (determinístico)</span></div>
+    </div>
+  </section>
+
+  <!-- 7 CAMBIO 1 -->
+  <section class="slide" data-t="Cambio 1">
+    <div class="s-head"><span class="eyebrow"><b>06</b> Cambio clave · 1</span>
+      <h2 class="s-title">El 1er LLM deja de resolver</h2></div>
+    <div class="s-body grid" style="gap:18px;align-content:start">
+      <p class="lead">Pasa a emitir la <span class="k">frase del cliente + slots</span> (cada uno marcado <code>explícito|ausente</code>). <b>Nunca un nombre de catálogo. Nunca plata.</b> Solo segmenta ítems, que lo hace bien. La resolución baja a la capa determinística, donde vive toda la curación.</p>
+      <div class="grid g2" style="gap:11px">
+        <div class="card" style="border-left:3px solid var(--verm)"><h4 style="color:var(--verm)">Antes</h4><p><code>producto: "150 Tarjetas Color/Negro"</code> — el LLM eligió y erró.</p></div>
+        <div class="card" style="border-left:3px solid var(--teal)"><h4 style="color:var(--teal)">Ahora</h4><p><code>frase:"150 tarjetas", slots:{cantidad:150}</code> — el matcher decide con datos.</p></div>
+      </div>
+      <div class="solves"><b>Resuelve</b> · INC-15 (bookcel→a3 tonner) · INC-20 (cantidad pegada al nombre)</div>
+    </div>
+  </section>
+
+  <!-- 8 CAMBIO 2 -->
+  <section class="slide" data-t="Cambio 2">
+    <div class="s-head"><span class="eyebrow"><b>07</b> Cambio clave · 2</span>
+      <h2 class="s-title">El matcher devuelve un SET, no un pick</h2></div>
+    <div class="s-body grid" style="gap:18px;align-content:start">
+      <p class="lead">Por cada ítem, el rank devuelve <span class="k">todos los candidatos que matchean</span> con score, slots discriminantes que faltan y un <span class="k">piso de confianza</span>. Nada de forzar un ganador único.</p>
+      <div class="grid g3" style="gap:11px">
+        <div class="card"><h4>Rank fuerte y solo</h4><p>1 ganador claro → pasa directo.</p></div>
+        <div class="card"><h4>Varios viables</h4><p>Estado de desambiguación (lámina 11), no una adivinanza.</p></div>
+        <div class="card"><h4>Rank débil bajo umbral</h4><p>Se trata como ambiguo. Mata el falso-positivo confiado.</p></div>
+      </div>
+      <div class="solves"><b>Resuelve</b> · INC-15 (match confiado y falso) · INC-07 / INC-13 (anillado plástico ↔ metálico: se muestran los dos)</div>
+    </div>
+  </section>
+
+  <!-- 9 CAMBIO 3 -->
+  <section class="slide" data-t="Cambio 3">
+    <div class="s-head"><span class="eyebrow"><b>08</b> Cambio clave · 3</span>
+      <h2 class="s-title">La plata, blindada y verificable</h2></div>
+    <div class="s-body grid" style="gap:18px;align-content:start">
+      <p class="lead">Cuatro pasos para que <b>"el LLM nunca tipea plata"</b> deje de ser eslogan y sea propiedad chequeable en cada turno.</p>
+      <div class="money">
+        <div class="box"><span class="step-n">PASO 7</span><h5>Motor determinístico</h5><small>Packs y brackets correctos, con tests de harness</small></div>
+        <div class="plus">→</div>
+        <div class="box"><span class="step-n">PASO 7</span><h5>Token opaco</h5><small>El monto viaja como marcador, no como número editable</small></div>
+        <div class="plus">→</div>
+        <div class="box"><span class="step-n">PASO 9</span><h5>Re-estampado</h5><small>Un Code node re-inyecta los números exactos tras el LLM</small></div>
+        <div class="plus">→</div>
+        <div class="box"><span class="step-n">PASO 9</span><h5>Regex-gate</h5><small>Si los tokens no calzan, se descarta el texto → plantilla</small></div>
+      </div>
+      <div class="solves"><b>Resuelve</b> · INC-21 (22.000 = pack de 100; 120 = 2 packs). El total sale de código testeado, no del LLM.</div>
+    </div>
+  </section>
+
+  <!-- 10 CAMBIO 4 -->
+  <section class="slide" data-t="Cambio 4">
+    <div class="s-head"><span class="eyebrow"><b>09</b> Cambio clave · 4</span>
+      <h2 class="s-title">El "vocero" se parte en dos</h2></div>
+    <div class="s-body grid" style="gap:18px;align-content:start">
+      <p class="lead">Tu idea del nodo LLM que valida y redacta era buena, pero un solo nodo mezcla dos trabajos que flash-lite no hace juntos bien. Se separan:</p>
+      <div class="grid g2" style="gap:12px">
+        <div class="card" style="border-left:3px solid var(--ink)"><h4>Validador — determinístico, ANTES</h4><p>Compara pedido vs atributo: ancho, faz, gramaje, tier. Una lona de 3 m contra 1,52 m es un <b>hard-fail, nunca cotiza</b>. Ningún LLM decide "3 &gt; 1,52".</p></div>
+        <div class="card" style="border-left:3px solid var(--teal)"><h4>Wordsmith — LLM ciego, DESPUÉS</h4><p>Redacta humano y agrupado, verbaliza el default y la derivación a mail. <b>No ve la plata, no valida, no elige.</b> Una sola burbuja.</p></div>
+      </div>
+      <div class="solves"><b>Resuelve</b> · INC-12 (lona que no entra) · INC-05 (agrupa + subtotal) · INC-15 (voz humana, mail explicado) · tu nota: la validación pedido-vs-respuesta se generaliza a todos los workflows</div>
+    </div>
+  </section>
+
+  <!-- 11 CAMBIO 5 -->
+  <section class="slide" data-t="Cambio 5">
+    <div class="s-head"><span class="eyebrow"><b>10</b> Cambio clave · 5</span>
+      <h2 class="s-title">La escalera de desambiguación</h2></div>
+    <div class="s-body grid" style="gap:16px;align-content:start">
+      <p class="lead">Cuando matchean varios, se sube la escalera por costo, no se adivina. La <span class="k">selección</span> es determinística; el LLM solo <span class="k">redacta</span>.</p>
+      <div class="steplist">
+        <div class="li"><span class="num">a</span><span class="txt"><b>Resta slots ya dichos.</b> Si queda uno claro → determinístico puro (arregla el menú redundante de INC-07).</span></div>
+        <div class="li"><span class="num">b</span><span class="txt"><b>Gemelos por un eje de dato</b> (gramaje / faz / material) → pregunta targeted de ESE eje, natural, con precios inline. Ni menú 1/2/3 ni dump 100/500/1000.</span></div>
+        <div class="li"><span class="num">c</span><span class="txt"><b>Selector-LLM de contrato cerrado</b> (candidatos + slots + mensaje como dato, salida = índice, sin historial, sin plata) solo como anteúltimo recurso. Reemplaza al Aclarador del INC-11.</span></div>
+        <div class="li"><span class="num">d</span><span class="txt"><b>Menú explícito</b> reservado a cuando el eje ES la elección del cliente (packs de tarjetas).</span></div>
+      </div>
+      <div class="solves" style="border-color:var(--verm-line);color:var(--verm)"><b style="color:var(--ink)">Regla dura:</b> nunca un LLM eligiendo el gemelo de oficio. Un pick confiado y equivocado cuesta una <b style="color:var(--ink)">reimpresión</b>, no 2,6 centavos.</div>
+    </div>
+  </section>
+
+  <!-- 12 MAPA -->
+  <section class="slide" data-t="Mapa incidente → arreglo">
+    <div class="s-head"><span class="eyebrow"><b>11</b> El mapa completo</span>
+      <h2 class="s-title" style="max-width:30ch">Cada incidente y qué lo arregla</h2></div>
+    <div class="s-body"><div class="tblscroll">
+      <table class="maptbl">
+        <thead><tr><th>Inc.</th><th>Síntoma</th><th>Qué lo arregla</th></tr></thead>
+        <tbody>
+          <tr><td>INC-04</td><td class="sym">Default a 106gr, no ofrece gramaje</td><td class="fix"><b>Defaults de oficio</b> sellados por TG, aplicados y <b>verbalizados</b> + slot de gramaje ausente que discrimina</td></tr>
+          <tr><td>INC-05</td><td class="sym">Multi-ítem sin monto ni agrupar</td><td class="fix"><b>Debounce</b> + matcher por ítem + <b>wordsmith agrupa</b> + subtotal por ítem (nunca suma cruzada)</td></tr>
+          <tr><td>INC-07</td><td class="sym">Sin metálico; menú redundante; re-ask</td><td class="fix"><b>Slot-carryover</b> + <b>SET de candidatos</b> + ejes de anillado cargados</td></tr>
+          <tr><td>INC-11</td><td class="sym">El 2º LLM (Aclarador) falló entero</td><td class="fix"><b>Selector de contrato cerrado</b> con input estructurado + instrumentación + log de corrección humana</td></tr>
+          <tr><td>INC-12</td><td class="sym">Lona de 1,52 m para trabajo de 3 m</td><td class="fix"><b>Gate de factibilidad</b> determinístico upstream → hard-fail, nunca cotiza</td></tr>
+          <tr><td>INC-13</td><td class="sym">Solo metálico + filtra <code>1"</code></td><td class="fix"><b>SET de candidatos</b> + <b>whitelist</b> que bloquea campos internos</td></tr>
+          <tr><td>INC-14</td><td class="sym">Otra vez default a 106gr</td><td class="fix"><b>Defaults de oficio verbalizados</b> (mismo que INC-04)</td></tr>
+          <tr><td>INC-15</td><td class="sym">"el catálogo"; bookcel→a3; obra 80; mail</td><td class="fix"><b>LLM1 sin nombre</b> + <b>léxico de papeles</b> + denylist anti-voz-máquina + handoff a mail humanizado</td></tr>
+          <tr><td>INC-20</td><td class="sym">"150 Tarjetas…"; vuelca variantes</td><td class="fix"><b>Tokenizador</b> + SET multi-candidato + <b>pregunta targeted</b> del eje que falta</td></tr>
+          <tr><td>INC-21</td><td class="sym">Asume d/f; total mal (packs)</td><td class="fix"><b>Motor de plata</b> testeado + slot-carryover + mostrar s/f vs d/f cuando es elección</td></tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <!-- 13 LO QUE SUME -->
+  <section class="slide" data-t="Lo que sumé">
+    <div class="s-head"><span class="eyebrow"><b>12</b> Lo que faltaba en tus notas</span>
+      <h2 class="s-title">Cosas que agregué</h2></div>
+    <div class="s-body grid g2" style="gap:10px;align-content:start">
+      <div class="card"><h4>Debounce de entrantes</h4><p>En WhatsApp real el pedido gotea ("150 tarjetas"… "y 200 a3"). Sin buffer, cotiza el ítem 1 (pago) antes de ver el 2.</p></div>
+      <div class="card"><h4>Ventana de 24 h</h4><p>Fuera de sesión solo se mandan plantillas pre-aprobadas, no texto libre. El párrafo humano puede ser inentregable → hay que medirlo.</p></div>
+      <div class="card"><h4>Burbuja física vs turno lógico</h4><p>Meta cobra por burbuja. El multi-ítem "agrupado" tiene que salir como UNA burbuja, no tres cargos.</p></div>
+      <div class="card"><h4>Confiabilidad multiplicativa</h4><p>3-4 LLM al 97% = ~88% de turnos buenos. Cada hop sube P(error). Por eso el tope de 2 LLM/turno.</p></div>
+      <div class="card"><h4>Deadline gemini + Meta</h4><p>2.5-flash-lite muere el 16-oct; Meta cobra desde el 1-oct. Re-correr el harness sobre 3.1-flash-lite antes.</p></div>
+      <div class="card"><h4>Tu pregunta: ¿laser vs inkjet?</h4><p>El bot <b>no recomienda tecnología</b> salvo que TG defina la regla (volumen, material, costo). Hoy no la tiene → pregunta a TG.</p></div>
+    </div>
+  </section>
+
+  <!-- 14 LANDMINES -->
+  <section class="slide" data-t="Los dos landmines">
+    <div class="s-head"><span class="eyebrow"><b>13</b> Lo que el consejo destapó</span>
+      <h2 class="s-title">Dos landmines que reordenan todo</h2></div>
+    <div class="s-body grid g2" style="gap:14px;align-content:start">
+      <div class="mine"><span class="warn">⚑ Landmine 1</span><h4>Los atributos son vaporware</h4>
+        <p>El gate de validación asume campos como <code>ancho_max</code>, <code>faz</code>, <code>tiers_pack</code>. Hoy <b>no existen</b> en el overlay: viven como texto libre dentro del nombre en <code>public.products</code>. Sin modelarlos, INC-12 e INC-21 no cierran. Es un <b>proyecto de datos + firma de TG</b> que nadie scopeó.</p></div>
+      <div class="mine"><span class="warn">⚑ Landmine 2</span><h4>El confident-wrong es invisible</h4>
+        <p>El flag de "falló la resolución" no dispara en INC-15 ni INC-21: el motor <b>creyó acertar</b>. La revisión semanal verá los sin_match ruidosos y ningún mis-quote silencioso. Única señal real: <b>loguear cuándo un humano en Chatwoot corrige al bot.</b></p></div>
+    </div>
+  </section>
+
+  <!-- 15 SECUENCIA -->
+  <section class="slide" data-t="La secuencia">
+    <div class="s-head"><span class="eyebrow"><b>14</b> Orden de construcción</span>
+      <h2 class="s-title">La secuencia (no "vocero primero")</h2></div>
+    <div class="s-body">
+      <div class="steplist" style="gap:8px">
+        <div class="li"><span class="num">1</span><span class="txt"><b>Instrumentar</b> — flag de resultado + contador de salientes + log de corrección humana + debounce. Cero LLM.</span></div>
+        <div class="li"><span class="num">2</span><span class="txt"><b>Fixes determinísticos puros</b> — matemática de packs (21), piso de confianza (15), slot-carryover (7), whitelist (13). Cero token.</span></div>
+        <div class="li"><span class="num">3</span><span class="txt"><b>Auditoría de atributos con TG</b> + modelar lo que falte. Prerrequisito del gate. Es data-entry, no un Code node.</span></div>
+        <div class="li"><span class="num">4</span><span class="txt"><b>Rediseñar el contrato del LLM1</b> (frase+slots) + tokenizador + matcher con SET.</span></div>
+        <div class="li"><span class="num">5</span><span class="txt"><b>Gate de factibilidad</b> upstream (una vez que existen los atributos).</span></div>
+        <div class="li"><span class="num">6</span><span class="txt"><b>Wordsmith ciego + re-estampado + gate</b>, en toda ruta. Reversión si no baja el re-ask medido.</span></div>
+        <div class="li"><span class="num">7</span><span class="txt"><b>Selector-LLM</b> de desempate, guardado para el final. El paso más riesgoso.</span></div>
+        <div class="li"><span class="num">8</span><span class="txt"><b>Re-correr todo el harness sobre gemini-3.1-flash-lite</b> antes de octubre.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 DECISIONES -->
+  <section class="slide" data-t="Decisiones para vos">
+    <div class="s-head"><span class="eyebrow"><b>15</b> Queda para vos</span>
+      <h2 class="s-title">Tres decisiones destraban todo</h2></div>
+    <div class="s-body grid" style="gap:14px;align-content:start">
+      <div class="grid g3" style="gap:11px">
+        <div class="dkey"><span class="lbl">Decisión 1</span><h4>¿Aprobás el contrato nuevo del LLM1? (frase+slots, no nombre)</h4></div>
+        <div class="dkey"><span class="lbl">Decisión 2</span><h4>¿Scopeamos ya la auditoría de atributos con TG, o se difiere?</h4></div>
+        <div class="dkey"><span class="lbl">Decisión 3</span><h4>¿Cómo cazamos el confident-wrong? ¿Log de Chatwoot y/o muestreo?</h4></div>
+      </div>
+      <p class="sec">Las otras cinco están en el plan: <b>defaults de oficio</b> firmados por TG · cuánto <b>forzar la ilusión humana</b> · <b>tope de LLM</b> + copy del handoff · <b>gate de reversión</b> del wordsmith · <b>migración a gemini-3.1</b>. Nada se construye sin tu OK.</p>
+    </div>
+  </section>
+
+  <!-- 17 PREGUNTAS TG -->
+  <section class="slide" data-t="Preguntas para TG">
+    <div class="s-head"><span class="eyebrow"><b>16</b> Para llevarle a TG</span>
+      <h2 class="s-title">Siete preguntas nuevas</h2></div>
+    <div class="s-body">
+      <div class="qlist">
+        <div class="q"><span class="qn">1</span><span><b>Atributos del catálogo:</b> ¿ancho_max, faz, gramajes, tiers_pack, ejes de anillado existen como campo consultable o están en el nombre?</span></div>
+        <div class="q"><span class="qn">2</span><span><b>Cantidades intermedias:</b> 150 tarjetas → ¿2 packs de 100? ¿próximo tier? ¿a medida?</span></div>
+        <div class="q"><span class="qn">3</span><span><b>Defaults de oficio:</b> ¿apuntes = 75gr s/f b/n? ¿tapa/premium = 106gr? ¿qué otros?</span></div>
+        <div class="q"><span class="qn">4</span><span><b>Anillado:</b> ¿ejes reales (plástico/metálico, diámetro, tapas) y default sin especificar?</span></div>
+        <div class="q"><span class="qn">5</span><span><b>Papeles especiales:</b> ¿cómo mapea obra 80, bookcel, ahuesado, ilustración al producto real?</span></div>
+        <div class="q"><span class="qn">6</span><span><b>Ventana de 24 h:</b> ¿qué % de cotizaciones se retoman fuera de sesión?</span></div>
+        <div class="q"><span class="qn">7</span><span><b>Corrección humana:</b> ¿los agentes en Chatwoot editan la cotización del bot? ¿Podemos loguearlo?</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 18 CIERRE -->
+  <section class="slide cover" data-t="Cierre">
+    <div class="brandline">Recomendación</div>
+    <div class="rule"></div>
+    <p class="close-big">Arrancar por lo cero-riesgo — los fixes determinísticos del 21 y 15 más la instrumentación — y en paralelo destrabar con TG si esos atributos existen.</p>
+    <p class="sub">El consejo tiene razón: no se arranca por el vocero. Y el cuello real no es código, es el dato que quizás no está cargado.</p>
+    <div class="meta">Plan completo → plans/consejo-arquitectura-resolucion.md</div>
+  </section>
+
+  <div class="hint">← → para navegar</div>
+  <div class="hud">
+    <div class="colorbar" aria-hidden="true">
+      <span style="background:var(--verm)"></span><span style="background:var(--verm-soft)"></span>
+      <span style="background:var(--ink)"></span><span style="background:var(--teal-soft)"></span>
+      <span style="background:var(--teal)"></span>
+      <b>Problema · Solución</b>
+    </div>
+    <div class="navwrap">
+      <div class="dots" role="tablist" aria-label="Ir a lámina"></div>
+      <button class="nb" id="prev" aria-label="Anterior">‹</button>
+      <span class="count">01 / 18</span>
+      <button class="nb" id="next" aria-label="Siguiente">›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, n=slides.length;
+  var count=document.querySelector('.count');
+  var bar=document.querySelector('.bar-fill');
+  var prev=document.getElementById('prev');
+  var next=document.getElementById('next');
+  var dotsWrap=document.querySelector('.dots');
+  var pad=function(x){return (x<10?'0':'')+x;};
+  slides.forEach(function(s,k){
+    var d=document.createElement('button');
+    d.className='dot'; d.setAttribute('role','tab');
+    d.setAttribute('aria-label','Lámina '+(k+1)+': '+(s.getAttribute('data-t')||''));
+    d.addEventListener('click',function(){go(k);});
+    dotsWrap.appendChild(d);
+  });
+  var dots=[].slice.call(document.querySelectorAll('.dot'));
+  function go(x){
+    i=Math.max(0,Math.min(n-1,x));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    dots.forEach(function(d,k){d.classList.toggle('on',k===i);d.setAttribute('aria-selected',k===i);});
+    count.textContent=pad(i+1)+' / '+pad(n);
+    bar.style.width=((i+1)/n*100)+'%';
+    prev.disabled=(i===0); next.disabled=(i===n-1);
+    slides[i].scrollTop=0;
+  }
+  prev.addEventListener('click',function(){go(i-1);});
+  next.addEventListener('click',function(){go(i+1);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){e.preventDefault();go(0);}
+    else if(e.key==='End'){e.preventDefault();go(n-1);}
+  });
+  go(0);
+})();
+</script>
