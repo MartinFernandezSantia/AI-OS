@@ -544,10 +544,12 @@ async function main() {
     decidir({ userMessage: 'cuánto sale una impresión?' }));
   console.log('A52 rescate filtra nicho:', r[0].json.estado === 'fallback: ambiguo' && !r[0].json.reply.includes('medicina') && r[0].json.reply.includes('Impresiones a3 tonner negro') ? 'OK' : 'FAIL ' + r[0].json.estado + '\n' + r[0].json.reply);
 
-  // M12: repeatNote con la excepcion r6 (pregunta repetida / "???" nunca noop).
+  // M12: repeatNote NO tiene excepcion (revertido: callar ante una pregunta ya
+  // respondida es lo deseado — re-mandar el mismo texto cuesta un msg de WhatsApp;
+  // decision Martin 2026-07-24). El backstop determinístico de 2 repeticiones sigue.
   r = await mensajes({ accion: 'x', edad_seg: 9999 }, { _catalogo: CATALOGO_MOCK }, decidir({ conversation: [], lastBotReplies: ['Hoy estamos hasta las 20:00.'] }));
   const noteRep = r[0].json.llmMessages[2].content;
-  console.log('M12 repeatNote excepcion:', noteRep.includes('REPITE') && noteRep.includes('NUNCA noop') ? 'OK' : 'FAIL ' + noteRep.slice(0, 200));
+  console.log('M12 repeatNote sin excepcion:', noteRep.includes('action noop') && !noteRep.includes('REPITE') ? 'OK' : 'FAIL ' + noteRep.slice(0, 200));
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

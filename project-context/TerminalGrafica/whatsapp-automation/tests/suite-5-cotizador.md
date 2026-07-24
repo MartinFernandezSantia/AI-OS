@@ -254,8 +254,9 @@ Cambios de conducta esperada respecto de lo escrito arriba:
 - **Multi-ítem**: ningún ítem se descarta (cupo de opciones ahora 4); tras elegir
   del menú, el segundo ítem debe reaparecer vía `mas`.
 - **Anillado**: sin "24 hs" en menús/render (curación b aplicada).
-- **Pregunta repetida o "???"**: el bot re-responde reformulado (el silencio del
-  repeatNote fue fix r6); 3 repeticiones textuales siguen muteando por backstop.
+- **Pregunta repetida o "???"**: el bot se CALLA (noop) si su respuesta sería la
+  misma — es lo deseado (ahorra un mensaje de WhatsApp pago), NO un bug
+  (aclaración Martin 2026-07-24). El backstop de 2 repeticiones textuales sigue.
 
 Replay mínimo: 4, 5, 7, 11, 12, 13, 14, 15→18, 20, 21, 25 (repetido + "???"), 26,
 29 + regresión 1, 9, 10, 22-24, 27, 28.

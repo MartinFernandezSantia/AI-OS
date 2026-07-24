@@ -23,7 +23,7 @@
 | 18 | "106" (respuesta a la repregunta de papel) → 0 filas → email | Producto inventado "Impresiones a4 s/f b/n" (fusión producto+variante). | RC-1, RC-3 |
 | 20* | "150 tarjetas" → precio directo del pack de 100 Simple Faz sin preguntar | Variante presupuesta (I13 reincidente) + cambio de producto post-menú sin `volver`/opciones. `por_pack` evitó el ×150. | RC-3 (prompt), telemetría |
 | 21 | Menú tarjetas en orden 100/1000/500 y variantes repetidas ×3 | `order by nombre_canonico` = orden de string; sin pivot de packs. | RC-5 |
-| 25* | "¿hasta qué hora están hoy?" repetido → silencio; "???" → silencio | El repeatNote instruye noop si "no agrega nada nuevo" y el LLM lo aplicó a una pregunta repetida. Dos silencios seguidos a un cliente confundido. | RC-8 |
+| 25* | "¿hasta qué hora están hoy?" repetido → silencio | **NO era bug** (aclaración Martin 2026-07-24): re-preguntó para confirmar que el bot no re-manda la misma respuesta. El silencio es lo deseado (ahorra un mensaje pago). RC-8 revertido. | RC-8 (revertido) |
 
 \* No numerados por Martin pero visibles en las capturas.
 
@@ -119,11 +119,15 @@ mal (no hay nada que elegir). Telemetría: `(variante rescatada: mono)`.
 - Prompts: {{PRECIO}} DENTRO de una frase natural ("El anillado te queda en
   {{PRECIO}}"), nunca coletilla.
 
-### RC-8 — repeatNote
-Excepción explícita: pregunta repetida o "?"/"???" = cliente esperando respuesta
-→ contestar de nuevo reformulado, NUNCA noop. El backstop determinístico de 2
-repeticiones textuales sigue intacto (no reabre loops: una reformulación no es
-textual-igual).
+### RC-8 — repeatNote — REVERTIDO 2026-07-24 (aclaración de Martin)
+Mi fix original agregaba una excepción (pregunta repetida / "???" → re-contestar).
+**Martin aclaró que NO era un bug:** él re-preguntó la hora a propósito para
+confirmar que el bot NO re-mandara la misma respuesta — con el cobro de Meta por
+mensaje (desde 1-oct-2026), callarse ante una pregunta ya respondida es lo
+DESEADO, no un fallo. La excepción quedó revertida; el bot vuelve a `noop` cuando
+su respuesta no agregaría nada nuevo. El backstop determinístico de 2 repeticiones
+textuales sigue como estaba. (El caso "???" tras silencio se acepta: un mensaje
+ahorrado vale más que romper el silencio.)
 
 ---
 
