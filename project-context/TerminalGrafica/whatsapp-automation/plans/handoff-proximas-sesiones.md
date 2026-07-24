@@ -104,21 +104,38 @@ cupo opciones 4, prompts anti-fusión + multi-ítem + naturalidad, repeatNote co
 excepción de pregunta repetida, curación b (`db/curacion-2026-07-23b.sql`: 4
 variantes únicas → '.', ancho de lona al display del producto).
 
-**RUNBOOK MARTIN — aplicar r6 (en orden):**
-1. Aplicar `db/curacion-2026-07-23b.sql` (revisar NOTICEs: 0 SKIPPED esperados;
-   sanity del final: 4 variantes con display '.').
+**RUNBOOK MARTIN — aplicar r6 + Aclarador + curaciones (en orden):**
+1. Aplicar en el SQL editor, juntos: `db/curacion-2026-07-23b.sql` (4 variantes
+   '.', anclaje apuntes/libro) **y** `db/curacion-2026-07-24.sql` (curación 1c:
+   Sobre Inglés fantasma oculto, Kraft 130/300 empatado, Folletos 10x15).
+   Revisar NOTICEs: 0 SKIPPED esperados.
 2. GET `/webhook/refrescar-catalogo` (URL de producción de la isla — purga cache).
-3. Re-importar `n8n/flows/faq-bot-v7.json` (mismos 60 nodos; cambian Get Precio,
-   Armar Respuesta Precio, Log Precio, Get Opciones, Armar Menu Opciones, Parsear
-   Respuesta, Armar Mensajes LLM y los dos prompts). Verificar creds + abrir/
-   guardar Log Precio y Log Menu (schema cache) + TOGGLE del workflow.
+3. Re-importar `n8n/flows/faq-bot-v7.json` — **ahora 68 nodos** (antes 60): +8 del
+   **Aclarador** (`¿Necesita Aclarador?`, `Armar Prompt Aclarador`, `Llamar LLM
+   Aclarador`, `Aplicar Aclarador`, `¿Resolver?`, `Get Precio 2`, `Armar Respuesta
+   Precio 2`, `Pre-Envío Precio`). **Verificar creds de los nodos nuevos:** `Get
+   Precio 2` → Bot Readonly DB; `Llamar LLM Aclarador` → OpenRouter API (mismas
+   creds que las existentes, n8n debería auto-mapear — confirmar). Abrir/guardar
+   `Log Precio` (ahora lee de `Pre-Envío Precio`) y `Log Menu` (schema cache) +
+   TOGGLE.
 4. **Ronda 3**: replay mínimo del plan §5 (4, 5, 7, 11, 12, 13, 14, 15→18, 20,
-   21, 25 repetido + "???", C2 faltantes, regresión 1/9/10/22-24/27/28).
-   Marcadores nuevos en `bot.decisiones.notas`: `(repregunta)`, `(variante
-   rescatada: mono)`, `faz_incoherente`, `producto_nicho`, `menu_pack`,
-   `menu_unico`, `menu_nicho`.
-5. Pregunta TG nueva: **36** (¿el precio de medicina es solo para medicina?).
+   21, 25 repetido + "???", C2 faltantes, regresión 1/9/10/22-24/27/28) + los
+   casos del Aclarador: "papel kraft" (→ debe PREGUNTAR 130 o 300, no elegir uno),
+   "folletos 10x15" (→ ofrece los tres), un pedido con nombre mutado
+   (→ resuelve al producto real y da el precio, sin mail). Marcadores nuevos en
+   `bot.decisiones.notas`: `aclarador: resolver/preguntar/opciones/nada`,
+   `(repregunta)`, `(variante rescatada: mono)`, `menu_pack`, `menu_unico`.
+5. Preguntas TG nuevas: **36** (medicina), **37** (Sobre Inglés $0), **38**
+   (sinónimos de urgencia del anillado).
 6. promptfoo cuando declares el build cerrado.
+
+**NOTA sobre el Aclarador (2ª llamada LLM):** cambio de diseño OK de Martin
+2026-07-24 (decisions/log.md). Reemplaza la repregunta fija por un fallback que
+resuelve o pide el dato que distingue, jailbreak-safe (mensaje actual como dato,
+NO la historia). Detalle en `suite5-ronda2-fixes.md` §RC-0. El gemelo `Armar
+Respuesta Precio 2` se deriva del original; si editás `Armar Respuesta Precio`,
+regenerá con `node tests/regen-arp2-twin.js --write` (o el harness de 94 casos lo
+caza).
 
 **PRÓXIMA SESIÓN:** Martin trae resultados de ronda 3 → loop de fixes. Contexto:
 `plans/suite5-ronda2-fixes.md` (diagnóstico + decisiones abiertas: pivot de packs

@@ -36,6 +36,35 @@ ventana (15-17), menú determinístico + elección por número (22/23), stickine
 
 ## 2. Causas raíz → fixes (paquete r6)
 
+### RC-0 — Aclarador (2ª llamada LLM) — CONSTRUIDO 2026-07-24 (reemplaza la repregunta fija)
+Feedback de Martin: repreguntar "¿me lo decís de nuevo?" es mala UX y puede no
+cambiar nada; mejor un fallback (aunque cueste una llamada) que **asegure una
+respuesta correcta**, y para la ambigüedad **presentar las opciones o pedir el
+dato — nunca forzar una sola y descartar el resto**. Implementado como el nodo
+**Aclarador**: una 2ª llamada LLM que se dispara SOLO en los estados de fallo de
+resolución (`sin_match`, `ambiguo`, `faz_incoherente`, `producto_nicho`,
+`producto_incoherente`). Recibe el catálogo cerrado cotizable + los candidatos +
+el **mensaje ACTUAL del cliente como dato** (NO la historia → a prueba de
+jailbreak; ya pasó el firewall) y devuelve, con salida JSON cerrada (enum +
+nombres de la lista cerrada → una inyección no puede tipear plata, revelar el
+prompt ni inventar un producto):
+- `resolver` {producto, variante} → 2º Get Precio determinístico → precio (el LLM
+  nunca tipea el monto);
+- `preguntar` → pregunta corta nombrando SOLO el eje que distingue ("¿el kraft en
+  130 o 300 gramos?");
+- `opciones` → menú numerado de los productos que matchean (para comparar);
+- `nada` → email (genuinamente fuera de catálogo).
+Con anti-loop (2 aclaraciones iguales → email) y degradación fail-safe (si el LLM
+falla, se usa el reply por defecto que ya computó `Armar Respuesta Precio`). Los
+fallbacks legítimos de "lo cotiza el equipo" (override, qr_multiple, precio_cero,
+dorso, papel_especial, sql_error) NO pasan por el Aclarador — siguen a email.
+Nodos nuevos (8): `¿Necesita Aclarador?` · `Armar Prompt Aclarador` · `Llamar LLM
+Aclarador` · `Aplicar Aclarador` · `¿Resolver?` · `Get Precio 2` · `Armar
+Respuesta Precio 2` (gemelo del render, generado programáticamente; el harness
+testea ambos para que no driftee) · `Pre-Envío Precio` (convergencia → Log lee de
+acá). Total flow: 68 nodos. Harness 94/94. **Las repreguntas fijas de RC-1 quedan
+como degradación**; la conducta primaria ahora es el Aclarador.
+
 ### RC-1 — `sin_match`/`ambiguo` derivaban a email (violaba "WhatsApp informa TODO")
 Un fallo de RESOLUCIÓN (el LLM inventó una clave) no es un precio que el sistema
 no pueda dar: es recuperable repreguntando. Ahora en `Armar Respuesta Precio`:
