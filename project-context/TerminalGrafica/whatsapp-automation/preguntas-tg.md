@@ -1,11 +1,13 @@
 # Preguntas pendientes a TG — consolidado
 
-> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-23,
-> incluye pasada 1 de curación: 35-41).
+> Única fuente de verdad de lo que falta preguntarle a TG (sesiones hasta 2026-07-24;
+> Martin resolvió un lote grande el 2026-07-24, ver tabla de abajo).
 > Ideal: UNA sola conversación. **Criterio transversal:** cada respuesta aterriza como
 > DATO (producto nuevo, sinónimo/display en el overlay, o línea de Info del negocio),
 > nunca como regla nueva de prompt.
 > Al final: lo ya resuelto (para no re-preguntar) y los temas comerciales a avisar.
+> Los números NO son correlativos (se conservan los originales para no romper referencias
+> en planes/decisiones; los resueltos se sacaron de acá y viven en la tabla del final).
 
 ## 1. Gates del catálogo limpio (bloquean partes del go-live del dedupe)
 
@@ -13,15 +15,10 @@
    tamaños?** — Gate del renombre de la zona sucia. Decisión ya tomada si la
    respuesta es sí: el display pasa a "Impresiones a4 papel obra 75 gr" y los
    sinónimos de a4 se duplican en 75 y 106 (nunca quedan en uno solo).
-2. **¿El precio de módulos/apuntes es SOLO para estudiantes de medicina o para
-   cualquiera?** — La poda de 'apuntes' lo asume solo-medicina; si es para todos,
-   se re-ensancha.
-3. **El 106 gr b/n simple faz tiene precio de lista $120 pero su tabla por cantidad
-   arranca en $180. ¿Cuál vale?** — Dato sucio latente (hoy invisible: siempre gana
-   la tabla; si algún día desactivan la regla, saldría $120).
 4. **Papel obra 106: ¿cuándo va por laser ($800/hoja) y cuándo por Riso/inkjet
-   (tabla desde $180)?** — Son dos productos con precios muy distintos y el cliente
-   dice "papel obra de 106" para ambos.
+   (tabla desde $180)?** — Son dos productos con precios muy distintos (en el export
+   figuran "Impresión a4 Papel obra de 106 gr" y "OBRA 106 GR") y el cliente dice
+   "papel obra de 106" para ambos.
 
 ## 2. Directas de catálogo
 
@@ -31,27 +28,11 @@
    cantidad. Si no es de público, se oculta en el overlay.
 7. **Sobres ingleses duplicados en el sistema** (Librería $500 vs Soportes
    Especiales $0 + tabla) — ¿unidad vs pack? ¿cuál va? → se oculta o renombra uno.
-8. **Papel vegetal x10 (a4 y a3/oficio): precio real** — En la BD están en $0 sin
-   reglas; hoy derivan a email siempre.
 9. **¿Hacen pasacalles?** — Si sí, entra como sinónimo de lona; si no, sigue
    derivando a humano.
-10. **Medidas de ploteo/impresión grande: ¿hasta qué medida? ¿A1/A0?** — Hoy las
-    medidas grandes solo se contestan para lo que va por m² (lona/cartelería);
-    láminas A1 de arquitectura escalan siempre.
-11. **Ítems de taller (encuadernado, refilado, troquelados, ojales, etc.):
-    ¿cuándo aplican y cada cuánto son?** — ¿O se deja simple como está hoy?
-    (pedido de Martin 2026-07-21).
-36. **"A5 ILUST. MATE 250 GR": la única variante cargada es "A4" ($600)** — y el
-    A4 de "Ilustración Mate 250 gr" sale $900. ¿La variante es en realidad A5
-    (mal cargada) o el producto duplica al otro? (pasada 1 de curación).
-37. **"Anillado Plastico a3": única variante "A4" ($3.200)** — ¿es A3 o A4?
-    (el a4/oficio sale $2.400). (pasada 1 de curación).
-38. **"Vinilo, Lona Brillo/Mate Uv" ($22.000, unidad "metro")** — ¿el precio es
-    por metro LINEAL o por m²? (el resto del UV va por m²). ¿Y se imprime en
-    lona además de vinilo? (ninguna variante lo refleja). (pasada 1).
-39. **Folios a4/oficio ($500 c/u): ¿son fundas plásticas o papel/hojas sueltas?**
-    — define sinónimos y casos de uso; en la pasada 1 se podaron "hojas a4" /
-    "papeles a4" / "papel bond", que cotizaban folios a quien pedía hojas.
+38. **"Vinilo, Lona Brillo/Mate Uv" — ¿se imprime en lona además de vinilo?**
+    (ninguna variante lo refleja). El precio por metro LINEAL ya quedó resuelto
+    (medida sin exacto → lineal o m² según el producto). Sólo queda esta parte.
 
 ## 3. Servicios implícitos (TG los calcula internamente y no están cargados)
 
@@ -60,26 +41,15 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 
 12. **Fotocopias b/n y color** — LA consulta #1 del mostrador; hoy escala siempre.
 13. **Escaneo / digitalización** — ¿por hoja? ¿lo mandan por mail al cliente?
-14. **Diapositivas / PowerPoint 2-4-6 por hoja** — clásico universitario;
-    ¿se cobra por hoja o por slide?
 15. **Plegado / doblado** (trípticos) — pega con Folletos.
 16. **Empastado / tapa dura** (tesis de posgrado) y **termoencuadernado**.
-17. **Tapas para anillados** — ¿EXISTEN como producto? (cierra con datos una
-    confabulación vista en tests).
-18. **Foto carnet 4x4.**
-19. **Impresión de fotos 10x15 / 13x18.**
-20. **Póster académico de congreso A0/A1** — ¿se hace en lona/PVC por m²?
-21. **Impresión en el acto desde mail/WhatsApp/celular** — ¿cómo es el proceso de
-    mostrador? (pega con USB, ya resuelto).
 22. **Guillotinado / corte chico suelto** — el producto Corte x Millar es por mil;
     ¿y cortar 20 hojas?
 
 ## 4. Segunda línea (solo si la reunión da)
 
-23. Sellos. 24. Diseño/ajuste de archivo. 25. Talonarios AFIP.
+24. Diseño/ajuste de archivo. 25. Talonarios AFIP.
 26. Transparencias/filminas. 27. Papel fotográfico. 28. Mapas/planos plegados.
-29. "Vinilo brillo" está en dos rubros (Solvente y UV): ¿hay un default de mostrador
-    cuando el cliente no especifica?
 40. "Papel Autoadhesivo Brillo / Split": ¿qué es "Split"? (pasada 1).
 41. "Papel Obra Vegetal Color/Negro" (ploteo): ¿es papel obra y/o vegetal? (pasada 1).
 
@@ -97,71 +67,27 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     ¿el mostrador carga UN ítem con N×P impresiones (bracket del total) o carga por
     copia? Hoy el bot usa un techo conservador que nunca sub-cotiza; con la
     respuesta pasa a total exacto.
-33. **Adicionales de papel (bookcel / "Adicional 106")** — tres sub-preguntas que
-    deciden si las tablas y totales de impresiones son confiables:
-    (a) ¿el "Adicional papel obra 106" se selecciona ALGUNA VEZ sobre trabajos del
-    propio producto 106? ¿en qué caso concreto?;
-    (b) ¿existe alguna clase de trabajo donde un adicional de papel se aplique
-    SIEMPRE (es decir: el papel se cobra aparte de la impresión)? — **si la
-    respuesta es sí, hay rollback pre-decidido**: se apagan número/tabla/total de
-    las variantes afectadas hasta re-modelar (plan v7 §Ronda 3);
-    (c) el "a4/oficio" del nombre del adicional, ¿es el tamaño del papel del
-    adicional, o un upgrade de tamaño que se le vende a trabajos a4?
 34. **Formato de los apuntes/módulos de medicina** — la única variante cargada es
     "Impresion a4 s/f color" ($45/página). ¿Es el único formato en que se imprimen
     (siempre a4, siempre simple faz, siempre color)? ¿O existen b/n, doble faz u
-    otros tamaños con precio especial de medicina que faltan cargar? Hasta la
-    respuesta, el bot presupone ese único formato sin decírselo al cliente.
-35. **Promo Inmobiliarias: ¿$15.000 es por cartel llevando 6, o por el pack
-    completo de 6?** — el cartel suelto 1×0,65 sale $19.500; un pack de 6 a
-    $15.000 no cierra (87% off). Define `por_pack`: hoy está en true (el bot
-    muestra $15.000 como precio del conjunto); si es por cartel, sub-cotiza 6×
-    y hay que pasarlo a false. (pasada 1 de curación).
-36. **Precio especial de medicina: ¿para quién es?** — en la ronda 2 el bot le
-    ofreció el $45/página de medicina a un cliente que pidió "apuntes" genéricos.
-    Desde r6 el bot solo lo menciona si el cliente dice "medicina" (guard de
-    nicho) y ante la duda pregunta "¿es material de medicina?". ¿Es la conducta
-    correcta, o el precio especial se le da a cualquiera que imprima apuntes?
-    (Complementa la 34, que pregunta por el formato.)
+    otros tamaños con precio especial de medicina que faltan cargar? (El ALCANCE ya
+    quedó resuelto: solo material de medicina; esto pregunta por el FORMATO.)
 37. **"Sobre Inglés" figura dos veces** — uno a $500 (rubro Librería) y otro a
     $0 (rubro Soportes Especiales). ¿El de $0 es un duplicado viejo para borrar?
     Mientras tanto lo ocultamos (curación 1c) para que no salga un menú con un
     ítem a $0; si es un producto vivo se revierte.
-38. **Anillado a4/oficio — sinónimos de urgencia** — el producto conserva los
-    sinónimos "anillado express" / "anillo plastico ya" / "anillado urgente".
-    Sirven para que el bot RESUELVA cuando el cliente los usa, pero rozan la idea
-    de plazo (que lo define el equipo, decisión I14). ¿Los dejamos (solo
-    resuelven, no prometen tiempo) o los sacamos? Recomendación: dejarlos.
 
-## 8. Rediseño de resolución (consejo 2026-07-24 — bloquean el gate de factibilidad y los defaults de oficio)
+## 8. Rediseño de resolución (consejo 2026-07-24)
 
-42. **Auditoría de atributos estructurados** — En `public.products` /
-    `product_variants`, ¿cuáles de estos existen HOY como CAMPO consultable (columna)
-    y cuáles viven enterrados en el texto del nombre?: ancho/alto máximo por material,
-    faz disponibles, gramajes válidos, tamaño de pack, diámetro/tipo de anillado. **Es
-    EL gate del rediseño:** sin estos como dato, el bot no puede validar "una lona de
-    3 m no entra en 1,52 m" (INC-12) ni cuantizar packs (INC-21) sin adivinar. Subyace
-    a 33, 37, 38 y 4.
-43. **Cuantización de pack** — Cuando el cliente pide una cantidad que no es múltiplo
-    exacto del pack (150 tarjetas con packs de 100): ¿se redondea al próximo pack
-    (2×100)? ¿al próximo tier? ¿se cotiza a medida? Es política de negocio, no sale de
-    la BD. (Causa de INC-21; generaliza la 35.)
-44. **Defaults de oficio por familia** — Cuando el cliente no especifica un eje que sí
-    cambia el precio, ¿qué asume el mostrador? Ej: apuntes/texto → ¿75gr obra simple
-    faz b/n? tapa/premium → ¿106gr? (Causa de INC-04/14; se cruza con 1, 2 y 36.) Cada
-    default confirmado se carga en el overlay con sello de TG y el bot lo verbaliza.
-45. **Ejes reales del anillado + default** — ¿Qué ejes distinguen los anillados
-    (plástico vs metálico/wire-o, diámetro del anillo, papel interior, tapas) y cuál es
-    el default cuando el cliente solo dice "anillado"? (Causa del flip-flop INC-07/13;
-    se cruza con 17, 37, 38.)
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
-    el cliente (obra 80, bookcel, ahuesado, ilustración, etc.) al producto de stock,
-    para disparar el fallback por NOMBRE y no por suerte de substring? (Causa de INC-15
-    "obra 80 no ruteó"; se cruza con 33, 4, 8, 41.)
+    el cliente (obra 80, ahuesado, ilustración, etc.) al producto de stock, para
+    disparar el fallback por NOMBRE y no por suerte de substring? (Causa de INC-15
+    "obra 80 no ruteó"; es el insumo concreto de la limpieza de catálogo — ver
+    resuelta "Auditoría de atributos".)
 47. **% de cotizaciones fuera de la ventana de 24 h** — ¿Qué proporción de clientes
-    retoma al otro día / fuera de la sesión de atención? Fuera de ventana, WhatsApp solo
-    permite plantillas pre-aprobadas, no texto libre → define cuántas plantillas humanas
-    hay que preparar para que el bot no se caiga mudo. (Nuevo, del rediseño.)
+    retoma al otro día / fuera de la sesión de atención? Define cuántas plantillas
+    humanas hay que preparar para que el bot no se caiga mudo. (Tarea de Martin /
+    revisión de logs, NO es pregunta de mostrador.)
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
@@ -191,4 +117,28 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Cantidad-first | Preguntar cuántas y dar el bracket exacto; sin cantidad → tabla (Martin, v10.7). |
 | Costo por página para libros | Sí, con "el precio final se cotiza vía mail" (Martin, v10.5). Compuestos excluidos de todo estimado con cantidad. |
 | Escalación a humano | Siempre por **mail** (misma dirección, incluye reclamos y clientes enojados); no hay takeover en Chatwoot (Martin, 2026-07-24). La frase la modula el refinador según contexto. |
+| Precio de medicina — alcance | SOLO para material de medicina; cualquiera puede pedirlo pero el precio especial solo aplica a medicina. La poda 'apuntes'=solo-medicina es correcta; el guard de nicho (pregunta si es medicina) queda (Martin, 2026-07-24). Falta el FORMATO → pregunta 34. |
+| 106 gr: lista $120 vs tabla $180 | Siempre gana la tabla (Martin, 2026-07-24). |
+| Papel vegetal x10 ($0) | Se ocultan (decisión del local). → curación pendiente `oculto=true` (Martin, 2026-07-24). |
+| Ploteo / impresión grande | No hay límite de medida; sin medida exacta se cobra por metro lineal o m² según diga el producto (Martin, 2026-07-24). |
+| Ítems de taller (encuadernado, ojales, refilado…) | Se deja simple: se informa el precio del ítem aunque el cliente lo mencione en un trabajo combinado, pero NUNCA cómo se relaciona con otros ítems (Martin, 2026-07-24). |
+| A5 ILUST. MATE 250 GR (variante "A4") | La variante "A4" es error de carga: es A5, no duplica a Ilustración Mate 250. Con mono-variante el display usa el nombre del producto (Martin, 2026-07-24). |
+| Anillado Plástico a3 (variante "A4") | Es A3; con una sola variante se usa solo el nombre del producto, la "A4" se ignora (Martin, 2026-07-24). |
+| Mono-variante → display | Con una única variante, el bot nombra solo el producto (confirma regla vigente) (Martin, 2026-07-24). |
+| Folios a4/oficio | Son fundas plásticas (Martin, 2026-07-24). |
+| Diapositivas / PowerPoint | Se cobran como impresión: si una slide = una hoja, cada diapositiva va al precio de la impresión según gramaje y faz elegidos (Martin, 2026-07-24). |
+| Tapas para anillados | No existen como producto (Martin, 2026-07-24). |
+| Foto carnet | No; TG solo imprime, no saca fotos (Martin, 2026-07-24). |
+| Impresión de fotos 10x15 / 13x18 | Sí, pero se cobra como la hoja de impresión (valores de impresiones) (Martin, 2026-07-24). |
+| Póster académico A0/A1 | Según pida el cliente; salvo variante específica, va por m² (Martin, 2026-07-24). |
+| Cómo llegan los archivos | USB, o el sistema propio del local para transferir desde el celu en el momento, o por celular; NO se aceptan archivos por WhatsApp (Martin, 2026-07-24). |
+| Sellos | No se hacen (Martin, 2026-07-24). |
+| Vinilo brillo (dos rubros) | Mostrar las opciones al cliente, sin default de mostrador (Martin, 2026-07-24). |
+| "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
+| Promo Inmobiliarias | Es POR CARTEL (no por pack) → `por_pack=false`, el bot cotiza 6×. → curación pendiente (Martin, 2026-07-24). |
+| Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → se sacan los sinónimos de urgencia (a confirmar el alcance con Martin) (Martin, 2026-07-24). |
+| Cuantización de pack | Se explica que se trabaja por pack y se pasa el precio del próximo pack (falta confirmar la aritmética exacta) (Martin, 2026-07-24). |
+| Defaults de oficio | **NO hay.** El bot no asume: muestra todo o pregunta (Martin, 2026-07-24). Revierte la recomendación de "defaults de oficio" del consejo. |
+| Anillado — ejes | Se distingue plástico ($2.400) vs metálico ($3.200): se muestran como opciones; las medidas (diámetro del anillo) solo si el cliente las especifica (Martin, 2026-07-24). |
+| Auditoría de atributos estructurados | No se modela un esquema nuevo: se resuelve limpiando/rediseñando el catálogo vía la skill de curación, para que el bot entienda nombres que hoy cargan las personas de TG para uso interno (Martin, 2026-07-24). |
 | Foto de la lista del mostrador (ex-30) | **No va a existir.** El catálogo y la lista de precios salen del sistema quote-automation, que está al día (Martin, 2026-07-23). La corroboración de datos del bot es 100% estructural (señales del barrido de la skill); el descubrimiento de faltantes queda en §3 + `bot.decisiones`. |
