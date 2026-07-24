@@ -34,8 +34,11 @@ ruta). Al leerlo:
 - El LLM ve el catálogo como líneas `RUBRO` + `- Producto: variante*, variante**, ...`
   (`*` = precio de lista mostrable, `**` = precio por cantidad, cantidad-first). Los
   displays que propongas son EXACTAMENTE lo que el bot pega en mensajes al cliente.
-- **Variante única**: el render usa el nombre del producto e ignora el de la variante
-  (confirmado por Martin, 2026-07-23). Pero la variante SIGUE viva en las queries
+- **Variante única = el nombre que vale es el del producto** (REGLA GENERAL, Martin
+  2026-07-23 y reafirmada 2026-07-24): el render usa el nombre del producto e ignora el
+  de la variante, y ante datos contradictorios de una variante única gana el nombre del
+  producto (ej. "Anillado Plástico a3" con variante mal cargada "A4" → es A3). Pero la
+  variante SIGUE viva en las queries
   (elección de variante en Get Precio, rank-3 slot-swap) y puede citarse en respuestas
   de precio → curar `display_variante` vale cuando el nombre de la variante confunde
   (p. ej. repite el nombre de OTRO producto); no hace falta para esconderla del render.
@@ -99,6 +102,41 @@ de "dato afirmado, no corroborado" — barrer TODAS en cada pasada:
 
 Salida de este barrido: cada señal se resuelve como pregunta a TG o como ocultamiento
 propuesto — nunca como un display que "completa" la información faltante.
+
+## Estandarización de atributos parseables (cuándo un valor pasa a dato de código)
+
+Además de displays/sinónimos/flags, la curación decide cuándo un atributo tiene que
+existir como DATO PARSEABLE que un nodo de código pueda comparar o calcular (no solo
+texto para el cliente). Nace del gate de factibilidad (INC-12: validar que una lona de
+3 m no entra en 1,52 m) y de la cuantización de pack (INC-21). Pedido de Martin
+(2026-07-24): estandaricemos, con un criterio explícito de cuándo hacerlo.
+
+**Test de decisión (una línea):** ¿algún nodo determinístico necesita COMPARAR
+(>, <, =) o CALCULAR con este valor?
+- **SÍ → estandarizar.** Va como número + unidad, en formato fijo y documentado, en un
+  campo estructurado del overlay — NUNCA parseado de la prosa del nombre (frágil).
+- **NO → texto de display.** Redactado para el cliente, sin formato de máquina.
+
+**Casos que SÍ se estandarizan** (hay un gate o un cálculo que los consume):
+- ancho/alto máximo por material → gate de factibilidad de medida.
+- tiers/tamaños de pack → cuantización: **redondeo hacia arriba al próximo tier**
+  (Martin 2026-07-24; ej. 150 con tiers 100/500/1000 → el de 500; si la cantidad
+  supera el mayor tier, se deriva al equipo, no se inventa).
+- gramaje SOLO cuando discrimina precio entre gemelos y el motor tiene que elegir.
+
+**Casos que NO** (nadie los compara ni calcula, solo se muestran):
+- casos_de_uso, acabados, descripciones; el diámetro de anillo (hoy solo se muestra si
+  el cliente lo pide → NO estandarizar hasta que un cálculo lo consuma).
+
+**Mecanismo:** el valor estandarizado vive en un campo estructurado del overlay —
+jsonb `atributos` en `bot.producto_meta` (p. ej. `{"ancho_max_m": 1.52,
+"pack_tiers": [100,500,1000]}`), no en el nombre libre. Si la columna no existe todavía,
+es un cambio de esquema que aplica Martin: proponé el `alter table` en el `.sql` de la
+pasada y documentá clave, unidad y tipo en el `.md`.
+
+**Disciplina:** no estandarizar de más. Cada atributo estandarizado es superficie de
+mantenimiento y una nueva forma de desincronizarse del sistema del mostrador. Solo los
+que un gate o un cálculo REALMENTE consume; el resto, display.
 
 ## Proceso
 
