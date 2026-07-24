@@ -123,6 +123,15 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     nicho) y ante la duda pregunta "¿es material de medicina?". ¿Es la conducta
     correcta, o el precio especial se le da a cualquiera que imprima apuntes?
     (Complementa la 34, que pregunta por el formato.)
+37. **"Sobre Inglés" figura dos veces** — uno a $500 (rubro Librería) y otro a
+    $0 (rubro Soportes Especiales). ¿El de $0 es un duplicado viejo para borrar?
+    Mientras tanto lo ocultamos (curación 1c) para que no salga un menú con un
+    ítem a $0; si es un producto vivo se revierte.
+38. **Anillado a4/oficio — sinónimos de urgencia** — el producto conserva los
+    sinónimos "anillado express" / "anillo plastico ya" / "anillado urgente".
+    Sirven para que el bot RESUELVA cuando el cliente los usa, pero rozan la idea
+    de plazo (que lo define el equipo, decisión I14). ¿Los dejamos (solo
+    resuelven, no prometen tiempo) o los sacamos? Recomendación: dejarlos.
 
 ## 7. Temas comerciales para avisar (no son preguntas de catálogo)
 
