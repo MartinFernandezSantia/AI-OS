@@ -1,236 +1,419 @@
-# R7 — Refinador final + resolución determinística (suites 5 y 6, ronda 4)
+# R7 — Refinador final + resolución determinística — **v2 (post-consejo Opus)**
 
 > Insumo: ronda 4 de suite-5 + suite-6 corridas por Martin en WhatsApp real (2026-07-25),
-> con capturas y notas. 16 incidentes.
+> con capturas y notas — 16 incidentes. Revisado por un consejo de 5 lentes Opus:
+> acta en [`r7-consejo-opus.md`](./r7-consejo-opus.md).
 > **Estado: PROPUESTA. Nada construido, nada aplicado.**
 > Regla que no cambia: Claude prepara, **Martin aplica**; harness verde tras cada nodo Code.
+>
+> v1 → v2: el consejo encontró 3 bugs de plata vivos que no eran parte del encargo, y que la
+> §2.2 de v1 (Get Precio devolviendo todas las variantes) apagaba los 7 guards del motor.
+> El orden de entrega se dio vuelta. El refinador pasa de "redactor" a "editor de bordes".
 
 ---
 
-## 0. Lo que Martin fijó (no se discute, entra como requisito)
+## 0. Lo que Martin fijó (requisito, no se discute)
 
-- **Nodo LLM final antes de TODO texto que salga al chat.** Toma los datos + el borrador,
-  lo comprime, lo deja humano y entendible, y respeta las directrices de conducta.
-- **Mono-variante ⇒ solo el nombre del producto.** IMPERATIVO, en todos los renders.
-- **Sacar la leyenda** `(precio de lista; el precio final del trabajo te lo confirma el equipo)`.
-  Reemplazo máximo permitido: "el total te lo confirmamos en el local o vía mail a
-  terminalgrafica@gmail.com".
-- **Variante por defecto en el catálogo curado**: forma de decirle al bot qué elegir cuando
-  el cliente no especifica (⚠️ revierte parcialmente la decisión "NO hay defaults de oficio"
-  del 2026-07-24 — ver §7).
-- **Los Get se hacen con el nombre del producto principal** (tarjetas / impresión / lona) y el
-  filtrado de variantes lo hace el sistema, no el LLM.
+- **Nodo LLM final antes de todo texto que salga al chat**, que comprima y humanice.
+- **Mono-variante ⇒ solo el nombre del producto.** Imperativo.
+- **Fuera la leyenda** `(precio de lista; el precio final del trabajo te lo confirma el equipo)`.
+  Reemplazo confirmado: `El total te lo confirmamos en el local o por mail.` — dirección
+  completa solo en la primera mención de la conversación.
+- **Variante por defecto en el catálogo curado**, con puerta abierta: se muestra el default y
+  se ofrece el resto ("¿buscabas algún gramaje en especial?"). Nunca un default silencioso.
+  Reemplaza la regla "NO hay defaults de oficio" del 2026-07-24.
+- **Los Get se hacen con el término del producto principal**; el filtrado de variantes es del
+  sistema, no del LLM.
 
-Única objeción que dejo escrita y sigo: un redactor fluido encima de un motor que a veces
-elige mal **narra bonito el número equivocado**. Por eso el refinador de §1 se construye
-*ciego a la plata* y con re-estampado + gate: no puede tocar un monto ni inventar un producto.
-Con eso, el riesgo que motivaba la objeción queda cerrado y el nodo entra igual.
+**Dos límites que el consejo pide dejar por escrito** (no bloquean, acotan expectativas):
+
+1. Después de excluir menús, tablas, líneas de degradación y la oración que lleva el monto, lo
+   que el refinador puede reescribir son una o dos oraciones. El nodo se justifica **por voz**;
+   los menús feos del incidente 7 los arregla el render determinístico (§3), no el refinador.
+   Si el refinador pudiera renumerar el menú, el "la 2" del turno siguiente apuntaría a otro
+   producto sin ninguna señal.
+2. Cuatro textos siguen fijos y no pasan por el refinador: `Mensaje Escalación`,
+   `Saludo Bienvenida`, `Respuesta No-Texto`, `Mensaje Cap Email`. Convergerlos llevaría la
+   convergencia de 3 ramas a 7 por textos de baja frecuencia que conviene tener deterministas.
 
 ---
 
-## 1. Mapa incidente → causa raíz → arreglo
+## 1. Bugs de plata vivos — entran al paquete aunque no estaban en el encargo
 
-| # | Incidente (suite) | Causa raíz verificada en código | Arreglo | Bloque |
+| # | Qué pasa hoy | Plata | Arreglo |
+|---|---|---|---|
+| V1 | Promo inmobiliarias: `por_pack=false` (curación 24b) habilitó el total. "3 carteles" → `3 × $15.000 = $45.000`; el real de 3 sueltos es $58.500 | −$13.500 | `min_unidades=6` curado + el motor no da total bajo el mínimo |
+| V2 | 18 variantes de Taller multiplican por hojas. "Anillado para 120 hojas" → `120 × $4.200 = $504.000` | absurdo público | flag curado `por_trabajo` |
+| V3 | `Talonarios Rifas 100 numeros`: "500 rifas" cotiza 500 talonarios = 50.000 rifas | absurdo público | `por_pack=true` + `numeros\|rifas\|talonarios` a la regex de telemetría |
+
+Los tres viven en el catálogo de **testing**, no hay clientes reales expuestos. Los tres son
+gate de go-live.
+
+**Corrección de documentación (no es código):** `mostrable` en la vista es `(not tiene_reglas)`
+y ningún nodo lo lee. La línea 138 de `preguntas-tg.md` ("el cartel suelto existe pero
+mostrable=false → deriva") está mal leída: el bot sí lo cotiza. Ocultar de verdad es
+`oculto=true` en `variante_meta`. Y ojo: `mostrable=false` en las 4 variantes de `OBRA 80 GR`,
+así que **nunca** implementar "variantes visibles" con ese campo.
+
+---
+
+## 2. Mapa incidente → causa raíz → arreglo
+
+| # | Incidente | Causa raíz verificada | Arreglo | Entrega |
 |---|---|---|---|---|
-| 7 | menú feo, mono-variante con medida rara, re-pregunta faz/color ya dados | `Armar Menu Opciones` L85 imprime `v.nombre` aunque el grupo tenga 1 variante; no filtra variantes por lo que el cliente ya ancló | mono-variante ⇒ nombre del producto; filtrar variantes por tokens anclados | B3 |
-| 7b | no entregó la opción de 75 gr | el LLM eligió UN producto (106) sin que el cliente anclara gramaje | guard de gemelos (§2.3) | B2 |
-| 11 | menú de opciones para producto de variante única | ídem 7 | ídem | B3 |
-| 13 | eligió `1" 1/4` del anillado metálico sola, no mostró plástico | nada impide que el LLM invente la variante: `Get Precio` matchea por igualdad exacta y el render la acepta | guard de variante no anclada (§2.4) + telemetría de por qué se eligió | B2/B5 |
-| 14 | presumió 106 gr sin mostrar opciones | gemelos 75/106 con variantes idénticas | guard de gemelos | B2 |
-| 15 | no ofrece la láser 80 gr como alternativa | decisión de negocio, no bug | pregunta TG (§7) | B6 |
-| 16 | todos los fallbacks dicen lo mismo | `Armar Respuesta Precio` L337-340: un solo texto para 7 estados distintos | mapa de mensaje por estado | B4 |
-| 17 | visión de túnel tras derivar a mail | ventana `papelEspecialHit` de 3 mensajes suprime el número aunque el cliente pregunte por otro producto | la ventana solo aplica al MISMO producto/familia; y "obra 80 gr" pasa a resolver de verdad (18) | B2/B4 |
-| 18 | `Get Precio` no encontró "OBRA 80 GR" | el cliente escribe `80gr`, el catálogo `OBRA 80 GR`; rank-2 es `LIKE %pedido%` → `obra 80gr` no es substring de `obra 80 gr` | normalizar gramajes (`(\d)\s*gr` → `\1 gr`) en ambos lados | B2 |
-| 19 | `Get Precio` no encontró "150 Tarjetas Color/Negro" | el LLM compone un nombre que no existe; el matcher solo hace exacto/sinónimo/substring | LLM emite el término principal; el sistema resuelve pack/variante (§2.1) | B2 |
-| 21a | 150 tarjetas → ofrece pack de 100 (peor negocio) | la cuantización "próximo tier hacia arriba" (resuelta 2026-07-24) nunca se implementó | motor de pack determinístico | B4 |
-| 21b | "Dos packs de 100 te quedan en $12.000" (es c/u) + caveat duplicado | el texto lo escribe el LLM vía `p.template`; el anti-eco solo mira `/precio de lista/i` | **plantilla siempre forzada**: el LLM deja de narrar precios (§4.1) | B4 |
-| S6-1 | pregunta gramaje al Vegetal (no tiene) y después lista tamaños | el LLM inventa un eje; el menú no sabe que el cliente ya dijo "a3" | guard de eje no listado (ya está en prompt) + filtro de variantes por lo anclado | B3 |
-| S6-2 | "Papel Vegetal / A3" → "Eso no lo tenemos en catálogo" | variante `OFICIO / a3` ≠ `a3` (igualdad exacta) → 0 filas → Aclarador → `nada` → texto que además filtra "catálogo" | resolvedor de variante por subconjunto de tokens (§2.2) + el `nada` deja de mencionar el catálogo | B2/B4 |
-| S6-4 | espiralado → precio del a3 directo, sin mostrar plástico a4/oficio | gemelos "Anillado Plastico a3" / "Anillado plástico a4/oficio" | guard de gemelos | B2 |
-| S6-5a | promo "de 6 carteles ... $15.000" (es por cartel) | el display curado dice "(cartel de 1 × 0,65 m, llevando 6)" pero **el texto lo escribió el LLM**, no el sistema | plantilla siempre forzada | B4 |
-| S6-5b | ofrece "te paso el detalle por mail" (no puede) y ante "Ok" se calla | acción inventada + `noop` por repetición sobre una afirmación del cliente | afirmación nunca es noop + denylist del refinador | B4 |
-| S6-6 | bookcel → pregunta tamaño → deriva hablando de 106 gr | producto no anclado (gemelos) + ventana de papel especial | gemelos + §17 | B2 |
-| S6-7 | menú de opciones repetido por cada pack | el pivot de packs exige que TODOS los productos tengan las MISMAS variantes; Kraft (2) rompe la familia de Color/Negro (4) | agrupar por esqueleto, no por igualdad de variantes | B3 |
+| 7 | menú feo, mono-variante con medida rara, re-pregunta faz/color ya dados | `Armar Menu Opciones` L85 imprime la variante aunque el grupo tenga una sola; no filtra por lo ya anclado | §3.1, §3.2 | E2 |
+| 7b | no ofreció el 75 | el LLM eligió el 106 sin ancla del cliente | guard de gemelos §2.4 | E1 |
+| 11 | menú para producto de variante única | ídem 7 | §3.1 | E2 |
+| 13 | eligió `1" 1/4` del metálico solo | nada impide que el LLM invente la variante | guard de variante no anclada §2.5 | E1 |
+| 14 | presumió el 106 | gemelos 75/106 con variantes idénticas | §2.4 | E1 |
+| 15 | no ofrece la láser 80 | decisión de negocio | pregunta TG | E1/E2 |
+| 16 | todos los fallbacks dicen lo mismo | un solo texto para 7 estados (ARP L337-340) | §4.3 | E2 |
+| 17 | visión de túnel tras derivar | ventana `papelEspecialHit` de 3 mensajes | §2.6 | E1 |
+| 18 | no encontró `OBRA 80 GR` | el cliente escribe `80gr`, el catálogo `OBRA 80 GR`; rank-2 es substring | §2.3 | E1 |
+| 19 | no encontró `150 Tarjetas Color/Negro` | el LLM compone un nombre inexistente | §2.1 | E1 |
+| 21a | 150 tarjetas → pack de 100 | la cuantización nunca se implementó | §4.4 (**decisión pendiente**) | E2 |
+| 21b | "Dos packs de 100 te quedan en $12.000" + caveat duplicado | el texto lo escribe el LLM vía `p.template` | §4.1 | E2 |
+| S6-1 | pregunta gramaje al Vegetal y después lista tamaños | eje inventado + menú que ignora lo anclado | §2.2, §3.2 | E1/E2 |
+| S6-2 | "Papel Vegetal / A3" → "no lo tenemos en catálogo" | `OFICIO / a3` ≠ `a3` (igualdad exacta) → 0 filas | §2.2 | E1 |
+| S6-4 | espiralado → precio del a3 directo | gemelos anillado plástico | §2.4 | E1 |
+| S6-5a | promo "de 6 carteles … $15.000" | el texto lo escribió el LLM | §4.1 | E2 |
+| S6-5b | ofrece "te paso el detalle por mail" y ante "Ok" se calla | acción inventada + noop por repetición | §4.5 | E2 |
+| S6-6 | bookcel → deriva hablando del 106 | gemelos + ventana de papel | §2.4, §2.6 | E1 |
+| S6-7 | menú repetido por cada pack | el pivot exige variantes idénticas; Kraft (2) rompe la familia (4) | §3.3 | E2 |
 
 ---
 
-## 2. Bloque 2 — resolución determinística (el corazón)
+## 3. Entrega 1 — resolución (`Get Precio` + `Armar Respuesta Precio`)
 
-### 2.1 Contrato nuevo del LLM: producto principal, no SKU compuesto
+*1 import · 0 nodos nuevos · 0 SQL de migración (el matcher vive dentro del nodo).*
 
-`action precio` / `opciones` emiten el **término del producto** tal como lo diría el cliente o
-como lo lista el catálogo (`tarjetas`, `impresiones papel obra 75 gr`, `lona mate`,
-`anillado plástico`). Prohibido componer cantidad + producto (`150 Tarjetas Color/Negro`) o
-producto + opción (`Impresiones a4 s/f b/n`). La cantidad va SIEMPRE en `cantidad`.
+### 2.1 Contrato del LLM: término principal, no SKU compuesto
 
-### 2.2 `Get Precio` devuelve TODAS las variantes del producto resuelto
+`producto` = el término del producto como lo diría el cliente o como lo lista el catálogo
+(`tarjetas`, `impresiones papel obra 75 gr`, `lona mate`, `anillado plástico`). Prohibido
+componer cantidad + producto (`150 Tarjetas Color/Negro`) o producto + opción
+(`Impresiones a4 s/f b/n`). La cantidad va siempre en `cantidad`.
 
-Hoy el SQL filtra la variante (igualdad exacta) y devuelve 0 filas cuando el LLM no copia el
-nombre verbatim → `sin_match` → email. Cambia a:
+### 2.2 Resolver el producto en SQL, la variante en JS — **en ese orden**
 
-- resolver el **producto** (rank 1 exacto/sinónimo, rank 2 substring **normalizado con gramajes**,
-  rank 3 rubro-como-producto — igual que hoy);
-- devolver **todas** las variantes visibles de ese producto + `n_variantes`;
-- devolver `gemelos` (productos con el mismo *esqueleto*, ver 2.3).
+`Get Precio` resuelve el **producto** (rank 1/2/3 como hoy) y devuelve **todas** las variantes
+visibles de cada producto matcheado, más `n_variantes`.
 
-La elección de variante pasa a JS, con escalera:
-`igualdad normalizada` → `subconjunto de tokens` (`a3` ⊂ `oficio / a3` ✅ S6-2) → `contenido`
-→ `mono-variante` → **ambiguo** (menú determinístico).
+`Armar Respuesta Precio` gana un paso previo, `resolverVariante(variantes, pedido, ventana)`:
 
-### 2.3 Guard de gemelos (mata "presumió el 106")
+1. igualdad normalizada;
+2. **subconjunto de tokens como multiset** (`a3` ⊂ `OFICIO / a3` ✅; y `"1 1"` ya no matchea
+   `1"` como pasa hoy con `every/includes`);
+3. contenido;
+4. mono-variante → automática;
+5. varias → `variante_ambigua`; ninguna → `variante_ausente`.
 
-*Esqueleto* = nombre normalizado sin dígitos ni tokens de tamaño/unidad (`a3`, `a4`, `oficio`,
-`mt`, `cm`, `gr`, `unid`, `x`). Dos productos con el mismo esqueleto son gemelos.
+Diccionario fijo de sinónimos de variante (el campo `sinonimos` es solo de producto):
+`blanco y negro↔b/n`, `pulgada↔"`, `metro↔mt`, `media/cuarto/octavo↔1/2, 1/4, 1/8`.
 
-Verificado contra el export real (88 productos):
+**`evaluar()` sigue recibiendo 0 ó 1 fila.** Estados nuevos, con texto distinto:
+`producto_ambiguo` (varios productos) y `variante_ambigua` (un producto, varias variantes).
+Hoy los dos colapsan en `ambiguo`. Cuando hay varias variantes, la repregunta es del **eje que
+falta** ("¿simple o doble faz?"), no el menú completo.
 
-| Gemelos detectados | ¿correcto? |
-|---|---|
-| `OBRA 80 GR` / `OBRA 106 GR` | sí |
-| `Impresiones a4 papel obra 106 gr` / `Impresiones papel obra 75 gr` | sí (INC-7b/14) |
-| `Anillado Plastico a3` / `Anillado plástico a4/oficio` | sí (S6-4) |
-| `Papel Kraft 130 Gr` / `Papel Kraft 300 Gr`; `Ilustración Mate 250/300 gr` | sí |
-| `100/500/1000 Tarjetas Color/Negro` | sí (van por el pivot de packs) |
-| `Sobre a3` / `Sobre a4`; `Plastificado a3/A4/Oficio` | sí |
-| `Sobre Ingles` × 2 (Librería $500 / Soportes $0) | sí — es el duplicado de la pregunta TG 37 |
-| `Lona Mate` / `Lona Back Light` / `Lona Front Brillo` | **no son gemelos** ✅ (esqueletos distintos) |
-| `Impresiones a3 tonner negro` vs impresiones obra | **no son gemelos** ✅ |
-| `Ilustración Brillo 150` vs `Ilustración Mate` | **no son gemelos** ✅ |
-| `Anillado Metálico a4/a3` | singleton ✅ — INC-13 lo cierra el guard de variante (2.4), no éste |
+**Cap del menú rescate por productos (≤6) y variantes por producto (≤4), nunca por filas** —
+con la firma nueva "tarjetas" son 14 filas y "papel obra" 26; contar filas los mandaría a email.
 
-(Corrido contra `db/export-actualizado-catalogo.json` + curación 24b:
-`scratchpad/gemelos.js`. Cero falsos positivos en los 88 productos.)
+### 2.3 Una sola normalización, a ambos lados y en los dos nodos
 
-Regla: si hay gemelos y el cliente **no** nombró ninguno de los tokens que los distinguen
-(`80` vs `106`, `a3` vs `a4/oficio`) → **no se cotiza**: menú determinístico con los gemelos.
-Si los nombró, sigue el camino normal (y el guard de numerales de hoy sigue de red).
-Dónde aporta de verdad: cuando el LLM emite **un** nombre exacto (rank 1) que el cliente nunca
-dijo. Cuando el pedido es genérico (`plastificado`, `folletos`) el substring ya devuelve varias
-filas y el camino `ambiguo` de hoy ya hace el menú.
+`lower → acentos → (\d)\s*(gr|grs|gramos) ⇒ '$1 gr' → [^\w\s+] ⇒ ' ' → colapsar espacios`,
+en una función SQL `bot.resolver_producto(prod, vari)` usada por `Get Precio` **y**
+`Get Opciones`. Hoy la rama menú no tiene rank 2 y los 8 términos genéricos más comunes
+(`tarjetas`, `papel obra`, `impresiones`, `anillado plastico`, `folletos`, `tacos`,
+`plastificado`, `sobre`) dan `menu_sin_match`.
 
-### 2.4 Guard de variante no anclada (mata el `1" 1/4` del INC-13)
+La puntuación desbloquea 6 casos reales que el gramaje no toca (`anillado plastico a4 oficio`,
+`folios a4 oficio`, `opp mate holografico`, `carteleria en pvc c/ papel obra 130 gr`,
+`a5 ilust mate 250 gr`, `tarjetas color negro`). Verificado: la normalización de gramajes no
+crea ninguna colisión nueva entre los 82 nombres. Nada de `de N` genérico (secuestra
+cantidades); para "obra de 80" vale la regla anclada al léxico de papel que ya existe en
+`extraerGramajes`.
 
-Producto con >1 variante visible + ninguna variante anclada por el cliente en la ventana →
-menú de variantes. Nunca el precio de una variante elegida por el LLM.
+### 2.4 Guard de gemelos
 
-### 2.5 Normalización de gramajes
+*Esqueleto* = nombre normalizado sin dígitos ni tokens de tamaño/unidad. 8 grupos / 18
+productos en el catálogo vivo, **cero falsos positivos** (verificado con `scratchpad/t1-gemelos.js`).
 
-`80gr`/`80 gr`/`80grs`/`de 80` → mismo token, en el pedido y en el nombre del catálogo.
-Cierra INC-18 y destraba INC-17 (obra 80 pasa a ser un producto real, no "papel especial").
+Dispara cuando hay gemelos y el cliente **no** ancló ningún token discriminante:
+
+```
+t discrimina en G ⟺ t ∈ ∪tokens(G) ∧ t ∉ ∩tokens(G) ∧ ∀m∈G: eje(t) ∈ ejes(m)
+eje ∈ { gramaje (\d{2,3} seguido de gr) | tamaño (a3-a6, oficio) | numero | léxico }
+```
+
+El eje es obligatorio: sin él, `"20 hojas a4"` ancla en el 106 (INC-14 sin arreglar) y
+`"80 hojas"` ancla como gramaje. Un **único extractor de anclas**, compartido con
+`GUARD NUMERALES`.
+
+Exenciones:
+- **`por_pack=true` exento** — el esqueleto es la clave de la escalera de tiers, no un bloqueo
+  (regla resuelta 140).
+- **La selección del menú anterior cuenta como ancla** — si no, el `"2"` con que el cliente
+  contesta reabre el mismo menú → anti-loop → email al tercer turno.
+
+**Lo que el esqueleto NO ve** (`OBRA 106 GR` vs `Impresiones a4 papel obra 106 gr`, 6,7×;
+`Vegetal` vs `Papel Obra Vegetal`, 10×; los 3 `Folletos 10x15`, 5,5×) se arregla por
+**curación** empatando sinónimos → rank empatado → `ambiguo` → menú, que es el mecanismo ya
+probado con Kraft 130/300. El guard en código es airbag, no sustituto del dato.
+
+### 2.5 Guard de variante no anclada
+
+Producto con >1 variante visible y ninguna anclada por el cliente → repregunta del eje o menú.
+Nunca el precio de una variante elegida por el LLM (INC-13).
+
+Costo medido: fuerza menú en el 43% del catálogo → **+6 a +9 menús/día** sobre ~18 consultas
+de precio diarias. Es el precio de no volver a cotizar el `1" 1/4` porque sí.
+
+### 2.6 Ventana de papel especial
+
+`papelEspecialHit` se suprime si el turno anterior fue un menú del bot, y `"el más grueso"` /
+`"el mejor papel"` mapean al mayor gramaje **del grupo ofrecido**. Hoy la respuesta natural al
+menú 75/106 se va a email (INC-17 mudado de lugar).
+
+### Housekeeping que viaja gratis en E1 (sin conducta nueva)
+
+- `timeout` en los 3 nodos LLM (hoy ninguno lo tiene → default 300 s).
+- `models: ['google/gemini-2.5-flash-lite','google/gemini-3.1-flash-lite']` en el body de
+  OpenRouter: convierte el 404 del 16-oct en fallback silencioso y cubre 429/5xx mejor que el
+  retry de n8n.
+- Id del modelo en **un solo campo** (`System Prompt.modelo`), referenciado desde los 5 puntos
+  donde hoy está hardcodeado.
+- `onError: continueRegularOutput` en `Log Precio` y `Log Respuesta` (hoy sin onError: un blip
+  de la DB deja la ejecución en rojo y un "retry execution" **reenvía el mensaje**).
+- Caveat viejo fuera (es un string).
+
+### Ronda 1 — criterio binario, la voz NO se juzga
+
+Incidentes 7b, 13, 14, 17, 18, 19, S6-2, S6-4, S6-6 + suite-6 casos 1-5 + regresión suite-5
+casos 13, 19, 20, 21, 22, 28. Se pregunta una sola cosa: **¿resolvió el producto correcto?**
 
 ---
 
-## 3. Bloque 3 — menús humanos
+## 4. Entrega 2 — menús + voz + plata
 
-1. **Mono-variante ⇒ nombre del producto, punto.** En `Armar Menu Opciones` (3 ramas), en el
-   menú rescate de `Armar Respuesta Precio`, en `Aplicar Aclarador` y en el render de precio
-   (`nombreVar` pasa a mirar `n_variantes`).
-2. **No re-listar lo que el cliente ya dio**: si ancló `simple faz`, el menú lista solo las
-   variantes que la contienen; si queda una, no hay menú (va directo a precio o a cantidad).
-3. **Pivot de packs por esqueleto** (S6-7): `100 Tarjetas Color/Negro`, `500...`, `1000...` y
-   `100 Tarjetas Papel Kraft 280 gr` se agrupan por familia aunque el set de variantes difiera;
-   Kraft es su propia línea, no repite el menú entero.
-4. **Cupo y forma**: máximo 4 líneas por grupo; el refinador (§1) le da la voz.
+*1 import · 0 nodos nuevos · 1 curación SQL (flags `por_trabajo` / `min_unidades` / `por_pack`).*
 
----
+### 3.1 Mono-variante ⇒ nombre del producto
+En `Armar Menu Opciones` (3 ramas), en el menú rescate de `Armar Respuesta Precio`, en
+`Aplicar Aclarador` y en el render (`nombreVar` mira `n_variantes`).
 
-## 4. Bloque 4 — voz, plata y salidas
+**`n_variantes` cuenta las TOTALES, no las visibles.** Si una curación oculta una hermana, el
+render diría "El vegetal sale $1.000" y el cliente que quería a3 se lleva un número que no es
+suyo.
 
-### 4.1 Plantilla SIEMPRE forzada
-El campo `reply`/`template` del LLM en `action precio` **se descarta**. El borrador lo arma el
-sistema con el nombre del producto de la BD, y el refinador lo humaniza. Mata de un saque:
-promo mal descripta (S6-5a), caveat duplicado y "dos packs ... $12.000" (21b), "el anillado
-metálico de 120 páginas" (13).
+**El atributo escondido se recupera en el nombre del producto, no reponiendo la variante**
+(`Lona Front Brillo` → "Lona front brillo (hasta 1,52 m de ancho)"). Lint mecánico en la skill
+de curación: todo producto mono-variante cuya variante tenga un token de medida ausente del
+nombre del producto se lista como pendiente.
 
-### 4.2 Caveat
-`(precio de lista; el precio final del trabajo te lo confirma el equipo)` sale del código.
-Reemplazo: **"El total te lo confirmamos en el local o por mail."** (dirección completa solo
-en la primera mención de la conversación, respetando la regla vigente).
+### 3.2 No re-listar lo ya dado
+Si el cliente ancló `simple faz`, el menú lista solo las variantes que la contienen; si queda
+una, no hay menú.
+
+### 3.3 Pivot de packs por esqueleto
+Agrupa la familia aunque el set de variantes difiera; Kraft es su propia línea (S6-7: 14 líneas
+→ 6).
+
+### 3.4 Orden canónico, nunca alfabético
+Simple antes de doble, b/n antes de color, chico antes de grande; cuando el eje es una medida,
+**ordenar por precio** (en el anillado metálico el orden alfabético es orden de precio salteado
+y el que manda "2" se lleva el más caro de los cinco).
+
+### 4.1 Plantilla siempre forzada
+El `reply`/`template` del LLM en `action precio` se descarta. Mata la promo mal descripta,
+el caveat duplicado, "dos packs … $12.000" y "el anillado metálico de 120 páginas".
+
+### 4.2 `frasePrecio()` única
+`frasePrecio(monto, unidad, condicion, estimado)` reemplaza las 5 armadas sueltas. **Ningún
+monto se imprime sin su unidad de venta** (`por hoja`, `el metro cuadrado`, `el pack de 500`,
+`cada cartel`) ni sin la condición en la misma oración. Sin centavos salvo que los tenga de
+verdad. `unidad` solo se imprime si está en allowlist curada (`página`, `m2`, `metro lineal`,
+`metro`): 148 de 180 variantes dicen "Hoja" por herencia y hoy sale "un taco, precio por hoja".
+
+Caveat: `El total te lo confirmamos en el local o por mail.` — dirección solo la primera vez.
+Primera persona plural siempre ("te lo confirmamos", no "te lo confirma el equipo").
 
 ### 4.3 Mensaje por tipo de fallback
-| estado | qué dice (borrador; el refinador lo redacta) |
-|---|---|
-| `papel_especial` | ese papel puntual no lo tengo acá; el equipo confirma si lo tienen y a cuánto |
-| `precio_cero` / `override` / `qr_multiple` | el precio de eso lo arma el equipo según el trabajo |
-| `dorso` / `df_gate` | el doble faz lo confirma el equipo |
-| `cap_volumen` | por ese volumen el total lo cotiza el equipo |
-| `sql_error` | genérico + telemetría |
-| `nada` (Aclarador) | **sin** "no lo tenemos en catálogo": "eso no lo estoy encontrando; contame un poco más o escribinos" |
+`papel_especial` · `precio_cero`/`override`/`qr_multiple` · `dorso`/`df_gate` · `cap_volumen` ·
+`sql_error` · `nada` del Aclarador (**sin** "no lo tenemos en catálogo").
 
-### 4.4 Packs
-- Cantidad que no es tier exacto → **próximo tier hacia arriba** (150 → pack de 500), diciendo
-  que se trabaja por pack. Si supera el mayor tier → deriva.
-- "N packs de X" → precio **c/u** explícito + total; nunca un número que se lea como el total.
-- Hint de conveniencia: si el tier de arriba baja el precio por unidad, se muestra también.
+### 4.4 Packs — ⚠️ decisión pendiente (§6.1)
+Flags `por_trabajo` y `min_unidades` (bugs V1/V2/V3) entran sí o sí. La regla de cuantización
+depende de la decisión de Martin. Y el §4.4 necesita un slot nuevo `packs`: hoy `por_pack=true`
+mata `cantidad`, así que la aritmética de "2 packs de 100" es inalcanzable con los slots
+actuales.
 
 ### 4.5 Afirmación nunca es silencio
-`ok`, `dale`, `sí`, `bueno`, `listo` respondiendo a una pregunta del bot → prohibido `noop`.
+`noop` pasa a ser decisión de intención: clasificador determinístico de 3 bits (¿hay pregunta?,
+¿hay dato nuevo?, ¿el último mensaje del bot terminó en pregunta u ofrecimiento?) antes de
+comparar textos. Cualquiera en 1 ⇒ `noop` prohibido. El backstop de 2 repeticiones sigue detrás.
+
+### Ronda 2
+suite-6 completa + suite-5 casos 21, 22, 23, 26 + incidentes 7, 11, 16, 21a, 21b, S6-1,
+S6-5a, S6-5b, S6-7. Con la resolución congelada en E1, **todo fallo nuevo es de render**.
 
 ---
 
-## 5. Bloque 1 — el refinador final
+## 5. Entrega 3 — topología (sin cambio de conducta)
+
+*1 import · **−4 nodos** (68 → 64) · 1 SQL de una línea · smoke de 6 mensajes, sin ronda completa.*
+
+Los tres nodos de envío son POST idénticos a Chatwoot con la misma credencial; los tres Log
+escriben en la misma tabla.
 
 ```
-(rama answer)   Switch Acción ─┐
-(rama precio)   Pre-Envío Precio ─┼─→ Armar Prompt Refinador → Llamar LLM Refinador
-(rama menú)     Armar Menu Opciones ─┘        → Aplicar Refinador (re-estampado + gate)
-                                              → Switch Destino → Enviar {Respuesta|Precio|Menu}
+Switch Acción[0] ──┐
+Pre-Envío Precio ──┼→ Enviar Mensaje → Log Turno
+Armar Menu Opciones┘
 ```
 
-**Contrato de entrada (Code, determinístico):**
-- `borrador` con cada monto reemplazado por un token opaco `«P1»`, `«P2»`… → el LLM **no ve plata**;
-- `situacion` derivada del pipeline (no cuesta una llamada extra): `cotizacion` · `tabla` ·
-  `menu` · `repregunta` · `deriva_mail` · `info` · `cierre` · `no_disponible` · `frustrado`;
-- `hechos`: lista cerrada de lo único que puede afirmar (productos nombrados, mail, local).
+- `Enviar Precio` → `Enviar Mensaje`; borrar `Enviar Respuesta` y `Enviar Menu`.
+- `Log Precio` → `Log Turno` sobre `$json.*`; borrar `Log Respuesta` y `Log Menu`.
+- Cada rama emite el mismo sobre `{reply, accountId, conversationId, userMessage, accion,
+  notas, productoResuelto, filasSql}`.
+- `alter table bot.decisiones add column if not exists borrador text;` + `Get Ruta Cotizador`
+  devuelve los últimos 3 borradores + los anti-loop comparan contra **el borrador**, no contra
+  `lastBotReplies`.
 
-**Contrato de salida:** solo texto plano, ≤ 5 líneas, mismos tokens `«Pn»` intactos.
+**Por qué antes del refinador:** `Enviar Respuesta` lee hoy `$('Parsear Respuesta').reply`, que
+ejecuta siempre — así que con el refinador enchufado **mandaría el borrador sin refinar, sin
+error y sin aviso**. Y el `volver` hace correr `Parsear Respuesta` dos veces (`runIndex` 0 y 1):
+`$('Nodo').first()` puede leer el run 0, que tiene `reply: ''` → **mensaje vacío a Chatwoot** y
+`accion` envenenada para el router C2. El sobre `$json` elimina la clase entera.
 
-**Gate post-LLM (Code):**
-1. re-estampa los montos reales sobre los tokens;
-2. rechaza si falta o sobra un token, si aparece un `$` que no salió del re-estampado, si
-   aparece un producto que no estaba en `hechos`, si aparece un mail distinto, o si se pasa
-   de largo;
-3. rechazo ⇒ **se manda el borrador determinístico** (que por eso tiene que ser un piso
-   aceptable de voz) y se loguea el rechazo como canario;
-4. denylist de voz de máquina: `el catálogo`, `la lista de precios`, `el sistema`, `la variante`,
-   `lo confirma el equipo`, SKUs, `te paso el detalle por mail`.
-
-**No pasan por el refinador:** firewall, anti-injection, refusals de seguridad (son plantillas
-fijas por diseño).
-
-**Costo:** +1 llamada por saliente. Con el tope de 2 LLM/turno vigente, el refinador es el
-segundo; el Aclarador (cuando dispara) lo lleva a 3 — aceptado.
+Smoke: 1 answer, 1 precio, 1 menú, 1 `volver` (suite-5 caso 25), 1 handoff, 1 repetición +
+`select accion, notas, borrador from bot.decisiones order by created_at desc limit 10`.
 
 ---
 
-## 6. Bloque 5 — telemetría (nota 13: "saber por qué eligió eso")
+## 6. Entrega 4 — el refinador
 
-En `notas` de `bot.decisiones`, por turno: `variante_origen` (`anclada` | `mono` | `default` |
-`inferida`), `gemelos_descartados`, `discriminante_faltante`, `refinador` (`ok` | `rechazado:<motivo>`).
-Es la única forma de cazar el confident-wrong sin humano en Chatwoot.
+*1 import · +3 nodos (64 → 67) · 0 credenciales a mano (el bloque va escrito en el JSON).*
+
+```
+Armar Prompt Refinador → Llamar LLM Refinador → Aplicar Refinador → Enviar Mensaje
+```
+
+### El borrador se parte en dos
+**Bloque literal** (viaja verbatim, nunca ve el LLM): líneas `N.` del menú, tabla de rangos
+completa, `LINEA_DF`/`LINEA_CAP`/`LINEA_VOLUMEN`, la oración que contiene un monto con su
+etiqueta, la dirección de mail.
+**Prosa refinable**: encabezado, cierre, repregunta.
+
+### Entradas determinísticas
+`situacion` (derivada del pipeline, no cuesta llamada extra), `hechos.productos =
+rows.map(nombre_canonico)` — **de la DB, nunca parseando el borrador**, si no la verificación
+es circular —, `primer_mensaje`, `puede_cerrar`, `aperturas_recientes`, `mail_ya_dado`.
+El eco del LLM (`p.producto`, texto influido por el cliente) **no llega al refinador**.
+
+### Tokens
+`[[P1]]`, ASCII, sin clase de comilla, sin markdown activo en WhatsApp (`«»` ya se usa para
+envolver el mensaje del cliente en el prompt del Aclarador, y el cliente puede forjarlo).
+Pre-normalización NFKC + borrado de zero-width antes de gatear. Los montos se estampan **desde
+los valores de la DB**, nunca por regex sobre el texto: tokenizar con `\$[\d.,]+` lavaría plata
+alucinada del Aclarador o de la rama answer, que no pasan por el chequeo `plataRe`.
+
+### Gate de conservación (relativo al borrador, no denylist absoluta)
+1. multiset de corridas de dígitos idéntico (cubre cantidades, gramajes, medidas, rótulos de
+   bracket y los dígitos del nombre del producto: "6 carteles", "106 gr");
+2. índices de token exactos, uno cada uno, **en orden creciente** (anti-swap gratis), misma
+   partición por línea;
+3. contención monótona: ningún `$`, ningún `@` y ningún término del lexicón de riesgo
+   (`total`, `en total`, `todo junto`, `c/u`, `cada uno`, `stock`, `hoy`, `mañana`, `hs`,
+   `plazo`, `entrega`, `reservo`, `garantizo`, `envío`, `descuento`, `IVA`) con conteo mayor
+   que en el borrador;
+4. conteo de líneas `^\d+\.` preservado;
+5. el mail va tokenizado (`[[MAIL]]`) y debe volver intacto — si no, se rompe `avisoDado` y el
+   bot anuncia el mail en cada turno;
+6. rechazo ⇒ **borrador**, siempre, y se loguea como canario.
+
+### Nodo HTTP: clon de `Llamar LLM Aclarador`, no de `Llamar LLM Respuesta`
+`onError: continueRegularOutput` + `alwaysOutputData: true` + `timeout: 6000` + **sin
+`retryOnFail`** (un 429 con retry agrega 6 s de silencio para terminar mandando el borrador
+igual) + `models: [2.5, 3.1]` + `response_format: json_object`.
+`Aplicar Refinador` lee el borrador de `$('Armar Prompt Refinador')` — obligatorio: con
+`continueRegularOutput` el ítem en error es `{error}`, no el de entrada — y corta si
+`$runIndex > 0`.
+
+### Instrucción de voz (lista cerrada)
+Puede: cortar repeticiones · una sola pregunta, al final · saludar solo si `primer_mensaje` ·
+no repetir la apertura de sus últimas 2 respuestas · "¿algo más?" solo con `puede_cerrar` ·
+acuse corto y factual ("dale", "listo") · voseo, texto plano, sin emoji ni markdown.
+No puede nunca: tocar un token, cantidad, medida o unidad · escribir un `$` propio · **agregar
+una pregunta que el borrador no tenía** (preguntar es afirmar que la opción existe) · nombrar
+algo fuera de `hechos` · prometer plazo, stock o envío · decir "no lo tenemos" · ofrecer una
+acción propia ("te paso el detalle por mail") · separar un total de su condición · fusionar
+ítems.
+
+### Kill-switch y observabilidad
+`const REFINADOR = true;` en la primera línea de `Armar Prompt Refinador` — Martin lo apaga
+editando una línea en la UI, sin re-importar.
+`bot.decisiones` guarda `borrador` y `final`: sin eso el juez offline del confident-wrong
+estaría juzgando un artefacto que el cliente nunca vio, y el drift semántico (relabelar
+unitario como total, borrar una línea de degradación) es estructuralmente indetectable.
+Circuit breaker: si la tasa de rechazo de las últimas N ejecuciones supera ~30%, bypass duro.
+Golden set de ~10 pares (borrador, salida aceptable/rechazable) en `code-harness.js`, que
+testea el prompt y el gate **sin llamar al LLM** — es lo que convierte la migración del 16-oct
+en "cambiar un campo y correr el harness" en vez de otra ronda.
+
+### Ronda 3 — A/B contra sí misma
+Replay mínimo de suite-5 (4, 5, 7, 11, 13, 14, 20, 21, 22, 25, 26) + suite-6, corrido **dos
+veces sobre la misma conversación**: una con `REFINADOR=false`, otra con `true`. Toda
+diferencia es 100% atribuible al refinador. Cierre:
+`select notas from bot.decisiones where notas like '%refinador:%'`. Si el rechazo supera ~5%,
+bajar temperature (arrancar en 0,4).
+
+### Costo, para que quede escrito
+El refinador es el **0,55%** del costo del mensaje que decora (1,62% con 3.1-flash-lite). El
+LLM es el 2% del costo del bot; el 98% es el conteo de mensajes. **No ahorra ni suma mensajes
+de primer orden.** Lo que se paga es latencia: +1,2 s p50 sobre ~6,6 s (**+18%**), 100% visible.
 
 ---
 
-## 7. Decisiones que necesito de Martin
+## 7. Decisiones para Martin
 
-1. **Caveat**: ¿la versión corta ("El total te lo confirmamos en el local o por mail", dirección
-   solo la 1ª vez) o textual la tuya con la dirección siempre?
-2. **Defaults**: el 2026-07-24 fijaste "NO hay defaults de oficio: el bot muestra todo o
-   pregunta". Ahora pedís default + "¿buscabas algún gramaje en especial?". Confirmo que
-   **reemplaza** a la anterior y la logueo así: *hay default por familia, se muestra el default
-   con la puerta abierta al resto* (nunca un default silencioso).
-3. **Orden de construcción**: propongo B4 (voz/plata, barato y visible) → B3 (menús) →
-   B2 (resolución, el grande) → B1 (refinador arriba de todo, ya con el motor sano).
-   Si preferís el refinador primero, se puede, pero tapa los síntomas que estamos midiendo.
-4. **Ronda adversarial Fable** antes de construir: decime si la corro (no lanzo agentes sin
-   que lo pidas).
+1. **Cuantización de packs — choca con la regla resuelta 140.** "Próximo tier hacia arriba"
+   sobre-cotiza: 150 tarjetas simple faz → $28.000 (tier 500) contra $24.000 (2×100);
+   folletos ilustración 1500 → $223.000 contra $186.000 (**20%**). Y la banda no es uniforme:
+   en DF Encapsuladas a 501-600 el tier de 1000 **sí** gana. Opciones: (a) mantener la regla
+   tal como está; (b) `mejorCobertura()` sobre combinaciones de hasta 2 packs, el más barato
+   primero y el tier de arriba como upsell con la diferencia explícita; (c) preguntárselo a TG
+   antes de tocar nada.
+2. **Confirmar el orden de entrega** E1 → E2 → E3 → E4 (el consejo dio vuelta el de v1).
+3. **Gemelos 75/106 como un solo producto con el gramaje de eje** (igual que la limpieza v10.8
+   hizo con el color): más limpio y ahorra 4 líneas de menú, pero es curación grande. ¿Entra en
+   R7 o queda para después?
 
-## 8. Preguntas nuevas para TG
+## 8. Preguntas a TG
 
-- **48. Papel por defecto**: cuando alguien dice "quiero imprimir esto", ¿qué papel/gramaje
-  sale por defecto en el mostrador? (Insumo del default del §7.2.)
-- **49. Láser vs Riso**: ¿cuándo corresponde ofrecer `OBRA 80 GR` (láser) y cuándo las
-  impresiones por página de 75/106? ¿Se ofrecen como alternativa entre sí? (INC-15.)
-- **50. Promo inmobiliarias**: ¿se puede llevar menos de 6 (a $19.500 el suelto) o el mínimo
-  es duro? (El cotizador necesita la regla de mínimo.)
-- Recordatorio: **46** (léxico de papeles) sigue abierta y es el insumo de INC-17/18.
+Numeración corregida: **se borra la 50** (ya respondida en la línea 138) y **la 49 se fusiona
+con la 4**, que sigue abierta. Nuevas:
+
+- **48. Papel por defecto.** "Quiero imprimir unos apuntes" sin más datos: ¿en qué papel sale,
+  75 o 106? ¿Simple faz?
+- **51. Color.** Si no dice si es color o b/n, ¿preguntan siempre o asumen b/n?
+- **52. Servicios de taller** (la que más plata desbloquea). Encuadernado, refilado, abrochado,
+  emblocado, numerado, anillado: el precio cargado ¿es por trabajo terminado o por hoja? Lo
+  pregunto porque en el sistema todos tienen "Hoja" como unidad.
+- **53. Anillado.** ¿Cómo eligen el anillo en el mostrador? ¿Por cantidad de hojas? Pasame la
+  referencia (hasta cuántas hojas entra cada medida). Y el precio, ¿es uno por trabajo?
+- **54. Packs de tarjetas.** Para 150: ¿2 packs de 100 o el de 500? ¿Cobran extra por hacer dos
+  packs? Arriba de 1000, ¿siguen sumando o lo cotizan aparte?
+- **55. Promo inmobiliarias.** Llevando 7 u 8, ¿los que pasan de 6 van a $15.000 o vuelven a
+  $19.500? ¿La promo es solo para inmobiliarias?
+- **56. Talonarios.** "Rifas 100 números": ¿el precio es por talonario o por rifa?
+- **57. Tacos.** Cuando alguien pide "un taco", ¿qué preguntan primero, el tamaño o el color?
+- **58. Carteles corrugado.** El de 1×0,65 a $19.500, ¿se vende suelto o solo dentro de la
+  promo? Las medidas 1×1 / 2×1 / a3, ¿son fijas o cortan a medida?
+
+**Defaults que la lente de dominio considera defendibles sin TG** (a loguear con la reversión
+del §0): default de **línea** (documento → Riso, no láser: las 8 variantes Riso son las únicas
+con escalera de cantidad), de **faz** (simple) y de **tamaño** (A4). **No hay default de
+color**: equivocarlo sub-cotiza 4×. Y **b/n implica Riso siempre** — el rubro láser se llama
+"Impresiones láser color" y no tiene ningún precio b/n; mandar un b/n al láser cobra $750 la
+hoja contra $100.
