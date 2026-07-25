@@ -119,7 +119,7 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Escalación a humano | Siempre por **mail** (misma dirección, incluye reclamos y clientes enojados); no hay takeover en Chatwoot (Martin, 2026-07-24). La frase la modula el refinador según contexto. |
 | Precio de medicina — alcance | SOLO para material de medicina; cualquiera puede pedirlo pero el precio especial solo aplica a medicina. La poda 'apuntes'=solo-medicina es correcta; el guard de nicho (pregunta si es medicina) queda (Martin, 2026-07-24). Falta el FORMATO → pregunta 34. |
 | 106 gr: lista $120 vs tabla $180 | Siempre gana la tabla (Martin, 2026-07-24). |
-| Papel vegetal x10 ($0) | Se ocultan (decisión del local). → curación pendiente `oculto=true` (Martin, 2026-07-24). |
+| Papel vegetal x10 ($0) | Se ocultan (decisión del local) → `oculto=true` en `db/curacion-2026-07-24b.sql` (desambigua "papel vegetal" hacia el "Vegetal" vivo) (Martin, 2026-07-24). |
 | Ploteo / impresión grande | No hay límite de medida; sin medida exacta se cobra por metro lineal o m² según diga el producto (Martin, 2026-07-24). |
 | Ítems de taller (encuadernado, ojales, refilado…) | Se deja simple: se informa el precio del ítem aunque el cliente lo mencione en un trabajo combinado, pero NUNCA cómo se relaciona con otros ítems (Martin, 2026-07-24). |
 | A5 ILUST. MATE 250 GR (variante "A4") | La variante "A4" es error de carga: es A5, no duplica a Ilustración Mate 250. Con mono-variante el display usa el nombre del producto (Martin, 2026-07-24). |
@@ -135,8 +135,8 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Sellos | No se hacen (Martin, 2026-07-24). |
 | Vinilo brillo (dos rubros) | Mostrar las opciones al cliente, sin default de mostrador (Martin, 2026-07-24). |
 | "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
-| Promo Inmobiliarias | Es POR CARTEL (no por pack) → `por_pack=false`, el bot cotiza 6×. → curación pendiente (Martin, 2026-07-24). |
-| Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → se **sacan** los sinónimos de urgencia (express/urgente/ya). Confirmado. → curación pendiente (Martin, 2026-07-24). |
+| Promo Inmobiliarias | Es POR CARTEL (no por pack) → `por_pack=false` + display por-cartel en `db/curacion-2026-07-24b.sql` (revisar términos "llevando 6"). La cuenta 6× es del cotizador (Martin, 2026-07-24). |
+| Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → sinónimos de urgencia **sacados** en `db/curacion-2026-07-24b.sql` (24 hs + ocultos 48/72/96); "anillado urgente" → sin_match (Martin, 2026-07-24). |
 | Cuantización de pack | Se explica que se trabaja por pack y se cotiza el **próximo tier hacia arriba**: 150 con tiers 100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo (Martin, 2026-07-24). |
 | Defaults de oficio | **NO hay.** El bot no asume: muestra todo o pregunta (Martin, 2026-07-24). Revierte la recomendación de "defaults de oficio" del consejo. |
 | Anillado — ejes | Se distingue plástico ($2.400) vs metálico ($3.200): se muestran como opciones; las medidas (diámetro del anillo) solo si el cliente las especifica (Martin, 2026-07-24). |
