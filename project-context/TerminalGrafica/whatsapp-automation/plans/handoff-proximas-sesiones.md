@@ -3,9 +3,72 @@
 > Estado y roadmap **forward-looking** para las próximas sesiones.
 > El log histórico detallado vive en la memoria `chatwoot-whatsapp-impl-status`.
 > El plan de build original está en [`v6-build-plan.md`](./v6-build-plan.md).
-> Última actualización: **2026-07-23 (noche, paquete r6)**.
+> Última actualización: **2026-07-24 (consejo de arquitectura + curación 2026-07-24b aplicada — ver sección al tope)**.
 >
 > **Reglas de trabajo que no cambian:** rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot) · Claude prepara migraciones, **Martin las aplica** (Claude no toca la BD) · el bot corre en la VM de dev con el número de test, NO es prod de TG · commits en rama, nunca a `main` de `projects/` · **toda decisión de diseño se contrasta con un agente Fable ANTES de aplicarla; Claude aplica** (ver "Cómo usamos a Fable") · tras editar un nodo Code, correr `node tests/code-harness.js` SIEMPRE.
+
+---
+
+## ⭐⭐ SESIÓN 2026-07-24 — consejo de arquitectura + curación aplicada (LEER PRIMERO)
+
+**Qué pasó.** La ronda 3 de suite-5 dio 10 incidentes (4,5,7,11,12,13,14,15,20,21). En vez
+de parchar, se corrió un **consejo de 6 lentes** (plan
+[`consejo-arquitectura-resolucion.md`](./consejo-arquitectura-resolucion.md) + deck
+artifact) que rediseñó la resolución. Martin contestó un lote grande de preguntas que
+fijaron dirección. Se aplicó una curación y se shippeó un fix de voz.
+
+**✅ APLICADO por Martin esta sesión:**
+- **Curación 2026-07-24b** (`db/curacion-2026-07-24b.sql` + `.md`): ocultar los "Papel
+  Vegetal x10" $0 (desambigua "papel vegetal" → "Vegetal" vivo $1000/$2000); Promo
+  Inmobiliarias `por_pack=false` + display "(llevando 6)"; sacar sinónimos de urgencia del
+  anillado plástico (24hs visible + 48/72/96 ocultos → "anillado urgente" → sin_match).
+  Verificado con `scratchpad/verify-curacion.js` (semántica real de Get Precio).
+
+**⚠️ COMMITEADO pero PENDIENTE de re-import (NO está live salvo que lo hayas hecho):**
+- **Regla de voz INC-15** (commit `e17f44b`, System Prompt de `faq-bot-v7.json`): prohíbe
+  decir "el catálogo"/"la lista de precios"/"el sistema"/"la variante" al cliente.
+  **Requiere re-importar el workflow en n8n** para tomar efecto. Harness 94/94, twin OK.
+
+**QUÉ TESTEAR la próxima sesión (traer resultados):**
+1. Replay curación: "papel vegetal a4" (→ Vegetal $1000, no ambiguo) · "anillado urgente"
+   (→ no fuerza el de 24hs) · "cuánto la promo de inmobiliarias" (→ $15.000 por cartel,
+   llevando 6).
+2. Regla de voz (si re-importaste): el bot ya no habla de "el catálogo"/"el equipo" como máquina.
+3. Lo que quieras de la resolución general (los 10 incidentes siguen siendo el norte).
+
+**DECISIONES DE DIRECCIÓN (decisions/log.md 2026-07-24, varias) — cambian el plan:**
+- **Sin humano en Chatwoot:** escalación 100% a mail (incluye reclamos/enojo); confident-wrong
+  detectado AUTOMÁTICO (flags de baja confianza + rechazo del cliente + auditoría offline),
+  revisado por Martin desde logs. Memoria `tg-bot-no-chatwoot-humano`.
+- **Refinador LLM final en TODO mensaje saliente:** humaniza + varía según situación
+  (etiqueta emitida por LLM1 → sin 3ª llamada); dominio cerrado (solo TG), frustración →
+  disculpa + mail, en extremo puede revelar que es bot; ciego a la plata + re-estampado.
+- **NO hay defaults de oficio:** el bot muestra todo o pregunta, no asume (revierte al consejo).
+- **Pack = próximo tier hacia arriba** (150 → 500; si supera el mayor, deriva).
+- **Atributos vía curación, no esquema nuevo:** framework de estandarización agregado a la
+  skill `tg-curar-catalogo` (jsonb `atributos` cuando un nodo compara/calcula).
+- **Mono-variante = regla general:** una sola variante → vale el nombre del producto.
+
+**PREGUNTAS TG:** 24 resueltas por Martin 2026-07-24 (tabla en `preguntas-tg.md`). Abiertas:
+1,4,5,6,7,9,12,13,15,16,22,24-28,31,32,34,37,38(vinilo/lona UV),40,41,46,47. **Q34 (formato
+medicina) sigue abierta.**
+
+**PENDIENTE de diseño — lógica de menú, NO curación (para el rework):**
+- Colapsar anillado plástico a3 vs a4/oficio → "plástico vs metálico" (hoy "anillado" da 3).
+- Vinilo brillo: mostrar opciones de los dos rubros.
+- Cotizador: el precio de promo tiene **mínimo 6** (regla cantidad-condicional); el cartel
+  suelto $19.500 existe (`mostrable=false`, deriva).
+
+**EL REWORK (plan `consejo-arquitectura-resolucion.md` + bloque de override 2026-07-24):**
+pipeline determinístico, LLM en los bordes (LLM1 emite frase+slots+situación → matcher
+devuelve SET con piso de confianza → resolver determinístico → gate de factibilidad →
+motor de plata con token opaco + re-estampado → refinador final). Secuencia: instrumentar
+→ fixes determinísticos → curación de atributos → contrato LLM1 → gate → refinador →
+selector. **NO construido**; es el norte cuando cerremos el loop de tests.
+
+**Mapa de commits de esta sesión:** consejo/deck/decisiones (varios) · `e17f44b` regla de
+voz · `2942562` curación 2026-07-24b · `91aadb3` promo confirmada + hallazgo cartel suelto
+· `0624b66`/`e96c491` respuestas de Martin + skill framework.
 
 ---
 
