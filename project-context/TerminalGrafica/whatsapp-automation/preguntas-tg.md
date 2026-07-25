@@ -135,7 +135,7 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Sellos | No se hacen (Martin, 2026-07-24). |
 | Vinilo brillo (dos rubros) | Mostrar las opciones al cliente, sin default de mostrador (Martin, 2026-07-24). |
 | "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
-| Promo Inmobiliarias | Es POR CARTEL (no por pack) → `por_pack=false` + display por-cartel en `db/curacion-2026-07-24b.sql` (revisar términos "llevando 6"). La cuenta 6× es del cotizador (Martin, 2026-07-24). |
+| Promo Inmobiliarias | Es POR CARTEL, exige llevar 6 (confirmado) → `por_pack=false` + display "(llevando 6)" en `db/curacion-2026-07-24b.sql`. Mínimo-6 y cuenta 6× = cotizador; el cartel suelto ($19.500) existe pero mostrable=false (deriva) (Martin, 2026-07-24). |
 | Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → sinónimos de urgencia **sacados** en `db/curacion-2026-07-24b.sql` (24 hs + ocultos 48/72/96); "anillado urgente" → sin_match (Martin, 2026-07-24). |
 | Cuantización de pack | Se explica que se trabaja por pack y se cotiza el **próximo tier hacia arriba**: 150 con tiers 100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo (Martin, 2026-07-24). |
 | Defaults de oficio | **NO hay.** El bot no asume: muestra todo o pregunta (Martin, 2026-07-24). Revierte la recomendación de "defaults de oficio" del consejo. |

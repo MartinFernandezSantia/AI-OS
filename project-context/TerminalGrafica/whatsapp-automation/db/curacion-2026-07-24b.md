@@ -26,10 +26,14 @@ SQL: `db/curacion-2026-07-24b.sql`. Martin aplica; el asistente no toca la DB.
 
 ## Pendiente / a revisar
 
-- **Display de la promo:** confirmá los términos. Puse "(llevando 6)" porque la pregunta
-  35 decía "por cartel llevando 6"; si NO exige 6, sacá esa parte. La cuenta de 6× /
-  mínimo 6 es lógica del **cotizador**, no de la curación (queda para cuando se toque el
-  motor de pack por tier).
+- **Display de la promo — CONFIRMADO (Martin 2026-07-24):** la promo exige llevar 6 para
+  que cada cartel quede a $15.000 → "(llevando 6)" es correcto, no se toca. Notas para el
+  **cotizador** (no curación): (a) el "cartel suelto" 1×0,65 a $19.500 SÍ está cargado,
+  como producto "Impresión exterior / montado sobre plástico corrugado" (mismo rubro),
+  pero con variantes `mostrable=false` → el bot NO lo cotiza, deriva; (b) el precio de
+  promo tiene **mínimo 6**: para <6 no aplica → regla de cantidad-condicional para cuando
+  se toque el motor de pack. Interin honesto: la promo muestra "$15.000 por cartel
+  (llevando 6)" y cualquier pedido de cartel suelto deriva.
 - **Colapso del anillado plástico a3 vs a4/oficio:** "anillado" muestra 3 opciones porque
   hay dos plásticos (a3 y a4/oficio). Colapsarlos a "plástico vs metálico" (pregunta 45)
   es lógica de menú, NO curación → queda como diseño aparte.
