@@ -77,6 +77,31 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     Mientras tanto lo ocultamos (curación 1c) para que no salga un menú con un
     ítem a $0; si es un producto vivo se revierte.
 
+## 9. Ronda 4 de suites + consejo Opus (2026-07-25)
+
+48. **Papel por defecto** — "Quiero imprimir unos apuntes" y no aclara nada: ¿en qué
+    papel sale, 75 o 106? ¿Y sale simple faz? (Insumo del default con puerta abierta.)
+51. **Color** — Si no dice si lo quiere en color o en blanco y negro, ¿preguntan
+    siempre o asumen b/n? (Equivocar el default de color sub-cotiza 4×.)
+52. **Servicios de taller — la que más plata desbloquea.** Encuadernado, refilado,
+    abrochado, emblocado, numerado, anillado: el precio cargado, ¿es por trabajo
+    terminado o por hoja? Lo pregunto porque en el sistema todos tienen "Hoja" como
+    unidad, y si el bot lo toma literal multiplica por las hojas del trabajo.
+53. **Anillado** — ¿Cómo eligen el anillo en el mostrador? ¿Por cantidad de hojas?
+    Pasame la referencia que usan (hasta cuántas hojas entra cada medida: hasta 3/4,
+    1", 1"1/8, 1"1/4, 1"1/2). Y el precio, ¿es uno por trabajo?
+54. **Packs de tarjetas** — Para 150: ¿les venden 2 packs de 100 o les ofrecen el de
+    500? ¿Cobran algo extra por hacer dos packs en vez de uno? Arriba de 1000, ¿siguen
+    sumando packs o lo cotizan aparte?
+55. **Promo inmobiliarias** — Llevando 7 u 8 carteles, ¿los que pasan de 6 también van
+    a $15.000 o vuelven a $19.500? ¿Y la promo es solo para inmobiliarias?
+56. **Talonarios** — "Rifas 100 números": ¿el precio cargado es por talonario de 100 o
+    por rifa? Si alguien pide 500 rifas, ¿son 5 talonarios?
+57. **Tacos** — Están cargados en 3 tamaños por color y negro. Cuando alguien pide "un
+    taco", ¿qué le preguntan primero, el tamaño o el color?
+58. **Carteles corrugado** — El de 1×0,65 a $19.500, ¿se vende suelto al público o solo
+    dentro de la promo? Y las medidas 1×1 / 2×1 / a3, ¿son fijas o cortan a medida?
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
@@ -135,9 +160,9 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Sellos | No se hacen (Martin, 2026-07-24). |
 | Vinilo brillo (dos rubros) | Mostrar las opciones al cliente, sin default de mostrador (Martin, 2026-07-24). |
 | "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
-| Promo Inmobiliarias | Es POR CARTEL, exige llevar 6 (confirmado) → `por_pack=false` + display "(llevando 6)" en `db/curacion-2026-07-24b.sql`. Mínimo-6 y cuenta 6× = cotizador; el cartel suelto ($19.500) existe pero mostrable=false (deriva) (Martin, 2026-07-24). |
+| Promo Inmobiliarias | Es POR CARTEL, exige llevar 6 (confirmado) → `por_pack=false` + display "(llevando 6)" en `db/curacion-2026-07-24b.sql`. Mínimo-6 y cuenta 6× = cotizador. ⚠️ **Corrección 2026-07-25 (consejo Opus):** el cartel suelto ($19.500) **sí se cotiza** — `mostrable` en la vista es `(not tiene_reglas)`, NO un flag de curación, y no lo lee ningún nodo Code. Ocultar de verdad es `oculto=true` en `variante_meta`. Además `por_pack=false` habilitó la multiplicación: "3 carteles" da $45.000 cuando el real es $58.500 → hace falta `min_unidades=6` (ver `plans/r7-refinador-y-resolucion.md` §1). Falta preguntar qué pasa entre 7 y 11 carteles (pregunta 55). |
 | Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → sinónimos de urgencia **sacados** en `db/curacion-2026-07-24b.sql` (24 hs + ocultos 48/72/96); "anillado urgente" → sin_match (Martin, 2026-07-24). |
-| Cuantización de pack | Se explica que se trabaja por pack y se cotiza el **próximo tier hacia arriba**: 150 con tiers 100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo (Martin, 2026-07-24). |
+| Cuantización de pack | Se explica que se trabaja por pack y se cotiza el **próximo tier hacia arriba**: 150 con tiers 100/500/1000 → el de 500; si la cantidad supera el mayor tier, deriva al equipo (Martin, 2026-07-24). ⚠️ **En revisión 2026-07-25 (consejo Opus):** sobre-cotiza contra la cobertura por combinaciones (150 simple faz → $28.000 vs $24.000 de 2×100; folletos ilustración 1500 → 20% de más) y la banda no es uniforme (en DF Encapsuladas a 501-600 el tier de 1000 sí gana). Decisión abierta en `plans/r7-refinador-y-resolucion.md` §7.1 + pregunta 54. |
 | Defaults de oficio | **NO hay.** El bot no asume: muestra todo o pregunta (Martin, 2026-07-24). Revierte la recomendación de "defaults de oficio" del consejo. |
 | Anillado — ejes | Se distingue plástico ($2.400) vs metálico ($3.200): se muestran como opciones; las medidas (diámetro del anillo) solo si el cliente las especifica (Martin, 2026-07-24). |
 | Auditoría de atributos estructurados | No se modela un esquema nuevo: se resuelve limpiando/rediseñando el catálogo vía la skill de curación, para que el bot entienda nombres que hoy cargan las personas de TG para uso interno (Martin, 2026-07-24). |
