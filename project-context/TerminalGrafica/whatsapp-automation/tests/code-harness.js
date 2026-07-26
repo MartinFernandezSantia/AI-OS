@@ -913,5 +913,75 @@ async function main() {
   pg = (await prompt({ origen: 'precio', reply: 'La opción 35X50 CM de Cartón sale $2.000,00.' }))[0].json;
   console.log('G7 sin catálogo el gate es no-op:', Array.isArray(pg.prohibidos) && pg.prohibidos.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(pg.prohibidos));
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1 — LA SEÑAL DEL CONFIDENT-WRONG (F) + CONJUNTO CERRADO (E)
+  // El incidente 14 no lo caza la regla de gemelos: esa solo dispara en el
+  // camino AMBIGUO. Cuando el LLM elige con confianza el motor devuelve una
+  // fila limpia y nada aguas abajo se entera. La señal no es la calidad del
+  // match: es cuanto del match lo puso el cliente.
+  // ══════════════════════════════════════════════════════════════════════════
+  const obra75 = { ...base, producto_id: 'uo75', nombre_canonico: 'Impresiones papel obra 75 gr',
+    variante: 'simple faz b/n', precio_lista: 100, match_rank: 1, por_pagina: true,
+    atributos: { papel: 'obra', gramaje_gr: 75, faz: 'simple', color: 'bn', unidad_venta: 'hoja', multiplica: true } };
+  const obra106 = { ...obra75, producto_id: 'uo106', nombre_canonico: 'Impresiones a4 papel obra 106 gr',
+    precio_lista: 120, match_rank: 2, atributos: { ...obra75.atributos, gramaje_gr: 106 } };
+
+  // S1: el cliente no dijo ni color ni gramaje y habia competencia -> el bot
+  //     declara el supuesto MAS CARO (color, 4x) pegado al monto.
+  r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [obra75, obra106], decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }));
+  console.log('S1 puerta abierta:', /avisame/.test(r[0].json.reply) && r[0].json.senales.puerta === 'color' ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('S2 puerta en telemetria:', r[0].json.notas.includes('(puerta:color)') && r[0].json.notas.includes('(descartados:1)') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // S3: el string CRUDO del LLM se conserva. Sin esto no se puede distinguir un
+  //     hijack de sinonimo de una eleccion deliberada: el log guardaba el canonico.
+  console.log('S3 producto crudo en señales:', r[0].json.senales.producto_pedido === 'impresiones'
+    && r[0].json.senales.descartados[0] === 'Impresiones a4 papel obra 106 gr' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales));
+  console.log('S4 ejes sin anclar:', r[0].json.senales.sin_anclar.includes('color') && r[0].json.senales.sin_anclar.includes('gramaje_gr')
+    && r[0].json.senales.anclados.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales.sin_anclar));
+
+  // S5: si el cliente SI ancla, el eje sale de la lista y la puerta cambia de eje.
+  r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [obra75, obra106], decidir({ userMessage: 'imprimir 100 hojas en blanco y negro' }));
+  console.log('S5 ancla reconocida:', r[0].json.senales.anclados.includes('color') && r[0].json.senales.puerta !== 'color' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales));
+
+  // S6: sin competencia NO hay puerta. Declarar un supuesto donde no habia con que
+  //     confundirse es ruido, y el ruido se paga a USD 0,026 el mensaje.
+  r = await armar({ producto: 'impresiones papel obra 75 gr', variante: 'simple faz b/n', template: null, forzarPlantilla: true, mas: [] },
+    [obra75], decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }));
+  console.log('S6 sin competencia no hay puerta:', r[0].json.senales.puerta === null && !/avisame/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // S7: el gramaje anclado por el cliente cuenta aunque venga pegado ("75gr").
+  r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [obra75, obra106], decidir({ userMessage: 'imprimir en obra 75gr color' }));
+  console.log('S7 gramaje pegado ancla:', r[0].json.senales.anclados.includes('gramaje_gr') && r[0].json.senales.anclados.includes('papel') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales.anclados));
+
+  // E1: el LLM compone un nombre que no existe (incidente 19) -> queda marcado.
+  const CATP = ['Impresiones papel obra 75 gr', 'Papel Kraft 130 Gr'];
+  const parsearE = (llmContent, dec, cat) => runNodeCode('parsear.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { nombresCatalogo: cat } : {} }) }),
+    $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
+  });
+  r = await parsearE(JSON.stringify({ action: 'precio', producto: '150 Tarjetas Color/Negro', variante: 'x', reply: '{{PRECIO}}' }), decidir(), CATP);
+  console.log('E1 producto inventado marcado:', (r[0].json.precio.flags || []).includes('producto_inventado') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.precio.flags));
+  r = await parsearE(JSON.stringify({ action: 'precio', producto: 'Impresiones papel obra 75 gr', variante: 'x', reply: '{{PRECIO}}' }), decidir(), CATP);
+  console.log('E2 producto real sin flag:', !(r[0].json.precio.flags || []).includes('producto_inventado') ? 'OK' : 'FAIL');
+  r = await parsearE(JSON.stringify({ action: 'precio', producto: 'IMPRESIONES PAPEL OBRA 75 GR', variante: 'x', reply: '{{PRECIO}}' }), decidir(), CATP);
+  console.log('E3 normaliza mayúsculas/acentos:', !(r[0].json.precio.flags || []).includes('producto_inventado') ? 'OK' : 'FAIL');
+  // fail-open: sin catalogo el chequeo no corre (un cache frio no puede tumbar el bot)
+  r = await parsearE(JSON.stringify({ action: 'precio', producto: 'Lo que sea', variante: 'x', reply: '{{PRECIO}}' }), decidir(), []);
+  console.log('E4 fail-open sin catálogo:', !(r[0].json.precio.flags || []).includes('producto_inventado') ? 'OK' : 'FAIL');
+
+  // E5/E6: el Aclarador era el unico punto donde un nombre TIPEADO por un LLM
+  //        llegaba al cliente sin pasar por la base.
+  const aplicarAclE = (llmContent, arpJson, dec, cat) => runNodeCode('aplicar-acl.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { nombresCatalogo: cat } : name === 'Armar Respuesta Precio' ? arpJson : {} }) }),
+    $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }) },
+  });
+  r = await aplicarAclE(JSON.stringify({ accion: 'opciones', productos: ['Papel Kraft 130 Gr', 'Papel Kraft 900 Gr'] }), arpJ, decidir(), CATP);
+  console.log('E5 filtra opción inexistente:', r[0].json.reply.includes('Papel Kraft 130 Gr') && !r[0].json.reply.includes('900') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  r = await aplicarAclE(JSON.stringify({ accion: 'opciones', productos: ['Papel Kraft 900 Gr', 'Sellos de goma'] }), arpJ, decidir(), CATP);
+  console.log('E6 todas inexistentes -> deriva:', r[0].json.accionLog === 'informo_precio' && r[0].json.notas.includes('descartadas') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

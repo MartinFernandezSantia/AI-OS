@@ -52,6 +52,23 @@ alter table bot.decisiones
   add column if not exists borrador text,
   add column if not exists final    text;
 
+-- v8.1 (consejo Opus 2026-07-26): la señal del confident-wrong.
+-- Hoy el log guarda el nombre CANÓNICO de la base, así que en el camino de ÉXITO el
+-- string crudo que tipeó el LLM se destruye — y con él la única forma de distinguir
+-- un hijack de sinónimo de una elección deliberada. La clase de fallo que más plata
+-- mueve era indetectable desde el log, por construcción.
+-- Una sola columna jsonb en vez de seis: un alter, y las auditorías salen con
+-- senales->>'...'. Claves: producto_pedido, variante_pedida, match_rank, descartados
+-- (los candidatos que el filtro de rank borró), filas, anclados, sin_anclar, puerta.
+alter table bot.decisiones
+  add column if not exists senales jsonb;
+
+-- Índice parcial para la consulta de auditoría (§5 del runbook): las cotizaciones
+-- que salieron con un número sin que el cliente anclara ningún eje.
+create index if not exists decisiones_sin_ancla_idx
+  on bot.decisiones ((senales->>'puerta'))
+  where senales is not null;
+
 -- ---------------------------------------------------------------------------
 -- 2. Vistas: exponer familias y atributos.
 --    Sin esto la migración es INERTE (ningún nodo puede leer las columnas).

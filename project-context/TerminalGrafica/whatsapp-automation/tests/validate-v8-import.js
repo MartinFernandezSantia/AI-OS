@@ -66,7 +66,9 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   'Get Ruta Cotizador', 'Armar Mensajes LLM', 'Parsear Respuesta',
   'Enviar Mensaje', 'Mensaje Firewall Refusal', 'Aviso Rate Firewall', 'Mensaje Refusal Tier-2',
   'Respuesta No-Texto', 'Saludo Bienvenida', 'Mensaje Anti-Injection', 'Mensaje Escalación',
-  'Mensaje Cap Email', 'Label Escalación', 'Label Cap']);
+  'Mensaje Cap Email', 'Label Escalación', 'Label Cap',
+  // v8.1 — señal, conjunto cerrado y housekeeping
+  'Decidir', 'Log Turno']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
@@ -161,6 +163,47 @@ else console.log('  ok  tokens prohibidos derivados del catalogo');
 if (!/catalogo no disponible/.test(b['Armar Mensajes LLM'].parameters.jsCode) || !/throw new Error/.test(b['Armar Mensajes LLM'].parameters.jsCode))
   E('Armar Mensajes LLM no aborta cuando el catalogo no cargo');
 else console.log('  ok  SPOF del catalogo: aborta en vez de improvisar');
+
+console.log('\n=== 7. v8.1 — SEÑAL, CONJUNTO CERRADO, MATCHING ===');
+
+// 7a. el rank-2 no puede volver a ser substring crudo: producto='lona' matcheaba
+// 'ta<lona>rios rifas'. Ancla a inicio de palabra, sin ancla al final (plural).
+['Get Precio', 'Get Precio 2'].forEach((nm) => {
+  const q = b[nm].parameters.query;
+  if (/like '%' \|\| replace\(replace\(p\.prod/.test(q)) E(nm + ': el rank-2 sigue siendo substring crudo (lona ⊂ talonarios)');
+  else if (!/prod_tok/.test(q)) E(nm + ': falta la tokenizacion del rank-2');
+});
+console.log('  ok  rank-2 anclado a inicio de palabra');
+
+// 7b. la señal del confident-wrong. Sin esto nada de lo demas es medible: el log
+// guardaba el nombre CANONICO y el string crudo del LLM se destruia.
+const arp2 = b['Armar Respuesta Precio'].parameters.jsCode;
+[['señal: producto crudo del LLM', /producto_pedido/],
+ ['señal: candidatos descartados por rank', /descartados/],
+ ['señal: ejes anclados por el cliente', /dijoValor/],
+ ['guard de ancla / puerta abierta', /PUERTA/]].forEach(([t, re]) => {
+  if (!re.test(arp2)) E('falta: ' + t); else console.log('  ok  ' + t);
+});
+if (!/senales/.test(JSON.stringify(b['Log Turno'].parameters))) E('Log Turno no guarda las señales');
+else console.log('  ok  Log Turno guarda senales');
+if (!/senales/.test(b['Normalizar Envío'].parameters.jsCode)) E('el sobre no lleva las señales hasta el log');
+else console.log('  ok  el sobre lleva las señales');
+
+// 7c. conjunto cerrado (E): el nombre que emite el LLM se valida contra el catalogo,
+// y el Aclarador ya no puede imprimirle al cliente un nombre que no existe.
+if (!/producto_inventado/.test(b['Parsear Respuesta'].parameters.jsCode)) E('Parsear Respuesta no valida contra el conjunto cerrado');
+else console.log('  ok  validacion de conjunto cerrado');
+if (!/setAcl/.test(b['Aplicar Aclarador'].parameters.jsCode)) E('Aplicar Aclarador imprime nombres sin validar contra el catalogo');
+else console.log('  ok  el Aclarador filtra contra el catalogo');
+
+// 7d. el endpoint pineado: 5 endpoints diluyen el cache de prefijo, que es donde
+// vive el catalogo (~5k tokens a 0,1x).
+const llms = v8.nodes.filter((nd) => nd.type === 'n8n-nodes-base.httpRequest' && /openrouter/i.test(JSON.stringify(nd.parameters)));
+const sinPin = llms.filter((nd) => !/provider: \{ order:/.test(nd.parameters.jsonBody || ''));
+if (sinPin.length) E('nodos LLM sin endpoint pineado: ' + sinPin.map((x) => x.name).join(', '));
+else console.log('  ok  los ' + llms.length + ' nodos LLM pinean el endpoint');
+if (!/normalize\('NFC'\)/.test(b['Decidir'].parameters.jsCode)) E('el mensaje del cliente no se normaliza a NFC');
+else console.log('  ok  mensaje del cliente en NFC');
 
 console.log('\n=== ' + err + ' errores ===');
 process.exit(err ? 1 : 0);
