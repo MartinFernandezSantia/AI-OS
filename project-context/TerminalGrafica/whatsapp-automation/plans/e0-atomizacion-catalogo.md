@@ -213,6 +213,29 @@ Ejemplo con 150: se muestran el pack de 100 y el de 500 de la variante elegida y
 cliente. Reemplaza la regla "próximo tier hacia arriba" del 2026-07-24, que sobre-cotizaba.
 Queda abierta la pregunta 54 solo por si TG cobra un extra por armar dos packs.
 
+## 6 ter. Medidas: cuándo el bot puede multiplicar (Martin, 2026-07-26)
+
+La decisión es **por variante, no por producto**. Un mismo producto tiene medidas fijas
+(se vende la pieza) y una variante que ES el metro o el m² (se vende por medida). La
+variante de medida **sí multiplica**: para eso existe.
+
+Dos guardas obligatorias antes de habilitarlo:
+
+1. **La medida listada gana.** Si lo pedido coincide con una variante de medida fija, se
+   cotiza esa, nunca el ritmo del m². Sin esto: 35×50 cm sale $20.000 por estar listado y
+   36×50 saldría $8.280 por m². Un centímetro cambiaría el precio 2,4 veces.
+2. **Mínimo.** El m² es más barato que todas las medidas chicas listadas (está pensado
+   para trabajos grandes). Sin piso, un trabajo de 20×30 cm cotizaría $2.760. Pregunta 60.
+
+Además: la lectura de la medida se fija por regla, no por criterio del modelo (si algún
+lado llega a 10, son centímetros; si no, metros) y la respuesta confirma la lectura. Y
+queda pendiente `ancho_max` por material (pregunta 62): con 1,52 m de ancho, un trabajo de
+3 m lleva paños y costura y deja de ser una cuenta de superficie.
+
+**Lo que el precio por m² NO puede hacer** es cotizar una medida ya listada. Verificado en
+PVC: 100×70 cm vale $42.000 y al ritmo del m² daría $32.200; 35×50 vale $20.000 contra
+$8.050. Multiplicar ahí sub-cotiza hasta 60%.
+
 ## 7. Qué le preguntamos a TG
 
 Las nuevas están en `preguntas-tg.md` (51 a 59). Las que siguen bloqueando algo de E0:

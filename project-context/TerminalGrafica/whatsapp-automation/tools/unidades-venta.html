@@ -119,7 +119,7 @@
   <button id="copyJson">Copiar al portapapeles</button>
   <span class="hint" id="status"></span>
   <span class="spacer"></span>
-  <span class="hint">Se guarda solo en este navegador. Sospechoso = la unidad cargada no se corresponde con lo que se vende.</span>
+  <span class="hint">Se guarda solo en este navegador. Sospechoso = la unidad cargada no se corresponde con lo que se vende. En m² y metro, "multiplica" significa por la medida pedida, y depende de las dos guardas del plan (gana la medida listada si coincide; respetar el mínimo).</span>
 </footer>
 
 <script>
@@ -134,8 +134,11 @@ const UNIDADES = [
   ['m2',     'm²'],
   ['metro',  'metro lineal'],
 ];
-// si el número que da el cliente multiplica el precio de lista, y con qué
-const MULT_DEFAULT = { pagina:true, hoja:true, unidad:true, trabajo:true, pack:false, m2:false, metro:false };
+// ¿el número que da el cliente puede multiplicar el precio de lista?
+// m2 y metro multiplican por la MEDIDA (para eso existe esa variante), pero solo
+// con las dos guardas del plan: si la medida coincide con una listada gana la
+// listada, y hay que respetar el mínimo. pack nunca: el precio ya es del pack.
+const MULT_DEFAULT = { pagina:true, hoja:true, unidad:true, trabajo:true, pack:false, m2:true, metro:true };
 const KEY = 'tg-unidades-v1';
 
 const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');

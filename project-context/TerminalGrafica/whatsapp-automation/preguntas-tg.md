@@ -83,6 +83,16 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     tienen "Hoja" como unidad, incluidas lonas, carteles y porta banners. ¿Cuáles se
     venden de verdad por hoja y cuáles por trabajo, por metro o por unidad? (Anillado,
     encuadernado y refilado ya los cerró Martin: por trabajo. Falta el resto.)
+60. **Mínimo de m² / metro.** El precio del m² es más barato que el de todas las
+    medidas chicas listadas (en PVC el m² sale $46.000 y el cartel de 35×50 cm sale
+    $20.000, que al ritmo del m² daría $8.050). ¿Desde qué medida se cobra por m²?
+    ¿Hay un mínimo de superficie o un precio piso para trabajos chicos?
+61. **Por metro lineal.** Laminado y encapsulado por metro, bolsillos de banner y el
+    vinilo UV: ¿hay mínimo de metros? ¿El precio por metro cambia según el ancho?
+    (Define si el bot puede hacer la cuenta de metros × precio o solo pasar el precio.)
+62. **Ancho máximo por material.** La lona brillo dice 1,52 m. ¿Cuál es el ancho máximo
+    de cada material, y qué pasa cuando el trabajo lo supera (paños y costura)? El bot
+    necesita saberlo para no cotizar por superficie algo que no entra.
 59. **OPP** — ¿"OPP Brillo" y "OPP Mate/Holográfico/Plata/Crystal/Glitter/Kraft" son
     impresiones sobre ese papel o el papel suelto? ¿Y los acabados que lista el nombre
     valen todos lo mismo? (Provisional: se tratan como impresiones y los acabados del
