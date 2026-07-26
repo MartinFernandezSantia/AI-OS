@@ -9,7 +9,81 @@
 
 ---
 
-## ⭐⭐ SESIÓN 2026-07-24 — consejo de arquitectura + curación aplicada (LEER PRIMERO)
+## ⭐⭐⭐ SESIÓN 2026-07-26 — ronda 4, consejo Opus, R7 v2 y entrega 0 (LEER PRIMERO)
+
+**Nada se construyó ni se aplicó esta sesión.** El workflow `faq-bot-v7.json` está intacto.
+Todo lo de abajo es diseño cerrado y datos listos para que la próxima sesión escriba el SQL.
+
+### Qué pasó
+Martin corrió las suites 5 y 6 en WhatsApp real y trajo **16 incidentes**. En vez de parchar se
+corrió un **consejo de 5 lentes Opus** (red-team de plata, matching determinístico, UX/voz de
+mostrador, costo-ops-n8n, dominio imprenta; ~640k tokens). El consejo confirmó el refinador pero
+reescribió cómo se especifica, dio vuelta el orden de entrega, y encontró cosas que no eran del
+encargo. Después Martin propuso partir el LLM en dos y darle familias propias al catálogo, y de
+ahí salió la **entrega 0 (atomización)**.
+
+### Documentos nuevos
+- [`r7-refinador-y-resolucion.md`](./r7-refinador-y-resolucion.md) — **v2**, el plan buildable.
+- [`r7-consejo-opus.md`](./r7-consejo-opus.md) — acta del consejo, con lo que tumbó y por qué.
+- [`e0-atomizacion-catalogo.md`](./e0-atomizacion-catalogo.md) — **el spec de arranque**.
+- `decks/r7-atomizacion-y-split.html` — deck de 14 láminas (artifact publicado).
+- `tools/unidades-venta.html` — decisor de unidades, ya usado.
+- `db/unidades-venta-decisiones.json` — **las 100 filas resueltas por Martin**.
+
+### 🔴 Tres bugs de plata VIVOS en el catálogo de testing
+1. **Promo inmobiliarias:** la curación 24b puso `por_pack=false` y habilitó la multiplicación.
+   "3 carteles" cotiza $45.000 cuando 3 sueltos son $58.500. Faltan $13.500.
+   Además **la promo es SOLO para inmobiliarias** (Martin), así que el producto necesita el
+   mismo guard de nicho que medicina: no puede aparecer ante un pedido genérico de carteles.
+2. **Servicios de taller:** 18 variantes multiplican por hojas. "Anillado para 120 hojas" da
+   $504.000. Lo frena solo una línea del prompt. → `unidad_venta=trabajo` + regla de texto: el
+   número multiplica solo si viene pegado a un sustantivo de trabajo ("3 apuntes"), no a hojas.
+3. **Talonarios Rifas 100 números:** "500 rifas" cotiza 500 talonarios. → `por_pack=true`.
+
+### 🟢 El hallazgo grande: el doble faz se cobra POR HOJA
+Cierra la **pregunta 31**, abierta desde el build del cotizador. Ver decisión en
+`decisions/log.md` 2026-07-26. `hojas = simple ? páginas : ceil(páginas/2)` por copia, bracket
+por hojas, **se levanta el dfGate**. 200 páginas doble faz pasan de $35.600 a $17.600.
+
+### Correcciones a cosas que dábamos por ciertas
+- **`mostrable` NO es un flag de curación**: es `not tiene_reglas` y no lo lee ningún nodo. El
+  cartel suelto sí se cotiza. Ocultar de verdad es `oculto=true` en `variante_meta`. Y ojo:
+  `mostrable=false` en las 4 variantes de `OBRA 80 GR`, así que nunca implementar "variantes
+  visibles" con ese campo.
+- **Ya son 2-3 llamadas LLM por turno**, no 1-2: `Guardrails Tier-2` es una llamada.
+- **Las credenciales viajan en el JSON exportado** con id real, así que un nodo nuevo no es
+  configuración manual de Martin. El cuello de botella es la ronda de WhatsApp, no el import.
+- El plan v1 proponía que `Get Precio` devolviera todas las variantes: **eso apagaba los 7
+  guards** (la escalera vive dentro de `rows.length === 1`). La variante se resuelve ANTES.
+
+### Decisiones de Martin de esta sesión (todas en `preguntas-tg.md` y en los planes)
+Caveat corto (`El total te lo confirmamos en el local o por mail.`, dirección solo la 1ª vez) ·
+hay default **con puerta abierta**, y el primero es **obra 75 simple faz b/n** (revierte el "no
+hay defaults" del 24) · packs: primero se confirma la **variante** y después se muestran los dos
+tiers con precio (supersede "próximo tier arriba", que sobre-cotizaba hasta 20%) · no se cobra
+extra por armar varios packs · anillado, encuadernado y refilado **por trabajo** · las variantes
+llamadas `m2` llevan unidad m2 y **multiplican por la medida** con dos guardas (gana la medida
+listada si coincide; hace falta un mínimo) · familias múltiples son la regla · emblocados fuera
+de cartelería · OPP como impresión sobre ese papel (provisional).
+
+### Orden de entrega acordado
+**E0 atomizar** (familias + atributos + los 3 bugs) → **E1 resolución sobre atributos** →
+**E2 split del LLM** → **E3 menús y voz** → **E4 topología** (1 envío + 1 log, −4 nodos) →
+**E5 refinador** (editor de bordes, gate de conservación, kill-switch, ronda A/B).
+
+### 👉 PRÓXIMO PASO CONCRETO
+Escribir `db/curacion-e0-YYYY-MM-DD.sql`: los dos `alter table`, familias y atributos de los 83
+productos, las unidades de `db/unidades-venta-decisiones.json`, y los parches de la promo
+(`min_unidades=6` + guard de nicho) y los talonarios (`por_pack=true`). Martin lo aplica.
+
+### Preguntas a TG abiertas y que bloquean algo
+**52** unidad de venta del resto (Ojales sin decidir) · **4** láser vs Riso · **55** promo entre
+7 y 11 carteles · **59** OPP · **60** mínimo de m² · **61** mínimo de metro lineal (bolsillos de
+banner quedó en duda) · **62** ancho máximo por material.
+
+---
+
+## ⭐⭐ SESIÓN 2026-07-24 — consejo de arquitectura + curación aplicada
 
 **Qué pasó.** La ronda 3 de suite-5 dio 10 incidentes (4,5,7,11,12,13,14,15,20,21). En vez
 de parchar, se corrió un **consejo de 6 lentes** (plan

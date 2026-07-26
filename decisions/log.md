@@ -18,6 +18,68 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-26 — Bot TG: las impresiones se cobran por HOJA, no por página (cierra la pregunta 31)
+
+**Decisión:** en las líneas de impresión Riso (obra 75 y a4 obra 106) la unidad de venta es la
+**hoja**. En simple faz se cobra la hoja; en doble faz no se cobra por página, porque el precio
+ya está ajustado a la hoja impresa de los dos lados. El motor pasa a calcular
+`hojas = simple ? páginas : ceil(páginas/2)` por copia, el bracket se elige por hojas, y **se
+levanta el gate que negaba el total del doble faz**.
+
+**Por qué:** se comprueba en la lista de precios: en obra 75, simple faz b/n $100 y doble faz
+b/n $150. Si el precio fuera por página, el doble faz debería ser la mitad del simple; que sea
+1,5 veces confirma que la unidad es la hoja. Medido con la tabla real del 106 doble faz b/n, un
+documento de 200 páginas cotizaba $35.600 por página y cotiza $17.600 por hoja: el gate existía
+justo para no cobrar el doble. Cambiaría de idea si TG dice que cargan el precio por carilla.
+
+**Alternativas consideradas:** dejar el gate y seguir sin dar total en doble faz (era el statu
+quo desde el build del cotizador, y le negaba una cotización a un caso muy común: el apunte).
+
+**Owner:** Martin.
+
+## 2026-07-26 — Bot TG: el catálogo se atomiza en atributos y familias (entrega 0)
+
+**Decisión:** antes de tocar el matcher se agrega al overlay `bot.producto_meta` /
+`bot.variante_meta` un `familias text[]` y un `atributos jsonb` (tecnología, papel, gramaje,
+tiers de pack, mínimo, unidad de venta a nivel producto; faz, color, tamaño como array, acabado
+y diámetro a nivel variante). El primer LLM pasa a emitir exactamente esas claves. La
+pertenencia a varias familias es la regla, no la excepción.
+
+**Por qué:** cinco guards del bot comparan gramaje, faz, tamaño y rubro, y hoy sacan esos
+valores parseando el nombre del producto con regex en cada mensaje. Es el criterio que la propia
+skill de curación ya fija: si un nodo determinístico necesita comparar o calcular con un valor,
+ese valor deja de ser texto. La atomización no crea información, la mueve de un regex opaco a
+una tabla revisable. Además hace exacta la regla de gemelos (misma familia, todos los atributos
+menos uno) y encuentra el par que más plata mueve, que la heurística de nombres no veía: `OBRA
+106 GR` a $800 la hoja contra `Impresiones a4 papel obra 106 gr` a $120 la página, 6,7 veces.
+
+**Alternativas consideradas:** seguir con la heurística de "esqueleto" sobre los nombres
+(quedaba ciega al par de 6,7×); pedirle a TG que cargue campos estructurados en su sistema
+(es su sistema operativo, no lo tocamos).
+
+**Owner:** Martin. Claude prepara el SQL, Martin lo aplica.
+
+## 2026-07-26 — Bot TG: el segundo LLM aporta recall, nunca elige el producto
+
+**Decisión:** el LLM se parte en dos. El primero entiende al cliente sin ver el catálogo y emite
+intención más slots de atributo. El segundo solo corre **si el matcher determinístico no
+encontró candidatos**, y devuelve un **conjunto** de productos que podrían encajar, nunca uno
+elegido y nunca un monto. La decisión entre candidatos es del código.
+
+**Por qué:** un modelo eligiendo entre gemelos es el confident-wrong que costó los incidentes de
+la ronda 4 (presumió el 106 sin preguntar, eligió un diámetro de anillado por su cuenta). Un
+pick equivocado y confiado cuesta una reimpresión, no dos centavos. Pero el matcher tiene el
+problema inverso: buena precisión y mala recuperación ("bookcel", "espiralado", "papel vegetal
+a3" caen en la nada y ahí se pierde el cliente). El LLM es bueno asociando y malo decidiendo con
+plata, así que se lo usa para lo primero. Ese segundo LLM ya existe (el Aclarador): se lo
+promueve al camino principal y se le saca la acción de resolver a un producto único.
+
+**Alternativas consideradas:** que el segundo LLM elija el producto (propuesta original de
+Martin, corregida acá); dejar todo determinístico (deja sin respuesta a los pedidos que el
+catálogo nombra distinto que el cliente).
+
+**Owner:** Martin.
+
 ---
 
 ## 2026-07-24 — Bot TG: lote de resoluciones de catálogo/resolución (no-defaults, pack por tier, atributos vía curación)
