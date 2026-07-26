@@ -86,16 +86,19 @@ líneas en el nodo Code, pero tiene que estar desde el principio: el tamaño es 
 | `porta_banner` | 2 | 2 velas, roll up |
 | `imanes` · `talonarios` | 1+1 | |
 
-Las reglas por palabra clave cubren **83 de 83**. Lo que hay que decidir con criterio no es
-si hay familia, es **si el corte es el que un cliente haría**. Cinco casos para revisar:
+Las reglas por palabra clave cubren **83 de 83**. Los cinco cortes dudosos los resolvió
+Martin (2026-07-26):
 
-| Producto | Cayó en | Duda |
+| Producto | Familias | Resolución |
 |---|---|---|
-| `Emblocados con cartón` | `carteleria` | es un servicio de taller, no un cartel |
-| `OPP Brillo` / `OPP Mate...` | `papeles` | ¿son papeles que vendés o impresiones sobre ese papel? |
-| `Impresión Uv Holografico` | `impresion` | ¿o va con lonas y vinilos? |
-| `Carteleria en Pvc c/vinilo` | `lonas_vinilos` | está en los dos mundos, candidato a familia doble |
-| `Sobre Ingles` ×2 | `libreria` | el duplicado de la pregunta 37 |
+| `Emblocados con cartón` | `taller`, `tacos` | **no va en cartelería** (Martin). Es el servicio de emblocar; se deja también en `tacos` porque quien pregunta por un taco puede estar pidiendo esto |
+| `OPP Brillo` / `OPP Mate…` | `impresion`, `papeles` | **son impresiones sobre ese papel**, provisional hasta que conteste TG (pregunta 59). Y el nombre no lista productos distintos: enumera **acabados equivalentes al mismo precio** (mate, holográfico, plata, crystal, glitter, kraft = $2.500; brillo = $2.400) → van como valores de `acabado`, no como productos |
+| `Impresión Uv Holografico` | `impresion`, `lonas_vinilos` | **las dos**, "según el caso entra en ambas" (Martin). Caso testigo de por qué `familias` es array |
+| `Carteleria en Pvc c/vinilo` | `carteleria`, `lonas_vinilos` | principal `carteleria` (lo que se entrega es un cartel rígido), secundaria `lonas_vinilos` (la impresión es sobre vinilo) |
+| `Sobre Ingles` ×2 | `libreria` | sigue como pregunta 37 a TG |
+
+**La pertenencia múltiple es la regla, no la excepción** (Martin). `familias[1]` decide menús y
+gemelos; el resto solo amplía el recall.
 
 ---
 
@@ -113,8 +116,12 @@ si hay familia, es **si el corte es el que un cliente haría**. Cinco casos para
 
 **El único agujero grande es `unidad_venta`**, y es el mismo que ya detectó el consejo: 148
 de 180 variantes dicen "Hoja" por herencia del sistema del mostrador, incluidas lonas,
-carteles, anillados y porta banners. Es la pregunta 52 a TG, y es la que más plata desbloquea
-porque es la que decide si un anillado se multiplica por las hojas del trabajo.
+carteles, anillados y porta banners. Es la que decide si un ítem se multiplica.
+
+**Resuelto por Martin (2026-07-26) para la parte que más riesgo tenía:** anillado,
+encuadernado y refilado van **`unidad_venta = trabajo`**, se informa el precio del ítem y
+nunca se multiplica. Eso cubre las familias `anillado` (3), `encuadernacion` (4) y `taller`
+(7) y cierra el bug V2 sin esperar a TG. Queda abierta la pregunta 52 para el resto.
 
 ---
 
@@ -187,18 +194,38 @@ Testeable en el harness sin llamar al modelo: el contrato es JSON con enums cerr
 
 ---
 
+## 6 bis. Reglas de negocio que Martin cerró el 2026-07-26
+
+**Papel por defecto: obra 75 gr, simple faz, b/n.** Se muestra ese y se deja la puerta
+abierta ("¿lo necesitás en color, o en otro papel?"). Cierra la pregunta 48.
+*Nota de riesgo, una vez:* si el cliente quería color, el default de b/n sub-cotiza 4×
+($100 contra $400 la página). Lo tapa la puerta abierta, no el default. Si en la ronda
+aparece gente aceptando el b/n sin querer, hay que pasar el color a pregunta.
+
+**Packs de tarjetas.** Nunca se cotiza un pack sin saber la variante, porque los packs
+comparten las mismas variantes a precios distintos. El orden es:
+
+1. Confirmar la variante (simple faz / doble faz / encapsuladas).
+2. Recién ahí, para una cantidad que no cae en un tier exacto, mostrar **el tier de abajo y
+   el de arriba con sus precios**, aclarando que se trabaja por packs.
+
+Ejemplo con 150: se muestran el pack de 100 y el de 500 de la variante elegida y decide el
+cliente. Reemplaza la regla "próximo tier hacia arriba" del 2026-07-24, que sobre-cotizaba.
+Queda abierta la pregunta 54 solo por si TG cobra un extra por armar dos packs.
+
 ## 7. Qué le preguntamos a TG
 
-Las nuevas ya están en `preguntas-tg.md` (48, 51 a 58). Las que bloquean E0:
+Las nuevas están en `preguntas-tg.md` (51 a 59). Las que siguen bloqueando algo de E0:
 
-- **52** unidad de venta de los servicios de taller: ¿por trabajo o por hoja? (55 productos)
+- **52** unidad de venta del resto de los productos con "Hoja" heredado (anillado,
+  encuadernado y refilado ya los cerró Martin: por trabajo)
 - **4** láser vs Riso: cuándo corresponde cada uno
-- **48** papel por defecto para "unos apuntes"
 - **55** promo inmobiliarias: qué pasa entre 7 y 11 carteles
+- **59** OPP: ¿son impresiones sobre ese papel o el papel suelto? ¿los acabados del nombre
+  valen todos lo mismo?
 
-E0 se puede construir sin las respuestas dejando `unidad_venta` en `null`, con la regla de
-que un producto sin unidad **no recibe total multiplicado**. Es la dirección segura y de paso
-tapa los bugs V2 y V3 sin esperar a nadie.
+E0 se construye igual: los productos sin `unidad_venta` quedan con la regla de que **no
+reciben total multiplicado**. Es la dirección segura y tapa V2 y V3 sin esperar a nadie.
 
 ---
 
