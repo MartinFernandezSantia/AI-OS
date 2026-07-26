@@ -162,11 +162,13 @@ simetría es el punto: lo que el modelo emite es lo que el matcher compara.
     "familia":   "impresion",
     "producto":  null,
     "papel":     null,
+    "material":  null,
     "gramaje_gr": null,
     "tamano":    ["a3"],
     "faz":       null,
     "color":     "bn",
     "acabado":   null,
+    "cobertura": null,
     "medida":    null,
     "cantidad":  200,
     "paginas":   null,
@@ -175,6 +177,15 @@ simetría es el punto: lo que el modelo emite es lo que el matcher compara.
   }]
 }
 ```
+
+> **`material` y `cobertura` agregados 2026-07-26.** La versión original del contrato
+> tenía 7 slots de atributo y le faltaban estos dos, que el cliente dice todo el
+> tiempo: *"quiero una lona"*, *"un cartel en PVC"*, *"25% de cobertura"*. Sin ellos
+> "lona" viaja dentro de `frase_cliente` y resuelve por substring — justo el
+> mecanismo que la atomización viene a matar. Son **9 slots de atributo**, y la
+> simetría con las claves atomizadas se mantiene: `material` cubre los 19 productos
+> donde `papel` no aplica (lonas, vinilos, PVC, corrugado, cartón) y `cobertura` los
+> 12 variantes de ploteo.
 
 Reglas del prompt, cortas y explícitas:
 

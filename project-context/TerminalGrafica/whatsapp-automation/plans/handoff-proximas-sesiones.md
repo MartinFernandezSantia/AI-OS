@@ -71,6 +71,19 @@ de cartelería · OPP como impresión sobre ese papel (provisional).
 **E2 split del LLM** → **E3 menús y voz** → **E4 topología** (1 envío + 1 log, −4 nodos) →
 **E5 refinador** (editor de bordes, gate de conservación, kill-switch, ronda A/B).
 
+> ⚠️ **Corrección Martin 2026-07-26 (posterior):** las etiquetas E0/E1/E2 son orden de
+> trabajo, **no entregas separadas para aplicar y testear de a una**. El objetivo es un
+> paquete único que haga que la **próxima pasada de tests en WhatsApp mida mejor**; no
+> tiene sentido que Martin aplique una migración inerte y corra una ronda que no puede
+> cambiar de resultado. Consecuencias concretas: el SQL lleva TAMBIÉN el recreate de
+> `bot.taxonomia` y `bot.variantes` exponiendo `familias` y `atributos` (si no, los
+> atributos son invisibles para todo nodo), y los cambios de Code node viajan en el
+> mismo paquete que la migración.
+>
+> **Anotado para esa construcción:** el contrato de extracción del primer LLM son
+> **9 slots de atributo, no 7** — faltaban `material` y `cobertura` (ver
+> [`e0-atomizacion-catalogo.md`](./e0-atomizacion-catalogo.md) §6).
+
 ### 👉 PRÓXIMO PASO CONCRETO
 Escribir `db/curacion-e0-YYYY-MM-DD.sql`: los dos `alter table`, familias y atributos de los 83
 productos, las unidades de `db/unidades-venta-decisiones.json`, y los parches de la promo
