@@ -103,10 +103,14 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 62. **Ancho máximo por material.** La lona brillo dice 1,52 m. ¿Cuál es el ancho máximo
     de cada material, y qué pasa cuando el trabajo lo supera (paños y costura)? El bot
     necesita saberlo para no cotizar por superficie algo que no entra.
-59. **OPP** — ¿"OPP Brillo" y "OPP Mate/Holográfico/Plata/Crystal/Glitter/Kraft" son
-    impresiones sobre ese papel o el papel suelto? ¿Y los acabados que lista el nombre
-    valen todos lo mismo? (Provisional: se tratan como impresiones y los acabados del
-    nombre como equivalentes al mismo precio.)
+59. **OPP y los papeles especiales** — ¿"OPP Brillo" y "OPP
+    Mate/Holográfico/Plata/Crystal/Glitter/Kraft" son impresiones sobre ese papel o el
+    papel suelto? ¿Y los acabados que lista el nombre valen todos lo mismo?
+    **Ampliada (E0, 2026-07-26):** la misma pregunta vale para el rubro entero —
+    kraft 130/300, vegetal y autoadhesivo están en *Soportes Especiales*, que cuelga
+    de LASER y tiene los mismos precios que la impresión láser (kraft A4 $800 = obra
+    106 A4 $800). ¿Son los cuatro impresiones sobre ese papel? (Provisional: se tratan
+    como impresiones y los acabados del nombre como equivalentes al mismo precio.)
 53. **Anillado** — ¿Cómo eligen el anillo en el mostrador? ¿Por cantidad de hojas?
     Pasame la referencia que usan (hasta cuántas hojas entra cada medida: hasta 3/4,
     1", 1"1/8, 1"1/4, 1"1/2). (El precio ya quedó por trabajo, decisión de Martin.)
@@ -121,6 +125,26 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     taco", ¿qué le preguntan primero, el tamaño o el color?
 58. **Carteles corrugado** — El de 1×0,65 a $19.500, ¿se vende suelto al público o solo
     dentro de la promo? Y las medidas 1×1 / 2×1 / a3, ¿son fijas o cortan a medida?
+
+## 10. Atomización del catálogo (E0, 2026-07-26)
+
+Las tres salieron de comparar atributos entre productos: son pares que quedaron
+**idénticos** o con precios que no cierran. El bot no puede distinguirlos solo.
+
+64. **¿"Cartón" y "Montado sobre cartón" son lo mismo?** — Tienen las mismas 5 medidas
+    pero distinto precio: el 100×70 sale $3.200 en *Cartones* y $6.500 en *Encartonado*.
+    ¿El primero es el cartón crudo (lo vendo y me lo llevo) y el segundo el servicio de
+    montar una impresión sobre cartón? (Provisional: se cargó así, con una marca de
+    "servicio" en el segundo.)
+65. **Las dos cartelerías de PVC tienen el MISMO precio** — "c/ Papel obra 130 gr" y
+    "c/vinilo brillo/mate" cuestan exactamente igual en las 6 medidas ($42.000 el
+    100×70, $20.000 el 35×50, $46.000 el m²…). ¿Es correcto que valgan lo mismo, o
+    quedó una sin actualizar? Si es correcto: ¿en qué caso conviene cada una?
+66. **"Corte x Millar": ¿"millar" es el pack?** — Está cargado a $5.000. ¿Ese precio es
+    por 1.000 cortes (o sea, alguien que pide 500 cortes paga igual $5.000), o es por
+    corte y el "millar" es otra cosa? Hoy el bot lo trata como pack y **no multiplica**,
+    que es la conducta segura; si es por corte estaría sub-cotizando. Pega con la 22
+    (guillotinado / corte chico suelto).
 
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
