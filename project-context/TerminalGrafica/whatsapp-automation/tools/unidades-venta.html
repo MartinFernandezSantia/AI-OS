@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unidades de venta — catálogo TG</title>
+<!--
+  DECISOR DE UNIDADES DE VENTA (entrega 0 — atomización del catálogo).
+  Self-contained: los datos del catálogo van embebidos, no hay backend ni fetch.
+
+  Para qué: en el sistema del mostrador, 143 de 180 variantes tienen "Hoja" como
+  unidad por herencia, incluidas lonas, carteles, anillados y porta banners. Ese
+  campo hace DOS trabajos: lo que el bot dice ("por hoja", "el m²") y —lo que
+  importa— si el número que da el cliente multiplica el precio. De ahí salieron
+  los bugs de plata V2 y V3.
+
+  Cómo se usa: elegí la unidad correcta de cada producto (viene con una sugerida),
+  ajustá si multiplica o no, y marcá con "?" lo que haya que preguntarle a TG.
+  El progreso se guarda solo en localStorage. "Exportar JSON" baja las decisiones
+  para que Claude arme el SQL de curación.
+
+  Los productos con unidades MEZCLADAS entre sus variantes aparecen desglosados
+  variante por variante (son los carteles: una variante dice Hoja y otra m²).
+-->
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1c1b1a; --mut:#6b675f; --line:#dad6cd;
+          --acc:#C2255C; --ok:#2b8a3e; --warn:#e8590c; --bad:#c92a2a; --chip:#efece6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#191817; --panel:#211f1e; --ink:#ece9e4; --mut:#a09a90; --line:#3a3733;
+            --acc:#f06595; --ok:#69db7c; --warn:#ffa94d; --bad:#ff8787; --chip:#2e2c29; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:10px; align-items:center; padding:10px 16px; border-bottom:2px solid var(--acc);
+           background:var(--panel); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 10px 0 0; }
+  .prog { color:var(--mut); font-size:12.5px; font-variant-numeric:tabular-nums; }
+  .prog b { color:var(--ink); }
+  .spacer { flex:1 }
+  button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--panel);
+           color:var(--ink); border-radius:6px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  input[type=search] { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px;
+                       background:var(--panel); color:var(--ink); min-width:200px; }
+  input[type=search]:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+
+  .toolbar { display:flex; gap:8px; align-items:center; padding:9px 16px; border-bottom:1px solid var(--line);
+             background:var(--panel); position:sticky; top:53px; z-index:4; flex-wrap:wrap; font-size:13px; }
+  .seg { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; padding:5px 11px; font-size:13px; }
+  .seg button[aria-pressed="true"] { background:var(--acc); color:#fff; }
+
+  main { padding:14px 16px 90px; max-width:1180px; margin:0 auto; }
+  h2.rub { font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--mut);
+           margin:22px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line); }
+  h2.rub:first-child { margin-top:4px; }
+
+  .row { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+         margin-bottom:7px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 14px; align-items:start; }
+  .row.done { border-left:3px solid var(--ok); }
+  .row.tg { border-left:3px solid var(--warn); }
+  .row .nm { font-weight:600; font-size:13.5px; }
+  .row .vr { color:var(--acc); font-weight:600; }
+  .meta { color:var(--mut); font-size:11.5px; margin-top:3px; display:flex; gap:10px; flex-wrap:wrap;
+          font-variant-numeric:tabular-nums; }
+  .meta .act { background:var(--chip); border-radius:4px; padding:1px 6px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .meta .why { font-style:italic; }
+  .flag { display:inline-block; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+          border:1px solid var(--line); border-radius:3px; padding:0 4px; color:var(--mut); }
+
+  .ctrl { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .units { display:flex; gap:4px; flex-wrap:wrap; }
+  .u { padding:4px 9px; font-size:12.5px; border-radius:5px; border:1px solid var(--line);
+       background:var(--panel); cursor:pointer; white-space:nowrap; }
+  .u[aria-pressed="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .u.sug { border-color:var(--acc); border-style:dashed; }
+  .u.sug[aria-pressed="true"] { background:var(--acc); border-color:var(--acc); border-style:solid; color:#fff; }
+  .mul { font-size:11.5px; color:var(--mut); display:flex; align-items:center; gap:5px; white-space:nowrap; }
+  .mul button { padding:3px 8px; font-size:11.5px; }
+  .mul button[aria-pressed="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .ask { padding:4px 9px; font-size:12.5px; }
+  .ask[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:#fff; }
+
+  footer { position:fixed; left:0; right:0; bottom:0; background:var(--panel); border-top:1px solid var(--line);
+           padding:9px 16px; display:flex; gap:9px; align-items:center; flex-wrap:wrap; z-index:6; }
+  .hint { color:var(--mut); font-size:11.5px; }
+  .empty { color:var(--mut); padding:40px; text-align:center; }
+  @media (max-width:760px){ .row { grid-template-columns:1fr; } .ctrl { justify-content:flex-start; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Unidades de venta</h1>
+  <span class="prog" id="prog"></span>
+  <span class="spacer"></span>
+  <button id="acceptAll">Aceptar todas las sugeridas</button>
+  <button id="acceptView">Aceptar las visibles</button>
+  <button id="reset">Empezar de cero</button>
+</header>
+
+<div class="toolbar">
+  <div class="seg" role="group" aria-label="Filtro">
+    <button data-f="pend" aria-pressed="true">Pendientes</button>
+    <button data-f="susp" aria-pressed="false">Sospechosos</button>
+    <button data-f="tg" aria-pressed="false">Para TG</button>
+    <button data-f="all" aria-pressed="false">Todos</button>
+  </div>
+  <input type="search" id="q" placeholder="Buscar producto o rubro" aria-label="Buscar">
+  <span class="hint" id="count"></span>
+</div>
+
+<main id="list"></main>
+
+<footer>
+  <button class="primary" id="exportJson">Exportar JSON</button>
+  <button id="copyJson">Copiar al portapapeles</button>
+  <span class="hint" id="status"></span>
+  <span class="spacer"></span>
+  <span class="hint">Se guarda solo en este navegador. Sospechoso = la unidad cargada no se corresponde con lo que se vende.</span>
+</footer>
+
+<script>
+const DATA = [{"prod":"Impresión Autocad lineal Color/Negro","rubro":"Autocad Lineal","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":200,"max":800,"nv":3,"vari":null,"act":"Hoja"},{"prod":"Impresión exterior / montado sobre plástico corrugado","rubro":"Cartelería en plástico corrugado","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":10500,"max":48000,"nv":1,"vari":"1 x 0.65 mt","act":"Hoja","precio":19500},{"prod":"Impresión exterior / montado sobre plástico corrugado","rubro":"Cartelería en plástico corrugado","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":10500,"max":48000,"nv":1,"vari":"1 x 1 mt","act":"m2","precio":30000},{"prod":"Impresión exterior / montado sobre plástico corrugado","rubro":"Cartelería en plástico corrugado","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":10500,"max":48000,"nv":1,"vari":"2 x 1 mt","act":"Hoja","precio":48000},{"prod":"Impresión exterior / montado sobre plástico corrugado","rubro":"Cartelería en plástico corrugado","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":10500,"max":48000,"nv":1,"vari":"a3","act":"Hoja","precio":10500},{"prod":"Promoción para inmobiliarias (6 carteles de 1 × 0,65 m)","rubro":"Cartelería en plástico corrugado","pack":true,"pag":false,"sug":"unidad","why":"el precio es por cartel, llevando 6","min":15000,"max":15000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"100X 70 CM","act":"Hoja","precio":42000},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"35X50 CM","act":"Hoja","precio":20000},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"50X70 CM","act":"Hoja","precio":27000},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"60X90 CM","act":"Hoja","precio":35000},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"A3","act":"Hoja","precio":13000},{"prod":"Carteleria en Pvc c/ Papel obra/130 gr","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"m2","act":"m2","precio":46000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"100X 70 CM","act":"Hoja","precio":42000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"35X50 CM","act":"Hoja","precio":20000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"50X70 CM","act":"Hoja","precio":27000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"60X90 CM","act":"Hoja","precio":35000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"A3","act":"Hoja","precio":13000},{"prod":"Carteleria en Pvc c/vinilo brillo/mate","rubro":"Cartelería en PVC","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":13000,"max":46000,"nv":1,"vari":"m2","act":"m2","precio":46000},{"prod":"Cartón","rubro":"Cartones","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":1500,"max":3200,"nv":5,"vari":null,"act":"Hoja"},{"prod":"Montado sobre cartón","rubro":"Encartonado","pack":false,"pag":false,"sug":"unidad","why":"cartel por medida; la variante m2 va aparte","min":3500,"max":6500,"nv":5,"vari":null,"act":"Hoja"},{"prod":"Imanes (impresión laminada y corte)","rubro":"Iman","pack":false,"pag":false,"sug":"unidad","why":"se vende por imán","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Impresión de módulos/apuntes de medicina","rubro":"Impresión Medicina","pack":false,"pag":true,"sug":"pagina","why":"documento por página","min":45,"max":45,"nv":1,"vari":null,"act":"PAGINA"},{"prod":"Vinilo, Lona Brillo/Mate Uv","rubro":"Impresion Ultra Violeta","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":22000,"max":22000,"nv":1,"vari":null,"act":"metro"},{"prod":"Impresión Uv Holografico / Glitter","rubro":"Impresión UV","pack":false,"pag":false,"sug":"m2","why":"los otros UV van por metro; confirmar con TG","min":26000,"max":26000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Impresiones a4 papel obra 106 gr","rubro":"Impresiones (Riso/inkjet)","pack":false,"pag":true,"sug":"pagina","why":"documento por página","min":0,"max":120,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Impresiones papel obra 75 gr","rubro":"Impresiones (Riso/inkjet)","pack":false,"pag":true,"sug":"pagina","why":"documento por página","min":100,"max":600,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Impresiones a3 tonner negro","rubro":"Impresiones a3 Negro Tonner","pack":false,"pag":true,"sug":"pagina","why":"documento por página","min":500,"max":500,"nv":1,"vari":null,"act":"a3"},{"prod":"Ilustración Brillo 150 gr","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":800,"max":1600,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Ilustración Mate 250 gr","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":0,"max":1700,"nv":5,"vari":null,"act":"Hoja"},{"prod":"Ilustración Mate 300 gr","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":900,"max":1800,"nv":4,"vari":null,"act":"Hoja"},{"prod":"OBRA 106 GR","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":800,"max":1500,"nv":4,"vari":null,"act":"Hoja"},{"prod":"OBRA 80 GR","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":750,"max":1200,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Opalina Obra 250 gr","rubro":"Impresiones láser color","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":900,"max":1800,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Encapsulado","rubro":"Laminado/Brillo Mate","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":600,"max":1200,"nv":3,"vari":null,"act":"Hoja"},{"prod":"Laminados","rubro":"Laminado/Brillo Mate","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":330,"max":850,"nv":3,"vari":null,"act":"Hoja"},{"prod":"A5 ILUST. MATE 250 GR","rubro":"LASER","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":600,"max":600,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Carpetas con Vaina","rubro":"Librería","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":1500,"max":1500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Folios a4/Oficio","rubro":"Librería","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":500,"max":500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Sobre a3","rubro":"Librería","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":1200,"max":1200,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Sobre a4","rubro":"Librería","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":700,"max":700,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Sobre Ingles","rubro":"Librería","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":500,"max":500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Lona Back Light","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":18000,"max":18000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Lona Front Brillo","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":16000,"max":16000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Lona Mate","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":18000,"max":18000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Microperforado","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":18000,"max":18000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Vinilo Brillo Satinado","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":16000,"max":16000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Vinilo Cristal","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":18000,"max":18000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"Vinilo Mate","rubro":"Lonas y vinilos","pack":false,"pag":false,"sug":"m2","why":"ya está cargado como metro cuadrado","min":18000,"max":18000,"nv":1,"vari":null,"act":"Metro Cuadrado"},{"prod":"100 Tarjetas Color/Negro","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":12000,"max":17000,"nv":4,"vari":null,"act":"Hoja"},{"prod":"100 Tarjetas Papel Kraft 280 gr","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":16000,"max":22000,"nv":2,"vari":null,"act":"hoja"},{"prod":"1000 Tarjetas Color/Negro","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":42000,"max":59000,"nv":4,"vari":null,"act":"Hoja"},{"prod":"500 Tarjetas Color/Negro","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":28000,"max":45000,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Carpetas de presentación a4 laminadas brillo/mate","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":0,"max":0,"nv":1,"vari":null,"act":"hoja"},{"prod":"Carpetas de presentación a4 s/laminar","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":0,"max":0,"nv":1,"vari":null,"act":"hoja"},{"prod":"Folletos 10x15 cm papel ilustracion brillo 150 gr","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":66000,"max":300000,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Folletos 10x15 cm papel obra de 75 gr b/n","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":12000,"max":49000,"nv":4,"vari":null,"act":"hoja"},{"prod":"Folletos 10x15 cm papel obra de 75 gr color inkjet","rubro":"Piezas gráficas","pack":true,"pag":false,"sug":"pack","why":"el nombre ya trae la cantidad del pack","min":14000,"max":59000,"nv":4,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 10x15 cm color","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 10x15 cm negro","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 10x7 cm color","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 10x7 cm negro","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 15x21 cm color","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Tacos / Emblocados 15x21 cm negro","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende el taco entero","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Talonarios Rifas 100 numeros","rubro":"Piezas gráficas","pack":false,"pag":false,"sug":"unidad","why":"se vende por talonario, no por rifa","min":0,"max":0,"nv":2,"vari":null,"act":"Hoja"},{"prod":"Carnet 9x13 cm","rubro":"Plastificado","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":1500,"max":1500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Cocodrilo","rubro":"Plastificado","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":800,"max":800,"nv":1,"vari":null,"act":"unidad"},{"prod":"Plastificado a3","rubro":"Plastificado","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":3000,"max":3000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Plastificado A4","rubro":"Plastificado","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":2200,"max":2200,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Plastificado Oficio","rubro":"Plastificado","pack":false,"pag":false,"sug":"unidad","why":"servicio sobre una pieza","min":2400,"max":2400,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Lineal obra 90 gr Color/Negro","rubro":"PLOTEADOS","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":5000,"max":12000,"nv":4,"vari":null,"act":"m2"},{"prod":"Papel 130 gr Recubierto / Encapado","rubro":"PLOTEADOS","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":10000,"max":16000,"nv":4,"vari":null,"act":"Metro Cuadrado"},{"prod":"Papel Obra Vegetal Color/Negro","rubro":"PLOTEADOS","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":10000,"max":16000,"nv":4,"vari":null,"act":"m2"},{"prod":"Porta Banner 2 velas 0.90 x 1.90 mt","rubro":"Productos","pack":false,"pag":false,"sug":"unidad","why":"es un objeto terminado","min":32000,"max":32000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Porta Banner Roll up 0.85 x 2.00 mt","rubro":"Productos","pack":false,"pag":false,"sug":"unidad","why":"es un objeto terminado","min":38000,"max":38000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"OPP Brillo","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":2400,"max":2400,"nv":1,"vari":null,"act":"Hoja"},{"prod":"OPP Mate/Holografico/Plata/Crystal/Glitter/Kraft","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":2500,"max":2500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Papel Autoadhesivo Brillo / Split","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":0,"max":1800,"nv":3,"vari":null,"act":"Hoja"},{"prod":"Papel Kraft 130 Gr","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":800,"max":1600,"nv":2,"vari":null,"act":"Hoja"},{"prod":"Papel Kraft 300 Gr","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":1000,"max":2000,"nv":2,"vari":null,"act":"Hoja"},{"prod":"Sobre Ingles","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"unidad","why":"se vende de a uno","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Vegetal","rubro":"Soportes Especiales","pack":false,"pag":false,"sug":"hoja","why":"impresión que se cobra por hoja","min":1000,"max":2000,"nv":2,"vari":null,"act":"Hoja"},{"prod":"Abrochado de Revistas","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":1000,"max":1000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Anillado Metálico a4/a3","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":3200,"max":4600,"nv":5,"vari":null,"act":"Hoja"},{"prod":"Anillado Plastico a3","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":3200,"max":3200,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Anillado plástico a4/oficio","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":2400,"max":2400,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Armado de Revistas. Plegado/refilado y 2 ganchos","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":2000,"max":2000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Bolsillos banner","rubro":"Taller","pack":false,"pag":false,"sug":"metro","why":"ya está cargado como metro lineal","min":1000,"max":1000,"nv":1,"vari":null,"act":"Metro lineal"},{"prod":"Corte x Millar","rubro":"Taller","pack":true,"pag":false,"sug":"pack","why":"el precio ya viene por cantidad de piezas","min":5000,"max":5000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Emblocados con cartón (lado corto o largo)","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":450,"max":800,"nv":5,"vari":null,"act":"Hoja"},{"prod":"Encuadernado","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Numeradora","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":5000,"max":5000,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Ojales","rubro":"Taller","pack":false,"pag":false,"sug":"unidad","why":"se cobra por cada uno","min":500,"max":500,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Perforaciones","rubro":"Taller","pack":true,"pag":false,"sug":"pack","why":"el precio ya viene por cantidad de piezas","min":4000,"max":6000,"nv":2,"vari":null,"act":"Hoja"},{"prod":"Puntas Redondeadas","rubro":"Taller","pack":true,"pag":false,"sug":"pack","why":"el precio ya viene por cantidad de piezas","min":3000,"max":7000,"nv":3,"vari":null,"act":"Hoja"},{"prod":"Refilado de libros","rubro":"Taller","pack":false,"pag":false,"sug":"trabajo","why":"servicio: se cobra por trabajo terminado","min":0,"max":0,"nv":1,"vari":null,"act":"Hoja"},{"prod":"Trazado/troquelado manual de papel","rubro":"Taller","pack":false,"pag":false,"sug":"unidad","why":"se cobra por cada uno","min":50,"max":50,"nv":1,"vari":null,"act":"Hoja"}];
+
+const UNIDADES = [
+  ['pagina', 'página'],
+  ['hoja',   'hoja'],
+  ['unidad', 'unidad'],
+  ['trabajo','trabajo'],
+  ['pack',   'pack'],
+  ['m2',     'm²'],
+  ['metro',  'metro lineal'],
+];
+// si el número que da el cliente multiplica el precio de lista, y con qué
+const MULT_DEFAULT = { pagina:true, hoja:true, unidad:true, trabajo:true, pack:false, m2:false, metro:false };
+const KEY = 'tg-unidades-v1';
+
+const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const idOf = r => r.prod + '||' + (r.vari || '');
+const fmt = n => '$' + new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(n);
+// sospechoso = lo cargado no coincide con lo sugerido
+const esSospechoso = r => norm(r.act).replace('metro cuadrado','m2') !== norm(r.sug);
+
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) { state = {}; }
+const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+const get = id => state[id] || {};
+
+let filtro = 'pend', query = '';
+
+function visibles() {
+  const q = norm(query);
+  return DATA.filter(r => {
+    const st = get(idOf(r));
+    if (filtro === 'pend' && st.unidad) return false;
+    if (filtro === 'susp' && !esSospechoso(r)) return false;
+    if (filtro === 'tg'   && !st.tg) return false;
+    if (q && !norm(r.prod + ' ' + (r.vari||'') + ' ' + r.rubro).includes(q)) return false;
+    return true;
+  });
+}
+
+function render() {
+  const list = document.getElementById('list');
+  const rows = visibles();
+  list.innerHTML = '';
+  if (!rows.length) {
+    list.innerHTML = '<p class="empty">Nada para mostrar con este filtro.</p>';
+  } else {
+    let rubro = null;
+    for (const r of rows) {
+      if (r.rubro !== rubro) {
+        rubro = r.rubro;
+        const h = document.createElement('h2');
+        h.className = 'rub'; h.textContent = rubro;
+        list.appendChild(h);
+      }
+      list.appendChild(fila(r));
+    }
+  }
+  const decid = DATA.filter(r => get(idOf(r)).unidad).length;
+  const tg = DATA.filter(r => get(idOf(r)).tg).length;
+  document.getElementById('prog').innerHTML =
+    '<b>' + decid + '</b> de ' + DATA.length + ' decididos · ' + tg + ' marcados para TG';
+  document.getElementById('count').textContent = rows.length + ' en pantalla';
+}
+
+function fila(r) {
+  const id = idOf(r);
+  const st = get(id);
+  const el = document.createElement('div');
+  el.className = 'row' + (st.unidad ? ' done' : '') + (st.tg ? ' tg' : '');
+
+  const izq = document.createElement('div');
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  nm.textContent = r.prod;
+  if (r.vari) {
+    const v = document.createElement('span');
+    v.className = 'vr'; v.textContent = '  ·  ' + r.vari;
+    nm.appendChild(v);
+  }
+  izq.appendChild(nm);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const act = document.createElement('span');
+  act.className = 'act'; act.textContent = 'cargado: ' + r.act;
+  meta.appendChild(act);
+  const precio = document.createElement('span');
+  precio.textContent = r.vari ? fmt(r.precio)
+    : (r.min === r.max ? fmt(r.min) : fmt(r.min) + ' a ' + fmt(r.max) + ' · ' + r.nv + ' opciones');
+  meta.appendChild(precio);
+  if (r.pack) meta.appendChild(chip('por_pack'));
+  if (r.pag)  meta.appendChild(chip('por_pagina'));
+  if (esSospechoso(r)) meta.appendChild(chip('sospechoso'));
+  const why = document.createElement('span');
+  why.className = 'why'; why.textContent = r.why;
+  meta.appendChild(why);
+  izq.appendChild(meta);
+  el.appendChild(izq);
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'ctrl';
+
+  const units = document.createElement('div');
+  units.className = 'units';
+  for (const [val, label] of UNIDADES) {
+    const b = document.createElement('button');
+    b.className = 'u' + (val === r.sug ? ' sug' : '');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(st.unidad === val));
+    b.title = val === r.sug ? 'Sugerida' : '';
+    b.addEventListener('click', () => {
+      const cur = get(id);
+      if (cur.unidad === val) { delete state[id]; }
+      else { state[id] = { unidad: val, multiplica: cur.unidad ? cur.multiplica : MULT_DEFAULT[val], tg: !!cur.tg }; }
+      save(); render();
+    });
+    units.appendChild(b);
+  }
+  ctrl.appendChild(units);
+
+  if (st.unidad) {
+    const mul = document.createElement('span');
+    mul.className = 'mul';
+    mul.appendChild(document.createTextNode('multiplica'));
+    for (const [v, lab] of [[true,'sí'],[false,'no']]) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = lab;
+      b.setAttribute('aria-pressed', String(!!st.multiplica === v));
+      b.addEventListener('click', () => { state[id].multiplica = v; save(); render(); });
+      mul.appendChild(b);
+    }
+    ctrl.appendChild(mul);
+  }
+
+  const ask = document.createElement('button');
+  ask.className = 'ask'; ask.type = 'button'; ask.textContent = '? TG';
+  ask.title = 'Marcar para preguntarle a TG';
+  ask.setAttribute('aria-pressed', String(!!st.tg));
+  ask.addEventListener('click', () => {
+    const cur = get(id);
+    state[id] = { unidad: cur.unidad || '', multiplica: cur.multiplica, tg: !cur.tg };
+    if (!state[id].unidad && !state[id].tg) delete state[id];
+    save(); render();
+  });
+  ctrl.appendChild(ask);
+
+  el.appendChild(ctrl);
+  return el;
+}
+
+function chip(t) { const s = document.createElement('span'); s.className = 'flag'; s.textContent = t; return s; }
+
+function aceptar(rows) {
+  for (const r of rows) {
+    if (!r.sug) continue;
+    const id = idOf(r), cur = get(id);
+    if (cur.unidad) continue;
+    state[id] = { unidad: r.sug, multiplica: MULT_DEFAULT[r.sug], tg: !!cur.tg };
+  }
+  save(); render();
+}
+
+document.getElementById('acceptAll').addEventListener('click', () => aceptar(DATA));
+document.getElementById('acceptView').addEventListener('click', () => aceptar(visibles()));
+document.getElementById('reset').addEventListener('click', () => {
+  if (!confirm('Se borran todas las decisiones tomadas. ¿Seguro?')) return;
+  state = {}; save(); render();
+});
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  filtro = b.dataset.f;
+  document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+document.getElementById('q').addEventListener('input', e => { query = e.target.value; render(); });
+
+function payload() {
+  const dec = DATA.filter(r => { const s = get(idOf(r)); return s.unidad || s.tg; }).map(r => {
+    const s = get(idOf(r));
+    return {
+      producto: r.prod,
+      variante: r.vari,
+      rubro: r.rubro,
+      unidad_actual: r.act,
+      unidad_venta: s.unidad || null,
+      multiplica: s.unidad ? !!s.multiplica : null,
+      consultar_tg: !!s.tg,
+      sugerida: r.sug,
+      acepto_sugerida: s.unidad === r.sug,
+    };
+  });
+  return JSON.stringify({
+    generado: new Date().toISOString(),
+    total_filas: DATA.length,
+    decididas: dec.filter(d => d.unidad_venta).length,
+    para_tg: dec.filter(d => d.consultar_tg).length,
+    decisiones: dec,
+  }, null, 2);
+}
+
+function flash(msg) {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  setTimeout(() => { s.textContent = ''; }, 2600);
+}
+
+document.getElementById('exportJson').addEventListener('click', () => {
+  const blob = new Blob([payload()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'unidades-venta-decisiones.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  flash('Archivo generado.');
+});
+document.getElementById('copyJson').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(payload()); flash('Copiado.'); }
+  catch (e) { flash('No se pudo copiar; usá Exportar JSON.'); }
+});
+
+render();
+</script>
+</body>
+</html>
