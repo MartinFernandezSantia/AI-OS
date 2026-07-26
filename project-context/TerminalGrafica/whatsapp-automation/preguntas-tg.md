@@ -90,9 +90,9 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 53. **Anillado** — ¿Cómo eligen el anillo en el mostrador? ¿Por cantidad de hojas?
     Pasame la referencia que usan (hasta cuántas hojas entra cada medida: hasta 3/4,
     1", 1"1/8, 1"1/4, 1"1/2). (El precio ya quedó por trabajo, decisión de Martin.)
-54. **Packs de tarjetas** — ¿Cobran algo extra por armar dos packs de 100 en vez de uno
-    solo? Arriba de 1000, ¿siguen sumando packs o lo cotizan aparte? (Qué mostrarle al
-    cliente ya lo decidió Martin: los dos tiers con precio, después de la variante.)
+54. **Packs de tarjetas** — Arriba de 1000, ¿siguen sumando packs o lo cotizan aparte?
+    (Lo demás resuelto: no se cobra extra por armar dos packs, y qué mostrarle al
+    cliente lo decidió Martin — los dos tiers con precio, después de la variante.)
 55. **Promo inmobiliarias** — Llevando 7 u 8 carteles, ¿los que pasan de 6 también van
     a $15.000 o vuelven a $19.500? ¿Y la promo es solo para inmobiliarias?
 56. **Talonarios** — "Rifas 100 números": ¿el precio cargado es por talonario de 100 o
@@ -164,6 +164,7 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → sinónimos de urgencia **sacados** en `db/curacion-2026-07-24b.sql` (24 hs + ocultos 48/72/96); "anillado urgente" → sin_match (Martin, 2026-07-24). |
 | **Papel por defecto** | **Obra 75 gr, simple faz, b/n** (Martin, 2026-07-26). Se muestra ese con la puerta abierta ("¿lo necesitás en color o en otro papel?"), nunca como default silencioso. Cierra la ex-pregunta 48. Riesgo anotado: si quería color, el b/n sub-cotiza 4× y lo tapa la puerta abierta, no el default. |
 | **Packs de tarjetas — qué mostrar** | Primero se **confirma la variante** (los packs comparten variantes a precios distintos), y recién ahí, si la cantidad no cae en un tier, se muestran **el tier de abajo y el de arriba con sus precios**, aclarando que se trabaja por packs (Martin, 2026-07-26). Reemplaza "próximo tier hacia arriba". |
+| **Extra por armar varios packs** | **No se cobra extra** (Martin, 2026-07-26). Lo que suele pasar es que por la diferencia de precio al cliente le conviene el tier de arriba: 3 packs de 100 son $36.000 y uno de 500 sale $28.000. El bot muestra las dos cuentas y decide el cliente. |
 | **Anillado / encuadernado / refilado** | `unidad_venta = trabajo`: se informa el precio del ítem y **nunca se multiplica** por hojas ni por páginas (Martin, 2026-07-26). Cierra el bug V2. |
 | Cuantización de pack | **SUPERSEDED por "Packs de tarjetas — qué mostrar" (2026-07-26).** La regla vieja era "próximo tier hacia arriba" (150 → el de 500, Martin 2026-07-24); el consejo Opus mostró que sobre-cotiza (150 simple faz: $28.000 contra $24.000 de 2×100; folletos ilustración 1500: 20% de más) y que la banda no es uniforme. |
 | Defaults de oficio | **Actualizado 2026-07-26: hay default, con puerta abierta.** La regla del 2026-07-24 ("NO hay defaults, el bot muestra todo o pregunta") queda reemplazada: si la familia tiene un default curado se muestra ese y se ofrece el resto en la misma frase. Nunca un default silencioso. Primer default firmado: impresiones → obra 75 gr simple faz b/n. |
