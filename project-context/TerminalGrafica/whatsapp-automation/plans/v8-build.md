@@ -200,6 +200,14 @@ mapa**, que viene de la base.
 **El gate compara valores, no layout** — y por eso no tiene ninguna regla de "conteo de líneas
 numeradas": justamente queremos que deshaga el menú.
 
+> **CORRECCIÓN (consejo Opus, 2026-07-26).** Esta afirmación era falsa en dos puntos concretos,
+> y el red-team pasó 12 de 19 ataques con veredicto `ok`. El gate protegía la plata pero **no el
+> nombre del producto** (renombrar `Cartón` a `montado sobre cartón` pasaba las cinco reglas) **ni
+> el hedge** (la regla 4 permite explícitamente que el léxico aparezca *menos* veces, así que
+> borrar *"el total te lo confirma el equipo"* pasaba). **El hedge es un valor**, no layout: marca
+> los casos donde el sistema decidió no dar un total firme. Arreglado en
+> [`v8-1-build.md`](./v8-1-build.md) §1.2 con las reglas 2b y 4b.
+
 | # | Regla | Qué evita |
 |---|---|---|
 | 1 | todos los tokens, una vez cada uno, **en el mismo orden** | que le dé al 130 el precio del 300 |

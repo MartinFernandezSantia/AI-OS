@@ -9,16 +9,31 @@
 
 ---
 
-## 🟩 PAQUETE E0 + v8 — CONSTRUIDO 2026-07-26, PENDIENTE DE APLICAR (LEER PRIMERO)
+## 🟩 PAQUETE E0 + v8.1 — CONSTRUIDO 2026-07-26, PENDIENTE DE APLICAR (LEER PRIMERO)
 
-**Los dos archivos se aplican JUNTOS. Ninguno solo sirve.**
+**Los tres archivos se aplican JUNTOS. Ninguno solo sirve.**
+**El runbook que manda es [`v8-1-build.md`](./v8-1-build.md) §6**, que incluye un paso manual
+que no estaba antes (enganchar el error workflow desde la UI).
 
 - [`db/curacion-e0-2026-07-26.sql`](../db/curacion-e0-2026-07-26.sql) — atomización: 83
-  productos, 139 variantes, 21 claves de atributo + el recreate de las dos vistas.
-- [`n8n/flows/faq-bot-v8.json`](../n8n/flows/faq-bot-v8.json) — el motor que las lee.
-  `faq-bot-v7.json` queda INTACTO como rollback.
-- Plan y runbook completos: [`v8-build.md`](./v8-build.md) · registro de la curación:
-  [`db/curacion-e0-2026-07-26.md`](../db/curacion-e0-2026-07-26.md)
+  productos, 139 variantes, 21 claves de atributo + el recreate de las dos vistas + las columnas
+  `borrador`/`final`/`senales` de `bot.decisiones`.
+- [`db/curacion-voz-2026-07-26.sql`](../db/curacion-voz-2026-07-26.sql) — vocabulario de
+  mostrador en el default (tenía la lista de sinónimos **vacía**) + poda de 4 hijacks medidos,
+  el peor de 82×.
+- [`n8n/flows/faq-bot-v8.json`](../n8n/flows/faq-bot-v8.json) — el motor que las lee, ya con
+  v8.1 encima. `faq-bot-v7.json` queda INTACTO como rollback.
+- Planes: [`v8-build.md`](./v8-build.md) (el motor y la voz) · [`v8-1-build.md`](./v8-1-build.md)
+  (bloqueantes + señal) · acta del consejo:
+  [`consejo-opus-resolucion-producto.md`](./consejo-opus-resolucion-producto.md) · registro de
+  la curación: [`db/curacion-e0-2026-07-26.md`](../db/curacion-e0-2026-07-26.md)
+
+> **⚠️ v8 a secas NO se aplica.** Un consejo Opus de 6 lentes (2026-07-26) encontró que el
+> compositor había matado **los cuatro anti-loops** — el bot podía repreguntar indefinidamente
+> sin derivar nunca a mail, pagando cada vuelta — y que el gate del compositor no protegía ni el
+> nombre del producto ni el hedge (12 de 19 ataques pasaban con veredicto `ok`). Los dos bugs
+> eran de v8 y el harness no los veía porque sus mocks codificaban la premisa anterior al
+> compositor. Arreglados en v8.1 junto con otros 3 bloqueantes.
 
 **Qué desbloquea — MOTOR:** doble faz por hoja (200 páginas: $35.600 → **$17.600**) · los 3
 bugs de plata (promo bajo el mínimo, taller por trabajo, talonarios) · la variante resuelve por
