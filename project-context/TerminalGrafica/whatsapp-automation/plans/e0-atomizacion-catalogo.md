@@ -236,6 +236,30 @@ queda pendiente `ancho_max` por material (pregunta 62): con 1,52 m de ancho, un 
 PVC: 100×70 cm vale $42.000 y al ritmo del m² daría $32.200; 35×50 vale $20.000 contra
 $8.050. Multiplicar ahí sub-cotiza hasta 60%.
 
+## 6 quater. El doble faz se cobra por HOJA (Martin, 2026-07-26)
+
+Salió de la pasada de unidades y **cierra la pregunta 31**, abierta desde el build del
+cotizador. Las impresiones se cobran por hoja: en simple faz se cobra la hoja, y en doble
+faz no se cobra por página porque **el precio ya está ajustado a la hoja**.
+
+Se comprueba en la lista: en obra 75, simple faz b/n $100 y doble faz b/n $150. La hoja
+impresa de los dos lados sale 1,5 veces la de un lado, no 2. Si el precio fuera por página,
+el doble faz debería ser la mitad del simple, no el 150%.
+
+**Cambios en el motor:**
+
+- `hojas = (faz === 'simple' ? paginas : Math.ceil(paginas / 2)) * copias`
+- el bracket se elige por **hojas**, no por páginas (reemplaza el `max()` de dos lookups)
+- **se levanta el `dfGate`**: el doble faz pasa a dar total
+- el render dice hojas y páginas: "por 200 páginas a doble faz (100 hojas)…"
+
+Impacto medido con la tabla real del 106 doble faz b/n: un documento de 200 páginas daba
+$35.600 cotizando por página y da **$17.600** cotizando por hoja. El gate existía justo
+para evitar ese 2×; ahora hay dato para calcularlo bien.
+
+*Ojo al implementar:* la tabla del 106 doble faz b/n no es monótona (11-100 a $176 y
+101-500 a $178), así que el bracket se toma tal cual, sin asumir que baja siempre.
+
 ## 7. Qué le preguntamos a TG
 
 Las nuevas están en `preguntas-tg.md` (51 a 59). Las que siguen bloqueando algo de E0:
