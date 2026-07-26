@@ -26,7 +26,7 @@ const decidir = (over = {}) => ({ conversationId: 9, accountId: 1, userMessage: 
 async function main() {
   // ===== PARSEAR =====
   const parsear = (llmContent, dec) => runNodeCode('parsear.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : {} }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : {} }) }),
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
   });
 
@@ -66,7 +66,7 @@ async function main() {
 
   // ===== ARMAR =====
   const armar = (precioObj, rows, dec, errored) => runNodeCode('armar.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
     $input: { all: () => rows.map((j) => ({ json: j })).concat(errored ? [{ json: { error: { message: 'column x does not exist' } } }] : []), first: () => ({ json: rows[0] || {} }) },
   });
 
@@ -334,7 +334,7 @@ async function main() {
 
   // ===== C2: parsear opciones/volver + menu deterministico + ruta =====
   const parsearC2 = (llmContent, dec, ruta) => runNodeCode('parsear.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { rutaCotizador: !!ruta } : {} }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { rutaCotizador: !!ruta, borradoresPrevios: dec.borradoresPrevios || [] } : {} }) }),
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
   });
 
@@ -353,7 +353,7 @@ async function main() {
 
   // helper menu
   const menu = (opcionesObj, rows, dec) => runNodeCode('menu.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { opciones: opcionesObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { opciones: opcionesObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
     $input: { all: () => rows.map((j) => ({ json: j })), first: () => ({ json: rows[0] || {} }) },
   });
   const vRow = (prod, vari, extra = {}) => ({ producto_id: 'p-' + prod, nombre_canonico: prod, variante: vari, por_pagina: false, n_reglas_cantidad: 1, tiene_override: false, precio_lista: 100, ...extra });
@@ -384,7 +384,7 @@ async function main() {
   const rowsLoop = [vRow('Prod A', 'x')];
   const primera = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?' }));
   const menuTxt = primera[0].json.reply;
-  r = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?', lastBotReplies: [menuTxt, menuTxt] }));
+  r = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?', borradoresPrevios: [menuTxt, menuTxt] }));
   console.log('M5 anti-loop:', r[0].json.antiLoop === true && r[0].json.reply.includes('terminalgrafica@gmail.com') && r[0].json.notas.includes('anti-loop') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // helper mensajes (ruta)
@@ -444,7 +444,7 @@ async function main() {
   // A44: anti-loop de repregunta — la misma repregunta ya salio 2 veces -> email.
   const repregunta = 'No estoy seguro de qué producto es. ¿Me lo decís de nuevo o me contás para qué lo necesitás? Así te paso las opciones y el precio.';
   r = await armar({ ...pBase, producto: 'Zzz', variante: '' },
-    [], decidir({ userMessage: 'zzz', lastBotReplies: [repregunta, repregunta] }));
+    [], decidir({ userMessage: 'zzz', borradoresPrevios: [repregunta, repregunta] }));
   console.log('A44 repregunta anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica@gmail.com') ? 'OK' : 'FAIL ' + r[0].json.accionLog + ' | ' + r[0].json.reply);
 
   // A45: sobre una repregunta NO se renderizan extras (reapareceran en el
@@ -585,7 +585,7 @@ async function main() {
 
   // helper aplicar aclarador
   const aplicarAcl = (llmContent, arpJson, dec) => runNodeCode('aplicar-acl.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Respuesta Precio' ? arpJson : {} }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : name === 'Armar Respuesta Precio' ? arpJson : {} }) }),
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }) },
   });
   const arpJ = { conversationId: 9, accountId: 1, userMessage: 'kraft', reply: 'DEFAULT', accionLog: 'pregunto_opciones', pedidoSlots: { producto: '', variante: '', cantidad: null, paginas: null, copias: null } };
@@ -606,12 +606,12 @@ async function main() {
   r = await aplicarAcl('esto no es json', arpJ, decidir());
   console.log('ACL10 degradado:', r[0].json.reply === 'DEFAULT' && r[0].json.notas.includes('degradado') ? 'OK' : 'FAIL ' + r[0].json.reply);
   // ACL11: anti-loop — misma pregunta 2 veces recientes → email.
-  r = await aplicarAcl(JSON.stringify({ accion: 'preguntar', reply: '¿130 o 300?' }), arpJ, decidir({ lastBotReplies: ['¿130 o 300?', '¿130 o 300?'] }));
+  r = await aplicarAcl(JSON.stringify({ accion: 'preguntar', reply: '¿130 o 300?' }), arpJ, decidir({ borradoresPrevios: ['¿130 o 300?', '¿130 o 300?'] }));
   console.log('ACL11 anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') && r[0].json.notas.includes('anti-loop') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // helper gemelo (2ª pasada): lee slots de $('Aplicar Aclarador')
   const armar2 = (precioObj, rows, dec) => runNodeCode('armar2.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
     $input: { all: () => rows.map((j) => ({ json: j })), first: () => ({ json: rows[0] || {} }) },
   });
   // ACL12: gemelo precia el producto resuelto (happy path idéntico al original;
@@ -745,7 +745,7 @@ async function main() {
 
   // V8-16: el eje respeta el anti-loop de repregunta (2 iguales -> email).
   r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
-    [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', lastBotReplies: ['¿De qué gramaje lo necesitás?', '¿De qué gramaje lo necesitás?'] }));
+    [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', borradoresPrevios: ['¿De qué gramaje lo necesitás?', '¿De qué gramaje lo necesitás?'] }));
   console.log('V8-17 gemelos anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -766,7 +766,7 @@ async function main() {
   console.log('N3 sobre answer:', r[0].json.origen === 'answer' && r[0].json.accion === 'cotizador_answer' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
 
   const prompt = (json) => runNodeCode('prompt-comp.js', {
-    $: () => ({ first: () => ({ json: {} }) }),
+    $: (name) => ({ first: () => ({ json: name === 'Armar Mensajes LLM' ? { nombresCatalogo: json.nombresCatalogo || [] } : {} }) }),
     $input: { first: () => ({ json }), all: () => [{ json }] },
   });
   const aplicar = (promptJson, contenido) => runNodeCode('aplicar-comp.js', {
@@ -828,6 +828,90 @@ async function main() {
   // C13: el verdicto queda en notas como canario para la auditoria offline.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]] y $9. [[MAIL]]' }));
   console.log('C13 canario en notas:', String(r[0].json.notas || '').includes('(compositor:') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1 — ANTI-LOOP CONTRA EL BORRADOR
+  // El compositor parafrasea, asi que lo que sale por Chatwoot ya nunca coincide
+  // con el borrador. Los 4 anti-loops comparaban contra Chatwoot: quedaron
+  // muertos y el bot podia repreguntar para siempre sin derivar nunca a mail.
+  // Estos casos fijan la premisa nueva Y la vieja, para que no vuelva.
+  // ══════════════════════════════════════════════════════════════════════════
+  const REPRE = 'No estoy seguro de qué producto es. ¿Me lo decís de nuevo o me contás para qué lo necesitás? Así te paso las opciones y el precio.';
+  const COMPUESTO = 'Perdoná, no me queda claro qué necesitás. ¿Me contás un poco más?';
+
+  // L1: el cliente vio texto COMPUESTO (distinto del borrador) y el anti-loop
+  //     igual dispara, porque compara borradores. Es el bug que se arreglo.
+  r = await armar({ ...pBase, producto: 'Zzz', variante: '' }, [],
+    decidir({ userMessage: 'zzz', lastBotReplies: [COMPUESTO, COMPUESTO], borradoresPrevios: [REPRE, REPRE] }));
+  console.log('L1 anti-loop con texto compuesto:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica@gmail.com') ? 'OK' : 'FAIL ' + r[0].json.accionLog);
+
+  // L2: sin borradores repetidos NO dispara (no hay falso positivo por el hecho
+  //     de que Chatwoot muestre dos mensajes parecidos).
+  r = await armar({ ...pBase, producto: 'Zzz', variante: '' }, [],
+    decidir({ userMessage: 'zzz', lastBotReplies: [COMPUESTO, COMPUESTO], borradoresPrevios: ['otra cosa'] }));
+  console.log('L2 sin repeticion real no dispara:', r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL ' + r[0].json.accionLog);
+
+  // L3: el menu, mismo criterio.
+  const m1 = await menu({ productos: ['A'], faltan: [] }, rowsLoop, decidir({ userMessage: '?' }));
+  r = await menu({ productos: ['A'], faltan: [] }, rowsLoop,
+    decidir({ userMessage: '?', lastBotReplies: [COMPUESTO, COMPUESTO], borradoresPrevios: [m1[0].json.reply, m1[0].json.reply] }));
+  console.log('L3 menu anti-loop con compuesto:', r[0].json.antiLoop === true ? 'OK' : 'FAIL');
+
+  // L4: el aclarador, mismo criterio.
+  r = await aplicarAcl(JSON.stringify({ accion: 'preguntar', reply: '¿130 o 300?' }), arpJ,
+    decidir({ lastBotReplies: [COMPUESTO, COMPUESTO], borradoresPrevios: ['¿130 o 300?', '¿130 o 300?'] }));
+  console.log('L4 aclarador anti-loop con compuesto:', r[0].json.accionLog === 'informo_precio' ? 'OK' : 'FAIL ' + r[0].json.accionLog);
+
+  // L5: answer repetido — el noop tambien compara borradores.
+  r = await parsear(JSON.stringify({ action: 'answer', reply: 'Abrimos de 9 a 18.', motivo: '' }),
+    decidir({ lastBotReplies: [COMPUESTO, COMPUESTO], borradoresPrevios: ['Abrimos de 9 a 18.', 'Abrimos de 9 a 18.'] }));
+  console.log('L5 answer noop con compuesto:', r[0].json.action === 'noop' ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1 — EL GATE PROTEGE EL NOMBRE Y EL HEDGE
+  // El gate de v8 cuidaba la plata y no el nombre: renombrar "Cartón" ($2.000) a
+  // "montado sobre cartón" ($4.000) pasaba las 5 reglas (tokens intactos, sin $
+  // propio, mismos digitos, lexico no aumenta, largo similar). Y la regla 4
+  // permite que el lexico aparezca MENOS veces, asi que borrar el caveat pasaba.
+  // ══════════════════════════════════════════════════════════════════════════
+  const CAT = ['Cartón', 'Montado sobre cartón', 'Lona front brillo', 'Vinilo/Lona UV Brillo',
+    'Impresiones papel obra 75 gr', 'Papel Kraft 130 Gr', 'Papel Kraft 300 Gr', 'Carpetas con Vaina'];
+
+  // G1: renombra a OTRO producto real -> RECHAZO. El precio era correcto; el nombre no.
+  let pg = (await prompt({ origen: 'precio', reply: 'La opción 35X50 CM de Cartón sale $2.000,00.', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'El montado sobre cartón de 35X50 CM te sale [[P1]].' }));
+  console.log('G1 rechaza producto ajeno:', String(r[0].json.compositor).startsWith('nombre_ajeno') && r[0].json.final === pg.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G2: la variante de 2 letras tambien cuenta (lona front brillo -> lona UV).
+  pg = (await prompt({ origen: 'precio', reply: 'La opción Lona Brillo de Lona front brillo sale $16.000,00.', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'La lona uv brillo te sale [[P1]].' }));
+  console.log('G2 rechaza token corto ajeno:', String(r[0].json.compositor).startsWith('nombre_ajeno') ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G3: NO hay falso positivo por singular/plural ni por acortar el nombre.
+  pg = (await prompt({ origen: 'menu', reply: 'Tenemos Papel Kraft 130 Gr y Papel Kraft 300 Gr.', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'El kraft lo tenemos en 130 y en 300 gramos, ¿cuál te sirve?' }));
+  console.log('G3 parafrasis legitima pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G4: borrar el caveat -> RECHAZO. Ese hedge marca que el total NO es firme.
+  pg = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 (precio de lista; el precio final del trabajo te lo confirma el equipo).', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'El A4 te sale [[P1]].' }));
+  console.log('G4 rechaza caveat borrado:', r[0].json.compositor === 'hedge' && r[0].json.final === pg.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G5: "total estimado" -> "precio final" es la misma clase: un estimado presentado
+  //     como firme. Los digitos no cambian, el lexico no aumenta: solo lo caza el hedge.
+  pg = (await prompt({ origen: 'precio', reply: 'Por 100 unidades sale $900,00 c/u — total estimado $90.000,00.', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'Por 100 unidades te queda [[P1]] cada una, precio final [[P2]].' }));
+  console.log('G5 rechaza estimado->firme:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G6: el hedge conservado pasa aunque el resto se reescriba entero.
+  pg = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 (precio de lista; el precio final del trabajo te lo confirma el equipo).', nombresCatalogo: CAT }))[0].json;
+  r = await aplicar(pg, JSON.stringify({ mensaje: 'El A4 te queda [[P1]], que es precio de lista — el final te lo confirma el equipo.' }));
+  console.log('G6 hedge conservado pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // G7: FAIL-SAFE — sin catalogo de nombres el gate de nombre es un no-op, no un
+  //     rechazo masivo. Si Armar Mensajes LLM no lo expuso, el bot sigue hablando.
+  pg = (await prompt({ origen: 'precio', reply: 'La opción 35X50 CM de Cartón sale $2.000,00.' }))[0].json;
+  console.log('G7 sin catálogo el gate es no-op:', Array.isArray(pg.prohibidos) && pg.prohibidos.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(pg.prohibidos));
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

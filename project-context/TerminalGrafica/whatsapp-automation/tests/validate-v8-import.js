@@ -61,7 +61,12 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   'Llamar LLM Respuesta', 'Llamar LLM Nota', 'Llamar LLM Aclarador', 'Log Escalación',
   // topologia unificada + compositor
   'Normalizar Envío', 'Enviar Mensaje', 'Log Turno', 'Armar Prompt Compositor', '¿Componer?',
-  'Llamar LLM Compositor', 'Aplicar Compositor', 'Armar Menu Opciones', 'Aplicar Aclarador', 'Prompt Cotizador']);
+  'Llamar LLM Compositor', 'Aplicar Compositor', 'Armar Menu Opciones', 'Aplicar Aclarador', 'Prompt Cotizador',
+  // v8.1 — bloqueantes del consejo
+  'Get Ruta Cotizador', 'Armar Mensajes LLM', 'Parsear Respuesta',
+  'Enviar Mensaje', 'Mensaje Firewall Refusal', 'Aviso Rate Firewall', 'Mensaje Refusal Tier-2',
+  'Respuesta No-Texto', 'Saludo Bienvenida', 'Mensaje Anti-Injection', 'Mensaje Escalación',
+  'Mensaje Cap Email', 'Label Escalación', 'Label Cap']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
@@ -107,6 +112,55 @@ if (!gp.includes('v.atributos')) E('Get Precio no expone atributos');
 else console.log('  ok  Get Precio expone atributos y familias');
 if (!/var_rank = \(select min/.test(gp)) E('Get Precio: falta el filtro de var_rank minimo (el match por atributo dejaria de ser aditivo)');
 else console.log('  ok  match por atributo es estrictamente aditivo');
+
+console.log('\n=== 6. v8.1 — BLOQUEANTES DEL CONSEJO ===');
+
+// 6a. settings: el validador no miraba esta seccion. Sin executionOrder v1, n8n
+// aplica el orden legacy al importar y el workflow se comporta distinto que en tus
+// pruebas. El errorWorkflow se engancha desde la UI (el id depende de la instancia).
+if (!v8.settings || v8.settings.executionOrder !== 'v1') E('falta wf.settings.executionOrder = "v1"');
+else console.log('  ok  executionOrder v1');
+
+// 6b. los nodos que MANDAN mensajes al cliente no pueden reintentar: Chatwoot esta
+// detras de un tunel y un 504 post-aceptacion cobra el mensaje de nuevo.
+['Enviar Mensaje', 'Mensaje Firewall Refusal', 'Aviso Rate Firewall', 'Mensaje Refusal Tier-2'].forEach((nm) => {
+  const nd = b[nm];
+  if (!nd) return E('falta el nodo ' + nm);
+  if (nd.retryOnFail) E(nm + ' reintenta un envio al cliente (cobra el mensaje dos o tres veces)');
+  if (nd.onError !== 'continueRegularOutput') E(nm + ' sin onError: un blip deja la ejecucion en rojo y el retry REENVIA');
+});
+console.log('  ok  envios al cliente sin retry y con onError');
+
+// 6c. ningun nodo Code puede volver a comparar el anti-loop contra lastBotReplies:
+// desde el compositor ese texto esta parafraseado y el guard queda muerto.
+v8.nodes.filter((nd) => nd.type === 'n8n-nodes-base.code').forEach((nd) => {
+  const js = nd.parameters.jsCode || '';
+  if (nd.name === 'Decidir' || nd.name === 'Armar Mensajes LLM') return; // lo producen / lo pasan al LLM
+  if (/lastBotReplies/.test(js) && !/^\s*\/\//m.test(js.split('lastBotReplies')[0].split('\n').pop()))
+    E(nd.name + ' compara contra lastBotReplies (texto compuesto): el anti-loop queda muerto');
+});
+const guards = ['Parsear Respuesta', 'Armar Respuesta Precio', 'Armar Menu Opciones', 'Aplicar Aclarador'];
+guards.forEach((nm) => {
+  if (!/borradoresPrevios/.test(b[nm].parameters.jsCode)) E(nm + ': el anti-loop no usa borradoresPrevios');
+});
+console.log('  ok  los 4 anti-loops comparan contra el borrador previo');
+if (!/borrador/.test(b['Get Ruta Cotizador'].parameters.query) || !/limit 3/.test(b['Get Ruta Cotizador'].parameters.query))
+  E('Get Ruta Cotizador no trae los 3 borradores previos');
+else console.log('  ok  Get Ruta Cotizador trae los 3 borradores');
+
+// 6d. el gate del compositor protege el NOMBRE y el HEDGE, no solo la plata.
+const comp2 = b['Aplicar Compositor'].parameters.jsCode;
+if (!/nombre_ajeno/.test(comp2)) E('el gate no protege el nombre del producto');
+else console.log('  ok  gate: conservacion de nombre');
+if (!/'hedge'/.test(comp2)) E('el gate no protege el hedge (precio de lista / lo confirma el equipo)');
+else console.log('  ok  gate: conservacion de hedge');
+if (!/prohibidos/.test(b['Armar Prompt Compositor'].parameters.jsCode)) E('Armar Prompt Compositor no calcula los tokens prohibidos');
+else console.log('  ok  tokens prohibidos derivados del catalogo');
+
+// 6e. sin catalogo el turno se aborta: contestar sin mundo cerrado es peor que callarse.
+if (!/catalogo no disponible/.test(b['Armar Mensajes LLM'].parameters.jsCode) || !/throw new Error/.test(b['Armar Mensajes LLM'].parameters.jsCode))
+  E('Armar Mensajes LLM no aborta cuando el catalogo no cargo');
+else console.log('  ok  SPOF del catalogo: aborta en vez de improvisar');
 
 console.log('\n=== ' + err + ' errores ===');
 process.exit(err ? 1 : 0);
