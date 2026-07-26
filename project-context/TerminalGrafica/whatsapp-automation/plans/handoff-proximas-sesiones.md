@@ -40,9 +40,16 @@ guards de plata de v7 + los 4 nuevos + las 7 reglas del gate verificados uno por
 casos viejos del harness corren con mocks sin atributos y pasan sin tocarlos.
 
 **Lo que NO entró y por qué:** el contrato del LLM de 9 slots con matcher estructural (el
-beneficio concreto ya lo da el match por atributo en `Get Precio`, sin tocar el contrato) ·
-el refinador de voz · la topología 3 ramas → 1 · la cuantización de packs · el guard de
-variante no anclada. Detalle en `v8-build.md` §3.
+beneficio concreto ya lo da el match por atributo en `Get Precio`, sin tocar el contrato; lo
+que queda sin resolver es que el LLM sigue eligiendo el nombre del producto de un catálogo
+pegado en el prompt) · que la capa determinística emita **hechos estructurados** en vez de un
+borrador tokenizado (el compositor hoy sigue atado a cómo redacta el código: es el próximo
+escalón) · la cuantización de packs · el guard de variante no anclada. Detalle en
+`v8-build.md` §3.
+
+**Antes de aplicar:** la disciplina del proyecto pide contrastar toda decisión de diseño con un
+agente Fable. **No se corrió** — en esa sesión Claude tenía instrucción de no lanzar agentes.
+El compositor y la salida del menú numerado son los dos candidatos obvios para esa ronda.
 
 ---
 
