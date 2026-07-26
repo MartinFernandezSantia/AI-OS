@@ -9,7 +9,7 @@
 // El harness (code-harness.js) también testea ambos nodos; esto es la red rápida.
 const fs = require('fs');
 const path = require('path');
-const WF = path.join(__dirname, '..', 'n8n', 'flows', 'faq-bot-v7.json');
+const WF = path.join(__dirname, '..', 'n8n', 'flows', process.env.WF || 'faq-bot-v8.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const orig = wf.nodes.find((n) => n.name === 'Armar Respuesta Precio');
 const twin = wf.nodes.find((n) => n.name === 'Armar Respuesta Precio 2');

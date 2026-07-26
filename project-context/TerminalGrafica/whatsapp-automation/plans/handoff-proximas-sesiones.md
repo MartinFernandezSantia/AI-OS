@@ -9,7 +9,37 @@
 
 ---
 
-## ⭐⭐⭐ SESIÓN 2026-07-26 — ronda 4, consejo Opus, R7 v2 y entrega 0 (LEER PRIMERO)
+## 🟩 PAQUETE E0 + v8 — CONSTRUIDO 2026-07-26, PENDIENTE DE APLICAR (LEER PRIMERO)
+
+**Los dos archivos se aplican JUNTOS. Ninguno solo sirve.**
+
+- [`db/curacion-e0-2026-07-26.sql`](../db/curacion-e0-2026-07-26.sql) — atomización: 83
+  productos, 139 variantes, 21 claves de atributo + el recreate de las dos vistas.
+- [`n8n/flows/faq-bot-v8.json`](../n8n/flows/faq-bot-v8.json) — el motor que las lee.
+  `faq-bot-v7.json` queda INTACTO como rollback.
+- Plan y runbook completos: [`v8-build.md`](./v8-build.md) · registro de la curación:
+  [`db/curacion-e0-2026-07-26.md`](../db/curacion-e0-2026-07-26.md)
+
+**Qué desbloquea:** doble faz por hoja (200 páginas: $35.600 → **$17.600**) · los 3 bugs de
+plata (promo bajo el mínimo, taller por trabajo, talonarios) · la variante resuelve por
+atributo (mata S6-2 "papel vegetal a3") · gemelos preguntan el eje en vez de listar un menú ·
+fallback de modelo antes del 16-oct.
+
+**Verificación:** harness **109/109** · gemelo ARP2 en sync · `tests/validate-v8-import.js`
+**0 errores** (mismo grafo de 68 nodos, mismas 31 credenciales, 10 nodos cambiados y todos
+previstos, los 7 guards de plata de v7 intactos).
+
+**Propiedad de seguridad:** una fila SIN atributos se comporta exactamente como v7 — los 94
+casos viejos del harness corren con mocks sin atributos y pasan sin tocarlos.
+
+**Lo que NO entró y por qué:** el contrato del LLM de 9 slots con matcher estructural (el
+beneficio concreto ya lo da el match por atributo en `Get Precio`, sin tocar el contrato) ·
+el refinador de voz · la topología 3 ramas → 1 · la cuantización de packs · el guard de
+variante no anclada. Detalle en `v8-build.md` §3.
+
+---
+
+## ⭐⭐⭐ SESIÓN 2026-07-26 — ronda 4, consejo Opus, R7 v2 y entrega 0
 
 **Nada se construyó ni se aplicó esta sesión.** El workflow `faq-bot-v7.json` está intacto.
 Todo lo de abajo es diseño cerrado y datos listos para que la próxima sesión escriba el SQL.

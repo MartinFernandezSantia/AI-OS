@@ -1,4 +1,4 @@
-// Harness de runtime para los nodos Code de faq-bot-v7.json (Parsear Respuesta +
+// Harness de runtime para los nodos Code de faq-bot-v8.json (WF=faq-bot-v7.json para el rollback) (Parsear Respuesta +
 // Armar Respuesta Precio). node --check solo valida sintaxis; esto EJECUTA el codigo
 // con mocks de $ / $input y cubre los caminos: answer, backstop 1a mencion, precio
 // single, campo mas, JSON ilegible, plata tipeada, limpio, caveat, tabla de rangos,
@@ -10,7 +10,7 @@
 // (Nacido del incidente 2026-07-21: "obj is not defined" — scope bug invisible para --check.)
 const fs = require('fs');
 const path = require('path');
-const WF = path.join(__dirname, '..', 'n8n', 'flows', 'faq-bot-v7.json');
+const WF = path.join(__dirname, '..', 'n8n', 'flows', process.env.WF || 'faq-bot-v8.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
 const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2') };
@@ -621,6 +621,132 @@ async function main() {
   // ACL13: residual en 2ª pasada → EMAIL (no repregunta, no loop).
   r = await armar2({ producto: 'Zzz', variante: '' }, [], decidir({ userMessage: 'zzz' }));
   console.log('ACL13 gemelo residual email:', r[0].json.estado === 'fallback: sin_match' && r[0].json.reply.includes('te lo cotiza el equipo') && !r[0].json.reply.includes('¿Me lo decís') && r[0].json.needsAclarador === false ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8 — ATOMIZACIÓN (E0). Todo lo de abajo depende de row.atributos; una fila
+  // SIN atributos tiene que comportarse EXACTAMENTE como v7 (los ~94 casos de
+  // arriba corren con mocks sin atributos y son justamente esa prueba).
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ---- doble faz POR HOJA (decisión Martin 2026-07-26, cierra pregunta TG 31) ----
+  // obra 75: s/f b/n $100 y d/f b/n $150 -> la hoja impresa de los dos lados vale
+  // 1,5x la de un lado, no 2x. 200 páginas d/f son 100 HOJAS.
+  const df = { ...base, producto_id: 'u75', nombre_canonico: 'Impresiones papel obra 75 gr', variante: 'OBRA 75 GR D/F',
+    por_pagina: true, tiene_reglas: true, n_reglas_cantidad: 1, precio_lista: 150,
+    rangos_cantidad: [{ value: 176, minQty: 1, maxQty: 100 }, { value: 178, minQty: 101, maxQty: 500 }],
+    atributos: { unidad_venta: 'hoja', multiplica: true, faz: 'doble', color: 'bn', papel: 'obra', gramaje_gr: 75 } };
+  const pDf = { producto: 'impresiones papel obra 75 gr', variante: 'doble faz b/n', template: null, forzarPlantilla: true, mas: [], paginas: 200 };
+
+  r = await armar(pDf, [df], decidir({ userMessage: 'cuanto sale imprimir 200 páginas doble faz' }));
+  // 200 páginas -> 100 hojas -> bracket 1-100 = $176 -> 100 x 176 = $17.600.
+  // Cotizando por página daban $35.600 (el 2x que el dfGate existía para evitar).
+  console.log('V8-1 doble faz por hoja:', r[0].json.estado === 'ok_paginas' && r[0].json.reply.includes('$17.600,00')
+    && r[0].json.reply.includes('(100 hojas)') && !r[0].json.notas.includes('df_gate') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // V8-2: simple faz sobre el mismo producto NO divide.
+  const sf = { ...df, variante: 'OBRA 75 GR S/F', precio_lista: 100,
+    rangos_cantidad: [{ value: 100, minQty: 1, maxQty: 500 }],
+    atributos: { ...df.atributos, faz: 'simple' } };
+  r = await armar({ ...pDf, variante: 'simple faz b/n' }, [sf], decidir({ userMessage: '200 páginas simple faz' }));
+  console.log('V8-2 simple faz no divide:', r[0].json.reply.includes('$20.000,00') && !r[0].json.reply.includes('hojas)') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // V8-3: producto que se cobra POR PÁGINA (medicina) NO divide nunca, aunque la
+  // variante fuera doble faz. La unidad curada es la que manda, no el nombre.
+  const medic = { ...df, producto_id: 'umed', nombre_canonico: 'Impresión de módulos/apuntes de medicina', variante: 'D/F',
+    precio_lista: 45, n_reglas_cantidad: 0, rangos_cantidad: null, tiene_reglas: false, solo_descuentos: false,
+    atributos: { unidad_venta: 'pagina', multiplica: true, faz: 'doble', nicho: 'medicina' } };
+  r = await armar({ ...pDf, producto: 'apuntes de medicina', variante: 'doble faz', paginas: 200 },
+    [medic], decidir({ userMessage: '200 páginas de apuntes de medicina doble faz' }));
+  console.log('V8-3 por página no divide:', r[0].json.reply.includes('$9.000,00') && !r[0].json.reply.includes('hojas') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // V8-4: fila SIN atributos + doble faz + páginas -> el dfGate sigue vivo (la
+  // unidad sigue siendo desconocida). Es la garantía de rollback.
+  r = await armar({ ...pDf, variante: 'D/F' }, [{ ...df, atributos: undefined }], decidir({ userMessage: '200 páginas doble faz' }));
+  console.log('V8-4 sin atributos = dfGate v7:', r[0].json.notas.includes('df_gate') && !r[0].json.reply.includes('$17.600') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // ---- V2: servicios de taller por TRABAJO (regla de sustantivo) ----
+  const anillado = { ...base, producto_id: 'uani', nombre_canonico: 'Anillado plástico a4/oficio', variante: 'Anillado Plastico a4/oficio 24 hs',
+    precio_lista: 2400, atributos: { unidad_venta: 'trabajo', multiplica: true, material: 'plastico', tamano: ['a4', 'oficio'] } };
+
+  // "anillado para 120 hojas": el 120 cuenta MATERIAL -> jamás multiplica.
+  // En v7 esto daba 120 x $2.400 = $288.000 (la clase del $504.000 de la ronda 4).
+  r = await armar({ producto: 'anillado plástico', variante: 'única', cantidad: 120, template: null, forzarPlantilla: true, mas: [] },
+    [anillado], decidir({ userMessage: 'cuánto sale un anillado para 120 hojas' }));
+  console.log('V8-5 trabajo + hojas no multiplica:', r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('total')
+    && r[0].json.notas.includes('no multiplica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // "3 apuntes anillados": el 3 cuenta TRABAJOS -> sí multiplica.
+  r = await armar({ producto: 'anillado plástico', variante: 'única', cantidad: 3, template: null, forzarPlantilla: true, mas: [] },
+    [anillado], decidir({ userMessage: 'necesito anillar 3 apuntes, cuánto sale' }));
+  console.log('V8-6 trabajo + trabajos multiplica:', r[0].json.reply.includes('$7.200,00') && !r[0].json.notas.includes('no multiplica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // V8-7: número ausente del texto (el LLM lo dedujo) -> dirección segura, no multiplica.
+  r = await armar({ producto: 'anillado plástico', variante: 'única', cantidad: 40, template: null, forzarPlantilla: true, mas: [] },
+    [anillado], decidir({ userMessage: 'cuánto sale anillar esto' }));
+  console.log('V8-7 trabajo sin ancla no multiplica:', !r[0].json.reply.includes('$96.000') && r[0].json.notas.includes('no multiplica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ---- multiplica=false (vinilo UV, bolsillos de banner: por metro, sin confirmar) ----
+  const uv = { ...base, producto_id: 'uuv', nombre_canonico: 'Vinilo, Lona Brillo/Mate Uv', variante: 'Vinilo UV Brillo o mate',
+    unidad: 'metro', precio_lista: 22000, atributos: { unidad_venta: 'metro', multiplica: false, material: 'vinilo', tecnologia: 'uv' } };
+  r = await armar({ producto: 'vinilo uv', variante: 'única', cantidad: 10, template: null, forzarPlantilla: true, mas: [] },
+    [uv], decidir({ userMessage: 'necesito 10 metros de vinilo uv' }));
+  console.log('V8-8 multiplica=false:', r[0].json.reply.includes('$22.000,00') && !r[0].json.reply.includes('$220.000')
+    && r[0].json.notas.includes('no multiplica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ---- V1: promo inmobiliarias — nicho + mínimo de unidades ----
+  const promo = { ...base, producto_id: 'upro', nombre_canonico: 'Promoción para inmobiliarias (cartel de 1 × 0,65 m, llevando 6)',
+    variante: 'Promoción cartel plástico corrugado 1x0.65 mt', precio_lista: 15000,
+    atributos: { unidad_venta: 'unidad', multiplica: true, min_unidades: 6, nicho: 'inmobiliarias', material: 'plastico_corrugado' } };
+  const pPromo = { producto: 'promoción inmobiliarias', variante: 'única', template: null, forzarPlantilla: true, mas: [] };
+
+  // Nicho NO mencionado -> jamás el precio promocional (hoy aparece ante cualquier
+  // consulta de carteles y sub-cotiza contra el suelto de $19.500).
+  r = await armar({ ...pPromo, cantidad: 3 }, [promo], decidir({ userMessage: 'cuánto sale un cartel de 1 x 0.65' }));
+  console.log('V8-9 nicho inmobiliarias bloquea:', r[0].json.estado === 'fallback: producto_nicho' && !r[0].json.reply.includes('$')
+    && /inmobiliaria/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // Nicho mencionado pero BAJO EL MÍNIMO -> sin total (3 x $15.000 = $45.000 era el bug).
+  r = await armar({ ...pPromo, cantidad: 3 }, [promo], decidir({ userMessage: 'soy de una inmobiliaria, necesito 3 carteles' }));
+  console.log('V8-10 bajo mínimo sin total:', r[0].json.estado === 'fallback: bajo_minimo' && !r[0].json.reply.includes('$45.000')
+    && r[0].json.reply.includes('6 o más') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // Nicho mencionado y EN el mínimo -> total correcto.
+  r = await armar({ ...pPromo, cantidad: 6 }, [promo], decidir({ userMessage: 'somos una inmobiliaria y queremos 6 carteles' }));
+  console.log('V8-11 en el mínimo cotiza:', r[0].json.reply.includes('$90.000,00') && !r[0].json.notas.includes('bajo_minimo') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ---- Regla de gemelos sobre atributos ----
+  const kraft130 = { ...base, producto_id: 'uk130', nombre_canonico: 'Papel Kraft 130 Gr', variante: 'A4', precio_lista: 800, match_rank: 2,
+    atributos: { tecnologia: 'laser', papel: 'kraft', gramaje_gr: 130, unidad_venta: 'hoja', multiplica: true, tamano: ['a3', 'a4'] } };
+  const kraft300 = { ...kraft130, producto_id: 'uk300', nombre_canonico: 'Papel Kraft 300 Gr', precio_lista: 1000,
+    atributos: { ...kraft130.atributos, gramaje_gr: 300 } };
+  r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
+    [kraft130, kraft300], decidir({ userMessage: 'cuánto sale el papel kraft a4' }));
+  console.log('V8-12 gemelos preguntan el eje:', r[0].json.reply.includes('gramaje') && !r[0].json.reply.includes('1.')
+    && r[0].json.notas.includes('gemelos:gramaje_gr') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // V8-13: separador DURO — un producto de nicho jamás es gemelo de uno que no lo
+  // es. Es el falso positivo que el spec §5 no mataba (medicina <-> a3 tonner).
+  const tonner = { ...base, producto_id: 'uton', nombre_canonico: 'Impresiones a3 tonner negro', variante: '.', match_rank: 2,
+    atributos: { tecnologia: 'tonner', unidad_venta: 'pagina', multiplica: true, tamano: ['a3'], color: 'bn' } };
+  const medic2 = { ...base, producto_id: 'umed', nombre_canonico: 'Impresión de módulos/apuntes de medicina', variante: '.', match_rank: 2,
+    atributos: { tecnologia: 'riso', unidad_venta: 'pagina', multiplica: true, nicho: 'medicina' } };
+  r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [tonner, medic2], decidir({ userMessage: 'impresiones' }));
+  console.log('V8-13 nicho no es gemelo:', !r[0].json.notas.includes('gemelos:') ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // V8-14: menos de 3 claves comunes -> no dispara (con 2 el "difieren en una" es trivial).
+  const flaco1 = { ...base, producto_id: 'uf1', nombre_canonico: 'Producto Flaco A', variante: '.', match_rank: 2,
+    atributos: { unidad_venta: 'unidad', multiplica: true, material: 'carton' } };
+  const flaco2 = { ...flaco1, producto_id: 'uf2', nombre_canonico: 'Producto Flaco B',
+    atributos: { unidad_venta: 'unidad', multiplica: true, material: 'pvc' } };
+  r = await armar({ producto: 'producto flaco', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [flaco1, flaco2], decidir({ userMessage: 'producto flaco' }));
+  console.log('V8-15 <3 claves comunes -> menú:', !r[0].json.notas.includes('gemelos:') && r[0].json.reply.includes('1. ') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // V8-16: el eje respeta el anti-loop de repregunta (2 iguales -> email).
+  r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
+    [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', lastBotReplies: ['¿De qué gramaje lo necesitás?', '¿De qué gramaje lo necesitás?'] }));
+  console.log('V8-17 gemelos anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
