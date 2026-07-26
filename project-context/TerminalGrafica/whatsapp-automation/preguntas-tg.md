@@ -73,6 +73,19 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
     $0 (rubro Soportes Especiales). ¿El de $0 es un duplicado viejo para borrar?
     Mientras tanto lo ocultamos (curación 1c) para que no salga un menú con un
     ítem a $0; si es un producto vivo se revierte.
+63. **Doble faz: ¿cómo lo calculan?** — El bot va a tener que hacer esta cuenta
+    solo, así que necesitamos que lo confirmen ustedes y no deducirlo de la lista.
+    (a) El precio unitario cargado para doble faz, ¿es **por hoja** (las dos caras
+    juntas) o **por página** (cada cara)? (b) Cuando alguien trae un documento de
+    200 páginas para imprimir doble faz, ¿qué cargan en el sistema: 100 hojas al
+    precio de doble faz, o 200 al de simple? (c) Si el documento tiene páginas
+    impares (201), ¿cobran 101 hojas? — **Por qué importa:** en obra 75, simple
+    faz b/n $100 y doble faz b/n $150. Si el precio es por hoja, 200 páginas salen
+    $17.600; si fuera por página, $35.600. Es un 2× de diferencia en cada
+    presupuesto de apuntes. Martin ya lo resolvió por inferencia (por hoja, porque
+    1,5× y no 2× solo cierra si el precio es de la hoja) y el motor se va a
+    construir así; esto es la confirmación. Pega con la 32 (práctica de carga con
+    copias).
 
 ## 9. Ronda 4 de suites + consejo Opus (2026-07-25)
 
@@ -169,7 +182,7 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 | "Adicional 106" / bookcel | No existen en el catálogo actual (verificado en el export). Era contexto viejo; "bookcel" es término del cliente sin producto → cae en sin_match (Martin + verificación, 2026-07-24). |
 | Promo Inmobiliarias | Es POR CARTEL, exige llevar 6 (confirmado) → `por_pack=false` + display "(llevando 6)" en `db/curacion-2026-07-24b.sql`. Mínimo-6 y cuenta 6× = cotizador. ⚠️ **Corrección 2026-07-25 (consejo Opus):** el cartel suelto ($19.500) **sí se cotiza** — `mostrable` en la vista es `(not tiene_reglas)`, NO un flag de curación, y no lo lee ningún nodo Code. Ocultar de verdad es `oculto=true` en `variante_meta`. Además `por_pack=false` habilitó la multiplicación: "3 carteles" da $45.000 cuando el real es $58.500 → hace falta `min_unidades=6` (ver `plans/r7-refinador-y-resolucion.md` §1). Falta preguntar qué pasa entre 7 y 11 carteles (pregunta 55). |
 | Anillado — sinónimos de urgencia | Nada de prometer tiempo, "el anillado es anillado y ya". → sinónimos de urgencia **sacados** en `db/curacion-2026-07-24b.sql` (24 hs + ocultos 48/72/96); "anillado urgente" → sin_match (Martin, 2026-07-24). |
-| **Unidad del doble faz (ex-31)** | **Las impresiones se cobran POR HOJA** (Martin, 2026-07-26). En simple faz se cobra la hoja; en doble faz NO se cobra por página, porque el precio ya está ajustado a la hoja. Se ve en la lista: obra 75 simple faz b/n $100 y doble faz b/n $150, o sea la hoja impresa de los dos lados sale 1,5 veces la de un lado, no 2. **Consecuencia: `hojas = simple ? páginas : ceil(páginas/2)` por copia, el bracket se elige por hojas, y el gate que negaba el total del doble faz se levanta.** Sin esto un documento de 200 páginas a doble faz cotizaba el doble. |
+| **Unidad del doble faz (ex-31)** | **Las impresiones se cobran POR HOJA** (Martin, 2026-07-26). En simple faz se cobra la hoja; en doble faz NO se cobra por página, porque el precio ya está ajustado a la hoja. Se ve en la lista: obra 75 simple faz b/n $100 y doble faz b/n $150, o sea la hoja impresa de los dos lados sale 1,5 veces la de un lado, no 2. **Consecuencia: `hojas = simple ? páginas : ceil(páginas/2)` por copia, el bracket se elige por hojas, y el gate que negaba el total del doble faz se levanta.** Sin esto un documento de 200 páginas a doble faz cotizaba el doble. ⚠️ **Resuelto por INFERENCIA, no por TG.** El motor se construye así, pero como el bot va a hacer la cuenta solo, la confirmación se pide en la **pregunta 63** (Martin, 2026-07-26). Si TG dice "por página", se vuelve a poner el gate. |
 | **Papel por defecto** | **Obra 75 gr, simple faz, b/n** (Martin, 2026-07-26). Se muestra ese con la puerta abierta ("¿lo necesitás en color o en otro papel?"), nunca como default silencioso. Cierra la ex-pregunta 48. Riesgo anotado: si quería color, el b/n sub-cotiza 4× y lo tapa la puerta abierta, no el default. |
 | **Packs de tarjetas — qué mostrar** | Primero se **confirma la variante** (los packs comparten variantes a precios distintos), y recién ahí, si la cantidad no cae en un tier, se muestran **el tier de abajo y el de arriba con sus precios**, aclarando que se trabaja por packs (Martin, 2026-07-26). Reemplaza "próximo tier hacia arriba". |
 | **Extra por armar varios packs** | **No se cobra extra** (Martin, 2026-07-26). Lo que suele pasar es que por la diferencia de precio al cliente le conviene el tier de arriba: 3 packs de 100 son $36.000 y uno de 500 sale $28.000. El bot muestra las dos cuentas y decide el cliente. |
