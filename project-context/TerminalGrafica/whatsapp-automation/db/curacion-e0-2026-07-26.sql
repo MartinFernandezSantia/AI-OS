@@ -43,6 +43,15 @@ alter table bot.producto_meta
 alter table bot.variante_meta
   add column if not exists atributos jsonb  not null default '{}';
 
+-- v8: el compositor redacta el mensaje que ve el cliente a partir de un borrador
+-- determinístico. Se guardan los DOS. Sin esto, el juez offline del confident-wrong
+-- estaría auditando un texto que el cliente nunca vio, y el drift semántico
+-- (re-etiquetar un unitario como total, borrar una línea de degradación) es
+-- estructuralmente indetectable.
+alter table bot.decisiones
+  add column if not exists borrador text,
+  add column if not exists final    text;
+
 -- ---------------------------------------------------------------------------
 -- 2. Vistas: exponer familias y atributos.
 --    Sin esto la migración es INERTE (ningún nodo puede leer las columnas).

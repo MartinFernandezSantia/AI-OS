@@ -1,9 +1,13 @@
-# faq-bot-v8 — el motor lee los atributos atomizados
+# faq-bot-v8 — el motor lee los atributos y el bot habla como una persona
 
 > **CONSTRUIDO 2026-07-26. Nada aplicado.** `faq-bot-v7.json` queda INTACTO como rollback.
 > Va junto con [`db/curacion-e0-2026-07-26.sql`](../db/curacion-e0-2026-07-26.sql): el SQL
 > pone los datos, v8 los usa. **Se aplican los dos de una** — ninguno solo tiene sentido.
-> Verificación: harness **109/109**, gemelo ARP2 en sync, validación de import **0 errores**.
+> Verificación: harness **125/125**, gemelo ARP2 en sync, validación de import **0 errores**.
+>
+> Dos mitades. La primera (§2) es el **motor**: lee los atributos atomizados y arregla la
+> plata. La segunda (§7-§9) es la **voz**: se va el menú numerado y un nodo LLM redacta el
+> mensaje que ve el cliente, sin poder tocar un solo número.
 
 ---
 
@@ -131,20 +135,118 @@ Harness V8-12 a V8-17.
 
 ---
 
+---
+
+## 7. Topología unificada — prerequisito duro del compositor
+
+Antes había **tres ramas de envío y tres de log**, una por acción. Ahora las tres convergen en
+un sobre único y una sola cadena de salida.
+
+```
+Switch Acción[0] (answer) ──┐
+Armar Respuesta Precio ─────┼→ Normalizar Envío → Armar Prompt Compositor → ¿Componer?
+Armar Menu Opciones ────────┘                                                  │        │
+                                            Llamar LLM Compositor ←────────────┘        │
+                                                      ↓                                 │
+                                            Aplicar Compositor ←──────────────────────┘
+                                                      ↓
+                                            Enviar Mensaje → Log Turno
+```
+
+**El motivo no es prolijidad.** `Enviar Respuesta` leía `$('Parsear Respuesta').reply`, y ese
+nodo se ejecuta **siempre**. Con un compositor enchufado habría mandado el borrador **sin
+componer, sin error y sin aviso**. Con el sobre viajando en `$json` eso es estructuralmente
+imposible.
+
+Cuentas: **−4 nodos** (`Enviar Menu`, `Enviar Respuesta`, `Log Menu`, `Log Respuesta`) y
+**+4** (`Armar Prompt Compositor`, `¿Componer?`, `Llamar LLM Compositor`, `Aplicar Compositor`).
+Quedan 68, los mismos que v7. `Pre-Envío Precio`, `Enviar Precio` y `Log Precio` se renombraron
+a `Normalizar Envío`, `Enviar Mensaje` y `Log Turno` conservando id y credencial.
+
+`Log Turno` gana dos columnas, **`borrador` y `final`**. Sin las dos, el juez offline del
+confident-wrong estaría auditando un texto que el cliente nunca vio.
+
+---
+
+## 8. Se va el menú numerado
+
+El menú numerado creaba una **dependencia de estado entre turnos**: el "2" de este mensaje solo
+significa algo si el bot puede releer el menú anterior y mapearlo igual. De ahí salen el
+anti-loop, la prohibición de que el refinador renumere, y buena parte de los incidentes de
+resolución. Y además se lee como copiado por un bot, que es de lo que se trata todo esto.
+
+Se sacó de los **tres** lugares que lo producían (`Armar Menu Opciones`, el menú de rescate de
+`Armar Respuesta Precio`, y la action `opciones` de `Aplicar Aclarador`): ahora son viñetas.
+La regla 2 del `Prompt Cotizador` se reescribió: el cliente **contesta con palabras** ("el de
+300", "la mate", "simple faz") y el LLM las mapea. Ya no se le pide un número nunca.
+
+Esto es viable **porque §2.4 ya existe**: el match por atributo entiende "300", "mate" o
+"oficio" sin que nadie tenga que copiar un nombre de catálogo.
+
+---
+
+## 9. El compositor
+
+Un nodo LLM que redacta el mensaje que ve el cliente a partir del borrador determinístico.
+*"1. Papel Kraft 130 Gr / 2. Papel Kraft 300 Gr"* pasa a *"el kraft lo tenemos en 130 y en 300
+gramos, ¿cuál te sirve?"*.
+
+**Cómo se garantiza que no invente plata.** Antes de llamarlo, `Armar Prompt Compositor`
+**tokeniza**: cada monto se reemplaza por `[[P1]]`, `[[P2]]`… y el mail por `[[MAIL]]`, y el
+mapa token → valor queda guardado. El LLM escribe prosa alrededor de tokens opacos y **nunca ve
+ni escribe un dígito de plata**. Después, `Aplicar Compositor` re-estampa los montos **desde el
+mapa**, que viene de la base.
+
+**El gate compara valores, no layout** — y por eso no tiene ninguna regla de "conteo de líneas
+numeradas": justamente queremos que deshaga el menú.
+
+| # | Regla | Qué evita |
+|---|---|---|
+| 1 | todos los tokens, una vez cada uno, **en el mismo orden** | que le dé al 130 el precio del 300 |
+| 2 | ningún `$` ni `@` propio | plata o mail inventados |
+| 3 | mismo multiset de dígitos fuera de los tokens | cantidades, gramajes y plazos inventados |
+| 4 | el léxico de riesgo no puede aparecer **más** veces que en el borrador | promesas de plazo, stock, envío, descuento |
+| 5 | largo acotado | ensayos |
+| 6 | ningún token sin estampar sobrevive | un `[[P1]]` crudo al cliente |
+
+**Cualquier rechazo manda el borrador** — exactamente lo que el bot habría mandado sin
+compositor — y deja el veredicto en `notas` como canario.
+
+**Tres cosas que no compone, a propósito:**
+
+- **Kill switch.** `const COMPOSITOR = true;` en la primera línea de `Armar Prompt Compositor`.
+  Lo apagás editando una línea en la UI de n8n, sin re-importar.
+- **La rama `answer` con un `$` adentro.** Esa plata la escribió el LLM1 y **no** pasa por el
+  backstop `plataRe`, que solo cubre la rama precio. Tokenizarla sería lavarla: le daría el
+  formato de un monto verificado a un número posiblemente alucinado. Preferimos el borrador feo.
+- **Los cuatro textos fijos** (escalación, bienvenida, no-texto, cap email) siguen siendo nodos
+  aparte y no pasan por acá.
+
+**La tabla de precios por cantidad se conserva** (decisión de Martin, 2026-07-26: un mensaje con
+la tabla cuesta menos que preguntar "¿cuántas?" y contestar después). El compositor tiene
+instrucción explícita de dejarla como tabla.
+
+**Costo:** una llamada LLM más por mensaje saliente, ~+1,2 s de latencia. Contra los ~6,6 s
+actuales es +18%, y es 100% visible para el cliente.
+
+---
+
 ## 3. Lo que deliberadamente NO entró
 
-- **El contrato del LLM de 9 slots con matcher estructural.** Es el rework grande: cambia
-  `Parsear Respuesta`, el prompt, los parámetros de `Get Precio` y todo el matcher. El beneficio
-  concreto que buscábamos (que "lona" y "25% cobertura" resuelvan por dato y no por suerte de
-  substring) ya lo da §2.4 usando el slot `variante` que ya existe. Meterlo ahora hubiera puesto
-  en riesgo los 109 casos que acaban de quedar verdes, sin comprar nada que no tengamos.
-  La regla anti-SKU-compuesto del §2.1 del plan r7 **ya estaba** en el prompt desde una ronda
-  anterior.
-- **El refinador de voz** (E4 del plan r7) y la **topología de 3 ramas → 1** (E3). Ninguno mueve
-  plata ni resolución; el refinador además suma +18% de latencia.
+- **El contrato del LLM de 9 slots con matcher estructural.** Cambia `Parsear Respuesta`, los
+  parámetros de `Get Precio` y todo el matcher. El beneficio concreto que buscábamos (que "lona"
+  y "25% cobertura" resuelvan por dato y no por suerte de substring) ya lo da §2.4 usando el slot
+  `variante` que ya existe. La regla anti-SKU-compuesto del plan r7 §2.1 **ya estaba** en el
+  prompt desde una ronda anterior. Lo que queda sin resolver es que el LLM sigue eligiendo el
+  nombre del producto de un catálogo pegado en el prompt — causa raíz de los incidentes 14 y 19.
+  La atomización lo mitiga (los gemelos repreguntan en vez de adivinar) pero no lo elimina.
+- **Que la capa determinística emita hechos estructurados** en vez de un borrador de texto. El
+  compositor hoy recibe el borrador tokenizado, no un JSON de hechos. Funciona y es mucho menos
+  invasivo, pero significa que el compositor sigue atado a cómo redacta el código. El paso a
+  hechos es el siguiente escalón natural.
 - **La cuantización de packs** (mostrar el tier de abajo y el de arriba): decidida, no
   construida. Necesita un slot `packs` que hoy no existe.
-- **El guard de variante no anclada** (§2.5 del plan r7). Fuerza menú en el 43% del catálogo
+- **El guard de variante no anclada** (plan r7 §2.5). Fuerza menú en el 43% del catálogo
   (+6 a +9 menús/día). Conviene medirlo con la resolución nueva ya andando antes de sumarlo.
 - **El modelo en un solo campo** (`System Prompt.modelo` referenciado desde los 5 puntos): el
   fallback de §2.6 resuelve el problema real sin tocar expresiones.
@@ -155,14 +257,21 @@ Harness V8-12 a V8-17.
 
 | gate | resultado |
 |---|---|
-| `node tests/code-harness.js` | **109/109**, 0 FAIL (94 de v7 + 15 nuevos de v8) |
+| `node tests/code-harness.js` | **125/125**, 0 FAIL (94 de v7 + 15 del motor + 16 del compositor) |
 | `node tests/regen-arp2-twin.js` | gemelo `Armar Respuesta Precio 2` en sync |
 | `node tests/validate-v8-import.js` | **0 errores** |
 
-La validación de import compara v8 contra v7 y verifica: mismo grafo (68 nodos, conexiones
-idénticas), mismas 31 credenciales, los 15 nodos Code con sintaxis válida, **solo 10 nodos
-cambiados y todos previstos**, y que ningún guard de plata se haya caído en la edición
-(dorso, numerales, papel especial, faz inversa, nicho, cap de volumen, plantilla forzada).
+La validación de import verifica: 68 nodos, **ninguna conexión colgando**, una sola rama de
+envío al cliente y un solo log de turno, ningún nodo de la topología vieja sobreviviente,
+ningún nodo HTTP o Postgres sin credencial, los 17 nodos Code con sintaxis válida, los 18
+nodos cambiados todos previstos, y **uno por uno** que sigan vivos los 7 guards de plata de v7
+(dorso, numerales, papel especial, faz inversa, nicho, cap de volumen, plantilla forzada), los
+4 nuevos del motor y las 7 reglas del gate del compositor.
+
+Los 16 casos del compositor cubren el camino feliz y **nueve formas distintas de rechazo**:
+token faltante, tokens invertidos, `$` propio, número inventado, promesa de plazo, JSON
+ilegible, error HTTP, kill switch y token sin estampar. En todos, el cliente recibe el
+borrador determinístico.
 
 ---
 
@@ -189,10 +298,23 @@ cambiados y todos previstos**, y que ningún guard de plata se haya caído en la
 | 6 | "500 rifas" | no cotiza 500 talonarios |
 | 7 | "papel vegetal a3" | resuelve (era "no lo tenemos") |
 | 8 | "papel kraft a4" | pregunta el **gramaje**, no lista un menú |
-| 9 | "cuánto sale anillar" | sigue dando el menú de 3 opciones (regresión) |
+| 9 | "cuánto sale anillar" | ofrece las 3 opciones **sin números**, en prosa |
+| 10 | cualquiera de los de arriba | el mensaje tiene que **sonar a persona**, no a lista |
+
+Después de la ronda, la consulta que dice si el compositor está sano:
+
+```sql
+select accion, notas, borrador, final from bot.decisiones
+ order by created_at desc limit 20;
+```
+
+Si la tasa de `(compositor:` distinto de `ok` supera ~30%, apagá el kill switch
+(`const COMPOSITOR = false;` en `Armar Prompt Compositor`, se edita en la UI sin re-importar)
+y traeme los rechazos: el veredicto dice exactamente qué regla se violó.
 
 **Rollback**: re-importar `faq-bot-v7.json`. El SQL no necesita rollback — v7 ignora las
-columnas nuevas, así que la base atomizada le es indiferente.
+columnas nuevas, así que la base atomizada le es indiferente. Rollback parcial más barato:
+el kill switch del compositor, que deja el motor nuevo y la voz vieja.
 
 ---
 

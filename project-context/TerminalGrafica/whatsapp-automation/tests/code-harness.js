@@ -13,7 +13,7 @@ const path = require('path');
 const WF = path.join(__dirname, '..', 'n8n', 'flows', process.env.WF || 'faq-bot-v8.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
-const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2') };
+const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2'), 'normalizar.js': jsOf('Normalizar Envío'), 'prompt-comp.js': jsOf('Armar Prompt Compositor'), 'aplicar-comp.js': jsOf('Aplicar Compositor') };
 
 function runNodeCode(file, mocks) {
   const code = CODES[file];
@@ -362,13 +362,13 @@ async function main() {
   r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: [] },
     ['simple faz b/n', 'simple faz color', 'doble faz b/n', 'doble faz color'].map((v) => vRow('Impresiones papel obra 75 gr', v)),
     decidir({ userMessage: 'cuanto salen las impresiones?' }));
-  console.log('M1 menu numerado:', r[0].json.reply.includes('1. simple faz b/n') && r[0].json.reply.includes('4. doble faz color') && r[0].json.reply.includes('cuál opción querés') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('M1 menu sin numeros:', r[0].json.reply.includes('- simple faz b/n') && r[0].json.reply.includes('- doble faz color') && !/^\d+\. /m.test(r[0].json.reply) && r[0].json.reply.includes('cuál te sirve') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M2: 2 productos -> dos niveles (header por producto) + numeracion continua.
   r = await menu({ productos: ['A', 'B'], faltan: [] },
     [vRow('Prod A', 'x'), vRow('Prod A', 'y'), vRow('Prod B', 'z')],
     decidir({ userMessage: 'precio?' }));
-  console.log('M2 dos niveles:', r[0].json.reply.includes('Prod A:') && r[0].json.reply.includes('Prod B:') && r[0].json.reply.includes('3. z') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('M2 dos niveles:', r[0].json.reply.includes('Prod A:') && r[0].json.reply.includes('Prod B:') && r[0].json.reply.includes('- z') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M3: faltan solo-datos con producto definido -> pregunta unica, SIN menu.
   r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: ['paginas', 'copias'] },
@@ -459,7 +459,7 @@ async function main() {
     [{ ...base, variante: 'Chico', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9' },
      { ...base, variante: 'Grande', match_rank: 3, nombre_canonico: 'Vinilos de Corte', producto_id: 'u9', precio_lista: 15000 }],
     decidir({ userMessage: 'vinilos' }));
-  console.log('A46 ambiguo menu rescate:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('opciones de Vinilos de Corte:') && r[0].json.reply.includes('1. Chico') && r[0].json.reply.includes('2. Grande') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('A46 ambiguo menu rescate:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('opciones de Vinilos de Corte:') && r[0].json.reply.includes('- Chico') && r[0].json.reply.includes('- Grande') && !/\d+\. /.test(r[0].json.reply) && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // A47: los fallbacks legitimos de precio SIGUEN derivando a email con accionLog
   // informo_precio (override: el sistema de verdad no puede dar ese numero).
@@ -481,7 +481,7 @@ async function main() {
   r = await menu({ productos: ['100 Tarjetas Color/Negro', '1000 Tarjetas Color/Negro', '500 Tarjetas Color/Negro'], faltan: [] },
     ['100', '500', '1000'].flatMap((p) => varsTarj.map((v) => vRow(p + ' Tarjetas Color/Negro', v))),
     decidir({ userMessage: 'cuánto salen las tarjetas personales?' }));
-  console.log('M9 pivot packs:', r[0].json.reply.includes('Tarjetas Color/Negro — packs de 100, 500 o 1000:') && r[0].json.reply.includes('4. Simple Faz Encapsuladas') && !r[0].json.reply.includes('5.') && r[0].json.reply.includes('de qué pack') && r[0].json.notas.includes('menu_pack') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('M9 pivot packs:', r[0].json.reply.includes('Tarjetas Color/Negro — packs de 100, 500 o 1000:') && r[0].json.reply.includes('- Simple Faz Encapsuladas') && !/\d+\. /.test(r[0].json.reply) && r[0].json.reply.includes('de qué pack') && r[0].json.notas.includes('menu_pack') ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M10: opcion UNICA (caso 5 real) -> frase natural, sin menu numerado.
   r = await menu({ productos: ['Anillado plástico a4/oficio'], faltan: [] },
@@ -534,7 +534,7 @@ async function main() {
     [{ ...base, variante: '.', match_rank: 2, nombre_canonico: 'Lona Mate', producto_id: 'L1' },
      { ...base, variante: '.', match_rank: 2, nombre_canonico: 'Lona front brillo (ancho máx 1,52 m)', producto_id: 'L2', precio_lista: 16000 }],
     decidir({ userMessage: 'una lona de 3x2' }));
-  console.log('A51 rescate sin header dup:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('1. Lona Mate') && r[0].json.reply.includes('2. Lona front brillo') && !r[0].json.reply.includes('Lona Mate:') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('A51 rescate sin header dup:', r[0].json.estado === 'fallback: ambiguo' && r[0].json.reply.includes('- Lona Mate') && r[0].json.reply.includes('- Lona front brillo') && !/\d+\. /.test(r[0].json.reply) && !r[0].json.reply.includes('Lona Mate:') && r[0].json.accionLog === 'pregunto_opciones' ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // A52 (H6a): el rescate tambien filtra el nicho — medicina no se OFRECE a quien
   // nunca la nombro.
@@ -598,7 +598,7 @@ async function main() {
   console.log('ACL7 preguntar:', r[0].json.accionAclarador === 'preguntar' && r[0].json.reply.includes('130 o 300') && r[0].json.accionLog === 'pregunto_opciones' && r[0].json.precio === null ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
   // ACL8: opciones → menú numerado de los productos que matchean.
   r = await aplicarAcl(JSON.stringify({ accion: 'opciones', productos: ['Papel Kraft 130 Gr', 'Papel Kraft 300 Gr'] }), arpJ, decidir());
-  console.log('ACL8 opciones:', r[0].json.reply.includes('1. Papel Kraft 130 Gr') && r[0].json.reply.includes('2. Papel Kraft 300 Gr') && r[0].json.reply.includes('número') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('ACL8 opciones:', r[0].json.reply.includes('- Papel Kraft 130 Gr') && r[0].json.reply.includes('- Papel Kraft 300 Gr') && !r[0].json.reply.includes('número') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL\n' + r[0].json.reply);
   // ACL9: nada → email, sin monto.
   r = await aplicarAcl(JSON.stringify({ accion: 'nada' }), arpJ, decidir());
   console.log('ACL9 nada:', r[0].json.accionLog === 'informo_precio' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.reply);
@@ -741,12 +741,93 @@ async function main() {
     atributos: { unidad_venta: 'unidad', multiplica: true, material: 'pvc' } };
   r = await armar({ producto: 'producto flaco', variante: '', template: null, forzarPlantilla: true, mas: [] },
     [flaco1, flaco2], decidir({ userMessage: 'producto flaco' }));
-  console.log('V8-15 <3 claves comunes -> menú:', !r[0].json.notas.includes('gemelos:') && r[0].json.reply.includes('1. ') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('V8-15 <3 claves comunes -> menú:', !r[0].json.notas.includes('gemelos:') && r[0].json.reply.includes('- ') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // V8-16: el eje respeta el anti-loop de repregunta (2 iguales -> email).
   r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
     [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', lastBotReplies: ['¿De qué gramaje lo necesitás?', '¿De qué gramaje lo necesitás?'] }));
   console.log('V8-17 gemelos anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8 — TOPOLOGIA UNIFICADA + COMPOSITOR
+  // El compositor redacta el mensaje; el gate garantiza que no pueda inventar
+  // plata, numeros ni promesas. Fail-safe: cualquier duda -> borrador.
+  // ══════════════════════════════════════════════════════════════════════════
+  const norm = (json, mocks) => runNodeCode('normalizar.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Parsear Respuesta' ? (mocks && mocks.parsear) || {} : (mocks && mocks.mensajes) || {} }) }),
+    $input: { first: () => ({ json }), all: () => [{ json }] },
+  });
+
+  r = await norm({ estado: 'ok', accionLog: 'informo_precio', reply: 'X', conversationId: 9, accountId: 1, userMessage: 'u' });
+  console.log('N1 sobre precio:', r[0].json.origen === 'precio' && r[0].json.accion === 'informo_precio' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+  r = await norm({ antiLoop: false, reply: 'X', notas: 'n', conversationId: 9, accountId: 1, userMessage: 'u' });
+  console.log('N2 sobre menu:', r[0].json.origen === 'menu' && r[0].json.accion === 'pregunto_opciones' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+  r = await norm({ action: 'answer', reply: 'X', conversationId: 9, accountId: 1, userMessage: 'u' }, { mensajes: { rutaCotizador: true } });
+  console.log('N3 sobre answer:', r[0].json.origen === 'answer' && r[0].json.accion === 'cotizador_answer' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+  const prompt = (json) => runNodeCode('prompt-comp.js', {
+    $: () => ({ first: () => ({ json: {} }) }),
+    $input: { first: () => ({ json }), all: () => [{ json }] },
+  });
+  const aplicar = (promptJson, contenido) => runNodeCode('aplicar-comp.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Armar Prompt Compositor' ? promptJson : {} }) }),
+    $input: { first: () => ({ json: contenido === null ? { error: { message: 'timeout' } } : { choices: [{ message: { content: contenido } }] } }), all: () => [] },
+  });
+
+  // C1: tokeniza los montos y el mail; el LLM nunca los ve.
+  let pr = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00. Escribinos a terminalgrafica@gmail.com.' }))[0].json;
+  console.log('C1 tokeniza:', pr.tokenizado.includes('[[P1]]') && pr.tokenizado.includes('[[MAIL]]') && !pr.tokenizado.includes('$')
+    && pr.mapa['[[P1]]'] === '$800,00' && pr.saltar === false ? 'OK' : 'FAIL ' + JSON.stringify(pr.tokenizado));
+
+  // C2: rama ANSWER con un $ -> NO se compone. Esa plata la escribio el LLM1 y no
+  // pasa por el backstop plataRe: tokenizarla seria lavarla.
+  const prAns = (await prompt({ origen: 'answer', reply: 'Las tarjetas salen $12.000 más o menos.' }))[0].json;
+  console.log('C2 answer con plata no compone:', prAns.saltar === true ? 'OK' : 'FAIL');
+
+  // C3: happy path — el compositor redacta y los montos se re-estampan desde el mapa.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'Dale, el A4 te sale [[P1]]. Si querés lo cerramos por [[MAIL]].' }));
+  console.log('C3 compone y estampa:', r[0].json.final === 'Dale, el A4 te sale $800,00. Si querés lo cerramos por terminalgrafica@gmail.com.'
+    && r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.final);
+
+  // C4: EL CASO QUE MOTIVO TODO — un menu se vuelve prosa, sin numeros.
+  const prMenu = (await prompt({ origen: 'menu', reply: 'Tenemos estas opciones:\n- Papel Kraft 130 Gr\n- Papel Kraft 300 Gr\nDecime cuál te sirve y te paso el precio.' }))[0].json;
+  r = await aplicar(prMenu, JSON.stringify({ mensaje: 'El kraft lo tenemos en dos gramajes, 130 y 300. ¿Cuál te sirve?' }));
+  console.log('C4 menu -> prosa:', r[0].json.compositor === 'ok' && !r[0].json.final.includes('- ') && r[0].json.final.includes('130 y 300') ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
+
+  // C5: el compositor escribe un $ propio -> RECHAZO, se manda el borrador.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]], o sea $800 redondeando. [[MAIL]]' }));
+  console.log('C5 rechaza plata propia:', r[0].json.compositor === 'plata_o_mail' && r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C6: se come un token (perderia un precio) -> RECHAZO.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] y listo.' }));
+  console.log('C6 rechaza token faltante:', r[0].json.compositor === 'tokens' && r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C7: invierte dos tokens (le daria a un producto el precio del otro) -> RECHAZO.
+  const pr2 = (await prompt({ origen: 'menu', reply: 'El 130 sale $800,00 y el 300 sale $1.000,00.' }))[0].json;
+  r = await aplicar(pr2, JSON.stringify({ mensaje: 'El 130 sale [[P2]] y el 300 sale [[P1]].' }));
+  console.log('C7 rechaza tokens invertidos:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C8: inventa un numero que no estaba (una cantidad, un gramaje, un plazo) -> RECHAZO.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]] y te lo tengo en 3 días. [[MAIL]]' }));
+  console.log('C8 rechaza numero inventado:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C9: promete algo del lexico de riesgo -> RECHAZO.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]], con envío gratis. [[MAIL]]' }));
+  console.log('C9 rechaza promesa:', r[0].json.compositor === 'lexico_riesgo' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C10: el LLM se cae o devuelve basura -> borrador, sin ruido para el cliente.
+  r = await aplicar(pr, 'esto no es json');
+  console.log('C10 ilegible -> borrador:', r[0].json.compositor === 'ilegible' && r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  r = await aplicar(pr, null);
+  console.log('C11 error http -> borrador:', r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C12: kill switch / saltar -> borrador tal cual, verdicto 'off'.
+  r = await aplicar({ saltar: true, borrador: 'TAL CUAL', mapa: {}, tokenizado: 'TAL CUAL' }, JSON.stringify({ mensaje: 'otra cosa' }));
+  console.log('C12 saltar -> borrador:', r[0].json.final === 'TAL CUAL' && r[0].json.compositor === 'off' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // C13: el verdicto queda en notas como canario para la auditoria offline.
+  r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]] y $9. [[MAIL]]' }));
+  console.log('C13 canario en notas:', String(r[0].json.notas || '').includes('(compositor:') ? 'OK' : 'FAIL ' + r[0].json.notas);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

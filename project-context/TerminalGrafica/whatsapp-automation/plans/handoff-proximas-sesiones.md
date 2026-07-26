@@ -20,14 +20,21 @@
 - Plan y runbook completos: [`v8-build.md`](./v8-build.md) · registro de la curación:
   [`db/curacion-e0-2026-07-26.md`](../db/curacion-e0-2026-07-26.md)
 
-**Qué desbloquea:** doble faz por hoja (200 páginas: $35.600 → **$17.600**) · los 3 bugs de
-plata (promo bajo el mínimo, taller por trabajo, talonarios) · la variante resuelve por
+**Qué desbloquea — MOTOR:** doble faz por hoja (200 páginas: $35.600 → **$17.600**) · los 3
+bugs de plata (promo bajo el mínimo, taller por trabajo, talonarios) · la variante resuelve por
 atributo (mata S6-2 "papel vegetal a3") · gemelos preguntan el eje en vez de listar un menú ·
 fallback de modelo antes del 16-oct.
 
-**Verificación:** harness **109/109** · gemelo ARP2 en sync · `tests/validate-v8-import.js`
-**0 errores** (mismo grafo de 68 nodos, mismas 31 credenciales, 10 nodos cambiados y todos
-previstos, los 7 guards de plata de v7 intactos).
+**Qué desbloquea — VOZ (decisión de Martin 2026-07-26):** se va el **menú numerado** de los 3
+lugares que lo producían; el cliente contesta con palabras y el match por atributo las entiende.
+Topología unificada (3 ramas de envío + 3 logs → 1) y un **compositor LLM** que redacta el
+mensaje final. La plata viaja tokenizada: el compositor nunca ve ni escribe un dígito de plata,
+y un gate de 6 reglas manda el borrador determinístico ante cualquier duda. Kill switch en la
+primera línea de `Armar Prompt Compositor`, editable en la UI sin re-importar.
+
+**Verificación:** harness **125/125** · gemelo ARP2 en sync · `tests/validate-v8-import.js`
+**0 errores** (68 nodos, ninguna conexión colgando, una sola rama de envío y un solo log, los 7
+guards de plata de v7 + los 4 nuevos + las 7 reglas del gate verificados uno por uno).
 
 **Propiedad de seguridad:** una fila SIN atributos se comporta exactamente como v7 — los 94
 casos viejos del harness corren con mocks sin atributos y pasan sin tocarlos.
