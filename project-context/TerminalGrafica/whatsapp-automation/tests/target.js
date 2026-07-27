@@ -38,14 +38,27 @@ const TARGETS = {
     nombre: 'faq-bot-v9-test',
     // El mock de Chatwoot. Habla el mismo dialecto de API que el Chatwoot real
     // para los 3 endpoints que el bot usa (GET messages, POST messages, POST labels).
-    chatwootHost: 'http://localhost:8787',
+    //
+    // El mock corre en la maquina de quien testea, y n8n (que vive en otra maquina)
+    // tiene que poder alcanzarlo: se expone con `cloudflared tunnel --url
+    // http://localhost:8787`, que da una URL trycloudflare EFIMERA — cambia en cada
+    // corrida. Por eso se puede pisar por entorno sin tocar el archivo:
+    //   MOCK_HOST=https://xxx.trycloudflare.com node tests/build-v9.js --target test
+    // El localhost queda de default para correr todo en una sola maquina.
+    chatwootHost: process.env.MOCK_HOST || 'http://localhost:8787',
     webhookPath: 'chatwoot-test',
     refreshPath: 'refrescar-catalogo-test',
     credenciales: {
-      // El mock no valida el token, pero el nodo n8n igual exige una credencial
-      // asignada. Reusamos la de Chatwoot: nunca sale hacia el Chatwoot real porque
-      // la URL apunta al mock.
-      'Chatwoot API Token': { id: 'KxbAlYAWQ95ZZKQ5', name: 'Chatwoot API Token' },
+      // Credencial PROPIA de test, y no la de prod, por una razon que costo una
+      // corrida entera: la credencial de prod tiene RESTRICCION DE DOMINIO a
+      // chatwoot.silvercoastwebagency.com. n8n rechaza el request ANTES de emitirlo
+      // ("Domain not allowed") apenas la URL apunta a otro host, asi que los 12
+      // nodos que hablan con el mock fallaban en silencio: Get Historial nunca
+      // llegaba y el turno moria sin respuesta ni error visible desde afuera.
+      // La restriccion de prod NO se toca: es una defensa real (impide que un bug
+      // mande datos de TG a un host ajeno). La de test va sin restriccion, o
+      // restringida al host del mock. El token puede ser dummy: el mock no valida.
+      'Chatwoot API Token': { id: process.env.MOCK_CRED_ID || 'FALTA_CRED_TEST', name: 'Chatwoot API Token (test)' },
       'OpenRouter API': { id: 'rwhlhrRvC0TbZZNI', name: 'OpenRouter API (test)' },
       'OpenRouter': { id: 'widAoSc9Weo8PxAN', name: 'OpenRouter (test)' },
     },
@@ -60,6 +73,18 @@ const HOST_PROD = 'https://chatwoot.silvercoastwebagency.com';
 function aplicarTarget(wf, target) {
   const cfg = TARGETS[target];
   if (!cfg) throw new Error('TARGET: target desconocido "' + target + '" (prod|test)');
+
+  // Sin credencial de test el JSON sale con un id invalido y n8n lo importa igual:
+  // el turno recien falla en runtime, en silencio y en el nodo equivocado. Mejor
+  // romper aca.
+  if (target === 'test' && cfg.credenciales['Chatwoot API Token'].id === 'FALTA_CRED_TEST') {
+    throw new Error(
+      'TARGET: falta la credencial de Chatwoot para test. Crea en n8n una credencial\n' +
+      '  httpHeaderAuth SIN restriccion de dominio (o restringida al host del mock) y corre:\n' +
+      '  MOCK_CRED_ID=<id> MOCK_HOST=<url> node tests/build-v9.js --target test\n' +
+      '  La credencial de PROD no se toca: su restriccion de dominio es deliberada.'
+    );
+  }
 
   const log = [];
   wf.name = cfg.nombre;
