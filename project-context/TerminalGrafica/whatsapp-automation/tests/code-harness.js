@@ -77,7 +77,7 @@ async function main() {
   console.log('A1 limpio:', r[0].json.reply.includes('$13.000,00') && !r[0].json.reply.includes('precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   r = await armar(pBase, [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 800 }], decidir({ userMessage: 'precio?' }));
-  console.log('A2 caveat:', r[0].json.reply.includes('$800,00 (precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('A2 cierre:', r[0].json.reply.includes('$800,00') && r[0].json.reply.includes('El total te lo confirmamos en el local o por mail.') && !r[0].json.reply.includes('(precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   const rangosRow = { ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }, { value: 450, minQty: 51, maxQty: 150 }, { value: 400, minQty: 501, maxQty: null }], variante: '.', unidad: 'a3', precio_lista: 500, nombre_canonico: 'Impresiones a3 tonner negro' };
   r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' }, [rangosRow], decidir({ userMessage: 'cuanto salen?' }));
@@ -101,7 +101,7 @@ async function main() {
   r = await armar({ ...pBase, template: 'El precio de lista es {{PRECIO}}.' },
     [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 2200 }], decidir({ userMessage: 'precio?' }));
   const rep3 = r[0].json.reply;
-  console.log('A8 anti-eco:', rep3.includes('$2.200,00 (el precio final') && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
+  console.log('A8 cierre unico:', (rep3.match(/El total te lo confirmamos/g) || []).length === 1 && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
   r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' },
     [{ ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }], variante: '.', unidad: 'a3', nombre_canonico: 'Impresiones a3 tonner negro' }],
     decidir({ userMessage: 'que sale?' }));
@@ -672,7 +672,7 @@ async function main() {
   // En v7 esto daba 120 x $2.400 = $288.000 (la clase del $504.000 de la ronda 4).
   r = await armar({ producto: 'anillado plástico', variante: 'única', cantidad: 120, template: null, forzarPlantilla: true, mas: [] },
     [anillado], decidir({ userMessage: 'cuánto sale un anillado para 120 hojas' }));
-  console.log('V8-5 trabajo + hojas no multiplica:', r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('total')
+  console.log('V8-5 trabajo + hojas no multiplica:', r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('total estimado') && !r[0].json.reply.includes('288.000')
     && r[0].json.notas.includes('no multiplica') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // "3 apuntes anillados": el 3 cuenta TRABAJOS -> sí multiplica.
@@ -1023,7 +1023,7 @@ async function main() {
 
   // D5: y la paráfrasis legítima que ANTES rechazaba, ahora pasa.
   const p5 = (await prompt({ origen: 'precio', reply: 'La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00.', nombresCatalogo: CAT2 }))[0].json;
-  r = await aplicar(p5, JSON.stringify({ mensaje: 'Para tus apuntes, en obra de 75 y de un solo lado, te sale [[P1]] la hoja.' }));
+  r = await aplicar(p5, JSON.stringify({ mensaje: 'Para tus apuntes, en obra de 75 y de un solo lado, te sale [[P1]].' }));
   console.log('D5 paráfrasis con "en"/"para"/"apuntes":', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1062,6 +1062,44 @@ async function main() {
   // J7: el Aclarador, ídem.
   r = await aplicarAcl('{"accion":"preguntar","reply":"¿De qué gramaje?"}\ntrailing', arpJ, decidir());
   console.log('J7 aclarador con basura:', r[0].json.accionAclarador === 'preguntar' ? 'OK' : 'FAIL ' + r[0].json.accionAclarador);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1d — LA UNIDAD EN LA FRASE Y EL CIERRE NUEVO
+  // Caso real: el borrador decia "Por 200 páginas ... sale $88,00 c/u" y el
+  // compositor lo leyo como precio POR PAGINA. Son $88 por HOJA: mentira de 2x
+  // que el gate frenaba solo por casualidad (se habia comido otro numero).
+  // ══════════════════════════════════════════════════════════════════════════
+  const oHoja = { ...base, producto_id: 'uh', nombre_canonico: 'Impresiones papel obra 75 gr',
+    variante: 'doble faz b/n', precio_lista: 88, match_rank: 1, por_pagina: true,
+    atributos: { papel: 'obra', gramaje_gr: 75, faz: 'doble', color: 'bn', unidad_venta: 'hoja', multiplica: true } };
+
+  // U1: el borrador dice la UNIDAD, no un "c/u" colgado.
+  r = await armar({ producto: 'Impresiones papel obra 75 gr', variante: 'doble faz b/n', paginas: 200, copias: 1, template: null, forzarPlantilla: true, mas: [] },
+    [oHoja], decidir({ userMessage: 'cuánto sale imprimir 200 páginas doble faz en obra 75' }));
+  console.log('U1 unidad en la frase:', r[0].json.reply.includes('por hoja') && !r[0].json.reply.includes('c/u') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // U2: y el cierre nuevo, una sola vez, sin la leyenda vieja.
+  console.log('U2 cierre nuevo:', (r[0].json.reply.match(/El total te lo confirmamos en el local o por mail\./g) || []).length === 1
+    && !r[0].json.reply.includes('precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // U3: EL CASO REAL — el compositor reetiqueta la unidad. Mismos digitos, mismos
+  //     tokens, mismo hedge: ninguna otra regla lo ve.
+  const pu = (await prompt({ origen: 'precio', reply: 'Por 200 páginas a doble faz (100 hojas), la opción doble faz b/n de Impresiones papel obra 75 gr sale $88,00 por hoja — total estimado $8.800,00. El total te lo confirmamos en el local o por mail.' }))[0].json;
+  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por página. El total estimado es [[P2]]. El total te lo confirmamos en el local o por mail.' }));
+  console.log('U3 rechaza cambio de unidad:', r[0].json.compositor === 'unidad:pagina' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // U4: conservar la unidad del borrador SI pasa.
+  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por hoja. El total estimado es [[P2]]. El total te lo confirmamos en el local o por mail.' }));
+  console.log('U4 conservar la unidad pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // U5: "c/u" -> "cada una" es la misma unidad, no una mentira.
+  const pc = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u — total estimado $8.000,00. El total te lo confirmamos en el local o por mail.' }))[0].json;
+  r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado. El total te lo confirmamos en el local o por mail.' }));
+  console.log('U5 c/u -> cada una pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // U6: y borrar el cierre nuevo sigue siendo rechazo (hedge).
+  r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
+  console.log('U6 borrar el cierre -> hedge:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

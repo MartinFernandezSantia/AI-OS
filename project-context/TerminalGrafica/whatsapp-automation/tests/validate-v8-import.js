@@ -156,6 +156,12 @@ if (!/nombre_ajeno/.test(comp2)) E('el gate no protege el nombre del producto');
 else console.log('  ok  gate: conservacion de nombre');
 if (!/'hedge'/.test(comp2)) E('el gate no protege el hedge (precio de lista / lo confirma el equipo)');
 else console.log('  ok  gate: conservacion de hedge');
+if (!/unidad:/.test(comp2)) E('el gate no protege la UNIDAD (c/u -> por pagina es una mentira de 2x)');
+else console.log('  ok  gate: conservacion de unidad');
+if (/precio de lista; el precio final/.test(b['Armar Respuesta Precio'].parameters.jsCode)) E('quedo la leyenda vieja inline');
+else console.log('  ok  sin la leyenda vieja');
+if (!/UNIDAD_FRASE/.test(b['Armar Respuesta Precio'].parameters.jsCode)) E('el borrador no dice la unidad de venta');
+else console.log('  ok  el borrador dice la unidad');
 if (!/prohibidos/.test(b['Armar Prompt Compositor'].parameters.jsCode)) E('Armar Prompt Compositor no calcula los tokens prohibidos');
 else console.log('  ok  tokens prohibidos derivados del catalogo');
 
