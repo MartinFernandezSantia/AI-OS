@@ -1995,6 +1995,83 @@ async function main() {
       r[0].json.rescatado === true && r[0].json.action === 'process' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
   }
 
+  // VS16 — el "pendiente": QUÉ quedó sin resolver. Sin esto el rescate es
+  // decorativo, porque el LLM principal recibe el mismo contexto que ya lo hizo
+  // callarse. Es el campo que hace que la 2ª vuelta sea distinta de la 1ª.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder',
+    pendiente: 'falta decir el precio de la promoción para inmobiliarias' }), sobreV);
+  console.log('VS16 el pendiente viaja al LLM principal:',
+    /promoción para inmobiliarias/.test(r[0].json.pendienteVerif)
+      && /pendiente:/.test(r[0].json.notas) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.pendienteVerif));
+
+  // VS17 — el pendiente es texto de un LLM que termina DENTRO de otro prompt:
+  // se aplana a una línea, se recorta, y se le sacan los montos. El invariante
+  // "ningún LLM tipea plata" no tiene excepciones.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder',
+    pendiente: 'falta el precio:\n$15.000 por cartel\ny 2000 pesos de envío' }), sobreV);
+  const pnd = r[0].json.pendienteVerif;
+  console.log('VS17 el pendiente se sanea (una línea, sin montos):',
+    !/[\r\n]/.test(pnd) && !/\$\s*15/.test(pnd) && !/2000\s*pesos/i.test(pnd)
+      && /el monto/.test(pnd) ? 'OK' : 'FAIL ' + JSON.stringify(pnd));
+
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder', pendiente: 'x'.repeat(900) }), sobreV);
+  console.log('VS18 el pendiente se recorta:',
+    r[0].json.pendienteVerif.length === 300 ? 'OK' : 'FAIL len=' + r[0].json.pendienteVerif.length);
+
+  // VS19 — 'responder' sin pendiente (el LLM omitió el campo): el rescate ocurre
+  // igual. Perder el turno porque falta la explicación sería peor que el bug.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV);
+  console.log('VS19 sin pendiente el rescate ocurre igual:',
+    r[0].json.rescatado === true && r[0].json.pendienteVerif === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+  // ---- EL PROMPT DE LA 2ª VUELTA (Armar Mensajes LLM) ----
+  // El bug que casi queda vivo: el `repeatNote` le ORDENA al modelo "respondé con
+  // action noop" si su respuesta no agrega nada. Reinyectar sin tocarlo hacía que
+  // el LLM se callara de nuevo, gastando la única vuelta que da la cota — o sea el
+  // rescate existía en el grafo y no cambiaba nada para el cliente.
+  {
+    const CAT2 = 'RUBRO: Impresiones\n- Prod A — opciones: x**, y*';
+    const mensajesV = (inputJson, dec) => runNodeCode('mensajes.js', {
+      $: (name) => ({
+        first: () => ({ json:
+          name === 'Decidir' ? dec :
+          name === 'Get Ruta Cotizador' ? {} :
+          name === 'Prompt Cotizador' ? { promptCotizador: 'PROMPT_COT __CATALOGO__' } :
+          name === 'System Prompt' ? { systemPrompt: 'PROMPT_MAIN __CATALOGO__' } : {} }),
+        all: () => [],
+      }),
+      $input: { first: () => ({ json: inputJson }) },
+    });
+    const dec2 = decidir({ conversation: [{ role: 'user', content: 'cual es el precio promocional?' }],
+      lastBotReplies: ['Ese precio es promocional si llevás 6 o más.'] });
+
+    // 1ª vuelta: el repeatNote de siempre, con la orden de callarse.
+    let m = await mensajesV({ _catalogo: CAT2 }, dec2);
+    const nota1 = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('VS20 la 1ª vuelta conserva la orden de callarse:',
+      /action noop/.test(nota1) ? 'OK' : 'FAIL');
+
+    // 2ª vuelta: la orden desaparece y entra el pendiente.
+    m = await mensajesV({ _catalogo: CAT2, reintentoSilencio: true,
+      pendienteVerif: 'falta decir el precio de la promoción para inmobiliarias' }, dec2);
+    const nota2 = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('VS21 la 2ª vuelta NO ordena callarse:',
+      !/respondé con action noop/.test(nota2) && /NO uses action noop/.test(nota2) ? 'OK' : 'FAIL ' + nota2.slice(0, 400));
+    console.log('VS22 la 2ª vuelta dice qué resolver:',
+      /promoción para inmobiliarias/.test(nota2) ? 'OK' : 'FAIL ' + nota2.slice(0, 400));
+
+    // Sin pendiente el mensaje igual tiene que servir: prohibir el noop es lo
+    // mínimo indispensable para que la reinyección no sea un viaje al mismo lugar.
+    m = await mensajesV({ _catalogo: CAT2, reintentoSilencio: true }, dec2);
+    const nota3 = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('VS23 sin pendiente igual prohíbe el noop:',
+      /NO uses action noop/.test(nota3) ? 'OK' : 'FAIL ' + nota3.slice(0, 300));
+
+    // Y el flag sigue propagándose para la cota (si se rompe, loop infinito).
+    console.log('VS24 el flag se republica para la cota:',
+      m[0].json.reintentoSilencio === true ? 'OK' : 'FAIL');
+  }
+
   // ---- la cota, de punta a punta ----
   // VS15 — el ciclo cierra: Aplicar Verificador pone reintentoSilencio, Armar
   // Mensajes LLM lo republica, y el gate del prompt lo ve en la 2ª vuelta. Si
@@ -2003,7 +2080,7 @@ async function main() {
     const rescate = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV);
     const flag = rescate[0].json.reintentoSilencio;
     const segunda = await promptVerif(noop(), decidir(), { reintentoSilencio: flag });
-    console.log('VS15 la cota cierra el ciclo end-to-end:',
+    console.log('VS25 la cota cierra el ciclo end-to-end:',
       flag === true && segunda[0].json.verificarSilencio === false ? 'OK' : 'FAIL');
   }
   }
