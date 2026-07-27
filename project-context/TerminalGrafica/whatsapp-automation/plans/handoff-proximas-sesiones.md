@@ -12,7 +12,7 @@ rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no e
 (es el mostrador de TG; el bot vive en el overlay `bot.*`) · **el LLM nunca tipea un monto** ·
 resolución **por clave natural**, jamás por uuid, con `raise notice` + skip · el bot corre en la
 VM de dev con el número de test, **no es prod de TG** · commits en rama, nunca a `main` de
-`projects/` · toda decisión de diseño se contrasta con un agente Fable **antes** de aplicarla
+`projects/` · toda decisión de diseño pasa por una **pasada adversarial antes** de aplicarla
 (ver §6) · tras tocar un nodo Code: `node tests/code-harness.js`, siempre.
 
 ---
@@ -129,9 +129,9 @@ una es un guard que no corre.
 el compositor está atado a cómo redacta el código: el pipeline es prosa→prosa. Es el próximo
 escalón de la voz, y el que haría innecesarias varias reglas del gate.
 
-**d. Fable nunca corrió sobre v8.** La disciplina del proyecto pide contrastar toda decisión de
-diseño antes de aplicarla, y en las sesiones de v8/v8.1 Claude tenía instrucción de no lanzar
-agentes. Los candidatos obvios: el compositor y la salida del menú numerado.
+**d. v8 nunca pasó por una pasada adversarial.** La disciplina del proyecto pide contrastar toda
+decisión de diseño antes de aplicarla, y en las sesiones de v8/v8.1 Claude tenía instrucción de no
+lanzar agentes. Los candidatos obvios: el compositor y la salida del menú numerado.
 
 **e. Sin cerrar de antes:** la cuantización de packs · el guard de variante no anclada.
 
@@ -184,29 +184,42 @@ asíncrono como **cambio de alcance** respecto de lo vendido · el SLA de reclam
 
 ---
 
-## 6. Cómo usamos a Fable
+## 6. Cómo se contrastan las decisiones
 
-Instrucción de Martin (2026-07-21, verbatim): *"Desplegá un bot Fable para contrastar tus
-decisiones sobre las soluciones a los problemas que vamos encontrando, vos las aplicas."*
+> **Fable está fuera desde 2026-07-27** — la cuenta llegó al 100% del límite. Lo reemplaza el
+> consejo Opus, que ya usábamos para las decisiones de dirección. **La disciplina no cambia; el
+> ejecutor sí.** Cuando el límite se libere, el patrón de Fable de abajo vuelve a ser la
+> herramienta barata para el contraste por decisión.
 
-**El patrón:** al inicio de la sesión, Claude despliega **un** agente Fable y lo **continúa vía
-SendMessage durante toda la sesión** (mantiene el contexto acumulado; no spawnear uno por
-pregunta). Para cada problema: (1) Claude diagnostica y arma una propuesta **con** alternativas y
-su descarte razonado; (2) se la manda a Fable pidiéndole explícitamente que **refute**, no que
-valide — bordes, falsos positivos, casos que la propuesta fabrica; (3) Fable valida, enmienda o
-rechaza; **Claude aplica** lo que sobrevive, con caso de harness + golden de suite + commit por
-tema.
+**Lo que no se negocia, corra quien corra:** una decisión de diseño se contrasta **antes** de
+aplicarla, y al contraste se le pide que **refute**, no que valide. Claude diagnostica y arma la
+propuesta **con** sus alternativas y el descarte razonado; el contraste busca bordes, falsos
+positivos y casos que la propuesta fabrica; **Claude aplica** lo que sobrevive, con caso de
+harness + golden de suite + commit por tema.
 
-Costo ~1-3 min por contraste, y el retorno fue real en cada ronda: enmendó o mejoró casi todas
-las propuestas (el rank 3 devolviendo todas las variantes, el gap "dirección de correo" antes de
-que apareciera en un test, el rechazo de cantidad-first sin marcador, el sobre-disparo del ancla
-libro, el lookup de brackets como espejo del motor).
+**Dos tamaños, según lo que esté en juego:**
 
-**Cuándo se convoca un consejo Opus en cambio:** cuando el problema no es un bug sino una
-dirección — el rediseño de la resolución (07-24), la ronda 4 y la atomización (07-26), la
-dependencia del nombre en el prompt (07-26). Un consejo cuesta ~600k tokens y **encuentra cosas
-fuera del encargo**: los dos consejos de julio trajeron, cada uno, bugs vivos que nadie estaba
-buscando.
+| | cuándo | forma | costo |
+|---|---|---|---|
+| **Pasada adversarial** | una decisión concreta dentro de una ronda de fixes | 2-3 agentes Opus en paralelo, **una lente distinta cada uno** (plata, resolución determinística, voz de mostrador), cada uno con la consigna de refutar. Diversidad de lente, no redundancia: tres refutadores idénticos encuentran lo mismo | ~50-100k tokens |
+| **Consejo** | el problema no es un bug sino una **dirección** | 5-6 lentes, brief escrito, acta en `plans/consejo-*.md` | ~600k tokens |
+
+**El consejo se paga solo por lo que encuentra fuera del encargo.** Los tres de julio trajeron,
+cada uno, bugs vivos que nadie estaba buscando: el 07-26 sobre la dependencia del nombre encontró
+que v8 había matado **los cuatro anti-loops** (el bot podía repreguntar indefinidamente sin
+derivar nunca a mail, pagando cada vuelta) y que el gate no protegía ni el nombre ni el hedge —
+12 de 19 ataques pasaban con veredicto `ok`. Ninguna de las dos cosas estaba en el brief.
+
+**Lo que el contraste enmendó cuando existía** (evidencia, para no aflojar la disciplina cuando
+apure el tiempo): el rank 3 devolviendo todas las variantes en vez de `sin_match`, el gap
+"dirección de correo" en la cascada de primera mención **antes** de que apareciera en un test, el
+rechazo de cantidad-first sin marcador (trampa de UX: preguntar e ignorar), el sobre-disparo del
+ancla libro, el lookup de brackets como espejo exacto del motor.
+
+**El costo de saltearlo también está medido:** los cinco bugs del 27 (§2) salieron a la luz en
+WhatsApp real, no en el harness. Un contraste no los habría encontrado todos —cuatro eran
+premisas falsas de los mocks— pero el del gate (91 tokens prohibidos que incluían "en" y "con")
+es exactamente la clase de cosa que un refutador con lente de voz pregunta en la primera vuelta.
 
 ---
 
