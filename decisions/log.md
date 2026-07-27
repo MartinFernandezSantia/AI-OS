@@ -18,6 +18,69 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-27 — Bot TG: el mensaje de precio cierra con un aviso de canal, una vez por conversación
+
+**Decisión:** se elimina la leyenda `(precio de lista; el precio final del trabajo te lo confirma
+el equipo)`, que iba **inline y entre paréntesis pegada a cada monto**. En su lugar el mensaje de
+precio cierra con una oración aparte: *"Los pedidos se hacen por mail a terminalgrafica@gmail.com
+o en el local; este canal es solo informativo."* Va **una sola vez por conversación** y **solo si
+el mensaje lleva plata**. Supersede el "caveat corto" decidido el 26 (`El total te lo confirmamos
+en el local o por mail.`), que nunca llegó a una ronda real.
+
+**Por qué:** Martin la rechazó por ilegible en WhatsApp — repetida por ítem en los multi-ítem el
+mensaje quedaba impresentable. Y decía lo que no importa (que el precio puede moverse) en vez de
+lo que sí (dónde se encarga). No hizo falta estado nuevo: `avisoDado` ya detectaba el mail del
+negocio en los mensajes salientes de Chatwoot, y como el aviso lleva la dirección, se apaga solo
+a partir del segundo. De paso alinea dos mecanismos que hablaban de lo mismo sin conocerse (ese
+`avisoDado` y el `avisoNote` que ya le pedía al LLM no repetir la dirección). El compositor no lo
+puede borrar por dos redes independientes: `solo informativo` está en la lista de hedges, y el
+mail viaja tokenizado como `[[MAIL]]`, así que borrar la oración también rompe la regla de tokens.
+
+**Consecuencia aceptada, no discutida:** del segundo mensaje en adelante el precio sale **sin
+ninguna leyenda**. Es lo pedido y tiene sentido (al cliente ya se le dijo). El disparador para
+revisarlo está definido: si en una ronda alguien toma un número del cuarto mensaje como
+presupuesto cerrado, hace falta una versión corta que reaparezca cada N turnos.
+
+**Alternativas consideradas:** el caveat corto del 26 (sigue siendo una leyenda de precio, no una
+instrucción de cómo encargar); repetir el aviso en cada mensaje con plata (ruido, y el ruido se
+paga a USD 0,026 el mensaje desde el 1-oct).
+
+**Owner:** Martin.
+
+## 2026-07-26 — Bot TG: el catálogo se queda en el prompt y el LLM sigue eligiendo el nombre
+
+**Decisión:** tras un consejo Opus de 6 lentes sobre "cómo dejar de depender de que el LLM elija
+el nombre del producto de un catálogo pegado en el prompt", **ninguna de las seis direcciones
+candidatas entra**. La arquitectura no cambia. Lo que entra en su lugar son tres cosas baratas:
+**señal** (conjunto cerrado de nombres + columna `senales` en `bot.decisiones` para detectar el
+confident-wrong offline), **curación de voz** (los sinónimos que faltaban, los hijacks medidos), y
+la **puerta abierta** (declarar el supuesto pegado al monto).
+
+**Por qué:** las seis se midieron y ninguna gana.
+- *IDs opacos* destruyen la única señal de detección: un `P047` equivocado no deja rastro humano.
+- *Enum en el JSON schema*: OpenRouter **ignora en silencio** los parámetros no soportados; 84
+  valores está al filo del umbral de `400` reportado (~100); y el array `models: [2.5, 3.1]`
+  existe justamente para que el 16-oct el primario caiga solo al sucesor — la garantía se
+  evaporaría sin aviso, en una fecha que ya está en el calendario.
+- *Sacar el catálogo del prompt* no ahorra: está dentro del prefijo cacheable, sacarlo da
+  **−USD 0,33/mes**, y se lleva puesto el mundo cerrado. No existe umbral de similitud que separe
+  "lo tenemos" de "se parece a algo que tenemos": medido, 0,63 afuera contra 0,53 adentro. El
+  resolver difuso puede proponer, nunca confirmar.
+- *Contrato de 9 slots con matcher estructural*: con todos los slots llenos **y correctos**, sólo
+  **42 de 82** productos quedan unívocos; los seis servicios de taller tienen el vector idéntico.
+  Nombre y atributos son **complementarios, no rivales**: a 17 productos los identifica sólo el
+  nombre (servicios cuya identidad es un sustantivo), a 22 sólo los atributos, y la unión cubre
+  80 de 81.
+
+Cambiaría de idea si el sucesor de flash-lite soporta `enum` de forma verificable (no en
+silencio), o si la señal recién construida mide una tasa de confident-wrong por nombre que
+justifique pagar el costo de detección perdida.
+
+**Alternativas consideradas:** las seis, con sus números, en
+`project-context/TerminalGrafica/whatsapp-automation/plans/consejo-opus-resolucion-producto.md`.
+
+**Owner:** Martin.
+
 ## 2026-07-26 — Bot TG: las impresiones se cobran por HOJA, no por página (cierra la pregunta 31)
 
 **Decisión:** en las líneas de impresión Riso (obra 75 y a4 obra 106) la unidad de venta es la
