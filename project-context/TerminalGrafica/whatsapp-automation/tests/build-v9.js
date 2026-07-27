@@ -267,12 +267,47 @@ flags as (
   from bot.variantes v
   group by v.producto_id
 ),
+-- EJES DE LAS VARIANTES. El filtro (LLM 2) decide con los atributos del PRODUCTO,
+-- pero hay familias enteras donde el eje que discrimina vive en la VARIANTE: en
+-- 'Impresiones papel obra 75 gr' el color es variante (simple faz color \$400) y el
+-- producto no lo declara, mientras que en 'obra 80/106' el color esta horneado en el
+-- producto y las variantes son tamanios. Sin esta union, el filtro leia "no dice
+-- color" y descartaba justo la opcion mas barata (incidente 2026-07-27: el cliente
+-- vio \$750 y nunca supo que existia la de \$400).
+-- Solo los ejes que un cliente nombra; el resto es ruido para el prompt.
+ejes as (
+  select v.producto_id,
+         jsonb_object_agg(e.k, e.vals) as ejes_variantes
+  from bot.variantes v
+  cross join lateral (
+    select kv.key as k, jsonb_agg(distinct vv.val) as vals
+    from jsonb_each(coalesce(v.atributos, '{}'::jsonb)) kv
+    cross join lateral jsonb_array_elements_text(
+      case when jsonb_typeof(kv.value) = 'array'  then kv.value
+           when jsonb_typeof(kv.value) = 'string' then jsonb_build_array(kv.value)
+           when jsonb_typeof(kv.value) = 'number' then jsonb_build_array(kv.value #>> '{}')
+           else '[]'::jsonb end) as vv(val)
+    where kv.key in ('tamano','faz','color','acabado','cobertura','material','papel','gramaje_gr')
+    group by kv.key
+  ) e
+  group by v.producto_id
+),
+-- Atributos a nivel PRODUCTO: los que valen para TODAS sus variantes. Salen de
+-- bot.taxonomia y NO de bot.variantes, que ya viene mergeada producto||variante y
+-- haria pasar un eje de una sola variante como si fuera de todo el producto.
+atrs as (
+  select t.producto_id, t.atributos, t.familias
+  from bot.taxonomia t
+),
 filtrado as (
   select c.producto_id, c.nombre_canonico, c.score, c.n_tokens, c.tokens_match,
-         f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, nb.por_nombre
+         f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, nb.por_nombre,
+         a.atributos, a.familias, coalesce(ej.ejes_variantes, '{}'::jsonb) as ejes_variantes
   from crudo c
   join flags f using (producto_id)
   join nombrado nb using (producto_id)
+  join atrs a using (producto_id)
+  left join ejes ej using (producto_id)
   cross join pedido pe
   -- GUARD DE NICHO: el producto de precio especial por rubro NUNCA es candidato
   -- si el cliente no nombro el rubro. Se compara contra la ventana, no contra
@@ -287,7 +322,8 @@ filtrado as (
 -- busqueda salia VACIA. Bug encontrado en la 1a corrida real (2026-07-27).
 tope as (select max(score) as mx from filtrado)
 select f.producto_id, f.nombre_canonico, round(f.score::numeric, 3) as score, f.n_tokens,
-       f.tokens_match, f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.por_nombre
+       f.tokens_match, f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.por_nombre,
+       f.atributos, f.familias, f.ejes_variantes
 from filtrado f, tope
 -- CORTE RELATIVO: todo lo que llegue al 40% del mejor score. Con una palabra
 -- distintiva deja 2-3; con puras genericas deja mas, que es correcto (el pedido
@@ -461,13 +497,29 @@ if (filas.length === 1) {
 }
 
 // PROYECCIÓN SLIM: sólo lo que sirve para DECIDIR cuál pidió el cliente.
+const objDe = (x) => { let a = x; if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = null; } }
+  return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; };
+const EJES_MOSTRAR = ['papel','material','gramaje_gr','tamano','color','faz','acabado','cobertura','tecnologia','impreso_en'];
+
 const slim = filas.map((r, i) => {
-  const at = (() => { let a = r.atributos; if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = null; } }
-    return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; })();
+  const at = objDe(r.atributos);
+  // EJES DE VARIANTE. El producto declara lo que vale para TODAS sus variantes; los
+  // ejes que varian entre ellas viven en ejes_variantes. Mezclarlos es lo que hace
+  // visible al obra 75, cuyo color es de variante y no de producto — el filtro lo
+  // descartaba por "no dice color" teniendo color a \$400 (incidente 2026-07-27).
+  const ev = objDe(r.ejes_variantes);
   const ejes = [];
-  for (const k of ['papel','material','gramaje_gr','tamano','color','faz','acabado','cobertura','tecnologia','impreso_en']) {
-    if (at[k] === null || at[k] === undefined) continue;
-    ejes.push(k + '=' + (Array.isArray(at[k]) ? at[k].join('/') : at[k]));
+  for (const k of EJES_MOSTRAR) {
+    const vP = at[k];
+    // union producto ∪ variantes, dedupe conservando orden, sin perder el escalar.
+    const vals = [];
+    for (const v of [].concat(vP === null || vP === undefined ? [] : vP,
+                              Array.isArray(ev[k]) ? ev[k] : (ev[k] === undefined ? [] : [ev[k]]))) {
+      const s = String(v);
+      if (s && !vals.includes(s)) vals.push(s);
+    }
+    if (!vals.length) continue;
+    ejes.push(k + '=' + vals.join('/'));
   }
   return '[' + i + '] ' + r.nombre_canonico + (ejes.length ? '  (' + ejes.join(' · ') + ')' : '')
     + (Number(r.n_variantes) > 1 ? '  — ' + r.n_variantes + ' opciones' : '');
