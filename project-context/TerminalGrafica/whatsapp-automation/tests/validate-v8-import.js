@@ -18,7 +18,7 @@ console.log('  nodos v7=' + v7.nodes.length + '  v8=' + v8.nodes.length);
 // tiene a nadie mirando Chatwoot, y `Asignar a Humano` ademas dejaba al bot MUDO
 // para siempre en esa conversacion (Filtro Ingreso exige !meta.assignee).
 const SIN_HANDOFF = ['Asignar a Humano', 'Armar Nota Agente', 'Llamar LLM Nota', 'Nota Privada Agente'];
-if (v7.nodes.length - SIN_HANDOFF.length !== v8.nodes.length) E('cambio la cantidad de nodos (68 - 4 de handoff = 64)');
+if (v7.nodes.length - SIN_HANDOFF.length + 1 !== v8.nodes.length) E('cambio la cantidad de nodos (68 - 4 de handoff + 1 de Log Silencio = 65)');
 SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });
 // y la escalacion tiene que seguir dejando su fila con el motivo
 if (!v8.nodes.some((n) => n.name === 'Log Escalación')) E('se perdio Log Escalación (ahi vive `motivo`)');
@@ -38,7 +38,7 @@ console.log('  nodos de envio al cliente: ' + envios.map((n) => n.name).join(', 
 // UN solo log del turno saliente. Se excluyen a proposito: `Log Escalación` (otra
 // rama, siempre fue separada) y `Get Ruta Cotizador` (LEE decisiones, no escribe).
 const logsTurno = v8.nodes.filter((n) => n.type === 'n8n-nodes-base.postgres'
-  && /decisiones/.test(JSON.stringify(n.parameters)) && /^Log /.test(n.name) && n.name !== 'Log Escalación');
+  && /decisiones/.test(JSON.stringify(n.parameters)) && /^Log /.test(n.name) && n.name !== 'Log Escalación' && n.name !== 'Log Silencio');
 console.log('  logs del turno saliente: ' + logsTurno.map((n) => n.name).join(', '));
 if (logsTurno.length !== 1) E('deberia haber UN solo log de turno, hay ' + logsTurno.length);
 ['Log Precio', 'Log Menu', 'Log Respuesta', 'Enviar Precio', 'Enviar Menu', 'Enviar Respuesta', 'Pre-Envío Precio']
@@ -71,6 +71,8 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   'Llamar LLM Compositor', 'Aplicar Compositor', 'Armar Menu Opciones', 'Aplicar Aclarador', 'Prompt Cotizador',
   // v8.1 — bloqueantes del consejo
   'Get Ruta Cotizador', 'Armar Mensajes LLM', 'Parsear Respuesta',
+  // v8.2 — telemetria de los finales mudos
+  'Log Silencio', 'Silencio Repetición', 'Descartar (debounce/dup)',
   'Enviar Mensaje', 'Mensaje Firewall Refusal', 'Aviso Rate Firewall', 'Mensaje Refusal Tier-2',
   'Respuesta No-Texto', 'Saludo Bienvenida', 'Mensaje Anti-Injection', 'Mensaje Escalación',
   'Mensaje Cap Email', 'Label Escalación', 'Label Cap',

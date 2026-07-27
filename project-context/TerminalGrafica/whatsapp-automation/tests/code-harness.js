@@ -1197,6 +1197,14 @@ async function main() {
     && !/promoci[oó]n cartel|inmobiliarias 6/i.test(r[0].json.reply) && !r[0].json.reply.includes('$')
     && /inmobiliaria/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
+  // W0: el noop dice POR QUÉ. Eran tres orígenes indistinguibles desde la base y
+  // ninguno dejaba fila: por eso "necesito anillar 3 apuntes" y "Hola?" se
+  // perdieron sin motivo. Ahora Log Silencio los escribe con su origen.
+  r = await parsear(JSON.stringify({ action: 'noop', reply: '', motivo: 'nada nuevo' }), decidir());
+  console.log('W0 noop del LLM:', r[0].json.action === 'noop' && r[0].json.noopOrigen === 'llm' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.noopOrigen));
+  r = await parsear(JSON.stringify({ action: 'answer', reply: '   ' }), decidir());
+  console.log('W0b noop por reply vacío:', r[0].json.action === 'noop' && r[0].json.noopOrigen === 'reply-vacio' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.noopOrigen));
+
   // W7: AVISO DE CANAL DURABLE. `decidir.avisoDado` viene en false (la ventana de
   // Chatwoot ya no lo alcanza) pero bot.decisiones dice que sí salió -> no se repite.
   // Este es el caso que dio "el aviso 4 veces en una conversación".
