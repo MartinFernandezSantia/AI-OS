@@ -171,6 +171,32 @@ Las tres salieron de comparar atributos entre productos: son pares que quedaron
     porque no están en el dato. (El resto de los invisibles se resolvió el 27 metiendo el
     sustantivo en el display — ver `db/curacion-2026-07-27.md`.)
 
+## 12. Defaults de familia — "el trabajo normal" (2026-07-28)
+
+Aplica la regla ya firmada en *Defaults de oficio* (§Ya resuelto): si la familia tiene un
+default curado, el bot cotiza ese y ofrece el resto en la misma frase — **nunca un default
+silencioso**. Esto extiende el mecanismo a 3 familias más. Ninguna de las cuatro bloquea:
+si TG corrige una, se mueve el flag y el mecanismo no cambia. Aplicadas en
+`db/curacion-2026-07-28.sql`.
+
+70. **Impresiones: ¿el trabajo normal es obra 75 gr en A4?** — Ya estaba firmado el papel
+    (obra 75, simple faz, b/n). Lo que se agrega es el **tamaño**: el producto no declaraba
+    ninguno, y sin ese dato el bot no puede detectar que un pedido de A3 no le corresponde
+    (cotizaba $400/hoja cuando el A3 real vale $1.200-1.800). Se cargó `tamano: ["a4"]`
+    asumiendo que del riso sale A4. **Confirmar que el riso no imprime otro tamaño.**
+71. **Anillado: ¿el normal es el plástico A4/oficio ($2.400)?** — Decisión de Martin
+    2026-07-28. Ante "anillame un apunte" sin más datos, el bot cotiza plástico y menciona
+    el metálico ($3.200-4.600). Confirmar que el plástico es lo que se pide por defecto en
+    el mostrador.
+72. **Plastificado: ¿el normal es `Laminados` ($330 A4 / $600 A3)?** — Hoy, ante
+    "plastificame esto", el bot elegiría `Plastificado A4` a **$2.200** — 6,7× más caro.
+    Necesito saber cuál es el trabajo que la gente pide cuando dice "plastificar" a secas,
+    y **cuál es la diferencia real entre `Laminados`, `Plastificado A4` y `Encapsulado`**,
+    porque por el nombre no se distingue y el precio dice que no son lo mismo.
+73. **Librería: ¿el sobre normal es el A4 ($700)?** — El más flojo de los cuatro. Ante
+    "necesito un sobre" el bot cotizaría A4; podría ser el inglés ($500) si la gente los
+    pide para carta. Confirmar cuál se vende más.
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
