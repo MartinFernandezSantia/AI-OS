@@ -1,0 +1,488 @@
+<title>v8.3 — La pasada adversarial antes de construir</title>
+<style>
+  :root{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a; --amber-soft:rgba(169,112,26,.12);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+      --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+      --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+      --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+      --amber:#d9a441; --amber-soft:rgba(217,164,65,.14);
+      --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a; --amber-soft:rgba(169,112,26,.12);
+    --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  :root[data-theme="dark"]{
+    --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+    --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+    --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+    --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+    --amber:#d9a441; --amber-soft:rgba(217,164,65,.14);
+    --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;
+    align-items:center;justify-content:center;padding:18px;
+    background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);
+    background-size:22px 22px;}
+
+  .stage{position:relative;width:min(1160px,96vw);height:min(710px,92vh);
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    box-shadow:var(--sh);overflow:hidden;}
+
+  .cm{position:absolute;width:16px;height:16px;z-index:6;opacity:.6}
+  .cm::before,.cm::after{content:"";position:absolute;background:var(--muted)}
+  .cm::before{width:16px;height:1px;top:0;left:0}
+  .cm::after{width:1px;height:16px;top:0;left:0}
+  .cm-tl{top:10px;left:10px}
+  .cm-tr{top:10px;right:10px;transform:scaleX(-1)}
+  .cm-bl{bottom:10px;left:10px;transform:scaleY(-1)}
+  .cm-br{bottom:10px;right:10px;transform:scale(-1)}
+
+  .bar{position:absolute;top:0;left:0;right:0;height:3px;background:transparent;z-index:7}
+  .bar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--verm),var(--teal));
+    transition:width .35s cubic-bezier(.4,0,.2,1)}
+
+  .slide{position:absolute;inset:0;padding:clamp(30px,4.6vh,58px) clamp(34px,4.8vw,72px) 78px;
+    display:none;flex-direction:column;opacity:0;overflow-y:auto;overflow-x:hidden;
+    transition:opacity .32s ease}
+  .slide.active{display:flex;opacity:1;animation:rise .4s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide.active{animation:none}.bar-fill{transition:none}}
+
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--muted);display:flex;align-items:center;gap:10px}
+  .eyebrow b{color:var(--teal);font-weight:700}
+  .s-head{margin-bottom:20px;flex:none}
+  .s-title{font-size:clamp(24px,3.3vw,38px);line-height:1.08;margin:12px 0 0;font-weight:800;
+    letter-spacing:-.02em;text-wrap:balance;max-width:26ch}
+  .s-body{flex:1;min-height:0}
+  .lead{font-size:clamp(15px,1.5vw,17px);color:var(--ink-soft);line-height:1.5;max-width:66ch}
+  .lead + .lead{margin-top:10px}
+  .k{color:var(--teal);font-weight:700}
+  .kv{color:var(--verm);font-weight:700}
+  .ka{color:var(--amber);font-weight:700}
+  code,.mono{font-family:var(--mono);font-size:.88em}
+  .chip-code{font-family:var(--mono);background:var(--verm-soft);color:var(--verm);
+    padding:.08em .4em;border-radius:4px;font-size:.85em;font-weight:600;white-space:nowrap}
+  .chip-ok{font-family:var(--mono);background:var(--teal-soft);color:var(--teal);
+    padding:.08em .4em;border-radius:4px;font-size:.85em;font-weight:600;white-space:nowrap}
+
+  .cover{justify-content:center;gap:26px}
+  .cover .brandline{font-family:var(--mono);font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+  .cover h1{font-size:clamp(34px,6vw,62px);line-height:1;margin:0;font-weight:850;letter-spacing:-.03em;text-wrap:balance;max-width:18ch}
+  .cover .sub{font-size:clamp(16px,1.8vw,20px);color:var(--ink-soft);max-width:56ch;line-height:1.45}
+  .cover .meta{font-family:var(--mono);font-size:12.5px;color:var(--muted);letter-spacing:.04em}
+  .rule{height:2px;width:74px;background:var(--verm)}
+
+  .grid{display:grid;gap:12px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:720px){.g2,.g3{grid-template-columns:1fr}}
+
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:15px 16px}
+  .card h4{margin:0 0 6px;font-size:14.5px;letter-spacing:-.01em}
+  .card p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.45}
+  .card p + p{margin-top:7px}
+
+  .inc{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--verm);
+    border-radius:7px;padding:12px 14px}
+  .inc.ok{border-left-color:var(--teal)}
+  .inc.warn{border-left-color:var(--amber)}
+  .inc .id{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--verm);letter-spacing:.04em}
+  .inc.ok .id{color:var(--teal)}
+  .inc.warn .id{color:var(--amber)}
+  .inc h4{margin:5px 0 0;font-size:14px;letter-spacing:-.01em;line-height:1.25}
+  .inc p{margin:6px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.42}
+  .inc .fix{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--teal);margin-top:8px;display:block;line-height:1.4}
+
+  .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+  @media (max-width:860px){.flow{grid-template-columns:1fr 1fr}}
+  .step{border:1px solid var(--line);border-radius:7px;padding:10px 11px 12px;background:var(--paper);position:relative}
+  .step.llm{border-color:var(--teal-line);background:var(--teal-soft)}
+  .step .n{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.05em}
+  .step h5{margin:3px 0 4px;font-size:13px;letter-spacing:-.01em;padding-right:38px}
+  .step small{font-size:11px;color:var(--ink-soft);line-height:1.32;display:block}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:.15em .4em;border-radius:3px;font-weight:700;position:absolute;top:9px;right:9px}
+  .tag.code{background:var(--ink);color:var(--paper)}
+  .tag.ai{background:var(--teal);color:#08201e}
+  .legend{display:flex;gap:18px;font-family:var(--mono);font-size:11px;color:var(--muted);
+    letter-spacing:.06em;margin-top:14px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+
+  .maptbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .maptbl th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);padding:0 10px 8px;border-bottom:1px solid var(--line);font-weight:600}
+  .maptbl td{padding:9px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.38}
+  .maptbl td.key{white-space:nowrap;font-family:var(--mono);font-weight:700;color:var(--verm);font-size:11.5px}
+  .maptbl td.keyt{white-space:nowrap;font-family:var(--mono);font-weight:700;color:var(--teal);font-size:11.5px}
+  .maptbl td b{color:var(--ink)}
+  .maptbl td.num{font-variant-numeric:tabular-nums;text-align:right;font-family:var(--mono);white-space:nowrap}
+  .tblscroll{height:100%;overflow:auto}
+
+  .mine{border:1px solid var(--amber);border-radius:9px;padding:16px 18px;background:linear-gradient(180deg,var(--amber-soft),transparent)}
+  .mine .warn{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:700}
+  .mine h4{margin:8px 0 7px;font-size:16px;line-height:1.25}
+  .mine p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+  .mine p + p{margin-top:8px}
+
+  .dkey{border:1px solid var(--teal-line);background:var(--teal-soft);border-radius:8px;padding:13px 15px}
+  .dkey .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  .dkey h4{margin:5px 0 0;font-size:14.5px;line-height:1.28}
+  .dkey p{margin:7px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.42}
+
+  pre.code{font-family:var(--mono);font-size:11.5px;line-height:1.55;background:var(--paper);
+    border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0;overflow-x:auto;color:var(--ink-soft)}
+  pre.code b{color:var(--teal);font-weight:700}
+  pre.code i{color:var(--verm);font-style:normal;font-weight:700}
+  pre.code u{color:var(--muted);text-decoration:none}
+
+  .close-big{font-size:clamp(20px,2.6vw,30px);font-weight:800;letter-spacing:-.02em;line-height:1.18;text-wrap:balance;max-width:28ch}
+
+  .hud{position:absolute;left:0;right:0;bottom:0;height:54px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 clamp(20px,4vw,40px);
+    border-top:1px solid var(--line);background:var(--card);z-index:8}
+  .colorbar{display:flex;gap:0}
+  .colorbar span{width:22px;height:11px;display:block}
+  .colorbar b{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;margin-left:12px;align-self:center;text-transform:uppercase}
+  .navwrap{display:flex;align-items:center;gap:6px}
+  .dots{display:flex;gap:5px;margin-right:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:0;padding:0;cursor:pointer;transition:background .2s,transform .2s}
+  .dot.on{background:var(--teal);transform:scale(1.35)}
+  .dot:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+  .nb{width:32px;height:32px;border-radius:6px;border:1px solid var(--line);background:var(--paper);
+    color:var(--ink);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .2s,color .2s}
+  .nb:hover{border-color:var(--teal);color:var(--teal)}
+  .nb:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .nb:disabled{opacity:.35;cursor:default}
+
+  .hint{position:absolute;bottom:64px;right:clamp(20px,4vw,40px);font-family:var(--mono);
+    font-size:10px;color:var(--muted);letter-spacing:.08em;z-index:8;opacity:.7}
+</style>
+
+<div class="stage" role="region" aria-label="Deck: pasada adversarial de v8.3">
+  <span class="cm cm-tl"></span><span class="cm cm-tr"></span>
+  <span class="cm cm-bl"></span><span class="cm cm-br"></span>
+  <div class="bar"><div class="bar-fill"></div></div>
+
+  <!-- 1 COVER -->
+  <section class="slide cover" data-t="Portada">
+    <div class="brandline">Terminal Gráfica · Bot de cotización WhatsApp</div>
+    <div class="rule"></div>
+    <h1>v8.3 antes de escribir código</h1>
+    <p class="sub">El log estaba roto y ya sé por qué. Y la pasada de 2 lentes tumbó dos premisas del plan: una de plata y una de costo. La dirección sigue en pie; el orden de construcción cambia.</p>
+    <p class="meta">2026-07-27 · lentes plata + costo por mensaje · nada construido todavía</p>
+  </section>
+
+  <!-- 2 EL LOG -->
+  <section class="slide" data-t="El log">
+    <div class="s-head">
+      <span class="eyebrow"><b>01</b> Paso 1 · resuelto sin la consulta</span>
+      <h2 class="s-title">El log está roto, y el daño es mayor que perder telemetría</h2>
+    </div>
+    <div class="s-body grid" style="gap:16px;align-content:start">
+      <pre class="code">Aplicar Compositor  →  <i>Enviar Mensaje</i> (HTTP POST a Chatwoot)  →  <b>Log Turno</b>
+
+<u>Log Turno mapea:</u>  borrador = {{ <i>$json</i>.borrador }}   final = {{ <i>$json</i>.final }}
+<u>Pero $json ahí es</u>  la respuesta del API de Chatwoot: {id, content, message_type…}
+<u>O sea:</u>            <i>las 4 columnas se escriben null en TODOS los turnos, siempre.</i></pre>
+      <div class="grid g2">
+        <div class="inc">
+          <span class="id">EL DAÑO REAL</span>
+          <h4>Los dos anti-loops están muertos</h4>
+          <p><code>Get Ruta Cotizador</code> lee <code>borrador</code> de la base para armar <code>borradoresPrevios</code>, y de ahí comen el anti-repetición y el anti-repregunta. Columna en null → array vacío → <b>nunca cuentan</b>. El consejo del 07-26 los arregló en el código y el log los volvió a desarmar.</p>
+        </div>
+        <div class="inc ok">
+          <span class="id">EL ARREGLO</span>
+          <h4>4 expresiones, cero riesgo</h4>
+          <p>Los datos están completos: <code>Aplicar Compositor</code> retorna el sobre entero con <code>Object.assign</code>. Cambiar la fuente de <code>$json</code> a <code>$('Aplicar Compositor').first().json</code> en los 4 campos.</p>
+          <span class="fix">La consulta de §5 quater igual se corre — después, como verificación.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 LO QUE TUMBARON -->
+  <section class="slide" data-t="Lo que cayó">
+    <div class="s-head">
+      <span class="eyebrow"><b>02</b> Convergencia de las 2 lentes</span>
+      <h2 class="s-title">Las dos llegaron al mismo lugar por caminos distintos</h2>
+    </div>
+    <div class="s-body grid" style="gap:14px;align-content:center">
+      <p class="lead">El diseño está presupuestado como si fuera gratis. No lo es — y una de las cuentas mal hechas <b>invalida una de las dos políticas del plan</b>.</p>
+      <div class="grid g2">
+        <div class="inc">
+          <span class="id">PREMISA CAÍDA · 1</span>
+          <h4>"No agrega una llamada" es falso</h4>
+          <p>Hoy hay <b>3 nodos HTTP a OpenRouter</b> + <code>Guardrails Tier-2</code>. El LLM 2 es nueva y adicional, y el Aclarador no muere. Peor caso: <span class="kv">5 llamadas secuenciales</span> en un turno.</p>
+        </div>
+        <div class="inc">
+          <span class="id">PREMISA CAÍDA · 2</span>
+          <h4>La puerta abierta no es gratis</h4>
+          <p>La puerta y la repregunta son <b>las dos un mensaje saliente</b>: ~USD 0,026 cada una. El ahorro de la puerta es <span class="ka">un turno de latencia, no plata</span>.</p>
+        </div>
+      </div>
+      <div class="mine">
+        <span class="warn">Consecuencia · esto cambia una decisión, no un número</span>
+        <h4>Con esa corrección, las políticas 1 y 2 del plan se contradicen</h4>
+        <p>La 2 dice <i>"no repreguntes, informá con la puerta abierta"</i>. La 1 dice <i>"con más de 4 candidatos, repreguntá"</i>. Y la 1 es cara: los tokens frecuentes son justo los que la gente usa (<code>papel</code> 30 productos · <code>impresion</code> 10 · <code>color</code> 10 · <code>a4</code> 15), así que dispararía seguido.</p>
+        <p><b>Costo estimado sobre 540 consultas de precio/mes:</b> 162 a 324 repreguntas extra = <span class="kv">USD 4 a 8/mes</span> — tanto como todo el gasto de LLM del bot (~USD 12/mes) — más un turno de abandono cada vez.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 HAYCOMPETENCIA -->
+  <section class="slide" data-t="hayCompetencia">
+    <div class="s-head">
+      <span class="eyebrow"><b>03</b> El hallazgo más caro</span>
+      <h2 class="s-title">El guard que detecta el confident-wrong no sobrevive al cambio</h2>
+    </div>
+    <div class="s-body grid" style="gap:15px;align-content:start">
+      <pre class="code"><u>Hoy:</u>   hayCompetencia = descartados.length > 0 || filas > 1     <u>← sale de Get Precio</u>
+
+<u>En v8.3:</u> el LLM 2 entrega un nombre <b>copiado de una lista que le pusieron delante</b>
+        → Get Precio lo resuelve exacto, fila única, descartados = []
+        → <i>hayCompetencia = false</i> → <i>PUERTA APAGADA</i></pre>
+      <p class="lead">El diseño elimina el ruido de resolución y <b>con él elimina la señal</b>. Es la misma causa raíz del 27 —la compuerta se deriva de un dato posterior a la elección del LLM— movida un nodo más adelante.</p>
+      <div class="dkey">
+        <span class="lbl">Sobrevive · y es una línea</span>
+        <h4><code>hayCompetencia</code> deja de leerse de <code>Get Precio</code> y pasa a leerse del candidato-set del SQL de tokens, <b>antes</b> del filtro del LLM 2.</h4>
+        <p>Es el mismo dato medido antes de la elección en vez de después. O sea: el diagnóstico del 27, aplicado en el lugar correcto.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 GUARDS ELUDIDOS -->
+  <section class="slide" data-t="Guards eludidos">
+    <div class="s-head">
+      <span class="eyebrow"><b>04</b> Lente de plata</span>
+      <h2 class="s-title">Tres guards de negocio quedan aguas abajo de una decisión que ya no producen</h2>
+    </div>
+    <div class="s-body grid" style="gap:12px;align-content:start">
+      <p class="lead">Hoy el nicho, <code>solo_descuentos</code> y <code>oculto</code> se aplican en <code>Armar Respuesta Precio</code>. El diseño pone la lista <b>delante del LLM 2</b>, y el menú y la repregunta-de-eje <b>no pasan por <code>nichoDe</code></b>.</p>
+      <div class="grid g2">
+        <div class="inc">
+          <span class="id">MEDIDO · CATÁLOGO REAL</span>
+          <h4>"imprimir un apunte de 200 páginas"</h4>
+          <p>Trae <b>Impresión de módulos/apuntes de medicina</b> primero — <code>apuntes</code> es sinónimo literal de ese producto. Si entra al menú y el cliente elige, el turno siguiente ya tiene "medicina" en la ventana → el guard <b>pasa</b> → <span class="kv">$45/página a un cliente que no califica</span>.</p>
+        </div>
+        <div class="inc">
+          <span class="id">MEDIDO · CATÁLOGO REAL</span>
+          <h4>"un cartel de 1x0.65"</h4>
+          <p>Trae la <b>promo de inmobiliarias</b> ($15.000) por encima del corrugado real ($19.500). Es el bug V1 que el código dice haber cerrado, reabierto por una puerta que el guard no vigila.</p>
+        </div>
+      </div>
+      <div class="dkey">
+        <span class="lbl">Sobrevive</span>
+        <h4>Los tres son <b>filtro SQL en la búsqueda por token</b>, no instrucción de prompt.</h4>
+        <p><code>where not oculto and (nicho is null or ventana ~* nicho) and (not solo_descuentos or el cliente lo nombró)</code>. El LLM 2 nunca ve lo que no debe ofrecer — y de paso caen 2 de las 5 frases de la leyenda de §4. Una regla comercial no se le delega a un modelo, igual que no se le delega tipear un monto.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 EL LIMIT -->
+  <section class="slide" data-t="El LIMIT 8">
+    <div class="s-head">
+      <span class="eyebrow"><b>05</b> Lo que ninguna lente tenía en el brief</span>
+      <h2 class="s-title">De 46 candidatos a 8 es aritmética, no criterio</h2>
+    </div>
+    <div class="s-body grid" style="gap:15px;align-content:start">
+      <pre class="code"><u>IDF sobre las frecuencias ya medidas:</u>
+   papel        30 de 88 productos   →  peso <i>1,08</i>
+   ilustracion   ~3 de 88            →  peso <b>3,38</b>
+   kraft          2 de 88            →  peso <b>3,78</b>
+
+<u>"papel ilustración para 500 folletos":</u>  ilustración pesa <b>3×</b> más que papel
+   → las 2 ilustraciones suben al tope, los 44 que sólo matchean por `papel` caen solos</pre>
+      <p class="lead"><b>El LLM 2 no hace falta para eso.</b> Donde sí aporta es en el eje que el ranking no ve: elegir entre <i>Ilustración Mate 250</i> y <i>Ilustración Brillo 250</i> sabiendo que el cliente dijo "para folletos" y tres mensajes atrás dijo "algo económico". Eso son 6 candidatos, no 46.</p>
+      <div class="dkey">
+        <span class="lbl">Sobrevive · y desactiva media pasada de las dos lentes</span>
+        <h4><code>where score >= 0.4 * max(score) limit 8</code> en el SQL, antes del LLM 2.</h4>
+        <p>El fail-safe se conserva íntegro (sigue degradando "hacia de más", sólo que de más = 8 en vez de 46) · el payload del LLM 2 baja de <span class="kv">~25k tokens</span> a <span class="k">~700</span> · y <b>la política 1 casi nunca dispara</b> porque el corte ya redujo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 ANTI-LOOP -->
+  <section class="slide" data-t="Anti-loop">
+    <div class="s-head">
+      <span class="eyebrow"><b>06</b> Lente de costo</span>
+      <h2 class="s-title">El anti-loop compara texto, y v8.3 pregunta un eje distinto cada vuelta</h2>
+    </div>
+    <div class="s-body grid" style="gap:15px;align-content:start">
+      <pre class="code"><u>Loop reproducible — 4 mensajes pagos, el contador nunca llega a 2:</u>
+
+  "quiero imprimir algo en papel"   → 42 candidatos
+  Bot: "¿color o b/n?"                            <i>$0,026</i>   (eje color)
+  "color"                          → ~20, sigue >4
+  Bot: "¿simple o doble faz?"                     <i>$0,026</i>   (eje faz — string distinto)
+  "simple"                         → ~12, sigue >4
+  Bot: "¿qué gramaje?"                            <i>$0,026</i>   (eje gramaje)
+  "no sé"
+  Bot: "¿qué gramaje?"                            <i>$0,026</i>   <u>← recién acá empieza a contar</u></pre>
+      <p class="lead"><span class="kv">USD 0,104 en un solo cliente</span>, y es exactamente el agujero que el consejo del 07-26 encontró y cerró. Un anti-loop por texto <b>premia al bot que hace muchas preguntas distintas</b>.</p>
+      <div class="dkey">
+        <span class="lbl">Sobrevive</span>
+        <h4>Cota de <b>2 repreguntas de resolución por consulta</b>, contada sobre <code>bot.decisiones</code> por conversación, cualquiera sea el eje — no sobre texto.</h4>
+        <p>Al llegar a 2: cotizar el piso con la puerta abierta. Nunca email — los fallos de resolución no derivan a mail, es invariante. <b>Y esta cota depende del fix del log</b>: se cuenta sobre la tabla que hoy escribe null.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 LO QUE NO SOBREVIVIÓ -->
+  <section class="slide" data-t="Descartado">
+    <div class="s-head">
+      <span class="eyebrow"><b>07</b> Del ataque, descartado con razón</span>
+      <h2 class="s-title">Tres cosas que las lentes propusieron y no entran</h2>
+    </div>
+    <div class="s-body grid" style="gap:12px;align-content:center">
+      <div class="inc warn">
+        <span class="id">NO</span>
+        <h4>"El LLM 1 puede dejar de ver el catálogo y ahorrar 11k tokens"</h4>
+        <p>El LLM 1 no sólo emite el producto: decide la <code>action</code>, aplica el mundo cerrado y el freno anti-confabulación. Sin catálogo, <i>"¿hacen tazas con foto?"</i> deja de poder negarse con conocimiento y cae al Aclarador. <b>El backlog §7 ya rechazó este movimiento por su nombre.</b> Queda escrito en el plan para que nadie lo re-proponga como optimización obvia durante el código.</p>
+      </div>
+      <div class="inc warn">
+        <span class="id">AL BACKLOG</span>
+        <h4>Guard de orden de magnitud contra la mediana del set</h4>
+        <p>La idea es buena y puede ser el próximo escalón — cubriría la clase entera de errores &gt;5× sin una regex nueva por eje. Pero es un guard nuevo con su propia superficie de falsos positivos, y meterlo en el mismo lote que un cambio de arquitectura hace imposible atribuir una regresión.</p>
+      </div>
+      <div class="inc warn">
+        <span class="id">NO EN ESTE LOTE</span>
+        <h4>Subir o sacar el cupo de 4 del menú</h4>
+        <p>La lente de costo dio la razón que faltaba: <b>el compositor se aflojó el 27 y su comportamiento con listas largas no se midió después</b> — la evidencia de "17 opciones → tres oraciones" es de antes. Y la de plata encontró que el cupo tapa un bug real: <code>esFamilia</code> exige que todos los miembros tengan las mismas variantes, y <i>100 Tarjetas Kraft</i> tiene 2 contra las 4 de <i>100 Tarjetas Color/Negro</i> → sin cupo, "200 tarjetas" cae a un menú plano de 14 líneas. Con el <code>LIMIT 8</code> el cupo deja de ser el cuello de botella igual.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 PREGUNTA TG -->
+  <section class="slide" data-t="Pregunta a TG">
+    <div class="s-head">
+      <span class="eyebrow"><b>08</b> Una pregunta que el plan daba por contestada</span>
+      <h2 class="s-title">El caso de aceptación es una decisión comercial, no un requisito técnico</h2>
+    </div>
+    <div class="s-body grid" style="gap:16px;align-content:center">
+      <p class="lead">El caso pide traer <code>Impresiones papel obra 75 gr</code> ($100 s/f b/n, riso) junto al rubro láser color ($750–$1.600). <b>No son sustitutos</b>: no es la misma calidad ni el mismo trabajo. Ofrecerlos en la misma frase dice implícitamente "son alternativas", y el cliente racional elige la barata.</p>
+      <div class="grid g2">
+        <div class="card"><h4>El número</h4><p>Ratio medido en el caso real: <span class="kv">5×</span>. Por 100 hojas a color, $15.000 contra $75.000. Si TG esperaba vender láser, el bot canibalizó el producto de mayor margen sin que nadie lo decidiera.</p></div>
+        <div class="card"><h4>A favor del plan</h4><p>El catálogo <b>ya declara</b> <code>default_familia: true</code> en Impresiones y <code>default_variante: true</code> en OBRA 75 S/F (curación E0). Pero eso es evidencia sobre el <i>default</i>, no sobre <i>mostrar ambos juntos</i>.</p></div>
+      </div>
+      <div class="mine">
+        <span class="warn">Va a preguntas-tg.md · no bloquea la construcción</span>
+        <h4>¿Ante "imprimir hojas a color", querés que el bot ofrezca la opción riso de $100/$400 junto a la láser de $750, o que ofrezca primero la láser y mencione la económica sólo si el cliente pregunta por precio?</h4>
+        <p>El pipeline se construye igual. La respuesta cambia el orden del ranking, no la arquitectura.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 ORDEN -->
+  <section class="slide" data-t="Orden">
+    <div class="s-head">
+      <span class="eyebrow"><b>09</b> Lo que se construye, y en qué orden</span>
+      <h2 class="s-title">Tres prerrequisitos nuevos entran antes del pipeline</h2>
+    </div>
+    <div class="s-body tblscroll">
+      <table class="maptbl">
+        <thead><tr><th style="width:52px">#</th><th>Qué</th><th>Por qué antes</th><th style="width:96px">Tamaño</th></tr></thead>
+        <tbody>
+          <tr><td class="key">0a</td><td><b>Fix del mapeo de Log Turno</b></td><td>Sin esto los anti-loops están muertos y el pipeline nuevo se depura a ciegas</td><td class="num">4 expr.</td></tr>
+          <tr><td class="key">0b</td><td><b>NFC en los slots de Parsear Respuesta</b></td><td>v8.3 no lo "hereda tal cual": lo <b>agrava</b>. Un token en NFD no matchea y los otros sí → la lista se arma sin el candidato correcto <b>y sin señal de que faltó</b></td><td class="num">1 línea</td></tr>
+          <tr><td class="key">0c</td><td><b>timeout: 6000 en los 4 nodos LLM</b></td><td>Ya especificado en r7 §336 y nunca aplicado; hoy el default es 300 s. Con 4-5 llamadas encadenadas, un proveedor lento deja al cliente esperando minutos</td><td class="num">4 params</td></tr>
+          <tr><td class="keyt">1</td><td><b>SQL de búsqueda por token</b> — IDF + <code>not oculto</code> + nicho + <code>solo_descuentos</code> + <code>limit 8</code> por score</td><td>Los guards de negocio son SQL, no prompt. Y el LIMIT hace innecesaria media pasada del LLM 2</td><td class="num">el nodo</td></tr>
+          <tr><td class="keyt">2</td><td><b>hayCompetencia desde el candidato-set pre-filtro</b></td><td>Sin esto v8.3 sale con <b>menos</b> guardas de plata que v8.2</td><td class="num">1 línea</td></tr>
+          <tr><td class="keyt">3</td><td><b>LLM 2</b> con proyección slim + leyenda de §4</td><td>Prohibido pasarle <code>unidad</code>, <code>precio_lista</code>, los <code>*_id</code>, <code>rangos_cantidad</code>, <code>mostrable</code>. Filtrar es más barato que explicar</td><td class="num">el nodo</td></tr>
+          <tr><td class="keyt">4</td><td><b>Política de salida invertida</b> (listar con piso + puerta) + <b>cota de 2 repreguntas</b></td><td>La política 1 original se contradice con la 2. La cota depende de 0a</td><td class="num">prompt + nodo</td></tr>
+          <tr><td class="keyt">5</td><td><b>¿Muere el Aclarador?</b> — decisión explícita</td><td>Si el LLM 2 ve la conversación y los candidatos, es redundante salvo con SQL = 0 filas, y ahí alcanza una repregunta determinística. Matarlo convierte el +1 neto de llamada en <b>0 neto</b></td><td class="num">decisión</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 11 CIERRE -->
+  <section class="slide" data-t="Cierre">
+    <div class="s-head"><span class="eyebrow"><b>10</b> En una línea</span></div>
+    <div class="s-body grid" style="gap:22px;align-content:center">
+      <p class="close-big">La dirección aguantó el ataque. Lo que no aguantó fue <span class="kv">dónde</span> viven los guards.</p>
+      <div class="grid g3" style="gap:12px">
+        <div class="card"><h4>Sigue en pie</h4><p>El LLM tira palabras, Postgres busca, un segundo LLM filtra. El fail-safe de "degradar hacia de más, nunca hacia nada" es sólido.</p></div>
+        <div class="card"><h4>Cambia</h4><p>Los guards de negocio bajan al SQL. <code>hayCompetencia</code> se mide antes de la elección. La política de repregunta se invierte.</p></div>
+        <div class="card"><h4>Antes de todo</h4><p>El log, el NFC y los timeouts. Los tres ya estaban escritos en el repo y ninguno se aplicó.</p></div>
+      </div>
+      <p class="lead" style="color:var(--muted)">Documentos: <span class="mono">plans/v8-3-pasada-adversarial.md</span> · <span class="mono">plans/v8-3-busqueda-por-palabra.md</span></p>
+    </div>
+  </section>
+
+  <div class="hud">
+    <div class="colorbar" aria-hidden="true">
+      <span style="background:var(--verm)"></span><span style="background:var(--verm-soft)"></span>
+      <span style="background:var(--ink)"></span><span style="background:var(--teal-soft)"></span>
+      <span style="background:var(--teal)"></span>
+      <b>v8.3 · contraste</b>
+    </div>
+    <div class="navwrap">
+      <div class="dots" role="tablist" aria-label="Ir a lámina"></div>
+      <button class="nb" id="prev" aria-label="Lámina anterior">‹</button>
+      <span class="count">01 / 11</span>
+      <button class="nb" id="next" aria-label="Lámina siguiente">›</button>
+    </div>
+  </div>
+  <div class="hint">← → para navegar</div>
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, n=slides.length;
+  var count=document.querySelector('.count');
+  var bar=document.querySelector('.bar-fill');
+  var prev=document.getElementById('prev');
+  var next=document.getElementById('next');
+  var dotsWrap=document.querySelector('.dots');
+  var pad=function(x){return (x<10?'0':'')+x;};
+  slides.forEach(function(s,k){
+    var d=document.createElement('button');
+    d.className='dot'; d.setAttribute('role','tab');
+    d.setAttribute('aria-label','Lámina '+(k+1)+': '+(s.getAttribute('data-t')||''));
+    d.addEventListener('click',function(){go(k);});
+    dotsWrap.appendChild(d);
+  });
+  var dots=[].slice.call(document.querySelectorAll('.dot'));
+  function go(x){
+    i=Math.max(0,Math.min(n-1,x));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    dots.forEach(function(d,k){d.classList.toggle('on',k===i);d.setAttribute('aria-selected',k===i);});
+    count.textContent=pad(i+1)+' / '+pad(n);
+    bar.style.width=((i+1)/n*100)+'%';
+    prev.disabled=(i===0); next.disabled=(i===n-1);
+    slides[i].scrollTop=0;
+  }
+  prev.addEventListener('click',function(){go(i-1);});
+  next.addEventListener('click',function(){go(i+1);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){e.preventDefault();go(0);}
+    else if(e.key==='End'){e.preventDefault();go(n-1);}
+  });
+  go(0);
+})();
+</script>
