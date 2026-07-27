@@ -323,13 +323,25 @@ filtrado as (
 tope as (select max(score) as mx from filtrado)
 select f.producto_id, f.nombre_canonico, round(f.score::numeric, 3) as score, f.n_tokens,
        f.tokens_match, f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.por_nombre,
-       f.atributos, f.familias, f.ejes_variantes
+       f.atributos, f.familias, f.ejes_variantes,
+       coalesce((f.atributos->>'default_familia')::boolean, false) as es_default
 from filtrado f, tope
 -- CORTE RELATIVO: todo lo que llegue al 40% del mejor score. Con una palabra
 -- distintiva deja 2-3; con puras genericas deja mas, que es correcto (el pedido
 -- era ambiguo de verdad y el cliente tiene que ver las opciones).
 where f.score >= 0.4 * tope.mx
-order by f.score desc, f.n_tokens desc, f.precio_piso asc nulls last
+-- EL DEFAULT DESEMPATA, NO GANA. 'default_familia' marca el trabajo normal de la
+-- familia: lo que se asume cuando el cliente NO especifico nada. Va como PRIMER
+-- criterio de orden pero DESPUES del corte por score, asi que solo decide entre los
+-- que ya entraron. Si el cliente dijo "ilustracion mate", el score pone la
+-- ilustracion arriba y el default queda donde le toca — el flag no lo fuerza.
+-- Sin esto, ante "imprimir 100 hojas a color" ganaba el laser de \$750 y el trabajo
+-- normal de \$400 quedaba invisible (incidente 2026-07-27). Ver preguntas TG 70-73.
+-- Se repite la expresion en vez de usar el alias 'es_default': un alias del SELECT es
+-- legal en ORDER BY, pero NO calificado (f.es_default seria un error de columna), y
+-- repetirla es mas robusto que depender de esa sutileza.
+order by coalesce((f.atributos->>'default_familia')::boolean, false) desc,
+         f.score desc, f.n_tokens desc, f.precio_piso asc nulls last
 limit greatest(coalesce($3::int, 8), 1)`;
 
 {
@@ -673,6 +685,9 @@ return [{
 // la competencia donde SI existe: el candidato-set del SQL, antes del filtro.
 // ───────────────────────────────────────────────────────────────────────────
 const ANCLA_COMP = "  const hayCompetencia = (main.descartados && main.descartados.length > 0) || main.filas > 1;";
+
+const SUP_ANCLA = "if (puerta) reply += ' ' + puerta.frase;";
+const SUP_NUEVO = "// ── SUPUESTO DEL TRABAJO NORMAL (default_familia) ────────────────────────\n// Si lo cotizado es el default de su familia y el cliente NO lo pidio por su\n// nombre, el mensaje dice EN QUE se cotizo antes de abrir la puerta. Sin esto el\n// default es silencioso: el cliente recibe un numero y no sabe que hay otras\n// opciones ni sobre que base se calculo.\n// En idioma de cliente: \"en A4, papel comun\" — nunca gramaje ni tecnologia (la\n// lente de costo del 28 midio que pedir vocabulario de imprenta cuesta turnos).\n// Los valores salen del ATRIBUTO de la fila, no de una tabla paralela: si manana\n// la curacion mueve el default a otro producto, la frase lo sigue sola.\nconst CLIENTE_DICE = {\n  a4: 'A4', a3: 'A3', 'a3+': 'A3+', a5: 'A5', oficio: 'oficio', ingles: 'inglés',\n  obra: 'papel común', ilustracion: 'papel ilustración', opalina: 'opalina',\n  kraft: 'papel kraft', vegetal: 'papel vegetal', plastico: 'plástico',\n  metalico: 'metálico', bn: 'blanco y negro', color: 'color',\n  simple: 'de un solo lado', doble: 'doble faz',\n};\nlet supuesto = '';\nif (okEstado && row && atr.default_familia === true) {\n  // ¿el cliente lo pidio por su nombre? El SQL ya lo midio sobre el candidato-set.\n  let porNombre = false;\n  try {\n    const c0 = ($('Buscar Candidatos').all() || [])\n      .map((i) => i.json).find((r) => r && r.producto_id === row.producto_id);\n    porNombre = !!(c0 && c0.por_nombre);\n  } catch (e) { porNombre = false; }\n  if (!porNombre) {\n    // Solo los ejes que el cliente NO nombro: si dijo \"a color\", no se le repite.\n    // Orden fijo tamaño → papel → color: es como lo diria un mostrador.\n    // La FAZ queda AFUERA a proposito: 'de un solo lado' es el default universal de\n    // una imprenta, decirlo es ruido, y sumaba un cuarto eje que convertia la frase\n    // en un ladrillo. Si el cliente quiere doble faz, la puerta ya se lo ofrece.\n    const partes = [];\n    for (const k of ['tamano', 'papel', 'material', 'color']) {\n      if (anclados.includes(k)) continue;\n      const v = atr[k]; if (v === null || v === undefined) continue;\n      const uno = Array.isArray(v) ? (v.length === 1 ? v[0] : null) : v;\n      if (uno === null || uno === undefined) continue; // eje con varias opciones: no es supuesto\n      const dicho = CLIENTE_DICE[String(uno).toLowerCase()];\n      if (dicho) partes.push(dicho);\n    }\n    if (partes.length) supuesto = ' Eso es en ' + partes.join(', ') + '.';\n  }\n}\nif (supuesto) reply += supuesto;\nif (puerta) reply += ' ' + puerta.frase;";
 const NUEVO_COMP = `  // v8.3: la competencia se mide ANTES de la elección, no después. El rowcount de
   // Get Precio es posterior a que el filtro ya eligió, así que con un producto
   // elegido de una lista da 1 fila SIEMPRE y la puerta quedaba muda. El candidato-set
@@ -684,6 +699,18 @@ const NUEVO_COMP = `  // v8.3: la competencia se mide ANTES de la elección, no 
 
 for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
   sub(nombre, ANCLA_COMP, NUEVO_COMP, '3 · hayCompetencia pre-filtro en ' + nombre);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 3b. EL DEFAULT DE FAMILIA SE DECLARA EN EL MENSAJE
+//
+// 'default_familia' existia en el catalogo desde la curacion E0 y NINGUN nodo lo
+// leia. Marca el TRABAJO NORMAL: lo que se asume cuando el cliente no especifico.
+// El SQL ya lo usa para desempatar el orden; aca el mensaje dice sobre que base
+// cotizo, para que el default no sea silencioso (regla de Martin 2026-07-26).
+// ───────────────────────────────────────────────────────────────────────────
+for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+  sub(nombre, SUP_ANCLA, SUP_NUEVO, '3b · supuesto del trabajo normal en ' + nombre);
 }
 
 // ───────────────────────────────────────────────────────────────────────────

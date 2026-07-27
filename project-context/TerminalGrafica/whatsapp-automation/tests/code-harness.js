@@ -79,8 +79,15 @@ async function main() {
   console.log('P10 cantidad basura:', r[0].json.precio.cantidad === null ? 'OK' : 'FAIL ' + r[0].json.precio.cantidad);
 
   // ===== ARMAR =====
-  const armar = (precioObj, rows, dec, errored) => runNodeCode('armar.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+  // `cands` son las filas de Buscar Candidatos (el candidato-set PRE-filtro). Lo leen
+  // hayCompetencia (nCandidatos) y el supuesto del default (por_nombre). Sin el .all()
+  // el nodo cae al catch y por_nombre queda false SIEMPRE: los tests de esa rama
+  // pasarian verdes sin ejercitarla nunca.
+  const armar = (precioObj, rows, dec, errored, cands) => runNodeCode('armar.js', {
+    $: (name) => ({
+      first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }),
+      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j })) : []),
+    }),
     $input: { all: () => rows.map((j) => ({ json: j })).concat(errored ? [{ json: { error: { message: 'column x does not exist' } } }] : []), first: () => ({ json: rows[0] || {} }) },
   });
 
@@ -1555,5 +1562,54 @@ async function main() {
     console.log('T17 telemetría de descarte:', r[0].json.filtroDescarto === 2 ? 'OK' : 'FAIL ' + r[0].json.filtroDescarto);
   }
 
+  // ===== DEFAULT DE FAMILIA (el trabajo normal) =====
+  // atributos del default real del catalogo: obra 75 + el tamano que le agrego la
+  // curacion del 28. Sus variantes son faz x color, por eso color/faz vienen de la fila.
+  const attrDef = { papel: 'obra', gramaje_gr: 75, tamano: ['a4'], color: 'color', faz: 'simple', unidad_venta: 'hoja', multiplica: true, tecnologia: 'riso', default_familia: true };
+  const rowDef = { ...base, producto_id: 'def1', nombre_canonico: 'Impresiones papel obra 75 gr', variante: 'simple faz color', precio_lista: 400, unidad: 'Hoja', atributos: attrDef, mostrable: true, tiene_reglas: false };
+  const pDef = { producto: 'Impresiones papel obra 75 gr', variante: 'simple faz color', template: '', forzarPlantilla: true, mas: [] };
+  const candsDef = (porNombre) => [
+    { producto_id: 'def1', nombre_canonico: 'Impresiones papel obra 75 gr', por_nombre: porNombre, es_default: true },
+    { producto_id: 'otro', nombre_canonico: 'Impresiones láser color papel obra 80 gr', por_nombre: false, es_default: false },
+  ];
+
+  // El cliente dijo "a color": ese eje queda ANCLADO y no se le repite. El supuesto
+  // declara solo lo que el cliente NO dijo, en idioma de cliente.
+  r = await armar(pDef, [rowDef], decidir({ userMessage: 'cuánto sale imprimir 100 hojas a color?' }), false, candsDef(false));
+  console.log('DF1 declara el supuesto en idioma cliente:',
+    /Eso es en A4, papel común\./.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('DF2 no repite el eje que el cliente nombró:',
+    !/color/.test(r[0].json.reply.split('Eso es en')[1] || '') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  // La faz no entra en el SUPUESTO ('de un solo lado' es el default universal y decirlo
+  // es ruido). Se mide sobre la frase del supuesto, NO sobre el mensaje entero: la
+  // puerta abierta sí puede nombrarla ("Si lo querés doble faz, avisame") y eso es
+  // deseado — el supuesto informa, la puerta ofrece.
+  console.log('DF2b la faz nunca se declara en el supuesto:',
+    !/un solo lado|doble faz/.test((r[0].json.reply.match(/Eso es en [^.]*\./) || [''])[0]) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // lo pidio por su nombre -> ya sabe lo que pidio, el supuesto es ruido
+  r = await armar(pDef, [rowDef], decidir({ userMessage: 'precio de impresiones obra 75 a color' }), false, candsDef(true));
+  console.log('DF3 pedido por nombre -> sin supuesto:',
+    !/Eso es en/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // producto que NO es default -> nunca declara supuesto
+  const rowNoDef = { ...rowDef, producto_id: 'otro', nombre_canonico: 'Impresiones láser color papel obra 80 gr', precio_lista: 750, atributos: { ...attrDef, gramaje_gr: 80, default_familia: false } };
+  r = await armar({ ...pDef, producto: 'Impresiones láser color papel obra 80 gr' }, [rowNoDef], decidir({ userMessage: 'imprimir 100 hojas a color' }), false, candsDef(false));
+  console.log('DF4 no-default no declara supuesto:',
+    !/Eso es en/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // eje con VARIAS opciones no es un supuesto: no se puede decir "eso es en a3/a4"
+  const rowMulti = { ...rowDef, atributos: { ...attrDef, tamano: ['a3', 'a4'] } };
+  // Un eje con VARIAS opciones no es un supuesto: no se puede decir "eso es en a3/a4".
+  r = await armar(pDef, [rowMulti], decidir({ userMessage: 'imprimir 100 hojas a color' }), false, candsDef(false));
+  console.log('DF5 eje multivaluado no se declara:',
+    /Eso es en papel común\./.test(r[0].json.reply) && !/a3|A3/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // la puerta abierta SIGUE saliendo despues del supuesto (son complementarias)
+  // Sin "color" en el mensaje, el supuesto lo declara Y la puerta ofrece cambiarlo:
+  // son complementarios, no redundantes. Un mensaje, no una escalera de preguntas.
+  r = await armar(pDef, [rowDef], decidir({ userMessage: 'cuánto sale imprimir 100 hojas?' }), false, candsDef(false));
+  console.log('DF6 supuesto y puerta conviven:',
+    /Eso es en A4, papel común, color\./.test(r[0].json.reply) && /avisame/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
