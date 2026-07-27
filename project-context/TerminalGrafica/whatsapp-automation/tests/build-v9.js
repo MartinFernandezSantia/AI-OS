@@ -14,10 +14,19 @@
 const fs = require('fs');
 const path = require('path');
 
+const { aplicarTarget } = require('./target');
+
 const DIR = path.join(__dirname, '..', 'n8n', 'flows');
 const SRC = path.join(DIR, 'faq-bot-v8.json');
-const OUT = path.join(DIR, 'faq-bot-v9.json');
 const CHECK = process.argv.includes('--check');
+
+// `--target test` emite la variante que le pega al mock de Chatwoot y usa la key de
+// OpenRouter de test. La logica es identica a prod: lo unico que cambia es a donde
+// apunta. Se genera del mismo build a proposito, para que no puedan divergir.
+const argTarget = process.argv.indexOf('--target');
+const TARGET = argTarget !== -1 ? process.argv[argTarget + 1] : 'prod';
+if (!['prod', 'test'].includes(TARGET)) throw new Error('BUILD: --target debe ser prod|test');
+const OUT = path.join(DIR, TARGET === 'test' ? 'faq-bot-v9-test.json' : 'faq-bot-v9.json');
 
 const wf = JSON.parse(fs.readFileSync(SRC, 'utf8'));
 const node = (name) => {
@@ -1007,18 +1016,23 @@ const main = evaluar(porIdx[1] || [], p.variante);`;
 // ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
+// El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de
+// arriba nunca tienen que saber contra que entorno corren.
+for (const l of aplicarTarget(wf, TARGET)) paso('target[' + TARGET + '] · ' + l);
+
 const json = JSON.stringify(wf, null, 2) + '\n';
+const NOMBRE_OUT = path.basename(OUT);
 
 if (CHECK) {
   const actual = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
   if (actual !== json) {
-    console.error('DESINCRONIZADO: faq-bot-v9.json no coincide con el build. Corré `node tests/build-v9.js`.');
+    console.error('DESINCRONIZADO: ' + NOMBRE_OUT + ' no coincide con el build. Corré `node tests/build-v9.js --target ' + TARGET + '`.');
     process.exit(1);
   }
-  console.log('v9 al día con build-v9.js (' + wf.nodes.length + ' nodos)');
+  console.log(NOMBRE_OUT + ' al día con build-v9.js (' + wf.nodes.length + ' nodos)');
 } else {
   fs.writeFileSync(OUT, json);
-  console.log('faq-bot-v9.json escrito — ' + wf.nodes.length + ' nodos (v8 tenía ' + (wf.nodes.length - 5) + ')');
+  console.log(NOMBRE_OUT + ' escrito — ' + wf.nodes.length + ' nodos (v8 tenía ' + (wf.nodes.length - 5) + ')');
   console.log('');
   for (const l of log) console.log('  ✓ ' + l);
 }
