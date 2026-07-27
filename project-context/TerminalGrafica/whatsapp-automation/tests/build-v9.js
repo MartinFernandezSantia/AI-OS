@@ -629,9 +629,24 @@ const JS_APLICAR_FILTRO = `// v8.3 APLICAR FILTRO — la salida del LLM 2 son Í
 const sobre = $('Armar Prompt Filtro').first().json;
 const candidatos = sobre.candidatos || [];
 
+// Aplanado de variantes con idx por producto: es el contrato que Armar Respuesta
+// Precio sabe leer (porIdx agrupa por idx). Se define ACA ARRIBA para que lo usen
+// LOS DOS returns — construirlo solo en el return final dejaba sin filas el camino
+// de 0/1 candidato, que es el mas comun, y el cliente terminaba en el mail con el
+// producto y la variante correctamente resueltos (conversacion 354, 2026-07-28).
+const aplanar = (ps) => {
+  const out = [];
+  (ps || []).forEach((p, i) => {
+    for (const v of (p.variantes || [])) out.push({ ...v, idx: i + 1 });
+  });
+  return out;
+};
+
 if (sobre.saltarFiltro) {
   const idx = sobre.elegidos || [];
-  return [{ json: { ...sobre, filtrados: idx.map((i) => candidatos[i]).filter(Boolean), filtroMotivo: 'sin llamada' }, pairedItem: { item: 0 } }];
+  const elegidosOk = idx.map((i) => candidatos[i]).filter(Boolean);
+  return [{ json: { ...sobre, filtrados: elegidosOk, filtroMotivo: 'sin llamada',
+                    filasPrecio: aplanar(elegidosOk) }, pairedItem: { item: 0 } }];
 }
 
 let raw = '';
@@ -689,14 +704,9 @@ else if (!elegidos.length) {
 // contrato que Armar Respuesta Precio ya sabe leer (porIdx agrupa por idx). Antes
 // esto lo producia Get Precio resolviendo por nombre; ahora viene del mismo SQL que
 // eligio el producto, asi que no hay forma de que producto y variante se crucen.
-const filasPrecio = [];
-filtrados.forEach((p, i) => {
-  for (const v of (p.variantes || [])) filasPrecio.push({ ...v, idx: i + 1 });
-});
-
 return [{
   json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length,
-          filasPrecio },
+          filasPrecio: aplanar(filtrados) },
   pairedItem: { item: 0 },
 }];`;
 

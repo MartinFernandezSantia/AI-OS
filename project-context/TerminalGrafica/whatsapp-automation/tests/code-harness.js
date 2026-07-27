@@ -1628,8 +1628,25 @@ async function main() {
     console.log('T15b descarta todo con 5: no se le cree:', r[0].json.filtrados.length === 5 && /no se le cree/.test(r[0].json.filtroMotivo) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filtroMotivo));
 
     // T16: el camino sin llamada (saltarFiltro) respeta los elegidos que ya venían.
-    r = await aplicarFiltro({ candidatos: [cand(1)], saltarFiltro: true, elegidos: [0], precio: {} }, null);
+    // Las variantes viajan en el candidato: es lo que el nodo aplana en filasPrecio.
+    const conVars = (n, precios) => ({ ...cand(n), variantes: precios.map((p, k) => ({ ...cand(n), variante: 'v' + k, precio_lista: p })) });
+    r = await aplicarFiltro({ candidatos: [conVars(1, [100, 200])], saltarFiltro: true, elegidos: [0], precio: {} }, null);
     console.log('T16 saltarFiltro respeta elegidos:', r[0].json.filtrados.length === 1 && r[0].json.filtroMotivo === 'sin llamada' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+    // T16b: y TRAE LAS FILAS DE PRECIO. Este es el camino más común —un solo
+    // candidato es el caso feliz de la búsqueda— y el return temprano no construía
+    // `filasPrecio`: Armar Respuesta Precio se quedaba sin filas, daba `ambiguo` y el
+    // cliente terminaba en el mail con el producto y la variante bien resueltos
+    // (conversación 354, 2026-07-28: "cuánto sale un cartel de 1x0.65").
+    console.log('T16b saltarFiltro igual trae filasPrecio:',
+      Array.isArray(r[0].json.filasPrecio) && r[0].json.filasPrecio.length === 2
+      && r[0].json.filasPrecio.every((f) => f.idx === 1) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filasPrecio));
+
+    // T16c: sin candidatos, filasPrecio existe y está vacío (no undefined: el
+    // consumidor distingue "no hubo filas" de "el campo no vino").
+    r = await aplicarFiltro({ candidatos: [], saltarFiltro: true, elegidos: [], precio: {} }, null);
+    console.log('T16c sin candidatos filasPrecio es []:',
+      Array.isArray(r[0].json.filasPrecio) && r[0].json.filasPrecio.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filasPrecio));
 
     // T17: telemetría — cuántos podó el filtro. Sin esto no hay forma de saber si
     // una resolución mala fue culpa de la búsqueda (trajo mal) o del filtro (eligió
