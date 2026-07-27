@@ -14,7 +14,14 @@ let err = 0; const E = (m) => { err++; console.log('  ERROR  ' + m); };
 
 console.log('=== 1. GRAFO ===');
 console.log('  nodos v7=' + v7.nodes.length + '  v8=' + v8.nodes.length);
-if (v7.nodes.length !== v8.nodes.length) E('cambio la cantidad de nodos (68 - 4 borrados + 4 nuevos = 68)');
+// v8.2: cae la ruta handoff a un humano (decision Martin, ronda del 27). TG no
+// tiene a nadie mirando Chatwoot, y `Asignar a Humano` ademas dejaba al bot MUDO
+// para siempre en esa conversacion (Filtro Ingreso exige !meta.assignee).
+const SIN_HANDOFF = ['Asignar a Humano', 'Armar Nota Agente', 'Llamar LLM Nota', 'Nota Privada Agente'];
+if (v7.nodes.length - SIN_HANDOFF.length !== v8.nodes.length) E('cambio la cantidad de nodos (68 - 4 de handoff = 64)');
+SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });
+// y la escalacion tiene que seguir dejando su fila con el motivo
+if (!v8.nodes.some((n) => n.name === 'Log Escalación')) E('se perdio Log Escalación (ahi vive `motivo`)');
 const n7 = new Set(v7.nodes.map((n) => n.name)), n8 = new Set(v8.nodes.map((n) => n.name));
 const soloV7 = [...n7].filter((x) => !n8.has(x)), soloV8 = [...n8].filter((x) => !n7.has(x));
 console.log('  solo en v7 (borrados/renombrados): ' + soloV7.join(', '));

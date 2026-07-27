@@ -752,35 +752,6 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/assignments' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ ({ assignee_id: 1 }) }}",
-        "options": {}
-      },
-      "id": "a3ce5c4c-e253-4004-9e42-f891246150fc",
-      "name": "Asignar a Humano",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2928,
-        560
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "KxbAlYAWQ95ZZKQ5",
-          "name": "Chatwoot API Token"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
         "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
@@ -813,7 +784,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ content: 'Entendido! Ya le paso tu consulta a un compañero del equipo. En breve te van a estar respondiendo.', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "jsonBody": "={{ ({ content: 'Eso lo ve el equipo directamente. Escribinos a terminalgrafica@gmail.com con el detalle, o llamanos al (0223) 476-0019. También podés pasar por el local, Rodríguez Peña 3865, de lunes a viernes de 8 a 20 y sábados de 9 a 13.', message_type: 'outgoing', content_type: 'text', private: false }) }}",
         "options": {}
       },
       "id": "29fdd394-3688-466b-88be-d6abbe9c3946",
@@ -831,81 +802,6 @@
         }
       },
       "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const decidir = $('Decidir').first().json;\nconst conversationMsgs = decidir.conversation || [];\n\n// Presentar como transcript plano — evita que el LLM \"continúe\" el diálogo en lugar de resumirlo\nconst transcript = conversationMsgs.map(m => {\n  const label = m.role === 'user' ? 'CLIENTE' : 'EQUIPO';\n  return `[${label}]: ${m.content}`;\n}).join('\\n');\n\nconst noteMessages = [\n  {\n    role: 'system',\n    content: 'Sos un asistente interno de Terminal Gráfica. NO respondas al cliente. Tu ÚNICA tarea es redactar una nota de traspaso para el asesor humano que va a tomar esta conversación.'\n  },\n  {\n    role: 'user',\n    content: `Conversación de WhatsApp:\\n\\n${transcript}\\n\\nRedactá la nota de traspaso. Incluí:\\n- Qué quiere el cliente (una línea)\\n- Datos mencionados (producto, cantidad, formato, etc.) — SOLO lo que el cliente dijo explícitamente, no inventes datos ni precios\\n- Próximo paso sugerido para el asesor\\n\\nMáximo 5 líneas. Tono directo, para uso interno.`\n  }\n];\n\nreturn [{\n  json: {\n    noteMessages,\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId\n  }\n}];"
-      },
-      "id": "6033a84e-1ebd-46b0-96ee-715284fd2644",
-      "name": "Armar Nota Agente",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3552,
-        560
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $json.noteMessages, max_tokens: 200, temperature: 0.2 }) }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "id": "f3e2353d-d522-4fa5-ac96-c2f7a2232732",
-      "name": "Llamar LLM Nota",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3760,
-        560
-      ],
-      "onError": "continueRegularOutput",
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
-          "name": "OpenRouter API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ ({ content: $json.choices[0].message.content, message_type: 'outgoing', content_type: 'text', private: true }) }}",
-        "options": {}
-      },
-      "id": "0b882a59-f29e-479d-a3c6-74995a2b3cec",
-      "name": "Nota Privada Agente",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3968,
-        560
-      ],
-      "onError": "continueRegularOutput",
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "KxbAlYAWQ95ZZKQ5",
-          "name": "Chatwoot API Token"
-        }
-      }
     },
     {
       "parameters": {
@@ -2345,7 +2241,7 @@
         ],
         [
           {
-            "node": "Asignar a Humano",
+            "node": "Label Escalación",
             "type": "main",
             "index": 0
           }
@@ -2374,7 +2270,7 @@
         ],
         [
           {
-            "node": "Asignar a Humano",
+            "node": "Label Escalación",
             "type": "main",
             "index": 0
           }
@@ -2409,17 +2305,6 @@
         ],
         [
           {
-            "node": "Asignar a Humano",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Asignar a Humano": {
-      "main": [
-        [
-          {
             "node": "Label Escalación",
             "type": "main",
             "index": 0
@@ -2439,39 +2324,6 @@
       ]
     },
     "Mensaje Escalación": {
-      "main": [
-        [
-          {
-            "node": "Armar Nota Agente",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Armar Nota Agente": {
-      "main": [
-        [
-          {
-            "node": "Llamar LLM Nota",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Llamar LLM Nota": {
-      "main": [
-        [
-          {
-            "node": "Nota Privada Agente",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Nota Privada Agente": {
       "main": [
         [
           {
