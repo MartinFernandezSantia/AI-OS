@@ -18,6 +18,16 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-27 — Bot TG: el bot nunca repregunta para desambiguar; muestra todas las opciones de una
+
+**Decision:** En la resolución de producto, cuando hay varios candidatos el bot **lista todo lo que sobrevive al filtro en un solo mensaje**, con el piso de precio incluido y una puerta abierta al final ("hay más opciones de X, decime cuál te interesa"). **No repregunta un eje.** Esto elimina la política 1 del plan de v8.3 (">4 candidatos → preguntar el eje que los separa"), no la invierte. La repregunta de desambiguación queda sólo donde el SQL devuelve cero filas y no hay nada que listar. El `LIMIT` de la búsqueda deja de ser un corte de payload del LLM y pasa a ser **el límite de lo que el cliente ve en un mensaje**.
+
+**Why:** Decisión de Martin (2026-07-27), sobre la corrección que trajo la pasada adversarial: la puerta abierta y la repregunta cuestan **exactamente lo mismo** (las dos son un mensaje saliente, ~USD 0,026 desde el 1-oct-2026), así que el plan se equivocaba al justificar la puerta con "informa lo mismo gratis". Corregido el empate, gana mostrar todo: **el mensaje de WhatsApp va a ser el costo dominante del bot** (~USD 12/mes de LLM contra USD 4-8/mes sólo de repreguntas extra estimadas), y un mensaje que lista N opciones ahorra los 1-3 turnos que la repregunta gasta en llegar al mismo lugar. Además evita el loop de repreguntas por ejes distintos que el anti-loop por texto no detecta. Cambiaría de idea si una ronda real midiera que los mensajes largos con muchas opciones no se leen y el cliente vuelve a preguntar igual — ahí el ahorro sería falso.
+
+**Alternatives considered:** Repreguntar el eje discriminante con >4 candidatos (el default del plan; cae por costo de mensaje y por el loop); cota de N repreguntas por conversación (deja de hacer falta si no se repregunta nunca); subir el cupo del menú pero conservando la repregunta como fallback (dos mecanismos para el mismo trabajo).
+
+**Owner:** Martin.
+
 ## 2026-07-27 — Bot TG: no existe más la ruta handoff a un humano; la escalación va al mail
 
 **Decision:** Se eliminan del workflow los 4 nodos de la ruta handoff (`Asignar a Humano`, `Armar Nota Agente`, `Llamar LLM Nota`, `Nota Privada Agente`). Las tres entradas de la ruta —la salida `handoff` del switch, el fallback de acción no reconocida y la salida de error del LLM— van ahora a `Label Escalación → Mensaje Escalación → Log Escalación`. El mensaje al cliente pasa a ser honesto: mail, teléfono, local y horario, sin "en breve te van a estar respondiendo". El contrato del LLM (`action: handoff` + el árbol de `motivo`) **no se toca**.

@@ -14,6 +14,20 @@ const WF = path.join(__dirname, '..', 'n8n', 'flows', process.env.WF || 'faq-bot
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
 const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2'), 'normalizar.js': jsOf('Normalizar Envío'), 'prompt-comp.js': jsOf('Armar Prompt Compositor'), 'aplicar-comp.js': jsOf('Aplicar Compositor') };
+// v8.3: los 3 nodos Code del pipeline de búsqueda por palabra. Opcionales a
+// propósito — el harness tiene que seguir corriendo contra v8 y v7 (rollback), y
+// ahí estos nodos no existen. `jsOf` tira si el nodo falta, así que se busca suave.
+const jsOpt = (name) => { const n = wf.nodes.find((x) => x.name === name); return n ? n.parameters.jsCode : null; };
+// ¿Estamos corriendo contra v8.3 o contra una versión anterior (rollback)? Cuatro
+// conductas cambiaron a propósito en v8.3 (el cupo 4→8 y los gemelos que listan en
+// vez de preguntar), así que sus goldens dependen de la versión. Sin esto, correr el
+// harness contra el rollback daría 4 FAIL rojos por cambios deliberados, y un rojo
+// que se espera es un rojo que se deja de mirar.
+const V83 = wf.nodes.some((x) => x.name === 'Aplicar Filtro');
+for (const [k, v] of [['extraer.js', 'Extraer Palabras'], ['prompt-filtro.js', 'Armar Prompt Filtro'], ['aplicar-filtro.js', 'Aplicar Filtro']]) {
+  const code = jsOpt(v);
+  if (code) CODES[k] = code;
+}
 
 function runNodeCode(file, mocks) {
   const code = CODES[file];
@@ -338,10 +352,17 @@ async function main() {
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
   });
 
-  // P15: action opciones — productos slice 4 (r6: 3 packs de tarjetas llenaban el
-  // cupo y el 2do item del pedido quedaba afuera), faltan filtrado por whitelist.
+  // P15: action opciones — el cupo pasa de 4 a 8 (v8.3, decisión Martin 2026-07-27:
+  // el bot muestra todo de una y nunca repregunta), faltan filtrado por whitelist.
+  // Con 5 productos entran los 5; el corte real se testea en P15b.
   r = await parsearC2(JSON.stringify({ action: 'opciones', productos: ['A', 'B', 'C', 'D', 'E'], faltan: ['cantidad', 'basura', 'paginas'] }), decidir(), false);
-  console.log('P15 opciones:', r[0].json.action === 'opciones' && r[0].json.opciones.productos.length === 4 && JSON.stringify(r[0].json.opciones.faltan) === '["cantidad","paginas"]' && r[0].json.reply === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.opciones));
+  console.log('P15 opciones:', r[0].json.action === 'opciones' && r[0].json.opciones.productos.length === (V83 ? 5 : 4) && JSON.stringify(r[0].json.opciones.faltan) === '["cantidad","paginas"]' && r[0].json.reply === '' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.opciones));
+
+  // P15b: el cupo sí corta. 10 productos -> 8 en v8.3, 4 antes. (El cupo dejó de ser
+  // "cuánto tolera el lector" —esa premisa murió cuando el compositor empezó a
+  // comprimir listas en prosa— y pasó a ser "cuánto entra en un mensaje".)
+  r = await parsearC2(JSON.stringify({ action: 'opciones', productos: ['A','B','C','D','E','F','G','H','I','J'], faltan: [] }), decidir(), false);
+  console.log('P15b el cupo corta:', r[0].json.opciones.productos.length === (V83 ? 8 : 4) ? 'OK' : 'FAIL ' + r[0].json.opciones.productos.length);
 
   // P16: volver EN ruta cotizador -> pasa.
   r = await parsearC2(JSON.stringify({ action: 'volver', reply: '', motivo: '' }), decidir(), true);
@@ -744,7 +765,15 @@ async function main() {
     atributos: { ...kraft130.atributos, gramaje_gr: 300 } };
   r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
     [kraft130, kraft300], decidir({ userMessage: 'cuánto sale el papel kraft a4' }));
-  console.log('V8-12 gemelos preguntan el eje:', r[0].json.reply.includes('gramaje') && !r[0].json.reply.includes('1.')
+  // v8.3 (decisión Martin 2026-07-27): los gemelos ya NO preguntan el eje — listan
+  // las dos opciones en un mensaje. El eje se sigue CALCULANDO porque es telemetría
+  // (gemelos:gramaje_gr en notas), pero el cliente ve los dos productos, no una
+  // pregunta. Motivo: la repregunta y la lista cuestan el mismo mensaje pago, y la
+  // lista ahorra el turno de ida y vuelta.
+  console.log('V8-12 gemelos ' + (V83 ? 'listan, no preguntan' : 'preguntan el eje') + ':',
+    (V83
+      ? (r[0].json.reply.includes('Kraft 130') && r[0].json.reply.includes('Kraft 300') && !r[0].json.reply.includes('¿De qué gramaje'))
+      : (r[0].json.reply.includes('gramaje') && !r[0].json.reply.includes('1.')))
     && r[0].json.notas.includes('gemelos:gramaje_gr') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // V8-13: separador DURO — un producto de nicho jamás es gemelo de uno que no lo
@@ -766,10 +795,21 @@ async function main() {
     [flaco1, flaco2], decidir({ userMessage: 'producto flaco' }));
   console.log('V8-15 <3 claves comunes -> menú:', !r[0].json.notas.includes('gemelos:') && r[0].json.reply.includes('- ') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
-  // V8-16: el eje respeta el anti-loop de repregunta (2 iguales -> email).
+  // V8-16/17: el anti-loop sigue vivo, pero ahora protege contra la LISTA repetida,
+  // no contra la pregunta repetida (v8.3: ya no se pregunta el eje). Mandar la misma
+  // lista 3 veces es el loop que hay que cortar -> derivación a mail.
+  // NOTA: este test depende del fix 0a del log. `borradoresPrevios` sale de
+  // bot.decisiones.borrador, que en v8 se escribía SIEMPRE null porque Log Turno
+  // leía el $json de la respuesta de Chatwoot -> el anti-loop nunca contaba nada
+  // en producción, por más que el harness lo diera OK con un mock.
+  // Lo que se repite es lo que el bot manda: en v8.3 la lista, antes la pregunta.
+  const repetido = V83
+    ? 'Tenemos estas opciones:\nPapel Kraft 130 Gr:\n  - A4\nPapel Kraft 300 Gr:\n  - A4\nDecime cuál te sirve y te paso el precio.'
+    : '¿De qué gramaje lo necesitás?';
   r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
-    [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', borradoresPrevios: ['¿De qué gramaje lo necesitás?', '¿De qué gramaje lo necesitás?'] }));
-  console.log('V8-17 gemelos anti-loop:', r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') ? 'OK' : 'FAIL ' + r[0].json.reply);
+    [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', borradoresPrevios: [repetido, repetido] }));
+  console.log('V8-17 anti-loop sobre ' + (V83 ? 'la lista' : 'la pregunta') + ':',
+    r[0].json.accionLog === 'informo_precio' && r[0].json.reply.includes('terminalgrafica') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8 — TOPOLOGIA UNIFICADA + COMPOSITOR
@@ -1348,6 +1388,158 @@ async function main() {
     decidir({ userMessage: 'cuánto sale un cartel de 1x0.65' }));
   console.log('W6 candidatos sin nicho:', r[0].json.needsAclarador === true && r[0].json.candidatos.length === 1
     && r[0].json.candidatos[0].producto === 'Carteleria en plástico corrugado' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.candidatos));
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.3 — BÚSQUEDA POR PALABRA + FILTRO
+  // El LLM deja de elegir un nombre y pasa a tirar palabras; Postgres busca con
+  // ponderación por rareza; un 2º LLM filtra con la conversación delante. Estos
+  // tests cubren los 3 nodos Code nuevos. El SQL (IDF + guards de negocio) NO se
+  // testea acá — necesita la base, y va en la suite 7.
+  // ══════════════════════════════════════════════════════════════════════════
+  if (CODES['extraer.js']) {
+    // ---- Extraer Palabras ----
+    const extraer = (precio, dec) => runNodeCode('extraer.js', {
+      $: (name) => ({ first: () => ({ json: name === 'Parsear Respuesta' ? { precio, conversationId: 9 } : dec }) }),
+      $input: { first: () => ({ json: {} }), all: () => [] },
+    });
+
+    // T1: las palabras salen del LLM Y del cliente. El LLM aporta el sustantivo
+    // (que acierta) y el cliente los ejes (que el LLM suele omitir).
+    r = await extraer({ producto: 'Impresiones papel obra 75 gr', variante: 'simple faz color' },
+      decidir({ userMessage: 'cuánto sale imprimir 100 hojas a color', conversation: [{ role: 'user', content: 'cuánto sale imprimir 100 hojas a color' }] }));
+    let pal = r[0].json.palabras.split(' ');
+    console.log('T1 palabras del LLM + del cliente:', pal.includes('impresiones') && pal.includes('obra') && pal.includes('color') && pal.includes('hojas') ? 'OK' : 'FAIL ' + r[0].json.palabras);
+
+    // T2: las stopwords se van, pero los SUSTANTIVOS de producto se quedan aunque
+    // sean frecuentes. `papel` está en 30 de 88 productos y NO se saca a mano: de
+    // eso se encarga el IDF, que lo pondera bajo sin perderlo. Sacarlo rompería
+    // "papel kraft" (kraft solo matchea menos).
+    r = await extraer({ producto: 'papel kraft', variante: '' },
+      decidir({ userMessage: 'hola, quería saber cuánto sale el papel kraft a4 por favor' }));
+    pal = r[0].json.palabras.split(' ');
+    console.log('T2 stopwords fuera, sustantivos dentro:', pal.includes('papel') && pal.includes('kraft') && pal.includes('a4')
+      && !pal.includes('hola') && !pal.includes('cuanto') && !pal.includes('sale') && !pal.includes('queria') ? 'OK' : 'FAIL ' + r[0].json.palabras);
+
+    // T3: los tokens cortos distintivos sobreviven al filtro de longitud (a4/a3 son
+    // de 2 caracteres pero discriminan muchísimo).
+    r = await extraer({ producto: '', variante: '' }, decidir({ userMessage: 'necesito algo en a3' }));
+    console.log('T3 a3 sobrevive al filtro de largo:', r[0].json.palabras.split(' ').includes('a3') ? 'OK' : 'FAIL ' + r[0].json.palabras);
+
+    // T4: la ventana para el guard de nicho junta TODOS los mensajes del cliente,
+    // no sólo el último: el cliente pudo decir "medicina" dos mensajes atrás.
+    r = await extraer({ producto: 'apuntes', variante: '' }, decidir({
+      userMessage: 'son 200 páginas',
+      conversation: [{ role: 'user', content: 'hola, imprimen apuntes de medicina?' }, { role: 'assistant', content: 'sí' }, { role: 'user', content: 'son 200 páginas' }],
+    }));
+    console.log('T4 ventana con todo el historial:', /medicina/.test(r[0].json.ventana) && /200/.test(r[0].json.ventana) ? 'OK' : 'FAIL ' + r[0].json.ventana);
+
+    // T5: el acento descompuesto (NFD, teclados iOS/macOS) se normaliza. Sin esto
+    // el token no matchea y —peor que en v8— los OTROS tokens sí, así que la lista
+    // se arma sin el candidato correcto y sin ninguna señal de que faltó algo.
+    r = await extraer({ producto: 'Impresión', variante: '' }, decidir({ userMessage: 'impresión a color' }));
+    console.log('T5 NFD normalizado:', r[0].json.palabras.includes('impresion') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.palabras));
+
+    // T6: cap de 12 tokens — un mensaje larguísimo no dispara un SQL con 40 LIKEs.
+    r = await extraer({ producto: '', variante: '' },
+      decidir({ userMessage: 'anillado plastico resorte metalico tapa acetato contratapa carton lomo grande chico mediano oficio legal carta tabloide' }));
+    console.log('T6 cap de 12 tokens:', r[0].json.palabras.split(' ').length <= 12 ? 'OK' : 'FAIL ' + r[0].json.palabras.split(' ').length);
+  }
+
+  if (CODES['prompt-filtro.js']) {
+    // ---- Armar Prompt Filtro ----
+    const cand = (n, over = {}) => ({ producto_id: 'p' + n, nombre_canonico: 'Producto ' + n, score: 5 - n,
+      n_variantes: 2, atributos: { papel: 'obra', gramaje_gr: 75, color: 'color' }, ...over });
+    const promptFiltro = (filas, dec) => runNodeCode('prompt-filtro.js', {
+      $: (name) => ({ first: () => ({ json: name === 'Extraer Palabras' ? { palabras: 'x', precio: {} } : dec }) }),
+      $input: { first: () => ({ json: filas[0] || {} }), all: () => filas.map((f) => ({ json: f })) },
+    });
+
+    // T7: CERO candidatos -> no se llama al LLM. No se paga una llamada para que
+    // conteste sobre una lista vacía.
+    r = await promptFiltro([], decidir());
+    console.log('T7 sin candidatos no llama al LLM:', r[0].json.saltarFiltro === true && r[0].json.elegidos.length === 0 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.saltarFiltro));
+
+    // T8: UN candidato -> tampoco. Es determinístico, y es el caso más común
+    // (una palabra distintiva -> un producto).
+    r = await promptFiltro([cand(1)], decidir());
+    console.log('T8 un candidato no llama al LLM:', r[0].json.saltarFiltro === true && JSON.stringify(r[0].json.elegidos) === '[0]' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+    // T9: con varios, el prompt lleva los candidatos INDEXADOS y con sus ejes.
+    r = await promptFiltro([cand(1), cand(2), cand(3)], decidir({ userMessage: 'imprimir hojas' }));
+    console.log('T9 prompt indexado con ejes:', r[0].json.saltarFiltro === false
+      && /\[0\] Producto 1/.test(r[0].json.promptFiltro) && /\[2\] Producto 3/.test(r[0].json.promptFiltro)
+      && /papel=obra/.test(r[0].json.promptFiltro) ? 'OK' : 'FAIL ' + String(r[0].json.promptFiltro).slice(0, 200));
+
+    // T10: PROYECCIÓN SLIM — el LLM 2 no puede ver plata ni los campos que no sabe
+    // leer. `unidad` (crudo del mostrador) contradice al curado en 148 de 185
+    // variantes; `mostrable` es `not tiene_reglas`, no un flag de curación; y de
+    // `solo_descuentos`/`oculto` ya se encargó el SQL. Que no lleguen es lo que
+    // hace innecesarias 3 de las 5 frases de la leyenda: filtrar sale más barato
+    // que explicar.
+    r = await promptFiltro([
+      cand(1, { precio_lista: 12345, unidad: 'Hoja', mostrable: false, solo_descuentos: true, variante_id: 'vvv', rangos_cantidad: [{ minQty: 1, value: 999 }] }),
+      cand(2)], decidir());
+    const pf = r[0].json.promptFiltro;
+    console.log('T10 proyección slim (sin plata ni ruido):', !/12345/.test(pf) && !/999/.test(pf) && !/unidad/i.test(pf)
+      && !/mostrable/i.test(pf) && !/solo_descuentos/i.test(pf) && !/vvv/.test(pf) ? 'OK' : 'FAIL ' + pf.slice(0, 300));
+
+    // T11: el prompt le dice explícitamente que ante la duda INCLUYA. Es el
+    // invariante del diseño: que sobre una opción es barato, que falte la que el
+    // cliente quería es el bug que estamos arreglando.
+    console.log('T11 prompt manda incluir ante la duda:', /ante la duda, INCLU/i.test(pf) && /más barata/i.test(pf) ? 'OK' : 'FAIL');
+  }
+
+  if (CODES['aplicar-filtro.js']) {
+    // ---- Aplicar Filtro ----
+    const cand = (n) => ({ producto_id: 'p' + n, nombre_canonico: 'Producto ' + n, n_variantes: 1 });
+    const aplicarFiltro = (sobre, llmContent) => runNodeCode('aplicar-filtro.js', {
+      $: (name) => ({ first: () => ({ json: name === 'Armar Prompt Filtro' ? sobre : {} }) }),
+      $input: { first: () => ({ json: llmContent === null ? {} : { choices: [{ message: { content: llmContent } }] } }), all: () => [] },
+    });
+    const tres = { candidatos: [cand(1), cand(2), cand(3)], saltarFiltro: false, precio: {} };
+
+    // T12: camino feliz — el LLM devuelve índices y se conserva el orden del SQL
+    // (score desc), no el orden en que el modelo los escupió.
+    r = await aplicarFiltro(tres, JSON.stringify({ elegidos: [2, 0], motivo: 'los dos de obra' }));
+    console.log('T12 filtro por índices, orden del SQL:', r[0].json.filtrados.length === 2
+      && r[0].json.filtrados[0].nombre_canonico === 'Producto 1'
+      && r[0].json.filtrados[1].nombre_canonico === 'Producto 3' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filtrados.map((f) => f.nombre_canonico)));
+
+    // T13: FAIL-SAFE — respuesta ilegible -> la lista ENTERA. Degradar hacia "de
+    // más", nunca hacia "nada". Es el invariante que hace aceptable el diseño.
+    r = await aplicarFiltro(tres, 'esto no es json');
+    console.log('T13 ilegible -> lista completa:', r[0].json.filtrados.length === 3 && /ilegible/.test(r[0].json.filtroMotivo) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filtroMotivo));
+
+    // T13b: el LLM caído (nodo con onError, item sin choices) -> idem.
+    r = await aplicarFiltro(tres, null);
+    console.log('T13b LLM caído -> lista completa:', r[0].json.filtrados.length === 3 ? 'OK' : 'FAIL ' + r[0].json.filtrados.length);
+
+    // T14: índices fuera de rango se descartan sin romper (el modelo alucina un [7]
+    // sobre una lista de 3).
+    r = await aplicarFiltro(tres, JSON.stringify({ elegidos: [0, 7, -1, 'dos'], motivo: '' }));
+    console.log('T14 índices inválidos descartados:', r[0].json.filtrados.length === 1
+      && r[0].json.filtrados[0].nombre_canonico === 'Producto 1' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filtrados));
+
+    // T15: "ninguno corresponde" se le CREE con pocos candidatos (poda deliberada)...
+    r = await aplicarFiltro({ candidatos: [cand(1), cand(2)], saltarFiltro: false, precio: {} }, JSON.stringify({ elegidos: [], motivo: 'ninguno es' }));
+    console.log('T15 descarta todo con 2 candidatos: se le cree:', r[0].json.filtrados.length === 0 ? 'OK' : 'FAIL ' + r[0].json.filtrados.length);
+
+    // T15b: ...y NO se le cree con muchos, donde es más probable que se haya
+    // confundido. Gana el invariante de "de más antes que nada".
+    r = await aplicarFiltro({ candidatos: [cand(1), cand(2), cand(3), cand(4), cand(5)], saltarFiltro: false, precio: {} },
+      JSON.stringify({ elegidos: [], motivo: 'ninguno' }));
+    console.log('T15b descarta todo con 5: no se le cree:', r[0].json.filtrados.length === 5 && /no se le cree/.test(r[0].json.filtroMotivo) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.filtroMotivo));
+
+    // T16: el camino sin llamada (saltarFiltro) respeta los elegidos que ya venían.
+    r = await aplicarFiltro({ candidatos: [cand(1)], saltarFiltro: true, elegidos: [0], precio: {} }, null);
+    console.log('T16 saltarFiltro respeta elegidos:', r[0].json.filtrados.length === 1 && r[0].json.filtroMotivo === 'sin llamada' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+    // T17: telemetría — cuántos podó el filtro. Sin esto no hay forma de saber si
+    // una resolución mala fue culpa de la búsqueda (trajo mal) o del filtro (eligió
+    // mal de una lista buena), que es justo la pregunta que se hace al depurar.
+    r = await aplicarFiltro(tres, JSON.stringify({ elegidos: [0], motivo: 'x' }));
+    console.log('T17 telemetría de descarte:', r[0].json.filtroDescarto === 2 ? 'OK' : 'FAIL ' + r[0].json.filtroDescarto);
+  }
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

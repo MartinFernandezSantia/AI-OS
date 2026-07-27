@@ -18,7 +18,18 @@ console.log('  nodos v7=' + v7.nodes.length + '  v8=' + v8.nodes.length);
 // tiene a nadie mirando Chatwoot, y `Asignar a Humano` ademas dejaba al bot MUDO
 // para siempre en esa conversacion (Filtro Ingreso exige !meta.assignee).
 const SIN_HANDOFF = ['Asignar a Humano', 'Armar Nota Agente', 'Llamar LLM Nota', 'Nota Privada Agente'];
-if (v7.nodes.length - SIN_HANDOFF.length + 1 !== v8.nodes.length) E('cambio la cantidad de nodos (68 - 4 de handoff + 1 de Log Silencio = 65)');
+// v8.3: los 6 nodos del pipeline de búsqueda por palabra. Se declaran acá para que
+// el conteo siga siendo una aserción exacta y no un ">=": si mañana aparece un nodo
+// que nadie declaró, el validador tiene que gritar igual que antes.
+const NUEVOS_V83 = ['Extraer Palabras', 'Buscar Candidatos', 'Armar Prompt Filtro',
+  '¿Filtrar?', 'Llamar LLM Filtro', 'Aplicar Filtro'];
+const esV9 = v8.nodes.some((n) => n.name === 'Aplicar Filtro');
+const nEsperados = v7.nodes.length - SIN_HANDOFF.length + 1 + (esV9 ? NUEVOS_V83.length : 0);
+if (nEsperados !== v8.nodes.length) {
+  E('cambio la cantidad de nodos: esperaba ' + nEsperados + ' y hay ' + v8.nodes.length
+    + ' (68 - 4 de handoff + 1 de Log Silencio' + (esV9 ? ' + ' + NUEVOS_V83.length + ' de v8.3' : '') + ')');
+}
+if (esV9) NUEVOS_V83.forEach((n) => { if (!v8.nodes.some((x) => x.name === n)) E('falta el nodo de v8.3 "' + n + '"'); });
 SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });
 // y la escalacion tiene que seguir dejando su fila con el motivo
 if (!v8.nodes.some((n) => n.name === 'Log Escalación')) E('se perdio Log Escalación (ahi vive `motivo`)');
@@ -77,7 +88,11 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   'Respuesta No-Texto', 'Saludo Bienvenida', 'Mensaje Anti-Injection', 'Mensaje Escalación',
   'Mensaje Cap Email', 'Label Escalación', 'Label Cap',
   // v8.1 — señal, conjunto cerrado y housekeeping
-  'Decidir', 'Log Turno']);
+  'Decidir', 'Log Turno',
+  // v8.3 — búsqueda por palabra + filtro. Los 6 nodos nuevos, más los 3 que se
+  // tocan para intercalarlos: Switch Acción (la rama precio ya no va directo a
+  // Get Precio) y los dos ARP (hayCompetencia pre-filtro + fallback de nombre).
+  ...NUEVOS_V83, 'Switch Acción']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
