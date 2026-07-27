@@ -364,11 +364,23 @@ async function main() {
     decidir({ userMessage: 'cuanto salen las impresiones?' }));
   console.log('M1 menu sin numeros:', r[0].json.reply.includes('- simple faz b/n') && r[0].json.reply.includes('- doble faz color') && !/^\d+\. /m.test(r[0].json.reply) && r[0].json.reply.includes('cuál te sirve') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
-  // M2: 2 productos -> dos niveles (header por producto) + numeracion continua.
+  // M2: 2 productos -> dos niveles (header por producto) para el que tiene varias
+  // variantes. v8.2: el de UNA sola variante ya no abre grupo — sale como una linea
+  // con la variante entre parentesis. (Premisa vieja del mock: "el colapso de opcion
+  // unica solo hace falta cuando hay un solo producto". La ronda del 27 la falsó:
+  // "Anillado Plastico a3:" con un solo "- A4" debajo.)
   r = await menu({ productos: ['A', 'B'], faltan: [] },
     [vRow('Prod A', 'x'), vRow('Prod A', 'y'), vRow('Prod B', 'z')],
     decidir({ userMessage: 'precio?' }));
-  console.log('M2 dos niveles:', r[0].json.reply.includes('Prod A:') && r[0].json.reply.includes('Prod B:') && r[0].json.reply.includes('- z') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  console.log('M2 dos niveles:', r[0].json.reply.includes('Prod A:') && !r[0].json.reply.includes('Prod B:') && r[0].json.reply.includes('- Prod B (z)') && !/\d+\. /.test(r[0].json.reply) ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // M2b: el mono cuya variante NO aporta nada (nombre igual, o vacío) sale con el
+  // nombre del producto a secas — el caso "Anillado plástico a4/oficio" duplicado.
+  r = await menu({ productos: ['A', 'B'], faltan: [] },
+    [vRow('Prod A', 'x'), vRow('Prod A', 'y'), vRow('Anillado plástico a4/oficio', '')],
+    decidir({ userMessage: 'anillar' }));
+  console.log('M2b mono sin variante propia:', r[0].json.reply.includes('- Anillado plástico a4/oficio')
+    && !r[0].json.reply.includes('Anillado plástico a4/oficio:') ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M3: faltan solo-datos con producto definido -> pregunta unica, SIN menu.
   r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: ['paginas', 'copias'] },
@@ -585,7 +597,10 @@ async function main() {
 
   // helper aplicar aclarador
   const aplicarAcl = (llmContent, arpJson, dec) => runNodeCode('aplicar-acl.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : name === 'Armar Respuesta Precio' ? arpJson : {} }) }),
+    // v8.2: el mock trae nombresCatalogo. Sin él, el filtro de conjunto cerrado
+    // es fail-open (`!setAcl.size ||`) y cualquier nombre inventado pasaba: el
+    // test verificaba una rama que en producción nunca se ejercitaba así.
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [], nombresCatalogo: dec.nombresCatalogo || ['Papel Kraft 130 Gr', 'Papel Kraft 300 Gr', 'Lona Mate'] } : name === 'Armar Respuesta Precio' ? arpJson : {} }) }),
     $input: { first: () => ({ json: { choices: [{ message: { content: llmContent } }] } }) },
   });
   const arpJ = { conversationId: 9, accountId: 1, userMessage: 'kraft', reply: 'DEFAULT', accionLog: 'pregunto_opciones', pedidoSlots: { producto: '', variante: '', cantidad: null, paginas: null, copias: null } };
@@ -602,6 +617,14 @@ async function main() {
   // ACL9: nada → email, sin monto.
   r = await aplicarAcl(JSON.stringify({ accion: 'nada' }), arpJ, decidir());
   console.log('ACL9 nada:', r[0].json.accionLog === 'informo_precio' && !r[0].json.reply.includes('$') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  // ACL9b (v8.2, Martin): el bot NUNCA dice que algo no lo tenemos en catálogo —
+  // delata el mecanismo y suena a "no existe". Deriva a mail, y punto.
+  console.log('ACL9b nada no delata el catálogo:', !/cat[áa]logo|no lo tenemos|no tenemos eso/i.test(r[0].json.reply)
+    && r[0].json.reply.includes('terminalgrafica@gmail.com') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  // ACL9c: y la rama de opciones descartadas (ninguna existe) dice lo mismo.
+  r = await aplicarAcl(JSON.stringify({ accion: 'opciones', productos: ['Impresora Epson', 'Guillotina'] }), arpJ, decidir());
+  console.log('ACL9c opciones descartadas no delata:', !/cat[áa]logo/i.test(r[0].json.reply)
+    && r[0].json.notas.includes('descartadas') ? 'OK' : 'FAIL ' + r[0].json.reply);
   // ACL10: LLM ilegible → degradación al reply por defecto de ARP (fail-safe).
   r = await aplicarAcl('esto no es json', arpJ, decidir());
   console.log('ACL10 degradado:', r[0].json.reply === 'DEFAULT' && r[0].json.notas.includes('degradado') ? 'OK' : 'FAIL ' + r[0].json.reply);
