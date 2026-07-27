@@ -178,6 +178,59 @@ Especiales, con el mismo nombre canónico — es la pregunta TG 37).
 
 ---
 
+## 5 ter. El caso de prueba que dejó la ronda del 27 (mejor que uno inventado)
+
+Con la curación aplicada y el compositor arreglado, *"cuánto sale imprimir 100 hojas a color?"*
+(conversación 343) devolvió un menú de **4 productos, todos del rubro láser color**, y el
+compositor lo redactó bien. Pero el menú **dejó afuera `Impresiones papel obra 75 gr`** — que es
+**inkjet**, tiene variantes de color y es **la más barata de todas**. También quedaron afuera
+variantes de las ilustraciones.
+
+**No es culpa del compositor:** obra 75 nunca estuvo en el borrador. El menú se armó incompleto, y
+el sesgo es justo el que venimos persiguiendo — el cliente ve el techo y no el piso.
+
+Dos causas posibles, sin decidir:
+- **El cupo de ~4 opciones** de `Armar Menu Opciones` (r6). Si obra 75 quedó quinta, se cae por corte.
+- **La búsqueda no la trajo**, porque el LLM emitió un producto del rubro láser y obra 75 vive en
+  otro rubro con otro nombre.
+
+Se distingue mirando `notas` de esa fila: trae los nombres canónicos que entraron y **cuántas
+opciones** eran (`menu: A / B / C (N opciones)`).
+
+**Por qué no se arregla ahora:** el pipeline de v8.3 reemplaza exactamente esa pieza — el menú deja
+de salir de `Armar Menu Opciones` con su cupo, y pasa a decidirlo el filtro con la conversación
+delante. Calibrar el cupo hoy sería afinar un nodo que está por desaparecer.
+
+**Y el cupo mismo hay que revisarlo:** los 4 se fijaron en r6 porque los menús largos se leían mal
+— pero eso era **antes de que el compositor funcionara**. Ahora convierte 17 opciones en tres
+oraciones legibles. La premisa que justificaba el cupo dejó de ser cierta.
+
+> **Caso de aceptación de v8.3, textual:** *"cuánto sale imprimir 100 hojas a color"* tiene que
+> traer **`Impresiones papel obra 75 gr`** entre los candidatos y ofrecerla, no sólo el rubro
+> láser color. Es evidencia real de la ronda, no un caso inventado.
+
+## 5 quater. Pendiente de diagnóstico: ¿el log escribe `borrador`/`final`/`senales`?
+
+Las 15 filas que se miraron el 27 tenían esas tres columnas en `null`, pero **todas eran del 25**,
+anteriores al compositor — así que no se puede distinguir "el mapeo está roto" de "todavía no
+corrió el workflow nuevo". `Log Turno` mapea `{{ $json.notas }}` y compañía, y `$json` en ese punto
+podría ser la respuesta del API de Chatwoot en vez del ítem de `Aplicar Compositor`.
+
+**Lo resuelve una consulta**, y hay que correrla antes de construir nada: si la telemetría está
+rota, el pipeline nuevo la hereda y se depura a ciegas.
+
+```sql
+select mensaje_cliente, accion, notas,
+       borrador is not null as tiene_borrador,
+       final    is not null as tiene_final,
+       senales  is not null as tiene_senales
+  from bot.decisiones
+ where conversation_id = 343
+ order by created_at desc limit 3;
+```
+
+Si `tiene_borrador` es `false`, hay que arreglar el mapeo de `Log Turno` **antes** de la fase 1.
+
 ## 6. Las dos decisiones que siguen abiertas
 
 Preguntadas dos veces, sin respuesta todavía. **Mi default, si no me decís otra cosa:**

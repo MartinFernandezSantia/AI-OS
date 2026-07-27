@@ -3,8 +3,8 @@
 > **Qué es este archivo:** el estado vivo y el próximo paso. Todo lo que ya está cerrado vive en
 > los planes de `plans/` y en el log histórico de la memoria `chatwoot-whatsapp-impl-status`; acá
 > sólo queda lo que todavía decide algo. Si una sesión termina y esto no cambió, el archivo miente.
-> **Última actualización: 2026-07-27** (ronda completa de 16 mensajes: 20 incidentes, lotes 1 y 2
-> aplicados, y el contraste que tumbó las dos propuestas de arquitectura).
+> **Última actualización: 2026-07-27, cierre** (ronda completa + lotes 1 y 2 + curación de nombres
+> aplicada por Martin + el gate del compositor aflojado. Lo próximo es construir v8.3).
 
 **Reglas de trabajo que no cambian:**
 rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot)
@@ -24,32 +24,30 @@ mirar. El plan largo se commitea igual en `plans/`; el deck es cómo se presenta
 
 ## 1. Estado ahora — lo único que hay que leer para arrancar
 
-**La ronda de 16 mensajes se corrió entera** (2026-07-27) y dio **20 incidentes**. Están
-diagnosticados por tres lentes, y los lotes 1 y 2 ya están aplicados en el workflow. El diagnóstico
-completo, la clasificación y los veredictos del contraste viven en
-[`v8-2-ronda-completa.md`](./v8-2-ronda-completa.md); el deck es
-[`decks/v8-2-ronda-completa.html`](../decks/v8-2-ronda-completa.html).
+**Lo próximo es construir v8.3: la búsqueda por palabra + el filtro con la conversación.** El plan
+está medido y escrito en [`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md); falta la
+pasada adversarial y el código. Todo lo de la ronda del 27 está cerrado y aplicado.
 
 | pieza | estado |
 |---|---|
-| `db/curacion-e0-2026-07-26.sql` · `db/curacion-voz-2026-07-26.sql` | ✅ aplicados (la de voz se confirma sola: "me hacen fotocopias?" resolvió) |
-| `n8n/flows/faq-bot-v8.json` | ⚠️ **hay que re-importar: ahora son 65 nodos** (caen los 4 de handoff, entra `Log Silencio`) |
-| Error workflow (`tg-bot-error`) | ⚠️ re-enganchar después del import |
-| `GET /webhook/refrescar-catalogo` | ⚠️ en la URL de producción |
-| La conversación de prueba | 🔴 **muda.** El handoff de "impresora epson" le puso `assignee_id: 1` y `Filtro Ingreso` exige `!meta.assignee`. Desasignar o abrir una nueva |
+| Curación de nombres (`db/curacion-2026-07-27.sql`) | ✅ **aplicada por Martin**. Los 6 papeles láser ya son encontrables: *"imprimir 100 hojas a color"* los trae |
+| `n8n/flows/faq-bot-v8.json` | ⚠️ **re-importar: 65 nodos.** Trae los lotes 1 y 2, y el gate del compositor aflojado |
+| Error workflow (`tg-bot-error`) | ⚠️ Martin lo dejó para después, a propósito |
+| La conversación de prueba vieja | 🔴 muda por un handoff previo (`assignee_id`). Ya no puede volver a pasar: la ruta se eliminó |
+| El log (`borrador`/`final`/`senales`) | ❓ **sin confirmar** — ver `v8-3` §5 quater. Una consulta lo resuelve, y hay que correrla ANTES de construir |
 
-### Lo primero, antes de cualquier otra cosa
+### Los 3 pasos antes de construir
 
-1. **Desasignar la conversación de prueba** (o abrir una nueva).
-2. **Re-importar `faq-bot-v8.json`** (65 nodos; las credenciales viajan con su id real).
-3. **Workflow Settings → Error Workflow → `tg-bot-error`.**
-4. **`GET /webhook/refrescar-catalogo`** en la URL de **producción**.
-5. **Correr las dos consultas de sólo lectura** de `v8-2-ronda-completa.md` §6 y traer el
-   resultado. La primera decide si se construye la opción C; la segunda dice si el compositor
-   rechaza demasiado.
+1. **Correr la consulta de `v8-3` §5 quater** sobre la conversación 343. Si `borrador` viene
+   `null`, el mapeo de `Log Turno` está roto y hay que arreglarlo primero: el pipeline nuevo
+   hereda esa telemetría y sin ella se depura a ciegas.
+2. **Pasada adversarial de 2 lentes** sobre el diseño de v8.3 (plata y costo por mensaje). Es
+   arquitectura, no parche: la disciplina la pide antes de aplicar.
+3. **Recién ahí, código.** El orden de construcción y el caso de aceptación están en `v8-3` §5 ter.
 
-**Rollback:** re-importar `faq-bot-v7.json`. El SQL no necesita rollback (v7 ignora las columnas
-nuevas). Rollback parcial más barato: el kill switch del compositor — motor nuevo, voz vieja.
+**Rollback:** re-importar `faq-bot-v7.json`. El SQL no necesita rollback. Rollback parcial más
+barato: el kill switch del compositor (`const COMPOSITOR = false` en la primera línea de
+`Armar Prompt Compositor`, se edita en la UI sin re-importar).
 
 ---
 
@@ -71,8 +69,16 @@ aviso de canal cruzado contra `bot.decisiones` · **fuera la ruta handoff a un h
 `Log Silencio` con el origen del noop.
 
 **El contraste tumbó las dos propuestas de arquitectura** (el guard de hermanos y la recuperación
-por familia del incidente 8). Sobrevive la **opción C** — comparar el string crudo del LLM contra
-el del cliente — y **se mide antes de construirla**. Ver `v8-2-ronda-completa.md` §5.
+por familia). Y la opción C que sobrevivía la tumbó Martin, con razón: si el LLM se equivoca, el
+cliente no recibe nada. **La dirección elegida es la suya** — el LLM tira palabras clave, Postgres
+busca, un segundo LLM filtra con la conversación delante. Cada paso degrada hacia "de más", nunca
+hacia "nada". Plan medido en [`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md).
+
+**Después de la ronda se hicieron dos cosas más el mismo día:** la **curación de nombres**
+(`db/curacion-2026-07-27.md`, aplicada) que hace encontrables los 6 papeles láser, y el **gate del
+compositor aflojado** — tres lentes midieron que el 31% de las frases naturales rebotaba y que el
+85% de los rechazos en precios salía de `hedge`. Ninguna regla se sacó; cuatro pasaron a medir
+contenido en vez de forma (commit `42c7359`).
 
 **La lección del harness, que ahora tiene nombre:** la firma es `armar(precioObj, rows, dec)`, o
 sea **el resultado del SQL es un input escrito por el autor del test**. Todo caso pregunta "dada
