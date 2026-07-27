@@ -43,6 +43,17 @@ alter table bot.producto_meta
 alter table bot.variante_meta
   add column if not exists atributos jsonb  not null default '{}';
 
+-- display_variante era `text not null` SIN default, y 176 de las 185 variantes no
+-- tienen fila de overlay: el primer insert de atributos fallaba. Relajar el not-null
+-- es la solucion correcta y NO pasar el nombre vivo, porque la vista hace
+-- `coalesce(vm.display_variante, v.name)`: un valor no-null gana para siempre y
+-- desengancharia 176 variantes del mostrador — si TG renombra una, el bot seguiria
+-- mostrando el nombre viejo. Es exactamente el modo de falla "el overlay miente" que
+-- el consejo marco. Las 9 variantes con display curado (anillados en linea unica) no
+-- se tocan: el on-conflict solo escribe atributos.
+alter table bot.variante_meta
+  alter column display_variante drop not null;
+
 -- v8: el compositor redacta el mensaje que ve el cliente a partir de un borrador
 -- determinístico. Se guardan los DOS. Sin esto, el juez offline del confident-wrong
 -- estaría auditando un texto que el cliente nunca vio, y el drift semántico
