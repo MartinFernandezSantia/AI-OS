@@ -23,11 +23,17 @@ const SIN_HANDOFF = ['Asignar a Humano', 'Armar Nota Agente', 'Llamar LLM Nota',
 // que nadie declaró, el validador tiene que gritar igual que antes.
 const NUEVOS_V83 = ['Extraer Palabras', 'Buscar Candidatos', 'Armar Prompt Filtro',
   '¿Filtrar?', 'Llamar LLM Filtro', 'Aplicar Filtro'];
+// v9: los 5 del verificador de silencio (2ª opinión sobre un noop del LLM principal).
+const NUEVOS_V9 = ['Armar Prompt Verificador', '¿Verificar Silencio?',
+  'Llamar LLM Verificador', 'Aplicar Verificador', '¿Rescatar Turno?'];
 const esV9 = v8.nodes.some((n) => n.name === 'Aplicar Filtro');
-const nEsperados = v7.nodes.length - SIN_HANDOFF.length + 1 + (esV9 ? NUEVOS_V83.length : 0);
+const conVerif = v8.nodes.some((n) => n.name === 'Aplicar Verificador');
+const nEsperados = v7.nodes.length - SIN_HANDOFF.length + 1
+  + (esV9 ? NUEVOS_V83.length : 0) + (conVerif ? NUEVOS_V9.length : 0);
 if (nEsperados !== v8.nodes.length) {
   E('cambio la cantidad de nodos: esperaba ' + nEsperados + ' y hay ' + v8.nodes.length
-    + ' (68 - 4 de handoff + 1 de Log Silencio' + (esV9 ? ' + ' + NUEVOS_V83.length + ' de v8.3' : '') + ')');
+    + ' (68 - 4 de handoff + 1 de Log Silencio' + (esV9 ? ' + ' + NUEVOS_V83.length + ' de v8.3' : '')
+    + (conVerif ? ' + ' + NUEVOS_V9.length + ' del verificador' : '') + ')');
 }
 if (esV9) NUEVOS_V83.forEach((n) => { if (!v8.nodes.some((x) => x.name === n)) E('falta el nodo de v8.3 "' + n + '"'); });
 SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });
@@ -98,7 +104,11 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   // HIT, $() tiraba y su catch dejaba la lista VACÍA, así que decidía 'nada' → mail
   // teniendo el producto. Pasa a una cascada que arranca por 'Armar Mensajes LLM',
   // que corre siempre y ahora republica `_catalogo`.
-  'Armar Prompt Aclarador']);
+  'Armar Prompt Aclarador',
+  // v9 — verificador de silencio (decisión Martin 2026-07-28). Los 5 nodos nuevos.
+  // 'Switch Acción' ya está arriba (la rama noop ahora entra al verificador) y
+  // 'Armar Mensajes LLM' también (republica el flag de la cota anti-ciclo).
+  ...NUEVOS_V9]);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
@@ -167,12 +177,21 @@ else console.log('  ok  executionOrder v1');
 });
 console.log('  ok  envios al cliente sin retry y con onError');
 
-// 6c. ningun nodo Code puede volver a comparar el anti-loop contra lastBotReplies:
+// 6c. ningun nodo Code puede volver a COMPARAR el anti-loop contra lastBotReplies:
 // desde el compositor ese texto esta parafraseado y el guard queda muerto.
+//
+// v9: la regla apunta a COMPARACIONES, no a lecturas. 'Armar Prompt Verificador' lee
+// lastBotReplies a proposito — le muestra al verificador lo que el cliente
+// EFECTIVAMENTE vio, y ahi el parafraseo del compositor es lo correcto
+// (borradoresPrevios es texto que el cliente nunca leyo). No compara nada: se lo pasa
+// a un LLM. La deteccion sigue siendo la misma: normRep/filter/=== sobre esa lista.
+const COMPARA = /lastBotReplies[\s\S]{0,200}?(normRep|\.filter\s*\(|===|\.includes\s*\()/;
 v8.nodes.filter((nd) => nd.type === 'n8n-nodes-base.code').forEach((nd) => {
   const js = nd.parameters.jsCode || '';
   if (nd.name === 'Decidir' || nd.name === 'Armar Mensajes LLM') return; // lo producen / lo pasan al LLM
-  if (/lastBotReplies/.test(js) && !/^\s*\/\//m.test(js.split('lastBotReplies')[0].split('\n').pop()))
+  if (!/lastBotReplies/.test(js)) return;
+  if (/^\s*\/\//m.test(js.split('lastBotReplies')[0].split('\n').pop())) return; // mencion en comentario
+  if (COMPARA.test(js))
     E(nd.name + ' compara contra lastBotReplies (texto compuesto): el anti-loop queda muerto');
 });
 const guards = ['Parsear Respuesta', 'Armar Respuesta Precio', 'Armar Menu Opciones', 'Aplicar Aclarador'];

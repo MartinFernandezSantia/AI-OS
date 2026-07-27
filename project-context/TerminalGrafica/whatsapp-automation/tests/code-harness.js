@@ -24,7 +24,10 @@ const jsOpt = (name) => { const n = wf.nodes.find((x) => x.name === name); retur
 // harness contra el rollback daría 4 FAIL rojos por cambios deliberados, y un rojo
 // que se espera es un rojo que se deja de mirar.
 const V83 = wf.nodes.some((x) => x.name === 'Aplicar Filtro');
-for (const [k, v] of [['extraer.js', 'Extraer Palabras'], ['prompt-filtro.js', 'Armar Prompt Filtro'], ['aplicar-filtro.js', 'Aplicar Filtro']]) {
+for (const [k, v] of [['extraer.js', 'Extraer Palabras'], ['prompt-filtro.js', 'Armar Prompt Filtro'], ['aplicar-filtro.js', 'Aplicar Filtro'],
+  // v9: los 2 nodos Code del verificador de silencio. Opcionales por la misma razón
+  // que los de arriba — el harness sigue corriendo contra v8 (rollback), donde no existen.
+  ['prompt-verif.js', 'Armar Prompt Verificador'], ['aplicar-verif.js', 'Aplicar Verificador']]) {
   const code = jsOpt(v);
   if (code) CODES[k] = code;
 }
@@ -1857,6 +1860,153 @@ async function main() {
   r = await armarF(pAn, AN, decidir({ userMessage: 'anillado de 1 pulgada' }), candAn);
   console.log('DI3 "1 pulgada" no cae en 3/4 por tolerancia:',
     /\$3\.800,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ===== SUITE VS — VERIFICADOR DE SILENCIO (v9, 2026-07-28) =====
+  // Incidente: "cual es el precio promocional?" -> silencio. El noop lo emitió el
+  // LLM (noopOrigen 'llm') creyendo que ya había contestado; nunca dio el número.
+  // El verificador es una 2ª opinión SOLO sobre esa rama.
+  if (CODES['prompt-verif.js']) {
+  // El gate de prompt lee $input (la salida de Parsear Respuesta), 'Decidir' y
+  // 'Armar Mensajes LLM' (el flag anti-ciclo). Un nodo ausente del mapa TIRA, igual
+  // que en n8n real: así una rama con try/catch no pasa verde sin ejercitarse.
+  const promptVerif = (parseado, dec, mensajes) => runNodeCode('prompt-verif.js', {
+    $: (name) => {
+      if (name === 'Decidir') return { first: () => ({ json: dec }) };
+      if (name === 'Armar Mensajes LLM') {
+        if (mensajes === null) throw new Error('nodo no ejecutado en este turno');
+        return { first: () => ({ json: mensajes }) };
+      }
+      throw new Error('nodo inesperado: ' + name);
+    },
+    $input: { first: () => ({ json: parseado }), all: () => [{ json: parseado }] },
+  });
+
+  const noop = (over = {}) => ({ action: 'noop', reply: '', motivo: '', noopOrigen: 'llm',
+    conversationId: 9, accountId: 1, userMessage: 'cual es el precio promocional?', ...over });
+
+  // VS1 — el caso real: el LLM se calló ante una pregunta que nunca contestó.
+  // Se paga la verificación y el prompt lleva la pregunta del cliente como dato.
+  r = await promptVerif(noop(), decidir({ userMessage: 'cual es el precio promocional?',
+    lastBotReplies: ['El cartel de 1 x 0,65 te sale $19.500,00.', 'Ese precio es promocional si llevás 6 o más.'] }), {});
+  console.log('VS1 noop del LLM se verifica:',
+    r[0].json.verificarSilencio === true && Array.isArray(r[0].json.verifMessages)
+      && r[0].json.verifMessages.length === 2 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.verifMotivo));
+
+  // VS2 — el mensaje del cliente y las respuestas del bot llegan al prompt como
+  // DATOS entre comillas. Sin esto el verificador decide sobre la nada.
+  {
+    const u = r[0].json.verifMessages[1].content;
+    console.log('VS2 el prompt lleva pregunta y respuestas previas:',
+      u.includes('«cual es el precio promocional?»') && u.includes('$19.500,00')
+        ? 'OK' : 'FAIL ' + u.slice(0, 200));
+  }
+
+  // VS3 — el anti-loop DETERMINÍSTICO no se discute: si el bot ya dijo lo mismo 2+
+  // veces, callarse es correcto por construcción y pagar un LLM sería tirar plata.
+  r = await promptVerif(noop({ noopOrigen: 'anti-loop' }), decidir(), {});
+  console.log('VS3 anti-loop no paga LLM:',
+    r[0].json.verificarSilencio === false && !r[0].json.verifMessages ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.verifMotivo));
+
+  // VS4 — LA COTA ANTI-CICLO. En la 2ª vuelta el silencio se respeta sin verificar;
+  // sin esto el rescate puede reinyectar para siempre.
+  r = await promptVerif(noop(), decidir(), { reintentoSilencio: true });
+  console.log('VS4 la 2ª vuelta no se re-verifica:',
+    r[0].json.verificarSilencio === false && /2ª vuelta/.test(r[0].json.verifMotivo) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.verifMotivo));
+
+  // VS5 — 'Armar Mensajes LLM' no corrió (silencio por debounce/dup): $() tira y el
+  // flag queda en false. Que el verificador siga funcionando, no que explote.
+  r = await promptVerif(noop(), decidir(), null);
+  console.log('VS5 sin Armar Mensajes LLM no explota:',
+    r[0].json.verificarSilencio === true ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.verifMotivo));
+
+  // VS6 — reply vacío también se verifica: el LLM quiso contestar y salió nada.
+  r = await promptVerif(noop({ noopOrigen: 'reply-vacio' }), decidir(), {});
+  console.log('VS6 reply-vacío se verifica:',
+    r[0].json.verificarSilencio === true ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.verifMotivo));
+
+  // ---- Aplicar Verificador ----
+  // `usage` es lo que devuelve OpenRouter con include:true. Se pasa por separado
+  // porque el nodo lo lee de 'Llamar LLM Verificador', no de $input.
+  const aplicarVerif = (contenido, sobre, usage) => runNodeCode('aplicar-verif.js', {
+    $: (name) => {
+      if (name === 'Armar Prompt Verificador') return { first: () => ({ json: sobre }) };
+      if (name === 'Llamar LLM Verificador') {
+        if (usage === null) throw new Error('nodo no ejecutado en este turno');
+        return { first: () => ({ json: usage === undefined ? {} : { usage } }) };
+      }
+      throw new Error('nodo inesperado: ' + name);
+    },
+    $input: { first: () => ({ json: contenido === null ? {} : { choices: [{ message: { content: contenido } }] } }), all: () => [] },
+  });
+  const sobreV = { ...noop(), verificarSilencio: true, verifMotivo: 'juicio del LLM a revisar' };
+
+  // VS7 — el rescate: el turno vuelve al LLM principal con action 'process'. Si
+  // quedara en 'noop', la 2ª vuelta no arma mensajes y el turno se pierde igual.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV);
+  console.log('VS7 rescate: action process + flag:',
+    r[0].json.rescatado === true && r[0].json.action === 'process'
+      && r[0].json.reintentoSilencio === true ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+  // VS8 — el silencio confirmado sigue siendo silencio.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'callar' }), sobreV);
+  console.log('VS8 silencio confirmado:',
+    r[0].json.rescatado === false && r[0].json.action === 'noop' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+  // VS9 — DEGRADACIÓN. Basura, timeout (sin choices) y veredicto desconocido
+  // caen a 'callar': el fail-safe apunta al comportamiento de HOY, así un
+  // verificador roto nunca es peor que no tenerlo.
+  for (const [etq, cont] of [['basura', 'no soy json'], ['timeout', null], ['enum raro', JSON.stringify({ veredicto: 'tal vez' })]]) {
+    r = await aplicarVerif(cont, sobreV);
+    console.log('VS9 degrada a callar (' + etq + '):',
+      r[0].json.rescatado === false && r[0].json.action === 'noop' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+  }
+
+  // VS11 — fences ```json y basura después del objeto: mismo parseo tolerante que
+  // el resto del workflow (nació del incidente 2026-07-21).
+  r = await aplicarVerif('```json\n{"veredicto":"responder"}\n```', sobreV);
+  console.log('VS10 fences:', r[0].json.rescatado === true ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+  r = await aplicarVerif('{"veredicto":"responder"}\n"}', sobreV);
+  console.log('VS11 basura después del objeto:', r[0].json.rescatado === true ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+
+  // VS13 — telemetría: el motivo entra al log para poder medir si el verificador
+  // sirve (cuántos noop rescató vs confirmó) y decidir si se queda.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV);
+  const notaR = r[0].json.notas;
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'callar' }), sobreV);
+  console.log('VS12 telemetría distingue rescate de confirmación:',
+    /rescatado/.test(notaR) && /confirmado/.test(r[0].json.notas) ? 'OK' : 'FAIL ' + notaR + ' | ' + r[0].json.notas);
+
+  // VS13 — EL COSTO viaja en el motivo del silencio confirmado. Tiene que ser acá y
+  // no en 'Aplicar Compositor' como el resto: en el silencio confirmado el compositor
+  // NO corre, así que la telemetría sólo vería los rescates — el sesgo inverso al que
+  // importa para decidir si la capa se paga sola.
+  r = await aplicarVerif(JSON.stringify({ veredicto: 'callar' }), sobreV,
+    { prompt_tokens: 320, completion_tokens: 8, cost: 0.0000412 });
+  console.log('VS13 el costo entra al log del silencio:',
+    /320in\/8out/.test(r[0].json.notas) && /u\$s0\.0000/.test(r[0].json.notas)
+      ? 'OK' : 'FAIL ' + r[0].json.notas);
+
+  // VS14 — sin usage (provider que no lo manda) y con el nodo que no corrió: la
+  // telemetría se pierde, el veredicto NO. Perder el turno del cliente por un dato
+  // de costo sería exactamente el bug que este nodo vino a arreglar.
+  for (const [etq, u] of [['sin usage', undefined], ['nodo no corrió', null]]) {
+    r = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV, u);
+    console.log('VS14 sin telemetría el veredicto sobrevive (' + etq + '):',
+      r[0].json.rescatado === true && r[0].json.action === 'process' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json));
+  }
+
+  // ---- la cota, de punta a punta ----
+  // VS15 — el ciclo cierra: Aplicar Verificador pone reintentoSilencio, Armar
+  // Mensajes LLM lo republica, y el gate del prompt lo ve en la 2ª vuelta. Si
+  // cualquiera de los tres eslabones se rompe, el rescate se vuelve un loop.
+  {
+    const rescate = await aplicarVerif(JSON.stringify({ veredicto: 'responder' }), sobreV);
+    const flag = rescate[0].json.reintentoSilencio;
+    const segunda = await promptVerif(noop(), decidir(), { reintentoSilencio: flag });
+    console.log('VS15 la cota cierra el ciclo end-to-end:',
+      flag === true && segunda[0].json.verificarSilencio === false ? 'OK' : 'FAIL');
+  }
+  }
   }
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
