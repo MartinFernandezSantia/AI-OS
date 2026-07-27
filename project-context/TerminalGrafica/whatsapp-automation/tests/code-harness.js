@@ -1144,6 +1144,97 @@ async function main() {
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
   console.log('U6b borrar el aviso -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.2 — EL GATE MIDE CONTENIDO, NO FORMA (2026-07-27). Tres lentes corrieron el
+  // gate real: 31% de las frases naturales rebotaban, y el 85% de los rechazos en
+  // mensajes de precio venían de `hedge`. Ninguna regla se sacó; cuatro se
+  // aflojaron para medir lo que siempre quisieron proteger. Los casos X* fijan la
+  // premisa nueva Y el ataque que cada una sigue frenando.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // X1: EL CASO REAL, verbatim (conversación 343, "cuánto sale imprimir 100 hojas a
+  // color?"). El compositor colapsó dos listas de tamaños idénticas —lo que su
+  // propio prompt le pide— y el multiset de dígitos bajó de 8 "3" a 6. No inventó
+  // ni perdió ningún valor. Rebotaba por `digitos`.
+  const menuReal = 'Tenemos estas opciones:\nImpresiones láser color papel ilustración brillo 150 gr:\n  - A3\n  - A3+\n  - A4\n  - OFICIO\nImpresiones láser color papel ilustración mate 250 gr:\n  - A3\n  - A3+\n  - A4\n  - Oficio\n  - Troquelado\nImpresiones láser color papel obra 80 gr:\n  - A3\n  - A3+\n  - A4\n  - OFICIO\nImpresiones láser color papel obra 106 gr:\n  - A3\n  - A3+\n  - A4\n  - OFICIO\nPara cotizarte, decime cuál te sirve y cuántas necesitás.';
+  const CATX = ['Papel Kraft 130 Gr', 'Papel Kraft 300 Gr', 'Impresiones papel obra 75 gr', 'Imanes', 'Cartón', 'Impresiones láser color papel ilustración brillo 150 gr', 'Impresiones láser color papel ilustración mate 250 gr', 'Impresiones láser color papel obra 80 gr', 'Impresiones láser color papel obra 106 gr'];
+  const pm = (await prompt({ origen: 'menu', reply: menuReal, nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pm, JSON.stringify({ mensaje: 'Dale, tenemos impresiones láser color en ilustración brillo de 150 gramos en A3, A3+, A4 y Oficio. También en ilustración mate de 250 gramos, que viene en A3, A3+, A4, Oficio y con opción de troquelado. Y en obra de 80 gramos y de 106 gramos, todas en A3, A3+, A4 y Oficio. Decime cuál te sirve y cuántas necesitás así te cotizo.' }));
+  console.log('X1 el menú real ahora pasa:', r[0].json.compositor === 'ok' && r[0].json.final !== menuReal ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+
+  // X2: inventar un tamaño que no estaba (A5) -> sigue siendo rechazo.
+  r = await aplicar(pm, JSON.stringify({ mensaje: 'Tenemos ilustración brillo de 150 gramos, mate de 250, obra de 80 y de 106, todas en A3, A3+, A4, A5 y Oficio. Decime cuál te sirve y cuántas necesitás.' }));
+  console.log('X2 inventar un tamaño -> rechazo:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X3: PERDER una opción que el borrador ofrecía -> rechazo. Es el guard que la
+  // regla vieja daba de yapa y que un "no inventar" a secas habría regalado: un
+  // compositor con contexto truncado entrega el menú incompleto y el cliente nunca
+  // se entera de las otras opciones.
+  r = await aplicar(pm, JSON.stringify({ mensaje: 'Tenemos ilustración brillo de 150 gramos en A3. Decime cuál te sirve y cuántas necesitás.' }));
+  console.log('X3 perder una opción -> rechazo:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X4: TOKENS — consolidar el mismo precio repetido ("todas a [[P1]]") es lo que
+  // el prompt pide y rebotaba por contar apariciones en vez de mirar el orden.
+  const pRep = (await prompt({ origen: 'precio', reply: 'La opción Chico de Imanes sale $1.500,00. La opción Mediano de Imanes sale $1.500,00. La opción Grande de Imanes sale $1.500,00.', nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pRep, JSON.stringify({ mensaje: 'Los imanes van en chico, mediano y grande, todos a [[P1]].' }));
+  console.log('X4 consolidar precio repetido pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+
+  // X4b: pero INTERCAMBIAR el orden de dos precios distintos sigue siendo rechazo.
+  // El anti-swap es la defensa real de esta regla y no se toca: si el compositor
+  // pone primero el segundo monto, el cliente lee el precio del 300 como si fuera
+  // el del 130.
+  const pDos = (await prompt({ origen: 'precio', reply: 'La opción A4 de Papel Kraft 130 Gr sale $800,00. La opción A4 de Papel Kraft 300 Gr sale $1.000,00.', nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 de 300 sale [[P2]] y el A4 de 130 sale [[P1]].' }));
+  console.log('X4b invertir el orden de dos precios -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X4d — HUECO CONOCIDO, documentado a propósito. Si el compositor conserva el
+  // ORDEN de los tokens pero le cambia el producto al que cada uno pertenece
+  // ("el de 300 sale [[P1]]" cuando [[P1]] es el precio del 130), ninguna regla lo
+  // ve: el gate cuenta bolsas globales y NUNCA ata un número a la entidad que lo
+  // porta. Lo encontró la lente de menús el 2026-07-27. NO lo introduce este
+  // cambio — la regla vieja también lo dejaba pasar (comparaba ids de token, que
+  // tampoco cambian). Este caso fija el hueco para que se note si algún día se
+  // cierra, y para que nadie crea que el gate cubre reatribución.
+  r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 de 300 sale [[P1]] y el A4 de 130 sale [[P2]].' }));
+  console.log('X4d reatribución NO cubierta (hueco conocido):', r[0].json.compositor === 'ok' ? 'OK (documentado)' : 'CAMBIÓ: ahora da ' + r[0].json.compositor);
+
+  // X4c: y perder un token del todo sigue siendo rechazo.
+  r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]].' }));
+  console.log('X4c perder un token -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X5: HEDGE — la paráfrasis honesta pasa. Éste es el caso que más dolía: no
+  // borraba el resguardo, lo hacía MÁS explícito, y rebotaba porque el substring
+  // exacto ya no estaba.
+  const pH = (await prompt({ origen: 'precio', reply: 'La opción A4 de Papel Kraft 130 Gr sale $800,00, precio de lista. El total te lo confirma el equipo.', nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pH, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]], ese es el valor de lista. El total te lo termina de confirmar el equipo.' }));
+  console.log('X5 paráfrasis honesta del hedge pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+
+  // X5b: BORRAR el resguardo entero sigue siendo rechazo. Es la defensa de plata
+  // que justifica que la regla no se saque: sin esto, un número estimado se
+  // presenta como firme.
+  r = await aplicar(pH, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]]. El total es ése.' }));
+  console.log('X5b borrar el resguardo -> rechazo:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X6: UNIDAD — "cada una" pegado a "por hoja" REFUERZA, no contradice.
+  const pU = (await prompt({ origen: 'precio', reply: 'La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00 por hoja, precio de lista.', nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pU, JSON.stringify({ mensaje: 'Te sale [[P1]] por hoja, cada una, precio de lista.' }));
+  console.log('X6 "cada una" refuerza la unidad:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+
+  // X6b: pero CAMBIAR la unidad sigue siendo la mentira de 2x que motivó la regla.
+  r = await aplicar(pU, JSON.stringify({ mensaje: 'Te sale [[P1]] por página, precio de lista.' }));
+  console.log('X6b cambiar hoja por página -> rechazo:', String(r[0].json.compositor).startsWith('unidad') ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X6c: y si el borrador NO declaraba unidad, afirmar "c/u" sigue siendo intruso
+  // (ahí sí estaría diciendo que el precio es por unidad sin que nadie lo dijera).
+  const pSinU = (await prompt({ origen: 'precio', reply: 'La opción A3 de Cartón sale $1.500,00, precio de lista.', nombresCatalogo: CATX }))[0].json;
+  r = await aplicar(pSinU, JSON.stringify({ mensaje: 'El cartón A3 te sale [[P1]] c/u, precio de lista.' }));
+  console.log('X6c "c/u" sin unidad declarada -> rechazo:', r[0].json.compositor === 'unidad:cu' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // X7: lexico_riesgo NO se tocó (es la única barrera contra prometer plazos que el
+  // sistema no puso). Se arregló en el prompt, que ahora prohíbe la muletilla.
+  r = await aplicar(pH, JSON.stringify({ mensaje: 'Hoy el kraft A4 te sale [[P1]], precio de lista. El total te lo confirma el equipo.' }));
+  console.log('X7 "hoy" sigue frenado por el gate:', r[0].json.compositor === 'lexico_riesgo' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
   // W9 (v8.2): el veredicto y su MOTIVO salen como campos propios del nodo, tanto
   // cuando rechaza como cuando pasa. Antes sólo viajaban dentro de `notas`, así que
   // si el log fallaba la decisión se perdía y no había con qué depurar desde n8n.
