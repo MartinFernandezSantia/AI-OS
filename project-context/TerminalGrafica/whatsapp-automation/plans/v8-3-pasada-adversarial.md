@@ -212,6 +212,74 @@ el orden del ranking, no la arquitectura.
 
 ---
 
+## 6 bis. La 1ª corrida real (2026-07-27, noche) — tres bugs y una corrección al plan
+
+Martin corrió el caso A1 (*"cuánto sale imprimir 100 hojas a color?"*, conversación 346) y
+**`Buscar Candidatos` devolvió vacío**. `Extraer Palabras` había funcionado bien: emitió
+`impresiones laser color papel obra a4 imprimir 100 hojas`. El fallo era del SQL.
+
+**1. El CTE que se leía a sí mismo (el que vaciaba el resultado).** El corte estaba escrito
+como `where score >= 0.4 * (select max(score) from filtrado)` **dentro del propio CTE
+`filtrado`**. Un CTE no puede referenciarse a sí mismo sin `RECURSIVE`: Postgres lo rechaza, y
+con `onError: continueRegularOutput` el nodo devuelve el ítem de error en vez de filas — o sea
+**la búsqueda salía vacía sin ninguna señal de que hubo un error**. El corte se mudó a su propio
+CTE (`tope`). Nota: la misma sub-consulta en el `SELECT` final **sí** es legal; la ilegalidad es
+estar adentro del CTE que se nombra.
+
+**2. `oculto` no existe en `bot.variantes`.** Vive en `bot.producto_meta`, y **`bot.taxonomia` ya
+lo aplica en su `WHERE`**. El filtro que yo había escrito leía una clave inexistente (inofensivo
+por `coalesce`), pero el `flags` agregaba sobre `bot.variantes` **sin pasar por `taxonomia`**, así
+que resucitaba productos que la vista ya había descartado. Ahora la búsqueda parte de `taxonomia`
+y usa `variantes` sólo para agregar flags.
+
+**3. `solo_descuentos` no significa lo que decía el plan §4 — y esto corrige el plan.** En la
+vista real (`db/curacion-e0-2026-07-26.sql`) es `bool_and(r.rule_type = 'discount')`: *"todas las
+reglas de precio de esta variante son descuentos"*, o sea **la lista es techo garantizado**. Es
+mecánica de precio —`totalPermitidoFijo` la usa para decidir si puede multiplicar sobre
+`ok_caveat`— y **no** la política comercial *"no ofrecer espontáneamente"* que el plan le
+atribuía. Filtrar por él habría escondido productos legítimos: 54 de 185 variantes, entre ellas
+los kraft y las ilustraciones. **El filtro se sacó.** El guard de nicho, que sí es una regla
+comercial real, se conserva.
+
+### Y un cuarto, de ranking: la cantidad no es un sustantivo
+
+Con el SQL arreglado, la simulación contra el catálogo real mostró que el token `100` (de "100
+hojas") metía **`100 Tarjetas`, `1000 Tarjetas` y `Talonarios Rifas 100 numeros`** en el top-8 de
+una consulta de impresiones — su IDF es alto (3,09) porque está en sólo 4 productos. Los números
+puros salieron de la tokenización. Es la misma clase que la regla de sustantivo de v8 ("anillado
+para 120 hojas" no son 120 anillados). Los packs se siguen encontrando por "tarjetas"; los
+gramajes sobreviven porque van pegados a su unidad (`80gr`).
+
+### El caso de aceptación, medido
+
+Simulando el ranking real (export del 27 + los 7 renames de la curación de ese día, que el export
+no refleja):
+
+| # | score | producto |
+|---|---|---|
+| 1 | 9,77 | Impresiones láser color papel obra 106 gr |
+| 2 | 9,77 | Impresiones láser color papel obra 80 gr |
+| **3** | **8,91** | **Impresiones papel obra 75 gr** ← el caso de aceptación |
+| 4-7 | 7,49 | las 4 ilustraciones/opalina láser |
+| 8 | 7,30 | Impresiones a4 papel obra 106 gr |
+
+**Obra 75 entra tercera y pasa el corte.** Y un efecto secundario que conviene registrar: los 7
+renames de la curación comparten el prefijo *"Impresiones láser color papel"*, así que ahora
+**compiten entre sí por las mismas 4 palabras** y empujan a obra 75 hacia abajo. Con cupo 8 entra;
+**con el cupo viejo de 4 se habría caído**. Es evidencia medida a favor de la decisión de mostrar
+todo de una.
+
+> `laser` da **df=0**: no aparece en ningún nombre del catálogo, así que el sesgo del LLM hacia el
+> láser (emitió `Impresiones láser color papel obra 80 gr`) **no contamina la búsqueda**. Es
+> exactamente el efecto que el diseño buscaba: que errar el eje deje de importar.
+
+**Lo que esto dejó construido:** `tests/validate-sql-busqueda.js`, un validador estructural del
+SQL. No reemplaza a Postgres (no hay instancia en el entorno), pero caza las tres clases de bug de
+arriba, y está **verificado contra una copia con los bugs reintroducidos a propósito** — un
+validador que no falla cuando debe no sirve.
+
+---
+
 ## 7. Orden de construcción resultante
 
 Los tres prerrequisitos del plan original siguen en pie (curación ✅ ya aplicada ·

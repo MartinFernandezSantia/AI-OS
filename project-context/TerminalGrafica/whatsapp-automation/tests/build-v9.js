@@ -156,16 +156,24 @@ sub('Parsear Respuesta',
 // y pondera por rareza". Tres cosas que la pasada adversarial movio de prompt a SQL,
 // porque una regla comercial no se le delega a un modelo:
 //
-//   - `oculto`: nunca es candidato. (Los 5 huerfanos de E0 son ruido en cualquier
-//     busqueda de "anillado".)
+//   - `oculto`: nunca es candidato. NO se filtra a mano: la vista `bot.taxonomia` YA
+//     lo aplica en su WHERE (`not coalesce(m.oculto, false)`), y `oculto` vive en
+//     `bot.producto_meta`, NO en `bot.variantes`. Por eso la busqueda parte de
+//     taxonomia y usa variantes solo para agregar flags: cualquier otra cosa
+//     resucitaba productos que la vista ya habia descartado.
 //   - nicho (medicina / promo inmobiliarias): solo entra si el cliente NOMBRO el
 //     nicho. Medido: "imprimir un apunte de 200 paginas" trae el producto de medicina
 //     PRIMERO, porque `apuntes` es sinonimo literal suyo. Si entra al menu y el
 //     cliente elige, el turno siguiente ya tiene "medicina" en la ventana y el guard
 //     de Armar Respuesta Precio pasa -> $45/pagina a quien no califica.
-//   - `solo_descuentos` (54 de 185 variantes): "no ofrecer espontaneamente, solo si
-//     el cliente lo pide por nombre". Entra SOLO si algun token del cliente matchea
-//     ese producto por nombre/sinonimo, que es literalmente lo que el flag define.
+//
+// NO se filtra por `solo_descuentos`, y esto CORRIGE lo que decia el plan §4. En la
+// vista real es `bool_and(r.rule_type = 'discount')`: "todas las reglas de precio de
+// esta variante son descuentos", o sea que la lista es TECHO garantizado. Es un dato
+// de mecanica de precio —lo usa `totalPermitidoFijo` para decidir si puede multiplicar
+// sobre `ok_caveat`— y NO la politica comercial "no ofrecer espontaneamente" que el
+// plan le atribuia. Filtrar por el escondia productos legitimos: 54 de 185 variantes,
+// entre ellas los kraft y las ilustraciones.
 //
 // Ponderacion: IDF clasico, ln(N/df). Medido sobre el catalogo real -> `papel` esta
 // en 30 de 88 productos (peso 1,08) y `kraft` en 2 (peso 3,78): la palabra rara pesa
@@ -182,7 +190,7 @@ const SQL_BUSCAR = `-- v8.3 BUSQUEDA POR TOKEN CON PONDERACION POR RAREZA (IDF)
 -- (para el guard de nicho) · $3 = cupo de candidatos.
 --
 -- Devuelve productos (no variantes) ordenados por score, ya filtrados por las tres
--- reglas de negocio que NO se le delegan al LLM: oculto, nicho y solo_descuentos.
+-- reglas de negocio que NO se le delegan al LLM (ver el comentario del build).
 with pedido as (
   select translate(lower(trim($1)), 'áéíóúñ', 'aeioun') as q,
          translate(lower(coalesce($2, '')), 'áéíóúñ', 'aeioun') as ventana
@@ -226,8 +234,10 @@ crudo as (
   join pesos p on b.texto like '% ' || p.tok || '%'
   group by b.producto_id, b.nombre_canonico
 ),
--- ¿algun token del cliente matchea este producto por NOMBRE o SINONIMO exacto?
--- Es la condicion que habilita a los solo_descuentos: "lo pidio por nombre".
+-- ¿algun token del cliente matchea este producto por su NOMBRE (no solo por un
+-- sinonimo generico)? No filtra nada: es TELEMETRIA. Sirve para distinguir "el
+-- cliente lo pidio por su nombre" de "llego por un token generico tipo papel",
+-- que es la pregunta que uno se hace cuando una resolucion sale rara.
 nombrado as (
   select c.producto_id,
          exists (
@@ -237,12 +247,12 @@ nombrado as (
          ) as por_nombre
   from crudo c
 ),
--- atributos y flags a nivel PRODUCTO, agregados desde sus variantes visibles.
+-- Flags a nivel PRODUCTO, agregados desde sus variantes. 'oculto' NO se mira aca:
+-- vive en bot.producto_meta y bot.taxonomia (de donde sale 'buscable') ya lo filtro.
+-- 'atributos' aca es el efectivo (producto || variante), por eso el nicho sale de
+-- max(): si alguna variante lo declara, el producto entero es de nicho.
 flags as (
   select v.producto_id,
-         bool_and(coalesce((v.atributos->>'oculto')::boolean, false)) as todo_oculto,
-         bool_or(coalesce(v.solo_descuentos, false)) as hay_solo_desc,
-         bool_and(coalesce(v.solo_descuentos, false)) as todo_solo_desc,
          max(v.atributos->>'nicho') as nicho,
          min(v.precio_lista) filter (where v.precio_lista > 0) as precio_piso,
          max(v.precio_lista) as precio_techo,
@@ -252,29 +262,31 @@ flags as (
 ),
 filtrado as (
   select c.producto_id, c.nombre_canonico, c.score, c.n_tokens, c.tokens_match,
-         f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.hay_solo_desc
+         f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, nb.por_nombre
   from crudo c
   join flags f using (producto_id)
   join nombrado nb using (producto_id)
   cross join pedido pe
-  where not coalesce(f.todo_oculto, false)
-    -- GUARD DE NICHO: el producto de precio especial por rubro NUNCA es candidato
-    -- si el cliente no nombro el rubro. Se compara contra la ventana, no contra
-    -- el mensaje suelto (el cliente pudo decir "medicina" dos mensajes atras).
-    and (f.nicho is null
+  -- GUARD DE NICHO: el producto de precio especial por rubro NUNCA es candidato
+  -- si el cliente no nombro el rubro. Se compara contra la ventana, no contra
+  -- el mensaje suelto (el cliente pudo decir "medicina" dos mensajes atras).
+  where (f.nicho is null
          or (f.nicho = 'medicina'      and pe.ventana ~ 'medicin')
          or (f.nicho = 'inmobiliarias' and pe.ventana ~ 'inmobiliari|inmueble'))
-    -- SOLO_DESCUENTOS: si TODAS sus variantes lo son, entra solo si lo pidio por nombre.
-    and (not coalesce(f.todo_solo_desc, false) or nb.por_nombre)
-)
-select producto_id, nombre_canonico, round(score::numeric, 3) as score, n_tokens,
-       tokens_match, nicho, precio_piso, precio_techo, n_variantes, hay_solo_desc
-from filtrado
+),
+-- El corte va en su PROPIO CTE: un CTE no puede referenciarse a si mismo sin
+-- RECURSIVE, y poner el corte contra max(score) DENTRO de 'filtrado' es un error de
+-- Postgres -> el nodo devolvia el item de error (onError continueRegularOutput) y la
+-- busqueda salia VACIA. Bug encontrado en la 1a corrida real (2026-07-27).
+tope as (select max(score) as mx from filtrado)
+select f.producto_id, f.nombre_canonico, round(f.score::numeric, 3) as score, f.n_tokens,
+       f.tokens_match, f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.por_nombre
+from filtrado f, tope
 -- CORTE RELATIVO: todo lo que llegue al 40% del mejor score. Con una palabra
 -- distintiva deja 2-3; con puras genericas deja mas, que es correcto (el pedido
 -- era ambiguo de verdad y el cliente tiene que ver las opciones).
-where score >= 0.4 * (select max(score) from filtrado)
-order by score desc, n_tokens desc, precio_piso asc nulls last
+where f.score >= 0.4 * tope.mx
+order by f.score desc, f.n_tokens desc, f.precio_piso asc nulls last
 limit greatest(coalesce($3::int, 8), 1)`;
 
 {
@@ -341,8 +353,18 @@ const norm = (s) => String(s || '').normalize('NFC').toLowerCase()
   .replace(/[áéíóúü]/g, (c) => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' }[c]))
   .replace(/ñ/g, 'n');
 
+// NÚMEROS PUROS FUERA (medido en la 1ª corrida real, 2026-07-27): "imprimir 100
+// hojas" mandaba el token \`100\` a la búsqueda, y como está en 4 productos su IDF es
+// alto (3,09) — así que "100 Tarjetas", "1000 Tarjetas" y "Talonarios Rifas 100
+// numeros" se metían en el top-8 de una consulta de impresiones. La cantidad NO es
+// un sustantivo de producto: es la misma clase de bug que la regla de sustantivo de
+// v8 ("anillado para 120 hojas" no son 120 anillados).
+// Los gramajes SÍ se conservan: van pegados a su unidad ("80gr") o los aporta el
+// LLM en el nombre del producto, y ahí discriminan de verdad.
+// Los packs no se pierden: se siguen encontrando por "tarjetas".
 const tokenizar = (txt) => norm(txt).replace(/[^a-z0-9]+/g, ' ').split(' ')
-  .filter((t) => t && !STOP.has(t) && (t.length >= 3 || /^(a[0-5]|opp|uv|pvc)$/.test(t)));
+  .filter((t) => t && !STOP.has(t) && !/^\\d+$/.test(t)
+    && (t.length >= 3 || /^(a[0-5]|opp|uv|pvc)$/.test(t)));
 
 // Fuente 1: lo que el LLM eligió como producto y variante. Es su mejor aporte —
 // acierta el sustantivo — y acá deja de ser una elección para pasar a ser una pista.

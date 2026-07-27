@@ -1439,6 +1439,20 @@ async function main() {
     r = await extraer({ producto: 'Impresión', variante: '' }, decidir({ userMessage: 'impresión a color' }));
     console.log('T5 NFD normalizado:', r[0].json.palabras.includes('impresion') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.palabras));
 
+    // T5b: los NÚMEROS PUROS no son tokens de búsqueda. Encontrado en la 1ª corrida
+    // real: "imprimir 100 hojas" mandaba `100` al SQL, y como está en 4 productos su
+    // IDF es alto (3,09) → "100 Tarjetas", "1000 Tarjetas" y "Talonarios Rifas 100
+    // numeros" se metían en el top-8 de una consulta de impresiones. La cantidad no
+    // es un sustantivo de producto: misma clase que la regla de sustantivo de v8.
+    r = await extraer({ producto: 'Impresiones papel obra 75 gr', variante: '' },
+      decidir({ userMessage: 'cuánto sale imprimir 100 hojas a color' }));
+    pal = r[0].json.palabras.split(' ');
+    console.log('T5b los números puros no buscan:', !pal.includes('100') && pal.includes('hojas') && pal.includes('obra') ? 'OK' : 'FAIL ' + r[0].json.palabras);
+
+    // T5c: pero el gramaje pegado a su unidad SÍ sobrevive (ahí sí discrimina).
+    r = await extraer({ producto: '', variante: '' }, decidir({ userMessage: 'papel de 80gr' }));
+    console.log('T5c el gramaje con unidad sobrevive:', r[0].json.palabras.includes('80gr') ? 'OK' : 'FAIL ' + r[0].json.palabras);
+
     // T6: cap de 12 tokens — un mensaje larguísimo no dispara un SQL con 40 LIKEs.
     r = await extraer({ producto: '', variante: '' },
       decidir({ userMessage: 'anillado plastico resorte metalico tapa acetato contratapa carton lomo grande chico mediano oficio legal carta tabloide' }));

@@ -20,10 +20,11 @@
 >
 > **Antes de correr nada, corré esto:**
 > ```
-> node tests/build-v9.js --check      # v9 al día con su build
-> WF=faq-bot-v9.json node tests/code-harness.js       # 221/221
-> WF=faq-bot-v9.json node tests/regen-arp2-twin.js    # gemelo en sync
-> WF=faq-bot-v9.json node tests/validate-v8-import.js # 0 errores
+> node tests/build-v9.js --check                       # v9 al día con su build
+> WF=faq-bot-v9.json node tests/code-harness.js        # 223/223
+> WF=faq-bot-v9.json node tests/regen-arp2-twin.js     # gemelo en sync
+> WF=faq-bot-v9.json node tests/validate-v8-import.js  # 0 errores
+> WF=faq-bot-v9.json node tests/validate-sql-busqueda.js  # 0 errores (estructura del SQL)
 > ```
 
 ---
