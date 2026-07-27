@@ -983,5 +983,48 @@ async function main() {
   r = await aplicarAclE(JSON.stringify({ accion: 'opciones', productos: ['Papel Kraft 900 Gr', 'Sellos de goma'] }), arpJ, decidir(), CATP);
   console.log('E6 todas inexistentes -> deriva:', r[0].json.accionLog === 'informo_precio' && r[0].json.notas.includes('descartadas') ? 'OK' : 'FAIL ' + r[0].json.notas);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1b — EL DICCIONARIO DE PALABRAS COMUNES
+  // La 1a version listaba como "token distintivo" cualquier palabra en <=3
+  // nombres de producto. Eso metia "en" (de "Cartelería en PVC") y "con" (de
+  // "Carpetas con Vaina"): el gate rechazaba TODO mensaje en castellano.
+  // Detectado en el primer mensaje de la ronda real, no por el harness.
+  // ══════════════════════════════════════════════════════════════════════════
+  const CAT2 = ['Cartón', 'Montado sobre cartón', 'Cartelería en PVC', 'Carpetas con Vaina',
+    'Lona front brillo', 'Vinilo/Lona UV Brillo', 'Impresión de módulos/apuntes de medicina',
+    'Impresiones papel obra 75 gr', 'Corte x Millar', 'Tarjetas Glitter', 'Encuadernado',
+    'Carnet Cocodrilo', 'Laminados', 'Talonarios Rifas 100 numeros'];
+  const pb = (await prompt({ origen: 'precio', reply: 'x', nombresCatalogo: CAT2 }))[0].json.prohibidos;
+
+  // D1: ninguna palabra funcional del castellano puede quedar prohibida.
+  const FUNC = ['en', 'con', 'para', 'sin', 'sobre', 'de', 'la', 'el'];
+  console.log('D1 sin palabras funcionales:', !FUNC.some((t) => pb.includes(t)) ? 'OK' : 'FAIL ' + JSON.stringify(pb.filter((t) => FUNC.includes(t))));
+
+  // D2: ni el vocabulario corriente del rubro — el mostrador lo usa hablando de
+  //     cualquier trabajo ("para tus apuntes", "el corte va aparte").
+  const RUBRO = ['apuntes', 'impresiones', 'corte', 'carteles', 'libros', 'carpetas', 'laminado'];
+  console.log('D2 sin vocabulario de rubro:', !RUBRO.some((t) => pb.includes(t)) ? 'OK' : 'FAIL ' + JSON.stringify(pb.filter((t) => RUBRO.includes(t))));
+
+  // D3: pero los tokens que SI identifican un SKU tienen que seguir ahí, o el
+  //     gate deja de proteger el nombre.
+  const SKU = ['montado', 'glitter', 'cocodrilo', 'medicina', 'uv'];
+  const faltan = SKU.filter((t) => !pb.includes(t));
+  console.log('D3 conserva los tokens de SKU:', !faltan.length ? 'OK' : 'FAIL faltan ' + JSON.stringify(faltan));
+
+  // D4: los 4 ataques de renombre siguen cazados con el diccionario nuevo.
+  const ataque = async (borr, msg) => {
+    const p0 = (await prompt({ origen: 'precio', reply: borr, nombresCatalogo: CAT2 }))[0].json;
+    return (await aplicar(p0, JSON.stringify({ mensaje: msg })))[0].json.compositor;
+  };
+  const v1 = await ataque('La opción 35X50 CM de Cartón sale $2.000,00.', 'El montado sobre cartón de 35X50 CM te sale [[P1]].');
+  const v2 = await ataque('La opción Lona Brillo de Lona front brillo sale $16.000,00.', 'La lona uv brillo te sale [[P1]].');
+  const v3 = await ataque('La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00.', 'Los módulos de medicina te salen [[P1]] la página.');
+  console.log('D4 ataques de renombre cazados:', [v1, v2, v3].every((v) => String(v).startsWith('nombre_ajeno')) ? 'OK' : 'FAIL ' + [v1, v2, v3].join(' / '));
+
+  // D5: y la paráfrasis legítima que ANTES rechazaba, ahora pasa.
+  const p5 = (await prompt({ origen: 'precio', reply: 'La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00.', nombresCatalogo: CAT2 }))[0].json;
+  r = await aplicar(p5, JSON.stringify({ mensaje: 'Para tus apuntes, en obra de 75 y de un solo lado, te sale [[P1]] la hoja.' }));
+  console.log('D5 paráfrasis con "en"/"para"/"apuntes":', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
