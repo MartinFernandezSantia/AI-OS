@@ -303,3 +303,34 @@ retry y con `onError`, que **ningún** nodo Code vuelva a comparar el anti-loop 
 `lastBotReplies`, que los cuatro guards usen `borradoresPrevios`, las dos reglas nuevas del gate,
 que el rank-2 no vuelva a ser substring crudo, las cuatro piezas de la señal, la validación de
 conjunto cerrado en los dos puntos, el endpoint pineado y el NFC.
+
+---
+
+## 8. Fixes post-aplicación — 2026-07-27
+
+Martin aplicó el SQL, importó v8 y mandó los primeros mensajes reales. **Cada mensaje encontró un
+bug.** Los cinco están arreglados y commiteados; el workflow que Martin tiene importado es
+anterior a los cinco, así que **hay que re-importar antes de seguir la ronda**.
+
+| # | Lo que pasó | Causa | Commit |
+|---|---|---|---|
+| 1 | El SQL de E0 murió en la **primera** variante | `variante_meta.display_variante` era `not null` sin default. El primer fix (pasar el nombre vivo) lo **rechacé yo mismo**: `coalesce(display_variante, v.name)` hace que un valor no nulo gane para siempre, y eso desincroniza 176 variantes del mostrador — es exactamente la falla de "el overlay miente" que el consejo había marcado. Fix correcto: `drop not null` | `2ffe24a` |
+| 2 | **El gate rechazaba todo mensaje en español** (`nombre_ajeno:en`) | `prohibidos` se armaba con los tokens que aparecen ≤3 veces en el catálogo. "en", "con", "para", "plata", "lado" cumplen. El harness no lo vio porque su catálogo mock tenía 8 nombres de juguete: **la frecuencia sólo tiene sentido sobre el catálogo real** | `00b8a05` |
+| 3 | Paráfrasis legítimas seguían cayendo | El diccionario COMUNES cubría funcionales pero no vocabulario del rubro. Decisión de Martin: sacar también los términos de oficio. 91 → 82 → **61 tokens**. Verificado en las dos direcciones: los ataques siguen cayendo, las paráfrasis pasan | `542314c` |
+| 4 | Un turno entero perdido por **JSON con basura después del objeto** | El modelo cerró bien y agregó `\n"}`. `JSON.parse` sobre el string entero explota y el turno se va a handoff / degradado / ilegible, teniendo el objeto perfectamente formado adelante. Los **tres** nodos que parsean tenían el mismo bug. Fix: extractor del primer objeto balanceado, consciente de strings y escapes | `34d06ef` |
+| 5 | El borrador decía `$88 c/u` y el compositor lo redactaba como **"por página"** | Mentira de unidad de 2× que ninguna otra regla ve: mismos dígitos, mismos tokens, mismo hedge. Causa raíz: ARP tenía `unidad_venta` y no lo decía — un `c/u` colgado hace que lo más cercano gramaticalmente sean las *páginas*. Fix doble: el borrador dice la unidad (`por hoja`) **y** el gate gana una regla 4c de conservación de unidad | `78b379d` |
+
+**Y un cambio de voz pedido por Martin** (`b096767`, decisión logueada): fuera la leyenda inline
+`(precio de lista; …)`, entra el aviso de canal *"Los pedidos se hacen por mail a
+terminalgrafica@gmail.com o en el local; este canal es solo informativo."*, **una vez por
+conversación** y sólo si el mensaje lleva plata. Sin estado nuevo: lo apaga el `avisoDado` que ya
+existía. Protegido por dos redes del gate (hedge + `[[MAIL]]`).
+
+**Verificación al cierre del 27:** harness **170/170** (los 150 de arriba + L/G/S/E/D/J/U:
+anti-loop post-compositor, gate de nombre y hedge, señal y conjunto cerrado, diccionario, JSON
+tolerante, unidad y aviso de canal) · gemelo en sync · validador 0 errores.
+
+**Lo que estos cinco enseñan, para la próxima:** cuatro de los cinco eran invisibles para el
+harness porque sus mocks codificaban una premisa más limpia que la realidad (catálogo de juguete,
+JSON siempre válido, `c/u` como unidad universal). El harness prueba que el código hace lo que
+dice; **no** prueba que la premisa sea cierta. Eso lo prueba la ronda.

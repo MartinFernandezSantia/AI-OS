@@ -298,7 +298,7 @@ borrador determinístico.
 
 | # | Mensaje | Qué tiene que pasar |
 |---|---|---|
-| 1 | "cuánto sale imprimir 200 páginas doble faz en obra 75" | **$17.600**, no $35.600, y que diga "(100 hojas)" |
+| 1 | "cuánto sale imprimir 200 páginas doble faz en obra 75" | **$8.800** (100 hojas × $88 de bracket), y que diga "(100 hojas)" y "por hoja" — corregido 2026-07-27: el $17.600 que decía antes era el número VIEJO, 200 × $88, o sea la cuenta por página que este paquete justamente elimina |
 | 2 | "cuánto sale un anillado para 120 hojas" | $2.400, **sin total** |
 | 3 | "necesito anillar 3 apuntes" | $7.200 (sigue multiplicando lo que corresponde) |
 | 4 | "cuánto sale un cartel de 1x0.65" | **no** puede salir la promo de $15.000 |
