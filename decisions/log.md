@@ -18,6 +18,16 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-28 — Bot TG: una 2ª opinión sobre el silencio, en vez de una regla nueva por caso
+
+**Decision:** Cuando el LLM principal decide callarse (`action: noop`), un verificador barato revisa ese juicio antes de que el turno muera. Cinco nodos nuevos entre `Switch Acción [noop]` y `Silencio Repetición`: si el veredicto es `responder`, el turno se reinyecta por `Forzar Ruta General`; si es `callar`, sigue como hoy. Sólo se verifica el silencio que emitió el LLM (`noopOrigen` `llm` o `reply-vacio`) — el anti-loop determinístico de 2 repeticiones no se discute, es correcto por construcción y no paga la llamada. La cota anti-ciclo es el flag `reintentoSilencio`: en la 2ª vuelta el silencio se respeta sin verificar. Toda degradación (timeout, JSON ilegible, veredicto desconocido) cae a `callar`, o sea al comportamiento actual.
+
+**Why:** El incidente: un cliente preguntó "cual es el precio promocional?" y el bot se calló, sin haber dado nunca ese número. La regla que lo silenció (no repetir lo ya respondido, 2026-07-24) es deseada — ahorra un mensaje a USD 0,026. Lo que falla es el juicio de "ya respondida", y eso no se enumera con condiciones: cada caso nuevo pediría una regla nueva. Decisión de Martin, textual: *"no se puede preveer cada caso de este estilo... puedo lidiar con que haya ofrecido la promo sin pasar el precio, pero no con que yo haya preguntado por el precio de la promo y me haya derivado a un silencio"*. Un cliente ignorado cuesta más que un mensaje de más. El costo de cada verificación se loguea en `bot.decisiones.notas` (tokens + USD) para poder decidir con números si la capa se queda.
+
+**Alternatives considered:** Un gate determinístico de `min_unidades` (arreglaba ESTE caso — la promo de 6 ofrecida a quien pidió 3 — pero no la clase; queda pendiente como curación aparte). Verificar dentro de `Parsear Respuesta` antes de emitir el noop: sin ciclo ni rama nueva, pero encarecía el 100% de los turnos para arreglar un ~2%. Sacar la regla de silencio: devolvía el problema que resolvió el 24-jul.
+
+**Owner:** Martin.
+
 ## 2026-07-28 — Bot TG: el gate del compositor observa en vez de bloquear
 
 **Decision:** El nodo `Aplicar Compositor` se queda con una sola responsabilidad: estampar los montos desde el mapa de la DB, para que el LLM nunca tipee plata. Las ocho reglas de conservación (tokens, plata propia, dígitos, léxico de riesgo, hedge, unidad, largo) siguen corriendo pero sólo registran: van a `compositorObs` con prefijo `habria_` y a `notas`, para una auditoría semanal (`db/auditoria-compositor.sql`). Sigue bloqueando únicamente `token_residual`, que no es una regla de política sino la verificación de que el estampado funcionó — si un `[[P1]]` sobrevive, el cliente lo recibe literal en WhatsApp.
