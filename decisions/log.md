@@ -18,6 +18,26 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-27 — Bot TG: no existe más la ruta handoff a un humano; la escalación va al mail
+
+**Decision:** Se eliminan del workflow los 4 nodos de la ruta handoff (`Asignar a Humano`, `Armar Nota Agente`, `Llamar LLM Nota`, `Nota Privada Agente`). Las tres entradas de la ruta —la salida `handoff` del switch, el fallback de acción no reconocida y la salida de error del LLM— van ahora a `Label Escalación → Mensaje Escalación → Log Escalación`. El mensaje al cliente pasa a ser honesto: mail, teléfono, local y horario, sin "en breve te van a estar respondiendo". El contrato del LLM (`action: handoff` + el árbol de `motivo`) **no se toca**.
+
+**Why:** TG no quiere empleados mirando Chatwoot, así que la nota de traspaso se escribía —gastando una 2ª llamada LLM— para un lector que no existe, y el aviso al cliente era mentira. Y había un efecto que nadie había medido: `Asignar a Humano` ponía `assignee_id: 1`, y como `Filtro Ingreso` exige `!meta.assignee`, **el bot quedaba mudo para siempre en esa conversación**. Le pasó a la conversación de prueba de la ronda del 27. Se conserva `Log Escalación` porque `motivo` vive sólo ahí, y `Label Escalación` porque no silencia nada y es el índice visual de escalaciones. Cambiaría de idea si TG algún día pone a alguien en Chatwoot.
+
+**Alternatives considered:** Dejar la asignación y desasignar a mano cada vez (el bot sigue muriendo por conversación); tocar el contrato del LLM para que no exista `handoff` (se pierde la telemetría de `motivo` y el freno anti-confabulación de la regla 4).
+
+**Owner:** Martin.
+
+## 2026-07-27 — Bot TG: el bot nunca dice que algo "no lo tenemos en catálogo"
+
+**Decision:** Fuera los dos strings del Aclarador que decían *"Eso no lo tenemos en catálogo"*. En su lugar, invitación a consultar por mail sin negar ni afirmar que el producto exista.
+
+**Why:** Delata el mecanismo interno y suena a "no existe" cuando lo que pasó es que el bot no lo encontró. El System Prompt **ya lo prohibía** ("nunca digas 'el catálogo', 'la lista de precios', 'el sistema'") y el código lo escribía igual: el prompt no puede gobernar un string hardcodeado. Y el compositor no podía repararlo porque tiene prohibido afirmar que algo existe o no existe, así que la frase quedaba blindada.
+
+**Alternatives considered:** Reescribirlo en el prompt (no aplica: no es texto del LLM); dejar que el compositor la parafrasee (el gate la protege, no la puede sacar).
+
+**Owner:** Martin.
+
 ## 2026-07-27 — Bot TG: el mensaje de precio cierra con un aviso de canal, una vez por conversación
 
 **Decisión:** se elimina la leyenda `(precio de lista; el precio final del trabajo te lo confirma
