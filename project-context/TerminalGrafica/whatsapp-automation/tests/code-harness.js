@@ -77,7 +77,7 @@ async function main() {
   console.log('A1 limpio:', r[0].json.reply.includes('$13.000,00') && !r[0].json.reply.includes('precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   r = await armar(pBase, [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 800 }], decidir({ userMessage: 'precio?' }));
-  console.log('A2 cierre:', r[0].json.reply.includes('$800,00') && r[0].json.reply.includes('El total te lo confirmamos en el local o por mail.') && !r[0].json.reply.includes('(precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  console.log('A2 aviso de canal:', r[0].json.reply.includes('$800,00') && r[0].json.reply.includes('este canal es solo informativo') && !r[0].json.reply.includes('(precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   const rangosRow = { ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }, { value: 450, minQty: 51, maxQty: 150 }, { value: 400, minQty: 501, maxQty: null }], variante: '.', unidad: 'a3', precio_lista: 500, nombre_canonico: 'Impresiones a3 tonner negro' };
   r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' }, [rangosRow], decidir({ userMessage: 'cuanto salen?' }));
@@ -101,7 +101,7 @@ async function main() {
   r = await armar({ ...pBase, template: 'El precio de lista es {{PRECIO}}.' },
     [{ ...base, mostrable: false, tiene_reglas: true, solo_descuentos: true, precio_lista: 2200 }], decidir({ userMessage: 'precio?' }));
   const rep3 = r[0].json.reply;
-  console.log('A8 cierre unico:', (rep3.match(/El total te lo confirmamos/g) || []).length === 1 && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
+  console.log('A8 aviso unico:', (rep3.match(/solo informativo/g) || []).length === 1 && !rep3.includes('(precio de lista;') ? 'OK' : 'FAIL ' + rep3);
   r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' },
     [{ ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }], variante: '.', unidad: 'a3', nombre_canonico: 'Impresiones a3 tonner negro' }],
     decidir({ userMessage: 'que sale?' }));
@@ -1079,27 +1079,39 @@ async function main() {
   console.log('U1 unidad en la frase:', r[0].json.reply.includes('por hoja') && !r[0].json.reply.includes('c/u') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // U2: y el cierre nuevo, una sola vez, sin la leyenda vieja.
-  console.log('U2 cierre nuevo:', (r[0].json.reply.match(/El total te lo confirmamos en el local o por mail\./g) || []).length === 1
+  console.log('U2 aviso de canal:', (r[0].json.reply.match(/solo informativo/g) || []).length === 1
     && !r[0].json.reply.includes('precio de lista;') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // U2b: UNA VEZ POR CONVERSACION. Si ya se avisó (avisoDado), no se repite.
+  r = await armar({ producto: 'Impresiones papel obra 75 gr', variante: 'doble faz b/n', paginas: 200, copias: 1, template: null, forzarPlantilla: true, mas: [] },
+    [oHoja], decidir({ userMessage: 'y 400 páginas?', avisoDado: true }));
+  console.log('U2b aviso no se repite:', !r[0].json.reply.includes('solo informativo') && r[0].json.reply.includes('por hoja') ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // U3: EL CASO REAL — el compositor reetiqueta la unidad. Mismos digitos, mismos
   //     tokens, mismo hedge: ninguna otra regla lo ve.
-  const pu = (await prompt({ origen: 'precio', reply: 'Por 200 páginas a doble faz (100 hojas), la opción doble faz b/n de Impresiones papel obra 75 gr sale $88,00 por hoja — total estimado $8.800,00. El total te lo confirmamos en el local o por mail.' }))[0].json;
-  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por página. El total estimado es [[P2]]. El total te lo confirmamos en el local o por mail.' }));
+  const pu = (await prompt({ origen: 'precio', reply: 'Por 200 páginas a doble faz (100 hojas), la opción doble faz b/n de Impresiones papel obra 75 gr sale $88,00 por hoja — total estimado $8.800,00. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
+  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por página. El total estimado es [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
   console.log('U3 rechaza cambio de unidad:', r[0].json.compositor === 'unidad:pagina' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
   // U4: conservar la unidad del borrador SI pasa.
-  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por hoja. El total estimado es [[P2]]. El total te lo confirmamos en el local o por mail.' }));
+  r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por hoja. El total estimado es [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
   console.log('U4 conservar la unidad pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
   // U5: "c/u" -> "cada una" es la misma unidad, no una mentira.
-  const pc = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u — total estimado $8.000,00. El total te lo confirmamos en el local o por mail.' }))[0].json;
-  r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado. El total te lo confirmamos en el local o por mail.' }));
+  const pc = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u — total estimado $8.000,00. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
+  r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
   console.log('U5 c/u -> cada una pasa:', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
   // U6: y borrar el cierre nuevo sigue siendo rechazo (hedge).
+  // U6: borrar un hedge conservando TODOS los tokens -> rechazo por hedge.
+  //     (borrar el aviso de canal entero cae antes en la regla de tokens, porque
+  //      el aviso lleva el mail: son dos redes distintas sobre la misma perdida.)
+  r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
+  console.log('U6 borrar un hedge -> rechazo:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // U6b: borrar el aviso de canal entero -> rechazo por tokens (se lleva el mail).
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
-  console.log('U6 borrar el cierre -> hedge:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('U6b borrar el aviso -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
