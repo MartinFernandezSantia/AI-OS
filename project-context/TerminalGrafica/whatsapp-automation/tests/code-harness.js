@@ -1197,6 +1197,25 @@ async function main() {
     && !/promoci[oó]n cartel|inmobiliarias 6/i.test(r[0].json.reply) && !r[0].json.reply.includes('$')
     && /inmobiliaria/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
+  // W7: AVISO DE CANAL DURABLE. `decidir.avisoDado` viene en false (la ventana de
+  // Chatwoot ya no lo alcanza) pero bot.decisiones dice que sí salió -> no se repite.
+  // Este es el caso que dio "el aviso 4 veces en una conversación".
+  const armarAviso = (precioObj, rows, dec, mensajesJson) => runNodeCode('armar.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [], ...mensajesJson } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    $input: { all: () => rows.map((j) => ({ json: j })), first: () => ({ json: rows[0] || {} }) },
+  });
+  r = await armarAviso(pBase, [base], decidir({ userMessage: 'precio a3?', avisoDado: false }), { avisoDado: true });
+  console.log('W7 aviso durable no se repite:', !r[0].json.reply.includes('solo informativo') ? 'OK' : 'FAIL ' + r[0].json.reply);
+  // W7b: y si ninguna de las dos fuentes lo vio, sale (la conducta de siempre).
+  r = await armarAviso(pBase, [base], decidir({ userMessage: 'precio a3?', avisoDado: false }), {});
+  console.log('W7b sin señal el aviso sale:', r[0].json.reply.includes('solo informativo') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // W8: el aviso va al FINAL del multi-ítem, no en el medio (antes se pegaba antes
+  // de concatenar los ítems del campo `mas`).
+  r = await armar({ ...pBase, mas: [{ producto: 'Impresiones a3 tonner negro', variante: 'única' }] },
+    [base, { ...rangosRow, idx: 2 }], decidir({ userMessage: 'precios?' }));
+  console.log('W8 aviso al final:', r[0].json.reply.trim().endsWith('este canal es solo informativo.') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
   // W5b: y el residual de verdad (sin_match) sigue derivando a mail, como antes.
   r = await armar2({ producto: 'Zzz', variante: '' }, [], decidir({ userMessage: 'zzz' }));
   console.log('W5b 2ª pasada residual sigue a mail:', r[0].json.reply.includes('te lo cotiza el equipo') ? 'OK' : 'FAIL ' + r[0].json.reply);
