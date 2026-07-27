@@ -15,6 +15,11 @@ VM de dev con el número de test, **no es prod de TG** · commits en rama, nunca
 `projects/` · toda decisión de diseño pasa por una **pasada adversarial antes** de aplicarla
 (ver §6) · tras tocar un nodo Code: `node tests/code-harness.js`, siempre.
 
+**Cómo se le contesta a Martin:** corto. Una conclusión y el próximo paso, sin recap de la
+pregunta. **Si lo que tiene que revisar no entra en ~15 líneas, no va en el chat: va como slide
+deck** (artifact HTML, precedente en `decks/r7-atomizacion-y-split.html`) con 2-3 bullets de qué
+mirar. El plan largo se commitea igual en `plans/`; el deck es cómo se presenta, no dónde vive.
+
 ---
 
 ## 1. Estado ahora — lo único que hay que leer para arrancar
@@ -45,20 +50,39 @@ tiene importado es anterior a esos arreglos.**
 
 ### La ronda: 16 mensajes en 3 tandas
 
-Los mensajes están en [`v8-build.md`](./v8-build.md) §5 (1-10) y
-[`v8-1-build.md`](./v8-1-build.md) §6 (11-16). Correrlos en este orden y traer el texto **tal cual
-llegó a WhatsApp**, no un resumen:
+Correr en este orden y traer el texto **tal cual llegó a WhatsApp**, no un resumen. (Origen:
+[`v8-build.md`](./v8-build.md) §5 para 1-10, [`v8-1-build.md`](./v8-1-build.md) §6 para 11-16.)
 
-- **Tanda A — plata** (si fallan, cuestan dinero): 1 doble faz obra 75 · 2 anillado 120 hojas ·
-  3 anillar 3 apuntes · 4 cartel suelto vs promo · 5 promo con 3 carteles · 6 "500 rifas" ·
-  16 papel ilustración para 500 folletos.
-  > Ojo con el 1: el esperado es **$8.800** (100 hojas × $88 de bracket). El $17.600 que decía el
-  > runbook era el número **viejo** — 200 × $88, la cuenta por página que este paquete elimina.
-- **Tanda B — resolución**: 7 papel vegetal a3 · 8 papel kraft a4 (tiene que **preguntar** el
-  gramaje) · 11 lona 3x2 (no puede aparecer `Talonarios Rifas`) · 12 "me hacen fotocopias?" ·
-  15 repetir 3 veces un pedido imposible (a la tercera **deriva a mail**: era el anti-loop muerto).
-- **Tanda C — voz**: 9 "cuánto sale anillar" (3 opciones en prosa, **sin** números) · 10 que suene
-  a persona · 13 la puerta de color aparece · 14 la puerta **no** aparece si ya ancló el color.
+**Tanda A — plata.** Si fallan, cuestan dinero. Van primero.
+
+| # | mensaje | tiene que pasar |
+|---|---|---|
+| 1 | "cuánto sale imprimir 200 páginas doble faz en obra 75" | **$8.800** (100 hojas × $88 de bracket), y que diga **"(100 hojas)"** y **"por hoja"**. Ojo: el $17.600 del runbook viejo era la cuenta **por página**, justo la que este paquete elimina |
+| 2 | "cuánto sale un anillado para 120 hojas" | **$2.400**, y **sin total** — el anillado se cobra por trabajo, no por hoja |
+| 3 | "necesito anillar 3 apuntes" | **$7.200** — acá sí multiplica, porque el número está pegado a un sustantivo de trabajo |
+| 4 | "cuánto sale un cartel de 1x0.65" | **no** puede salir la promo de $15.000 (es sólo para inmobiliarias y desde 6) |
+| 5 | "soy de una inmobiliaria, necesito 3 carteles" | dice el **mínimo de 6**, y **no** cotiza $45.000 |
+| 6 | "500 rifas" | **no** cotiza 500 talonarios (el talonario trae 100 números) |
+| 16 | "papel ilustración para 500 folletos" | **no** puede cotizar la hoja suelta de $900 — el hijack medido era de 73× |
+
+**Tanda B — resolución.**
+
+| # | mensaje | tiene que pasar |
+|---|---|---|
+| 7 | "papel vegetal a3" | resuelve (antes era "no lo tenemos") |
+| 8 | "papel kraft a4" | **pregunta el gramaje** (130 o 300), no lista un menú ni elige uno |
+| 11 | "una lona de 3x2" | **no** puede aparecer `Talonarios Rifas` entre las opciones |
+| 12 | "me hacen fotocopias?" | resuelve — caía en la posición **71 de 82**. *Este es el que falla por diseño si no se aplicó la curación de voz* |
+| 15 | repetir **3 veces** un pedido imposible | a la tercera **deriva a mail**. Era el anti-loop que v8 había matado: sin esto repregunta para siempre, y cada vuelta se paga |
+
+**Tanda C — voz.**
+
+| # | mensaje | tiene que pasar |
+|---|---|---|
+| 9 | "cuánto sale anillar" | ofrece las 3 opciones **en prosa y sin números** |
+| 13 | "cuánto sale imprimir 100 hojas" | sale el precio **y la puerta**: *"si lo necesitás en color es otro precio, avisame"* |
+| 14 | "quiero 100 hojas en blanco y negro" | la puerta de color **no** aparece — ya lo ancló él |
+| 10 | cualquiera de los anteriores | tiene que **sonar a persona**, no a lista. Y el aviso de canal, **una sola vez** en toda la conversación |
 
 ### Las 2 consultas de después
 
