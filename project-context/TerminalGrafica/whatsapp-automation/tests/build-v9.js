@@ -320,16 +320,9 @@ filtrado as (
 -- RECURSIVE, y poner el corte contra max(score) DENTRO de 'filtrado' es un error de
 -- Postgres -> el nodo devolvia el item de error (onError continueRegularOutput) y la
 -- busqueda salia VACIA. Bug encontrado en la 1a corrida real (2026-07-27).
-tope as (select max(score) as mx from filtrado)
-select f.producto_id, f.nombre_canonico, round(f.score::numeric, 3) as score, f.n_tokens,
-       f.tokens_match, f.nicho, f.precio_piso, f.precio_techo, f.n_variantes, f.por_nombre,
-       f.atributos, f.familias, f.ejes_variantes,
-       coalesce((f.atributos->>'default_familia')::boolean, false) as es_default
-from filtrado f, tope
--- CORTE RELATIVO: todo lo que llegue al 40% del mejor score. Con una palabra
--- distintiva deja 2-3; con puras genericas deja mas, que es correcto (el pedido
--- era ambiguo de verdad y el cliente tiene que ver las opciones).
-where f.score >= 0.4 * tope.mx
+tope as (select max(score) as mx from filtrado),
+-- Los productos que pasaron el corte, ya ordenados y con el cupo aplicado.
+--
 -- EL DEFAULT DESEMPATA, NO GANA. 'default_familia' marca el trabajo normal de la
 -- familia: lo que se asume cuando el cliente NO especifico nada. Va como PRIMER
 -- criterio de orden pero DESPUES del corte por score, asi que solo decide entre los
@@ -337,12 +330,49 @@ where f.score >= 0.4 * tope.mx
 -- ilustracion arriba y el default queda donde le toca — el flag no lo fuerza.
 -- Sin esto, ante "imprimir 100 hojas a color" ganaba el laser de \$750 y el trabajo
 -- normal de \$400 quedaba invisible (incidente 2026-07-27). Ver preguntas TG 70-73.
--- Se repite la expresion en vez de usar el alias 'es_default': un alias del SELECT es
--- legal en ORDER BY, pero NO calificado (f.es_default seria un error de columna), y
--- repetirla es mas robusto que depender de esa sutileza.
-order by coalesce((f.atributos->>'default_familia')::boolean, false) desc,
-         f.score desc, f.n_tokens desc, f.precio_piso asc nulls last
-limit greatest(coalesce($3::int, 8), 1)`;
+--
+-- El LIMIT tiene que quedar ACA ADENTRO: aplicado despues del join a variantes
+-- cortaria por FILA (8 filas = 2 productos con 4 variantes) en vez de por producto.
+elegidos as (
+  select f.*, coalesce((f.atributos->>'default_familia')::boolean, false) as es_default
+  from filtrado f, tope
+  -- CORTE RELATIVO: todo lo que llegue al 40% del mejor score. Con una palabra
+  -- distintiva deja 2-3; con puras genericas deja mas, que es correcto (el pedido
+  -- era ambiguo de verdad y el cliente tiene que ver las opciones).
+  where f.score >= 0.4 * tope.mx
+  order by coalesce((f.atributos->>'default_familia')::boolean, false) desc,
+           f.score desc, f.n_tokens desc, f.precio_piso asc nulls last
+  limit greatest(coalesce($3::int, 8), 1)
+)
+-- UNA FILA POR VARIANTE, con su precio y sus reglas.
+--
+-- Antes esto devolvia un producto por fila y Get Precio volvia a la base a buscar la
+-- variante POR NOMBRE — resolviendo de nuevo algo que el filtro ya habia resuelto, y
+-- cruzando el producto del filtro con la variante que habia tipeado el LLM (de ahi el
+-- sin_match del 2026-07-28). Ahora las variantes viajan con su producto, con las
+-- MISMAS columnas que devolvia Get Precio: el contrato de Armar Respuesta Precio no
+-- cambia, solo deja de haber una resolucion por nombre en el medio.
+--
+-- 'orden' materializa el ranking del producto: el ORDER BY de un CTE no es estable
+-- hacia afuera, y es lo que hace que el default siga primero despues del join.
+select e.producto_id, e.nombre_canonico, e.score, e.n_tokens, e.tokens_match,
+       e.nicho, e.precio_piso, e.precio_techo, e.n_variantes, e.por_nombre,
+       e.familias, e.ejes_variantes, e.es_default,
+       row_number() over (order by e.es_default desc, e.score desc, e.n_tokens desc,
+                                   e.precio_piso asc nulls last) as orden,
+       v.variante_id, v.variante, v.color, v.unidad, v.precio_lista, v.precio_actualizado,
+       v.por_pagina, v.por_pack, v.tiene_reglas, v.solo_descuentos, v.tiene_override,
+       v.n_reglas_cantidad, v.rangos_cantidad, v.mostrable,
+       -- atributos EFECTIVOS de la variante (la vista ya mergea producto || variante):
+       -- es lo que leen los guards de plata. Los del producto viajan aparte.
+       v.atributos, e.atributos as atributos_producto,
+       -- Get Precio marcaba con match_rank el origen del match. Con el producto ya
+       -- elegido por el filtro siempre es exacto; se deja el campo para no romper el
+       -- contrato de evaluar(), que filtra por el mejor rank.
+       1 as match_rank, 1 as idx
+from elegidos e
+join bot.variantes v on v.producto_id = e.producto_id
+order by orden, v.precio_lista asc nulls last`;
 
 {
   const getPrecio = node('Get Precio');
@@ -494,7 +524,27 @@ const JS_PROMPT_FILTRO = `// v8.3 PROMPT DEL FILTRO (LLM 2) — proyección slim
 // puede escribir un nombre.
 const busq = $('Extraer Palabras').first().json;
 const decidir = $('Decidir').first().json;
-const filas = $input.all().map((i) => i.json).filter((r) => r && r.producto_id);
+// El SQL devuelve una fila por VARIANTE (trae el precio y las reglas de cada una).
+// El filtro decide a nivel PRODUCTO, que es como elige el cliente: "papel obra 75",
+// no "simple faz color". Se agrupa conservando el orden del SQL (ya viene ordenado
+// por 'orden', con el default primero), y las variantes viajan adentro para que
+// Armar Respuesta Precio las reciba sin volver a la base.
+const crudas = $input.all().map((i) => i.json).filter((r) => r && r.producto_id);
+const porProd = new Map();
+for (const r of crudas) {
+  let g = porProd.get(r.producto_id);
+  if (!g) {
+    g = { producto_id: r.producto_id, nombre_canonico: r.nombre_canonico, score: r.score,
+          n_tokens: r.n_tokens, tokens_match: r.tokens_match, nicho: r.nicho,
+          precio_piso: r.precio_piso, precio_techo: r.precio_techo,
+          n_variantes: r.n_variantes, por_nombre: r.por_nombre, familias: r.familias,
+          ejes_variantes: r.ejes_variantes, es_default: r.es_default, orden: r.orden,
+          atributos: r.atributos_producto, variantes: [] };
+    porProd.set(r.producto_id, g);
+  }
+  g.variantes.push(r);
+}
+const filas = [...porProd.values()];
 
 // Sin candidatos no hay nada que filtrar: se saltea la llamada (no se paga un LLM
 // para que conteste sobre una lista vacía) y el flujo cae al camino de sin_match.
@@ -635,8 +685,18 @@ else if (!elegidos.length) {
   filtroMotivo = motivo || 'ok';
 }
 
+// Las variantes de los productos elegidos, aplanadas y con idx por producto: es el
+// contrato que Armar Respuesta Precio ya sabe leer (porIdx agrupa por idx). Antes
+// esto lo producia Get Precio resolviendo por nombre; ahora viene del mismo SQL que
+// eligio el producto, asi que no hay forma de que producto y variante se crucen.
+const filasPrecio = [];
+filtrados.forEach((p, i) => {
+  for (const v of (p.variantes || [])) filasPrecio.push({ ...v, idx: i + 1 });
+});
+
 return [{
-  json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length },
+  json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length,
+          filasPrecio },
   pairedItem: { item: 0 },
 }];`;
 
@@ -686,6 +746,9 @@ return [{
 // ───────────────────────────────────────────────────────────────────────────
 const ANCLA_COMP = "  const hayCompetencia = (main.descartados && main.descartados.length > 0) || main.filas > 1;";
 
+const VAR_ANCLA = "const todo = $input.all().map((i) => i.json).filter((r) => r && r.precio_lista !== undefined);\nconst porIdx = {};\nfor (const r of todo) { const k = Number(r.idx) || 1; (porIdx[k] = porIdx[k] || []).push(r); }";
+const VAR_NUEVO = "// v8.3b: las filas vienen de Aplicar Filtro (el mismo SQL que eligio el producto),\n// no de un Get Precio que volvia a resolver por nombre. Fallback a \\$input para el\n// gemelo de 2a pasada, que sigue colgando de Get Precio 2.\nlet todo = [], desdeFiltro = false;\ntry {\n  const ff = $('Aplicar Filtro').first().json.filasPrecio;\n  if (Array.isArray(ff) && ff.length) { todo = ff.filter((r) => r && r.precio_lista !== undefined); desdeFiltro = todo.length > 0; }\n} catch (e) { todo = []; desdeFiltro = false; }\nif (!desdeFiltro) todo = $input.all().map((i) => i.json).filter((r) => r && r.precio_lista !== undefined);\n\n// ── ELECCION DE VARIANTE (v8.3b: de SQL a codigo) ─────────────────────────\n// Un producto trae TODAS sus variantes; hay que quedarse con UNA. Misma escalera que\n// tenia Get Precio en su var_rank, con el eco del LLM afuera:\n//   1. el cliente nombro los ejes -> la que mas ejes matchea (y ninguno en contra)\n//   2. mono-variante -> esa\n//   3. default_variante curado -> ese es el trabajo normal\n//   4. nada -> la mas barata, que es el piso honesto y lo que ya ordenaba el SQL\n// Devolver TODAS cuando el cliente no dijo nada seria 'ambiguo' y mandaria a email:\n// justo lo que este rediseño vino a evitar.\nconst elegirVariante = (vs) => {\n  if (!Array.isArray(vs) || vs.length <= 1) return vs || [];\n  const msgV = normMsg(decidir.userMessage || '');\n  const puntuar = (v) => {\n    const a = atrDe(v);\n    let a_favor = 0, en_contra = 0;\n    for (const k of ['tamano', 'faz', 'color', 'acabado', 'cobertura', 'material', 'papel']) {\n      const val = a[k];\n      if (val === null || val === undefined) continue;\n      // ¿el cliente nombro ESTE valor? -> a favor. ¿nombro OTRO valor del mismo eje\n      // entre las hermanas? -> en contra (pidio a3 y esta es a4).\n      if (dijoValor(msgV, k, val)) { a_favor++; continue; }\n      const otros = new Set();\n      for (const w of vs) {\n        const av = atrDe(w)[k];\n        for (const x of (Array.isArray(av) ? av : (av === null || av === undefined ? [] : [av]))) otros.add(x);\n      }\n      for (const x of otros) {\n        if (dijoValor(msgV, k, x)) { en_contra++; break; }\n      }\n    }\n    return { a_favor, en_contra };\n  };\n  const puntuadas = vs.map((v) => ({ v, ...puntuar(v) }));\n  const limpias = puntuadas.filter((p) => p.en_contra === 0);\n  const base = limpias.length ? limpias : puntuadas;\n  // Desempate, en este orden: mas ejes a favor -> default_variante curado -> mas\n  // barata. Se aplica IGUAL con o sin anclas: si el cliente dijo \"a color\" y quedan\n  // simple color y doble color, la faz sigue sin anclar y simple es el default de\n  // oficio. Sin este desempate salia un menu por una eleccion que el catalogo ya\n  // tenia firmada. El precio como ultimo criterio es la direccion segura: si erramos,\n  // erramos por abajo y la puerta abierta ofrece el resto.\n  const maxF = Math.max(...base.map((p) => p.a_favor));\n  const finalistas = base.filter((p) => p.a_favor === maxF);\n  if (finalistas.length === 1) return [finalistas[0].v];\n  const def = finalistas.find((p) => atrDe(p.v).default_variante === true);\n  if (def) return [def.v];\n  const conPrecio = finalistas.filter((p) => Number(p.v.precio_lista) > 0);\n  const pool = conPrecio.length ? conPrecio : finalistas;\n  return [pool.reduce((a, b) => (Number(a.v.precio_lista) <= Number(b.v.precio_lista) ? a : b)).v];\n};\n\nconst porIdx = {};\nfor (const r of todo) { const k = Number(r.idx) || 1; (porIdx[k] = porIdx[k] || []).push(r); }\n// La reduccion se aplica SOLO a las filas que trajo el filtro (que son todas las\n// variantes de cada producto) y agrupa POR PRODUCTO, no por idx: un idx puede traer\n// productos DISTINTOS y ese es el 'ambiguo' legitimo — reducirlo a uno seria el bot\n// eligiendo por su cuenta entre dos productos que compiten. Las filas de Get Precio\n// (2a pasada) no pasan por aca: ahi el SQL ya eligio la variante.\nif (desdeFiltro) {\n  for (const k of Object.keys(porIdx)) {\n    const porProducto = new Map();\n    for (const r of porIdx[k]) {\n      const pid = r.producto_id || '?';\n      if (!porProducto.has(pid)) porProducto.set(pid, []);\n      porProducto.get(pid).push(r);\n    }\n    const out = [];\n    for (const vs of porProducto.values()) out.push(...elegirVariante(vs));\n    porIdx[k] = out;\n  }\n}";
+
 const SUP_ANCLA = "if (puerta) reply += ' ' + puerta.frase;";
 const SUP_NUEVO = "// ── SUPUESTO DEL TRABAJO NORMAL (default_familia) ────────────────────────\n// Si lo cotizado es el default de su familia y el cliente NO lo pidio por su\n// nombre, el mensaje dice EN QUE se cotizo antes de abrir la puerta. Sin esto el\n// default es silencioso: el cliente recibe un numero y no sabe que hay otras\n// opciones ni sobre que base se calculo.\n// En idioma de cliente: \"en A4, papel comun\" — nunca gramaje ni tecnologia (la\n// lente de costo del 28 midio que pedir vocabulario de imprenta cuesta turnos).\n// Los valores salen del ATRIBUTO de la fila, no de una tabla paralela: si manana\n// la curacion mueve el default a otro producto, la frase lo sigue sola.\nconst CLIENTE_DICE = {\n  a4: 'A4', a3: 'A3', 'a3+': 'A3+', a5: 'A5', oficio: 'oficio', ingles: 'inglés',\n  obra: 'papel común', ilustracion: 'papel ilustración', opalina: 'opalina',\n  kraft: 'papel kraft', vegetal: 'papel vegetal', plastico: 'plástico',\n  metalico: 'metálico', bn: 'blanco y negro', color: 'color',\n  simple: 'de un solo lado', doble: 'doble faz',\n};\nlet supuesto = '';\nif (okEstado && row && atr.default_familia === true) {\n  // ¿el cliente lo pidio por su nombre? El SQL ya lo midio sobre el candidato-set.\n  let porNombre = false;\n  try {\n    const c0 = ($('Buscar Candidatos').all() || [])\n      .map((i) => i.json).find((r) => r && r.producto_id === row.producto_id);\n    porNombre = !!(c0 && c0.por_nombre);\n  } catch (e) { porNombre = false; }\n  if (!porNombre) {\n    // Solo los ejes que el cliente NO nombro: si dijo \"a color\", no se le repite.\n    // Orden fijo tamaño → papel → color: es como lo diria un mostrador.\n    // La FAZ queda AFUERA a proposito: 'de un solo lado' es el default universal de\n    // una imprenta, decirlo es ruido, y sumaba un cuarto eje que convertia la frase\n    // en un ladrillo. Si el cliente quiere doble faz, la puerta ya se lo ofrece.\n    const partes = [];\n    for (const k of ['tamano', 'papel', 'material', 'color']) {\n      if (anclados.includes(k)) continue;\n      const v = atr[k]; if (v === null || v === undefined) continue;\n      const uno = Array.isArray(v) ? (v.length === 1 ? v[0] : null) : v;\n      if (uno === null || uno === undefined) continue; // eje con varias opciones: no es supuesto\n      const dicho = CLIENTE_DICE[String(uno).toLowerCase()];\n      if (dicho) partes.push(dicho);\n    }\n    if (partes.length) supuesto = ' Eso es en ' + partes.join(', ') + '.';\n  }\n}\nif (supuesto) reply += supuesto;\nif (puerta) reply += ' ' + puerta.frase;";
 const NUEVO_COMP = `  // v8.3: la competencia se mide ANTES de la elección, no después. El rowcount de
@@ -700,6 +763,17 @@ const NUEVO_COMP = `  // v8.3: la competencia se mide ANTES de la elección, no 
 for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
   sub(nombre, ANCLA_COMP, NUEVO_COMP, '3 · hayCompetencia pre-filtro en ' + nombre);
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// 3a-bis. LA ELECCION DE VARIANTE PASA DE SQL A CODIGO
+//
+// Get Precio se fusiona con Buscar Candidatos: el SQL ya devuelve las variantes con
+// su precio y sus reglas, asi que resolver el producto POR NOMBRE una segunda vez
+// dejo de tener sentido — y era la fuente del bug del 28 (producto del filtro +
+// variante del LLM = 0 filas). La escalera de var_rank se reescribe en JS.
+// Solo el nodo principal: el gemelo de 2a pasada sigue colgando de Get Precio 2.
+// ───────────────────────────────────────────────────────────────────────────
+sub('Armar Respuesta Precio', VAR_ANCLA, VAR_NUEVO, '3a-bis · elección de variante en código');
 
 // ───────────────────────────────────────────────────────────────────────────
 // 3b. EL DEFAULT DE FAMILIA SE DECLARA EN EL MENSAJE
@@ -801,7 +875,14 @@ sub('Parsear Respuesta',
   conn['Armar Prompt Filtro'] = { main: [[M('¿Filtrar?')]] };
   conn['¿Filtrar?'] = { main: [[M('Llamar LLM Filtro')], [M('Aplicar Filtro')]] };
   conn['Llamar LLM Filtro'] = { main: [[M('Aplicar Filtro')]] };
-  conn['Aplicar Filtro'] = { main: [[M('Get Precio')]] };
+  // v8.3b: Get Precio sale del camino. Aplicar Filtro ya trae las variantes con su
+  // precio y sus reglas (mismo SQL que eligio el producto), asi que un segundo viaje
+  // a la base para resolver POR NOMBRE lo que el filtro ya resolvio era redundante —
+  // y era donde se cruzaban producto (del filtro) y variante (del LLM): 0 filas y el
+  // cliente sin respuesta (2026-07-28).
+  // El nodo 'Get Precio' queda en el workflow pero desconectado de la 1a pasada:
+  // 'Get Precio 2' (Aclarador) es otro nodo y sigue funcionando igual.
+  conn['Aplicar Filtro'] = { main: [[M('Armar Respuesta Precio')]] };
   paso('4d · cableado: Switch[precio] → Extraer → Buscar → Prompt → ¿Filtrar? → LLM → Aplicar → Get Precio');
 
   // El gate que evita pagar el LLM 2 cuando no hay nada que filtrar (0 candidatos,

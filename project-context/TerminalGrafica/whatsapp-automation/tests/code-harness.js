@@ -1468,8 +1468,13 @@ async function main() {
 
   if (CODES['prompt-filtro.js']) {
     // ---- Armar Prompt Filtro ----
+    // v8.3b: el SQL devuelve una fila por VARIANTE. `atributos` es el EFECTIVO de la
+    // variante (la vista mergea producto || variante) y los del producto viajan en
+    // `atributos_producto`, que es de donde el prompt arma los ejes.
     const cand = (n, over = {}) => ({ producto_id: 'p' + n, nombre_canonico: 'Producto ' + n, score: 5 - n,
-      n_variantes: 2, atributos: { papel: 'obra', gramaje_gr: 75, color: 'color' }, ...over });
+      n_variantes: 2, precio_lista: 100 * n, variante: 'v' + n,
+      atributos_producto: { papel: 'obra', gramaje_gr: 75, color: 'color' },
+      atributos: { papel: 'obra', gramaje_gr: 75, color: 'color' }, ...over });
     const promptFiltro = (filas, dec) => runNodeCode('prompt-filtro.js', {
       $: (name) => ({ first: () => ({ json: name === 'Extraer Palabras' ? { palabras: 'x', precio: {} } : dec }) }),
       $input: { first: () => ({ json: filas[0] || {} }), all: () => filas.map((f) => ({ json: f })) },
@@ -1611,5 +1616,66 @@ async function main() {
   r = await armar(pDef, [rowDef], decidir({ userMessage: 'cuánto sale imprimir 100 hojas?' }), false, candsDef(false));
   console.log('DF6 supuesto y puerta conviven:',
     /Eso es en A4, papel común, color\./.test(r[0].json.reply) && /avisame/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ===== ELECCION DE VARIANTE EN CODIGO (v8.3b) =====
+  // Get Precio se fusionó con Buscar Candidatos: ahora llegan TODAS las variantes del
+  // producto por `filasPrecio` y la escalera que antes era var_rank vive en JS.
+  // `armarF` entrega las filas por esa vía, que es la que ejercita la reducción.
+  const armarF = (precioObj, filasPrecio, dec, cands) => runNodeCode('armar.js', {
+    $: (name) => ({
+      first: () => ({
+        json: name === 'Decidir' ? dec
+          : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] }
+          : name === 'Aplicar Filtro' ? { filasPrecio }
+          : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage },
+      }),
+      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j })) : []),
+    }),
+    $input: { all: () => [], first: () => ({ json: {} }) },
+  });
+
+  // las 4 variantes reales del default: faz x color, todas del MISMO producto
+  const vDef = (faz, color, precio) => ({ ...base, idx: 1, producto_id: 'def1',
+    nombre_canonico: 'Impresiones papel obra 75 gr', variante: faz + ' faz ' + color,
+    precio_lista: precio, unidad: 'Hoja', mostrable: true, tiene_reglas: false,
+    atributos: { ...attrDef, faz, color, default_variante: faz === 'simple' && color === 'bn' } });
+  const cuatro = [vDef('simple', 'bn', 100), vDef('simple', 'color', 400), vDef('doble', 'bn', 150), vDef('doble', 'color', 600)];
+
+  // el cliente dijo "a color" -> gana una de color, nunca la de $100 b/n
+  r = await armarF(pDef, cuatro, decidir({ userMessage: 'imprimir 100 hojas a color' }), candsDef(false));
+  console.log('EV1 el eje nombrado elige la variante:',
+    /\$400,00/.test(r[0].json.reply) && !/\$100,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // "doble faz a color" -> las dos anclas suman
+  r = await armarF(pDef, cuatro, decidir({ userMessage: 'imprimir 100 hojas doble faz a color' }), candsDef(false));
+  console.log('EV2 dos ejes nombrados:',
+    /\$600,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // sin anclas -> el default_variante curado, no la más barata por casualidad
+  r = await armarF(pDef, cuatro, decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }), candsDef(false));
+  console.log('EV3 sin anclas gana el default_variante:',
+    /\$100,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // sin default_variante y sin anclas -> la más barata (piso honesto)
+  const sinDef = cuatro.map((v) => ({ ...v, atributos: { ...v.atributos, default_variante: false } }));
+  r = await armarF(pDef, sinDef, decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }), candsDef(false));
+  console.log('EV4 sin default gana la más barata:',
+    /\$100,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // DOS PRODUCTOS en el mismo idx: eso es 'ambiguo' legítimo y NO se reduce a uno.
+  // Reducirlo sería el bot eligiendo por su cuenta entre productos que compiten.
+  const otroProd = { ...vDef('simple', 'color', 750), producto_id: 'otro',
+    nombre_canonico: 'Impresiones láser color papel obra 80 gr' };
+  r = await armarF(pDef, [vDef('simple', 'color', 400), otroProd], decidir({ userMessage: 'imprimir 100 hojas a color' }), candsDef(false));
+  console.log('EV5 dos productos siguen siendo ambiguo:',
+    r[0].json.estado === 'fallback: ambiguo' ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // el eco del LLM ya no participa: aunque pida una variante que no existe en este
+  // producto, la elección sale de los atributos. Es el bug del 2026-07-28.
+  r = await armarF({ ...pDef, variante: 'simple faz color' },
+    [vDef('simple', 'bn', 100), vDef('doble', 'bn', 150)],
+    decidir({ userMessage: 'imprimir 100 hojas' }), candsDef(false));
+  console.log('EV6 variante inexistente del LLM no rompe:',
+    /\$100,00/.test(r[0].json.reply) && !/cotiza el equipo/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

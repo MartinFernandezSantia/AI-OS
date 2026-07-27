@@ -114,7 +114,14 @@ if (/regexp_replace\([^)]*\bq\b/.test(sqlCodigo)) {
 // o sea "la lista es techo garantizado" — mecánica de precio, NO la política comercial
 // "no ofrecer espontáneamente" que el plan §4 le atribuía. Filtrar por él escondería
 // productos legítimos (54 de 185 variantes, entre ellas kraft e ilustraciones).
-if (/\bsolo_descuentos\b/i.test(sqlCodigo)) {
+// v8.3b: desde la fusión con Get Precio, el SQL SELECCIONA solo_descuentos (la
+// escalera de estados de Armar Respuesta Precio lo necesita para decidir si un total
+// se puede afirmar). Lo prohibido sigue siendo FILTRAR por él, así que la regla mira
+// el WHERE y no el texto entero — antes cualquier mención lo daba por violado.
+// Cada WHERE hasta el próximo cierre de cláusula (select/from/join/group/order/limit
+// o el `)` que cierra el CTE): eso es la condición real, sin arrastrar el SELECT final.
+const clausulasWhere = (sqlCodigo.match(/\bwhere\b[\s\S]*?(?=\b(?:select|from|join|group\s+by|order\s+by|limit|with)\b|\n\))/gi) || []).join('\n');
+if (/\bsolo_descuentos\b/i.test(clausulasWhere)) {
   E('la búsqueda filtra por solo_descuentos: ese flag es mecánica de precio (bool_and(rule_type=discount)), no la política "no ofrecer espontáneamente"');
 } else ok('no filtra por solo_descuentos (es mecánica de precio, no política comercial)');
 
