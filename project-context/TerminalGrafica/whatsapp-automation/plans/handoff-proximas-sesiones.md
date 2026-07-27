@@ -3,8 +3,8 @@
 > **Qué es este archivo:** el estado vivo y el próximo paso. Todo lo que ya está cerrado vive en
 > los planes de `plans/` y en el log histórico de la memoria `chatwoot-whatsapp-impl-status`; acá
 > sólo queda lo que todavía decide algo. Si una sesión termina y esto no cambió, el archivo miente.
-> **Última actualización: 2026-07-27** (aplicación de E0+v8.1 y los 5 fixes que salieron de los
-> primeros mensajes reales).
+> **Última actualización: 2026-07-27** (ronda completa de 16 mensajes: 20 incidentes, lotes 1 y 2
+> aplicados, y el contraste que tumbó las dos propuestas de arquitectura).
 
 **Reglas de trabajo que no cambian:**
 rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot)
@@ -24,104 +24,60 @@ mirar. El plan largo se commitea igual en `plans/`; el deck es cómo se presenta
 
 ## 1. Estado ahora — lo único que hay que leer para arrancar
 
-**El paquete E0 + v8.1 está APLICADO.** El bot corre sobre el motor nuevo. Pero la ronda quedó a
-medias: los primeros mensajes reales encontraron 5 bugs, ya arreglados, y **el workflow que Martin
-tiene importado es anterior a esos arreglos.**
+**La ronda de 16 mensajes se corrió entera** (2026-07-27) y dio **20 incidentes**. Están
+diagnosticados por tres lentes, y los lotes 1 y 2 ya están aplicados en el workflow. El diagnóstico
+completo, la clasificación y los veredictos del contraste viven en
+[`v8-2-ronda-completa.md`](./v8-2-ronda-completa.md); el deck es
+[`decks/v8-2-ronda-completa.html`](../decks/v8-2-ronda-completa.html).
 
 | pieza | estado |
 |---|---|
-| `db/curacion-e0-2026-07-26.sql` | ✅ **aplicado** (con el fix del `not null`). Devolvió **133** variantes de 139 esperadas |
-| `db/curacion-voz-2026-07-26.sql` | ⚠️ **sin confirmar** — Martin dijo "apliqué el SQL", en singular. Verificar antes de la ronda: si no está, el mensaje 12 ("me hacen fotocopias?") falla por diseño |
-| `n8n/flows/faq-bot-v8.json` | ⚠️ importado, pero **5 commits atrás**. Hay que re-importar |
-| Error workflow (`tg-bot-error`) | ⚠️ sin confirmar. Es el único paso manual del runbook y sin él una ejecución que muere no avisa a nadie |
-| `GET /webhook/refrescar-catalogo` | ⚠️ sin confirmar |
-| La ronda de 16 mensajes | 🔄 empezada; ver §2 |
+| `db/curacion-e0-2026-07-26.sql` · `db/curacion-voz-2026-07-26.sql` | ✅ aplicados (la de voz se confirma sola: "me hacen fotocopias?" resolvió) |
+| `n8n/flows/faq-bot-v8.json` | ⚠️ **hay que re-importar: ahora son 65 nodos** (caen los 4 de handoff, entra `Log Silencio`) |
+| Error workflow (`tg-bot-error`) | ⚠️ re-enganchar después del import |
+| `GET /webhook/refrescar-catalogo` | ⚠️ en la URL de producción |
+| La conversación de prueba | 🔴 **muda.** El handoff de "impresora epson" le puso `assignee_id: 1` y `Filtro Ingreso` exige `!meta.assignee`. Desasignar o abrir una nueva |
 
-### Los 4 pasos antes de seguir
+### Lo primero, antes de cualquier otra cosa
 
-1. **Re-importar `n8n/flows/faq-bot-v8.json`** (68 nodos; las credenciales viajan con su id real,
-   no hay configuración manual). Trae: JSON tolerante a basura, el diccionario del gate corregido,
-   la unidad en la frase del monto, la regla 4c del gate y el aviso de canal.
-2. Si no está: **`db/curacion-voz-2026-07-26.sql`**. Leer los NOTICES — cada uno dice
-   `OK: <producto> -> N sinonimos` o `SKIPPED`. **Un SKIPPED significa que TG renombró algo.**
+1. **Desasignar la conversación de prueba** (o abrir una nueva).
+2. **Re-importar `faq-bot-v8.json`** (65 nodos; las credenciales viajan con su id real).
 3. **Workflow Settings → Error Workflow → `tg-bot-error`.**
-4. **`GET /webhook/refrescar-catalogo`** en la URL de **producción** (en ejecución manual el
-   `staticData` no persiste y el purgado no queda).
-
-### La ronda: 16 mensajes en 3 tandas
-
-Correr en este orden y traer el texto **tal cual llegó a WhatsApp**, no un resumen. (Origen:
-[`v8-build.md`](./v8-build.md) §5 para 1-10, [`v8-1-build.md`](./v8-1-build.md) §6 para 11-16.)
-
-**Tanda A — plata.** Si fallan, cuestan dinero. Van primero.
-
-| # | mensaje | tiene que pasar |
-|---|---|---|
-| 1 | "cuánto sale imprimir 200 páginas doble faz en obra 75" | **$8.800** (100 hojas × $88 de bracket), y que diga **"(100 hojas)"** y **"por hoja"**. Ojo: el $17.600 del runbook viejo era la cuenta **por página**, justo la que este paquete elimina |
-| 2 | "cuánto sale un anillado para 120 hojas" | **$2.400**, y **sin total** — el anillado se cobra por trabajo, no por hoja |
-| 3 | "necesito anillar 3 apuntes" | **$7.200** — acá sí multiplica, porque el número está pegado a un sustantivo de trabajo |
-| 4 | "cuánto sale un cartel de 1x0.65" | **no** puede salir la promo de $15.000 (es sólo para inmobiliarias y desde 6) |
-| 5 | "soy de una inmobiliaria, necesito 3 carteles" | dice el **mínimo de 6**, y **no** cotiza $45.000 |
-| 6 | "500 rifas" | **no** cotiza 500 talonarios (el talonario trae 100 números) |
-| 16 | "papel ilustración para 500 folletos" | **no** puede cotizar la hoja suelta de $900 — el hijack medido era de 73× |
-
-**Tanda B — resolución.**
-
-| # | mensaje | tiene que pasar |
-|---|---|---|
-| 7 | "papel vegetal a3" | resuelve (antes era "no lo tenemos") |
-| 8 | "papel kraft a4" | **pregunta el gramaje** (130 o 300), no lista un menú ni elige uno |
-| 11 | "una lona de 3x2" | **no** puede aparecer `Talonarios Rifas` entre las opciones |
-| 12 | "me hacen fotocopias?" | resuelve — caía en la posición **71 de 82**. *Este es el que falla por diseño si no se aplicó la curación de voz* |
-| 15 | repetir **3 veces** un pedido imposible | a la tercera **deriva a mail**. Era el anti-loop que v8 había matado: sin esto repregunta para siempre, y cada vuelta se paga |
-
-**Tanda C — voz.**
-
-| # | mensaje | tiene que pasar |
-|---|---|---|
-| 9 | "cuánto sale anillar" | ofrece las 3 opciones **en prosa y sin números** |
-| 13 | "cuánto sale imprimir 100 hojas" | sale el precio **y la puerta**: *"si lo necesitás en color es otro precio, avisame"* |
-| 14 | "quiero 100 hojas en blanco y negro" | la puerta de color **no** aparece — ya lo ancló él |
-| 10 | cualquiera de los anteriores | tiene que **sonar a persona**, no a lista. Y el aviso de canal, **una sola vez** en toda la conversación |
-
-### Las 2 consultas de después
-
-Están completas en [`v8-1-build.md`](./v8-1-build.md) §6.7. En una línea:
-
-- **Confident-wrong**, determinística y sin juez LLM: las cotizaciones con número donde el cliente
-  no ancló nada y **había con qué confundirse** (`senales->'descartados'` no vacío).
-- **Salud del compositor**: distribución de veredictos. Si los rechazos pasan ~30%, apagá el kill
-  switch (`const COMPOSITOR = false;` en la primera línea de `Armar Prompt Compositor`, se edita en
-  la UI sin re-importar) y traé los veredictos: cada uno dice qué regla se violó, y
-  `nombre_ajeno:<token>` dice además qué palabra lo disparó.
+4. **`GET /webhook/refrescar-catalogo`** en la URL de **producción**.
+5. **Correr las dos consultas de sólo lectura** de `v8-2-ronda-completa.md` §6 y traer el
+   resultado. La primera decide si se construye la opción C; la segunda dice si el compositor
+   rechaza demasiado.
 
 **Rollback:** re-importar `faq-bot-v7.json`. El SQL no necesita rollback (v7 ignora las columnas
 nuevas). Rollback parcial más barato: el kill switch del compositor — motor nuevo, voz vieja.
 
 ---
 
-## 2. Lo que ya encontró la ronda parcial (2026-07-27)
+## 2. La ronda del 27 — el titular
 
-Cinco bugs, uno por mensaje, todos arreglados y commiteados. **Tabla completa con causa raíz en
-[`v8-1-build.md`](./v8-1-build.md) §8.** El resumen que importa para la próxima:
+**El mensaje 1 fue el único de la tanda A que salió limpio** ($8.800, "(100 hojas)", "por hoja").
+De ahí en adelante: **6 incidentes de plata, 7 de resolución, 7 de voz**, y **cuatro cotizaciones
+con número equivocado dicho con confianza** (1,42× · 1,25× · 1,76× · hasta 100× en las rifas).
 
-| # | síntoma | commit |
-|---|---|---|
-| 1 | E0 murió en la primera variante (`display_variante` not null) | `2ffe24a` |
-| 2 | El gate rechazaba **todo** mensaje en español ("en" era token prohibido) | `00b8a05` |
-| 3 | Paráfrasis legítimas seguían cayendo → 91 → 61 tokens | `542314c` |
-| 4 | JSON con basura después del objeto tiraba el turno entero (3 nodos) | `34d06ef` |
-| 5 | `$88 c/u` redactado como "por página" = mentira de unidad de 2× | `78b379d` |
-| — | Voz: fuera la leyenda inline, entra el aviso de canal 1×/conversación | `b096767` |
+**Los cuatro salen del mismo defecto:** la compuerta del guard de ancla se deriva del **rowcount
+del SQL**, que es *posterior* a la elección del LLM. Cuanto más confiado el LLM, más limpio el
+resultado, más callado el guard. Detalle completo en `v8-2-ronda-completa.md` §1.
 
-**La lección, que vale más que los cinco fixes:** cuatro eran invisibles para el harness porque
-sus mocks codificaban una premisa más limpia que la realidad — catálogo de juguete de 8 nombres,
-JSON siempre válido, `c/u` como unidad universal. El harness prueba que el código hace lo que
-dice. **No** prueba que la premisa sea cierta. Eso lo prueba la ronda, y por eso la ronda no se
-saltea.
+**Aplicado (5 commits, harness 186/186, validador 0 errores):** la unidad de la tabla de rangos y
+la escalera-que-es-total · la unidad en el precio único sin total · la unidad propia de los extras
+· la 2ª pasada que ya no nombra lo que el guard de nicho bloqueó · los candidatos del Aclarador
+filtrados por nicho · fuera "no lo tenemos en catálogo" · el menú colapsa la opción única · el
+aviso de canal cruzado contra `bot.decisiones` · **fuera la ruta handoff a un humano** ·
+`Log Silencio` con el origen del noop.
 
-Verificación al cierre: **harness 170/170** · gemelo `Armar Respuesta Precio 2` en sync ·
-`tests/validate-v8-import.js` 0 errores.
+**El contraste tumbó las dos propuestas de arquitectura** (el guard de hermanos y la recuperación
+por familia del incidente 8). Sobrevive la **opción C** — comparar el string crudo del LLM contra
+el del cliente — y **se mide antes de construirla**. Ver `v8-2-ronda-completa.md` §5.
+
+**La lección del harness, que ahora tiene nombre:** la firma es `armar(precioObj, rows, dec)`, o
+sea **el resultado del SQL es un input escrito por el autor del test**. Todo caso pregunta "dada
+una resolución correcta, ¿la aritmética aguanta?". La clase entera *"la resolución fue mala"* queda
+afuera por construcción — y el caso S6 llegaba a assertear el bug de 1,76× como conducta correcta.
 
 ---
 
@@ -153,9 +109,9 @@ una es un guard que no corre.
 el compositor está atado a cómo redacta el código: el pipeline es prosa→prosa. Es el próximo
 escalón de la voz, y el que haría innecesarias varias reglas del gate.
 
-**d. v8 nunca pasó por una pasada adversarial.** La disciplina del proyecto pide contrastar toda
-decisión de diseño antes de aplicarla, y en las sesiones de v8/v8.1 Claude tenía instrucción de no
-lanzar agentes. Los candidatos obvios: el compositor y la salida del menú numerado.
+**d. v8 pasó por su primera pasada adversarial el 07-27** (2 lentes, sobre la decisión de
+arquitectura). Lo que **sigue sin contrastar**: el compositor, la salida del menú, y la **opción C**
+misma cuando la medición diga que vale la pena construirla.
 
 **e. Sin cerrar de antes:** la cuantización de packs · el guard de variante no anclada.
 
@@ -298,6 +254,7 @@ justamente eso.
 
 | fecha | qué pasó | dónde está |
 |---|---|---|
+| 07-27 | **Ronda completa (16 mensajes) → 20 incidentes en 3 lentes.** Una causa raíz para los 4 confident-wrong: la compuerta del guard sale del rowcount del SQL. Lotes 1 y 2 aplicados; fuera la ruta handoff; `Log Silencio`. El contraste tumbó A y B, sobrevive la opción C (sin construir, se mide primero) | `v8-2-ronda-completa.md` |
 | 07-27 | Aplicación de E0+v8.1 y 5 fixes de los primeros mensajes reales; el cierre pasa a aviso de canal | `v8-1-build.md` §8 |
 | 07-26 | **Consejo Opus de 6 lentes** sobre la dependencia del nombre en el prompt: ninguna de las 6 direcciones entra. Encontró además los 2 anti-loops que v8 había matado y que el gate no protegía nombre ni hedge (12 de 19 ataques pasaban con `ok`) | `consejo-opus-resolucion-producto.md`, `v8-1-build.md` |
 | 07-26 | Ronda 4 (16 incidentes) → **consejo Opus de 5 lentes** → **atomización E0**: familias + atributos + los 3 bugs de plata (promo bajo el mínimo, taller por trabajo, talonarios). Hallazgo: **el doble faz se cobra por hoja** (cierra la pregunta 31) | `r7-consejo-opus.md`, `e0-atomizacion-catalogo.md`, `v8-build.md` |

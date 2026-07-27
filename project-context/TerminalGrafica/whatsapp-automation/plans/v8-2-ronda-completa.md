@@ -258,43 +258,131 @@ pregunta ese eje (el más caro primero) o cotiza el `default_variante` declarand
 resuelve la **familia**; un segundo LLM selecciona el subconjunto plausible con el historial; se
 cotizan todas determinísticamente; el compositor arma el abanico con precios.
 
-Contraste en vuelo: dos refutadores Opus, lente **plata/riesgo** y lente **costo por mensaje +
-voz**, cada uno con la consigna de refutar las dos y de verificar si el concepto de "familia"
-existe de verdad en los datos para agrupar kraft 130/300, obra 75/106 y folletos brillo/obra.
-**Si la agrupación no existe o está incompleta, las dos se caen.** Acta al cerrar.
+### El contraste: las dos se caen
+
+Dos refutadores Opus, lente **plata/riesgo** y lente **costo por mensaje + voz**, cada uno con la
+consigna de refutar. **Convergieron: ninguna de las dos se construye.**
+
+**Contra A (el guard de hermanos):**
+- La regla de agrupación que A reutiliza detecta **21 de 301 pares intra-familia (7%)**, y falla
+  en **3 de los 4 incidentes**: anillado metálico ⟷ plástico no matchea (`comunes=2`), folletos
+  brillo150 ⟷ obra75 tampoco. Peor: **el par testigo del propio plan E0** —el de 6,7× entre
+  `Impresión a4 obra 106` y `OBRA 106 GR`— dejó de detectarse cuando la curación les puso `tamano`
+  distinto. La curación rompió el caso que justificaba la regla y nadie lo notó.
+- **50 de 83 productos** tienen menos de 3 ejes poblados: no pueden formar par nunca. Quedan
+  afuera todos los Tacos, Anillados, Tarjetas, Plastificados, Carpetas, Sobres.
+- El umbral de % no tiene contra qué medirse en **18 variantes con `precio_lista = 0`** ni en las
+  **24 cuyo precio es una curva**.
+- `default_familia` / `default_variante` existen en **1 producto y 1 variante de toda la base**:
+  la rama "difieren poco → cotizá el default" no tiene dato fuera de IMPRESIONES.
+- Y por costo: el guard dispararía en **92,4% de las filas visibles** (media 2,25 ejes sin anclar).
+  Una pregunta = **+US$13/mes**; preguntar hasta anclar todo = **+US$31/mes**, o sea **+12% a +29%
+  de la factura Meta**. En la consulta insignia ("cuánto sale imprimir 100 hojas", cero ejes
+  anclados y los cuatro con hermano) o hace una pregunta y **deja tres supuestos vivos** —el bug
+  sigue— o cobra **5 mensajes** para cotizar un trabajo de $100.
+- Y dispara sobre el mensaje **más especificado de toda la ronda** (el 1, que ancló gramaje, papel
+  y faz): queda `color` sin anclar, y el caso feliz recibe una pregunta antes del número.
+
+**Contra B (recuperación por familia):**
+- El costo en USD es ruido (**+US$0,08 a 0,23/mes**, 0,2%). Quien la refute por ahí pierde.
+- Se cae por **voz**: la familia que atiende "imprimir 100 hojas" son **43 filas / 1.659 chars /
+  63 líneas**. Y el gate de dígitos del compositor **rechaza** cualquier reescritura en prosa de
+  un abanico (las etiquetas llevan dígitos: `150 gr`, `A3`, `1"1/2`), así que sale el borrador
+  crudo con viñetas — exactamente el mensaje que marcaste "muy mal".
+- **105 de 178 variantes (59%) tienen `mostrable = false`**: su número no es el precio final. La
+  condición no entra cuatro veces en un WhatsApp, y el gate garantiza el hedge **una vez**, no por
+  línea. El cliente se queda con el más barato y saca captura.
+- Nicho y mínimos pasan de **guard determinístico** a línea de prompt del selector.
+- Y duplica un nodo que ya existe: **el Aclarador ES el segundo LLM que elige de una lista
+  cerrada**. Su cabecera dice por qué NO recibe la historia de la conversación —jailbreak-safety,
+  decidido en el consejo del 24— y B se la devolvería.
+
+### Lo que sobrevive: la opción C, y una medición antes
+
+**Opción C (de la lente de plata):** la señal más barata ya está en la mano y nadie la usa —
+**el string crudo del LLM contra el string crudo del cliente**. v8.1 ya loguea `producto_pedido`
+sin normalizar. Regla: *si el nombre que emitió el LLM contiene un token que es valor de un eje
+con plata (`130`, `metálico`, `1"`, `doble faz`, `brillo`, `150`) y ese token no aparece en la
+ventana del cliente → no sale el número, sale la pregunta de ese eje.*
+
+Por qué pasa las dos lentes donde A y B no: **no necesita familias** (funciona en los 50 productos
+sin atributos), y **no dispara por ausencia sino por especificidad agregada** — el mensaje 1, que
+ancló todo, no la activa; los cuatro confident-wrong sí, porque los cuatro agregaron un token que
+el cliente nunca dijo.
+
+**Pero primero se mide, no se construye.** El repo ya tiene escrito el umbral para esta clase de
+decisión (`handoff` §3a: *"si más del ~15% contesta 'en color' en el turno siguiente…"*) y la
+columna `senales` ya emite la señal. La ronda que acabás de correr **ya está en la base**: se
+cuenta antes de tocar código. Las dos consultas están en §6.
+
+**Sigue sin contraste:** la opción C misma. Cuando la medición diga que vale la pena, va una
+pasada adversarial propia antes de construirla.
 
 ---
 
-## 6. Plan de aplicación
+## 6. Qué se aplicó — y qué queda para vos
 
-**Lote 1 — plata, código, sin decisión de diseño.**
-1. `ok_rangos`: unidad correcta y **nunca `c/u` sobre una escalera creciente** (es total) + validar
-   cobertura de la escalera antes de publicarla.
-2. `:544` (extra con precio fijo): `c/u` hardcodeado → `cadaUno`.
-3. `:351-356` (precio único sin total): decir la unidad cuando cambia el sentido — m², metro,
-   hoja, página, millar, pack. No para `unidad` ni `trabajo`, que son el default implícito.
-4. `armar-respuesta-precio-2.js:390-396`: no nombrar el producto y no tragarse los fallbacks de
-   nicho y bajo-mínimo.
-5. Candidatos del Aclarador filtrados por nicho + el prompt del Aclarador sin productos de nicho.
+### Aplicado (código, con harness y commit por tema)
 
-**Lote 2 — resolución y voz, código, directivas explícitas.**
-6. Fuera "no lo tenemos en catálogo" (los 2 strings) → invitación a consultar por mail.
-7. Fuera la ruta handoff a humano: cae `Asignar a Humano` y el trío de la nota (incluida la 2ª
-   llamada LLM), se recablea `Mensaje Escalación → Log Escalación` para no perder `motivo`, y el
-   texto pasa a mail + teléfono + local + horario. `Label Escalación` se queda: no silencia nada.
-8. Menú: portar el colapso por grupo de ARP a `Armar Menu Opciones`, y que la viñeta no repita el
-   nombre de la familia.
-9. Aviso de canal: leerlo de `bot.decisiones` por conversación (query de nodo, sin migración) en
-   vez del `includes()` sobre el historial de Chatwoot; y pegarlo **después** de los ítems `mas`.
-10. Telemetría de los finales mudos: que el noop deje fila con su origen.
+| commit | qué entró |
+|---|---|
+| `3203b91` | **Lote 1, plata.** La unidad de la tabla de rangos sale del atributo curado y no de `row.unidad`; una escalera **creciente** es el total del tramo y ya no dice "c/u"; los tramos `[n, n+1]` se rotulan como puntos; el precio único **sin total** dice la unidad (la lona, "por m²"); los extras del campo `mas` usan **su** unidad y no la del ítem principal; la 2ª pasada no nombra lo que el guard de nicho bloqueó y usa la repregunta correcta; los candidatos del Aclarador respetan el guard de nicho |
+| `eb2db16` | Fuera **"no lo tenemos en catálogo"** (los 2 strings del Aclarador) · el menú **colapsa la opción única** (H6b portado desde ARP) |
+| `b4f2d67` | El **aviso de canal** se cruza contra `bot.decisiones` (durable por conversación) en vez de depender de la ventana sin paginar de Chatwoot · y va al **final** del multi-ítem |
+| `aec42f5` | **Fuera la ruta handoff a un humano.** Caen 4 nodos (68 → 64); las 3 entradas van a `Label Escalación`; `Mensaje Escalación → Log Escalación` conserva `motivo`; el texto pasa a mail + tel + local + horario |
+| `6e9100d` | **`Log Silencio`** (64 → 65): el noop deja fila y dice su origen (`llm` / `reply-vacio` / `anti-loop`), y el descarte por debounce deja su `reason` |
 
-**Lote 3 — bloqueado por §5.** El guard de producto no anclado / la recuperación por familia.
+**Verificación:** `node tests/code-harness.js` **186/186** (14 casos nuevos: W0-W8) · gemelo
+`Armar Respuesta Precio 2` en sync · `node tests/validate-v8-import.js` **0 errores**, con dos
+invariantes nuevos (que los 4 nodos de handoff **no vuelvan**, y que `Log Silencio` no cuente como
+segundo log del turno).
 
-**SQL para Martin (no lo toco):** la variante `A4` de `Anillado Plastico a3`, previa verificación
-contra la base viva.
+### Lo que NO se hizo, a propósito
 
-**Gates de siempre:** `node tests/code-harness.js` después de cada nodo Code · el gemelo
-`Armar Respuesta Precio 2` regenerado · `node tests/validate-v8-import.js` · commit por tema.
+- **La validación de cobertura de la escalera** (los huecos entre 102 y 249). Una escala discreta
+  es legítimamente no contigua, así que rechazarla dejaría al cliente sin nada; y un hueco hoy ya
+  degrada a la tabla, que es la dirección segura. **No es un bug de plata.** Queda como pregunta
+  a TG: *¿la escala de rifas es el precio total de esa cantidad o el precio por talonario?*
+- **El guard que bloquea el noop cuando el cliente suma un dato** (el de "necesito anillar 3
+  apuntes"). Es la red que falta, pero rozarlo mal desanda tu decisión del 24 — el silencio ante
+  una pregunta ya respondida es deseado y ahorra un mensaje pago. Necesita su propia pasada.
+- **Nada de la opción C.** Se mide primero (abajo).
+
+### Para vos — dos consultas de sólo lectura, antes de tocar nada más
+
+```sql
+-- 1. ¿El LLM agrega especificidad que el cliente nunca dio? (la población de la opción C)
+select mensaje_cliente,
+       senales->>'producto_pedido' as pidio_el_llm,
+       producto_resuelto,
+       senales->'sin_anclar'       as ejes_no_dichos,
+       senales->'descartados'      as se_descarto,
+       senales->>'puerta'          as puerta,
+       final
+  from bot.decisiones
+ where accion = 'informo_precio'
+   and jsonb_array_length(coalesce(senales->'anclados', '[]')) = 0
+ order by created_at desc limit 50;
+
+-- 2. Salud del compositor: si los rechazos pasan ~30%, el kill switch y me traés los veredictos
+select split_part(split_part(notas, '(compositor:', 2), ')', 1) as veredicto, count(*)
+  from bot.decisiones where notas like '%(compositor:%' group by 1 order by 2 desc;
+```
+
+### Y un SQL de curación que preparo cuando me confirmes la fila
+
+La variante de `Anillado Plastico a3` se llama **`A4`** en la base. Clave natural: producto
+`public.products.name = 'Anillado Plastico a3'` + categoría `Taller` (la misma que resolvió sin
+`SKIPPED` en `curacion-e0:2464`), variante única `lower(trim(name)) = 'a4'`, precio 3200. El
+overlay va por `bot.variante_meta.display_variante`, nunca `public.*`. **No lo genero a ciegas:**
+el export de referencia es del 23-jul y está cuatro curaciones atrás.
+
+### Antes de la próxima ronda
+
+1. **Desasignar la conversación de prueba** (o abrir una nueva). El handoff de la impresora epson
+   puso `assignee_id: 1` y `Filtro Ingreso` exige `!meta.assignee`: **ese hilo ya no contesta.**
+2. Re-importar `faq-bot-v8.json` (**65 nodos**) y volver a enganchar el error workflow.
+3. `GET /webhook/refrescar-catalogo` en la URL de producción.
 
 ---
 

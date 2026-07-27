@@ -146,6 +146,20 @@ Las tres salieron de comparar atributos entre productos: son pares que quedaron
     que es la conducta segura; si es por corte estaría sub-cotizando. Pega con la 22
     (guillotinado / corte chico suelto).
 
+## 11. Ronda completa de 16 mensajes (2026-07-27)
+
+67. **La escala de rifas: ¿el número es el total del trabajo o el precio por talonario?** —
+    *Talonarios Rifas 100 numeros* tiene una escala que **sube** con la cantidad: 100 → $6.000,
+    250 → $8.000, 500 → $10.000, 1.000 → $14.000, 5.000 → $29.000, 10.000 → $32.000. Un precio
+    unitario no sube por volumen, así que asumimos que **cada número es el total de esa cantidad**
+    y el bot dejó de decir "c/u" (antes decía "100 a 101: $6.000 c/u", que leído literal son
+    $600.000 por 100 rifas). Confirmar. Y de paso: los tramos están cargados como `[n, n+1]`
+    (100 a 101, 250 a 251…), o sea **puntos sueltos**: ¿qué se cobra por 300, que no cae en
+    ninguno? Hoy el bot muestra la escala entera y no elige.
+68. **`Anillado Plastico a3`: su única variante se llama `A4`.** — ¿Es un error de carga (debería
+    decir A3) o el producto es "anillado plástico" y el A4 es la medida real? Bloquea una curación
+    de una línea.
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice

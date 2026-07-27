@@ -457,47 +457,83 @@ const hayCompetencia =
   </section>
 
   <!-- 9 -->
-  <section class="slide" data-t="Plan">
+  <section class="slide" data-t="El contraste">
     <div class="s-head">
-      <div class="eyebrow"><b>08</b> Qué hago ahora</div>
-      <h2 class="s-title">Dos lotes que aplico ya, uno que espera al contraste</h2>
+      <div class="eyebrow"><b>08</b> El contraste · dos lentes, una conclusión</div>
+      <h2 class="s-title">Las dos propuestas se caen. La que sobrevive es la más barata</h2>
     </div>
-    <div class="s-body grid g3" style="align-content:start">
-      <div class="lote a">
-        <div class="lh">Lote 1 · plata, sin decisión</div>
-        <ul>
-          <li><b>Rifas:</b> unidad correcta, nunca "c/u" sobre una escalera creciente, y validar cobertura antes de publicar la tabla</li>
-          <li><b>Precio único sin total:</b> decir la unidad (m², metro, hoja, página, pack)</li>
-          <li><b>2ª pasada:</b> que no nombre el producto que el guard de nicho bloqueó</li>
-          <li><b>Aclarador:</b> candidatos filtrados por nicho</li>
-        </ul>
-      </div>
-      <div class="lote b">
-        <div class="lh">Lote 2 · tus directivas</div>
-        <ul>
-          <li><b>Fuera</b> "no lo tenemos en catálogo" → consultanos por mail</li>
-          <li><b>Fuera la ruta handoff</b> → mail, teléfono, local y horario. Se queda <span class="mono">Log Escalación</span> con el motivo</li>
-          <li><b>Menú:</b> colapso cuando la familia tiene una sola variante</li>
-          <li><b>Aviso de canal:</b> leerlo de la base por conversación, no del historial de Chatwoot</li>
-          <li><b>Telemetría del noop</b>, con su origen</li>
-        </ul>
-      </div>
-      <div class="lote c">
-        <div class="lh">Lote 3 · esperando el contraste</div>
-        <ul>
-          <li>El <b>guard de producto no anclado</b> (determinístico) contra la <b>recuperación por familia</b> que proponés vos</li>
-          <li>Cubre A1 · A2 · A3 · A4: los cuatro confident-wrong de resolución</li>
-          <li>Dos refutadores Opus corriendo: lente <b>plata/riesgo</b> y lente <b>costo por mensaje + voz</b></li>
-          <li>La pregunta que decide: <b>¿la "familia" existe de verdad en los datos?</b> Si no, se caen las dos</li>
-        </ul>
-      </div>
-      <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:10px;margin-top:2px">
-        <div class="dkey">
-          <div class="lbl">Para vos · lo único que no toco</div>
-          <h4>El SQL de la variante <span class="mono">A4</span> del <span class="mono">Anillado Plastico a3</span></h4>
-          <p>Te lo preparo por clave natural sobre <span class="mono">bot.variante_meta</span>, nunca <span class="mono">public.*</span> — pero primero hay que confirmar contra la base viva que sigue llamándose así: el export de referencia está cuatro curaciones atrás.</p>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>Contra <b>A</b> — el guard de hermanos (la mía)</h4>
+          <p>La regla de agrupación detecta <b>21 de 301 pares (7%)</b> y falla en <b>3 de los 4 incidentes</b>. Peor: el par testigo del propio plan E0 —el de 6,7×— dejó de detectarse cuando la curación les puso <span class="mono">tamano</span> distinto. <b>La curación rompió el caso que justificaba la regla y nadie lo notó.</b></p>
+          <p><b>50 de 83 productos</b> no pueden formar par nunca. Y <span class="mono">default_variante</span> existe en <b>1 variante de toda la base</b>.</p>
+          <p>Por costo: dispararía en el <b>92,4%</b> de las filas. Una pregunta = <b>+US$13/mes</b>; anclar todo = <b>+US$31/mes</b> (+12% a +29% de la factura Meta). En "imprimir 100 hojas" o deja tres supuestos vivos —el bug sigue— o cobra <b>5 mensajes</b> por un trabajo de $100.</p>
         </div>
-        <p class="lead"><b>Antes de la próxima ronda:</b> desasignar la conversación del handoff (o abrir una nueva), si no el bot no contesta.</p>
+        <div class="card">
+          <h4>Contra <b>B</b> — recuperación por familia (la tuya)</h4>
+          <p>Por plata no se cae: <b>+US$0,23/mes</b> es ruido. Se cae por voz y por arquitectura.</p>
+          <p>La familia que atiende "imprimir 100 hojas" son <b>43 filas / 63 líneas</b>. Y el gate de dígitos del compositor <b>rechaza</b> cualquier reescritura en prosa de un abanico —las etiquetas llevan dígitos— así que sale el borrador crudo con viñetas: el mensaje que marcaste "muy mal".</p>
+          <p><b>59% de las variantes</b> tienen <span class="mono">mostrable = false</span>: su número no es el final, y la condición no entra cuatro veces en un WhatsApp.</p>
+          <p>Y duplica un nodo que ya existe: <b>el Aclarador ES ese segundo LLM</b>. Renunció a ver la conversación por jailbreak-safety, en el consejo del 24. B se la devolvería.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="dkey">
+          <div class="lbl">Lo que sobrevive · opción C</div>
+          <h4>El string crudo del LLM contra el string crudo del cliente</h4>
+          <p>Si el nombre que emitió el LLM trae un token que vale plata —<span class="mono">130</span>, <span class="mono">metálico</span>, <span class="mono">1"</span>, <span class="mono">doble faz</span>, <span class="mono">brillo</span>— y ese token <b>no aparece en lo que escribió el cliente</b>, no sale el número: sale la pregunta de ese eje.</p>
+          <p>Pasa las dos lentes: <b>no necesita familias</b> (funciona en los 50 productos sin atributos) y <b>no dispara por ausencia sino por especificidad agregada</b> — el mensaje 1, que ancló todo, no la activa; los cuatro confident-wrong sí.</p>
+        </div>
+        <div class="mine">
+          <div class="warn">Pero primero se mide</div>
+          <p>El umbral para esta clase de decisión ya está escrito en el repo (~15%) y la columna <span class="mono">senales</span> ya emite la señal. <b>La ronda que corriste ya está en la base:</b> se cuenta antes de tocar código. Las dos consultas están en la lámina siguiente.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide" data-t="Aplicado">
+    <div class="s-head">
+      <div class="eyebrow"><b>09</b> Qué apliqué · qué te queda</div>
+      <h2 class="s-title">Cinco commits, 186 casos de harness, y dos consultas para vos</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="lote a">
+          <div class="lh">Plata · sin decisión de diseño</div>
+          <ul>
+            <li><b>Rifas:</b> la unidad sale del atributo curado; una escalera creciente es el <b>total</b> del tramo y ya no dice "c/u"; "100 a 101" pasa a "100"</li>
+            <li><b>Precio único sin total</b> dice la unidad: la lona, "por m²"</li>
+            <li>Los <b>extras</b> usan su propia unidad, no la del ítem principal</li>
+            <li>La <b>2ª pasada</b> no nombra lo que el guard de nicho bloqueó, y los candidatos del Aclarador lo respetan</li>
+          </ul>
+        </div>
+        <div class="lote b">
+          <div class="lh">Tus directivas</div>
+          <ul>
+            <li><b>Fuera</b> "no lo tenemos en catálogo"</li>
+            <li><b>Fuera la ruta handoff:</b> caen 4 nodos, quedan la etiqueta y <span class="mono">Log Escalación</span> con el <span class="mono">motivo</span>. El texto pasa a mail + tel + local + horario</li>
+            <li>El <b>menú colapsa</b> la opción única</li>
+            <li>El <b>aviso de canal</b> se cruza contra la base y va al final del mensaje</li>
+            <li><b>Log Silencio:</b> el noop deja fila y dice su origen</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>Lo que NO hice, a propósito</h4>
+          <p><b>La validación de huecos en la escalera.</b> Una escala discreta es legítimamente no contigua, y hoy un hueco ya degrada a la tabla — la dirección segura. No es plata. Es una pregunta para TG: <i>¿la escala de rifas es el total de esa cantidad o el precio por talonario?</i></p>
+          <p><b>El guard que bloquea el noop</b> cuando el cliente suma un dato. Es la red que falta, pero mal hecho desanda tu decisión del 24: el silencio ante una pregunta ya respondida es deseado y ahorra un mensaje pago. Necesita su propia pasada.</p>
+        </div>
+        <div class="mine">
+          <div class="warn">Antes de la próxima ronda</div>
+          <p><b>1.</b> Desasignar la conversación de prueba, o abrir una nueva. El handoff de la impresora epson la dejó muda.<br>
+          <b>2.</b> Re-importar <span class="mono">faq-bot-v8.json</span> — ahora son <b>65 nodos</b> — y volver a enganchar el error workflow.<br>
+          <b>3.</b> <span class="mono">GET /webhook/refrescar-catalogo</span> en la URL de producción.<br>
+          <b>4.</b> Correr las dos consultas de sólo lectura del plan (§6) y traerme los resultados.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -510,7 +546,7 @@ const hayCompetencia =
     <div class="navwrap">
       <div class="dots" role="tablist" aria-label="Láminas"></div>
       <button class="nb" id="prev" aria-label="Lámina anterior">‹</button>
-      <span class="count">01 / 09</span>
+      <span class="count">01 / 10</span>
       <button class="nb" id="next" aria-label="Lámina siguiente">›</button>
     </div>
   </div>
