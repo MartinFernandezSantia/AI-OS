@@ -1772,6 +1772,91 @@ async function main() {
     decidir({ userMessage: 'imprimir 100 hojas' }), candsDef(false));
   console.log('EV6 variante inexistente del LLM no rompe:',
     /\$100,00/.test(r[0].json.reply) && !/cotiza el equipo/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ===== MEDIDA Y PACK (auditoría 2026-07-28) =====
+  // 12 productos del catálogo tienen los 7 ejes idénticos en todas sus variantes: lo
+  // único que las distingue es la medida o la cantidad del pack. Sin leerlos, el
+  // desempate caía en "la más barata" y sub-cotizaba hasta 4,57×.
+
+  // El cartel real que falló: 4 variantes, mismos atributos, distinta medida.
+  const AT_CART = { tamano: ['a3'], material: 'plastico_corrugado', multiplica: true, unidad_venta: 'unidad' };
+  const vCart = (nombre, precio, alto, ancho) => ({ ...base, idx: 1, producto_id: 'cart',
+    nombre_canonico: 'Impresión exterior / montado sobre plástico corrugado',
+    variante: nombre, precio_lista: precio, unidad: 'Hoja', mostrable: true, tiene_reglas: false,
+    atributos: { medida: { alto, ancho, unidad: 'cm' }, ...AT_CART } });
+  const CART = [vCart('a3', 10500, 42, 29.7), vCart('1 x 0.65 mt', 19500, 65, 100),
+                vCart('1 x 1 mt', 30000, 100, 100), vCart('2 x 1 mt', 48000, 100, 200)];
+  const pCart = { producto: 'Impresión exterior / montado sobre plástico corrugado', variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candCart = [{ producto_id: 'cart', nombre_canonico: 'Impresión exterior / montado sobre plástico corrugado', por_nombre: true, es_default: false }];
+
+  // El caso textual de la conversación 354.
+  r = await armarF(pCart, CART, decidir({ userMessage: 'cuánto sale un cartel de 1x0.65' }), candCart);
+  console.log('MD1 "1x0.65" elige la variante de esa medida:',
+    /\$19\.500,00/.test(r[0].json.reply) && !/\$10\.500,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // Con unidad explícita en metros.
+  r = await armarF(pCart, CART, decidir({ userMessage: 'necesito un cartel de 2 x 1 metro en coroplast' }), candCart);
+  console.log('MD2 "2 x 1 metro" no cotiza la hoja A3:',
+    /\$48\.000,00/.test(r[0].json.reply) && !/\$10\.500,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // En centímetros, y con la ficha que tiene alto/ancho invertidos: la comparación
+  // no mira orientación, así que igual matchea.
+  r = await armarF(pCart, CART, decidir({ userMessage: 'un cartel de 100x65' }), candCart);
+  console.log('MD3 sin orientación (100x65 = 65x100):',
+    /\$19\.500,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // Sin medida en el mensaje, la conducta vieja se conserva: gana la más barata.
+  r = await armarF(pCart, CART, decidir({ userMessage: 'cuánto sale un cartel' }), candCart);
+  console.log('MD4 sin medida sigue ganando la más barata:',
+    /\$10\.500,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // PACKS: folletos b/n, 4 tiers. El cliente dice la cantidad y el tier sale de ahí.
+  const vPack = (nombre, precio) => ({ ...base, idx: 1, producto_id: 'fol',
+    nombre_canonico: 'Folletos 10x15 cm papel obra de 75 gr b/n', variante: nombre,
+    precio_lista: precio, unidad: 'unidad', mostrable: true, tiene_reglas: false,
+    atributos: { papel: 'obra', gramaje_gr: 75, multiplica: false, unidad_venta: 'pack' } });
+  const PACK = [vPack('x500', 12000), vPack('x1000', 20000), vPack('x2000', 34000), vPack('x3000', 49000)];
+  const pPack = { producto: 'Folletos 10x15 cm papel obra de 75 gr b/n', variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candPack = [{ producto_id: 'fol', nombre_canonico: 'Folletos 10x15 cm papel obra de 75 gr b/n', por_nombre: true, es_default: false }];
+
+  r = await armarF(pPack, PACK, decidir({ userMessage: 'cuanto salen 3000 folletos 10x15 en blanco y negro?' }), candPack);
+  console.log('PK1 3000 folletos elige el pack de 3000:',
+    /\$49\.000,00/.test(r[0].json.reply) && !/\$12\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // Cantidad que no cae en ningún tier: gana el inmediato SUPERIOR, nunca el de abajo.
+  r = await armarF(pPack, PACK, decidir({ userMessage: 'necesito 1500 folletos' }), candPack);
+  console.log('PK2 1500 sube al tier de 2000, no baja a 1000:',
+    /\$34\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // Más que el tier más grande: gana el más grande (el mostrador arma varios packs).
+  r = await armarF(pPack, PACK, decidir({ userMessage: 'quiero 8000 folletos' }), candPack);
+  console.log('PK3 más que el tier tope gana el tope:',
+    /\$49\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // DIÁMETRO: anillado metálico, el único producto con {diametro, unidad:'pulg'}.
+  const vAn = (nombre, precio, d) => ({ ...base, idx: 1, producto_id: 'an',
+    nombre_canonico: 'Anillado Metálico a4/a3', variante: nombre, precio_lista: precio,
+    unidad: 'trabajo', mostrable: true, tiene_reglas: false,
+    atributos: { medida: { diametro: d, unidad: 'pulg' }, material: 'metalico', unidad_venta: 'trabajo' } });
+  const AN = [vAn('Hasta 3/4', 3200, 0.75), vAn('1 pulgada', 3800, 1), vAn('1 1/2', 4600, 1.5)];
+  const pAn = { producto: 'Anillado Metálico a4/a3', variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candAn = [{ producto_id: 'an', nombre_canonico: 'Anillado Metálico a4/a3', por_nombre: true, es_default: false }];
+
+  r = await armarF(pAn, AN, decidir({ userMessage: 'un anillado metalico de 1 1/2 a4' }), candAn);
+  console.log('DI1 "1 1/2" elige el diámetro correcto:',
+    /\$4\.600,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // La fracción mixta NO puede dejar suelto su "1/2": ese 0,5 es un diámetro real y
+  // haría un falso positivo. Se verifica pidiendo 1/2 a secas, que debe dar otro.
+  r = await armarF(pAn, AN, decidir({ userMessage: 'anillado metalico de 3/4' }), candAn);
+  console.log('DI2 "3/4" no se confunde con 1 ni con 1 1/2:',
+    /\$3\.200,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // En pulgadas la tolerancia tiene que ser casi exacta: con la de centímetros
+  // (5% + 0,5) todos los diámetros matcheaban entre sí y ganaba el primero.
+  r = await armarF(pAn, AN, decidir({ userMessage: 'anillado de 1 pulgada' }), candAn);
+  console.log('DI3 "1 pulgada" no cae en 3/4 por tolerancia:',
+    /\$3\.800,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
   }
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
