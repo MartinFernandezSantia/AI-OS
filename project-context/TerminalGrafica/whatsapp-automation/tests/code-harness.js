@@ -1113,5 +1113,79 @@ async function main() {
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
   console.log('U6b borrar el aviso -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.2 — LOTE 1 (ronda real del 27). Cada caso fija la premisa NUEVA y la
+  // vieja, para que no vuelva. Ojo con el patrón que ya nos costó 5 bugs: acá
+  // los mocks traen el dato como viene de la base, no como conviene al test.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // W1: TALONARIOS RIFAS. La escalera SUBE con la cantidad -> `value` es el total
+  // del tramo, no un unitario, y decir "c/u" es un error de 100x. Además la fila
+  // trae unidad CRUDA 'Hoja' (mostrador) contra unidad_venta 'pack' (curada): gana
+  // la curada, y con esTotal no se dice ninguna. Y los tramos [n, n+1] son PUNTOS.
+  const rifas = { ...base, producto_id: 'urifa', nombre_canonico: 'Talonarios Rifas 100 numeros', variante: 'Escala de rifas 10x7cm',
+    mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, unidad: 'Hoja', precio_lista: 0, por_pack: true,
+    rangos_cantidad: [{ value: 6000, minQty: 100, maxQty: 101 }, { value: 8000, minQty: 250, maxQty: 251 }, { value: 10000, minQty: 500, maxQty: 501 }],
+    atributos: { unidad_venta: 'pack', multiplica: false, pack_unidades: 100 } };
+  r = await armar({ producto: 'Talonarios Rifas 100 numeros', variante: 'Escala de rifas 10x7cm', cantidad: 300, template: null, forzarPlantilla: true, mas: [] },
+    [rifas], decidir({ userMessage: 'la primera unas 300' }));
+  const repW1 = r[0].json.reply;
+  console.log('W1 escalera creciente sin c/u:', !repW1.includes('c/u') && !repW1.includes('por hoja') && repW1.includes('- 100: $6.000,00')
+    && !repW1.includes('100 a 101') ? 'OK' : 'FAIL\n' + repW1);
+
+  // W2: la escalera que BAJA sigue siendo un unitario -> conserva el sufijo, y con
+  // unidad curada dice la de venta, no la cruda. (Premisa vieja: 'c/u' universal.)
+  const bajaRow = { ...base, mostrable: false, tiene_reglas: true, n_reglas_cantidad: 1, variante: '.', unidad: 'a3',
+    nombre_canonico: 'Impresiones a3 tonner negro', precio_lista: 500,
+    rangos_cantidad: [{ value: 500, minQty: 1, maxQty: 50 }, { value: 450, minQty: 51, maxQty: 150 }],
+    atributos: { unidad_venta: 'pagina', multiplica: true } };
+  r = await armar({ ...pBase, producto: 'Impresiones a3 tonner negro', variante: 'única' }, [bajaRow], decidir({ userMessage: 'cuanto salen?' }));
+  const repW2 = r[0].json.reply;
+  console.log('W2 escalera decreciente = unitario:', repW2.includes('precio de lista por página según cantidad')
+    && repW2.includes('- 1 a 50: $500,00 por página') ? 'OK' : 'FAIL\n' + repW2);
+
+  // W3: precio único SIN total dice la unidad cuando cambia el sentido (la lona
+  // salía "$18.000,00" a secas). Sale también dentro del template del LLM.
+  const lona = { ...base, producto_id: 'ulona', nombre_canonico: 'Lona Mate', variante: '.', unidad: 'metro', precio_lista: 18000,
+    atributos: { unidad_venta: 'm2', multiplica: true, material: 'lona', acabado: 'mate' } };
+  r = await armar({ producto: 'Lona Mate', variante: 'única', template: 'Dale, el precio de la lona mate es de {{PRECIO}}.', forzarPlantilla: false, mas: [] },
+    [lona], decidir({ userMessage: 'mate' }));
+  console.log('W3 unidad en precio único:', r[0].json.reply.includes('$18.000,00 por m²') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // W3b: 'trabajo' y 'unidad' son el default implícito -> NO se dicen (formulario).
+  r = await armar({ producto: 'anillado plástico', variante: 'única', template: null, forzarPlantilla: true, mas: [] },
+    [{ ...base, nombre_canonico: 'Anillado plástico a4/oficio', variante: '.', precio_lista: 2400, atributos: { unidad_venta: 'trabajo', multiplica: true } }],
+    decidir({ userMessage: 'cuánto sale un anillado' }));
+  console.log('W3b trabajo no dice unidad:', r[0].json.reply.includes('$2.400,00') && !r[0].json.reply.includes('por trabajo') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // W4: el extra usa SU unidad, no la del ítem principal (antes heredaba `cadaUno`).
+  r = await armar({ producto: 'Lona Mate', variante: 'única', template: null, forzarPlantilla: true,
+    mas: [{ producto: 'Impresiones papel obra 75 gr', variante: 'simple faz b/n', cantidad: 100 }] },
+    [lona, { ...base, idx: 2, producto_id: 'uobra', nombre_canonico: 'Impresiones papel obra 75 gr', variante: 'simple faz b/n',
+      precio_lista: 100, atributos: { unidad_venta: 'hoja', multiplica: true } }],
+    decidir({ userMessage: 'lona mate y 100 hojas' }));
+  console.log('W4 unidad propia del extra:', r[0].json.reply.includes('$100,00 por hoja — por 100') && r[0].json.reply.includes('por m²') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // W5: 2ª PASADA + nicho. La rama SEGUNDA_PASADA precedía a REPREGUNTA y se tragaba
+  // el guard NOMBRANDO el producto: la promo de inmobiliarias salía con su "llevando
+  // 6" ante un cliente que no calificaba. Ahora usa la repregunta del nicho.
+  r = await armar2({ ...pPromo, cantidad: null }, [promo], decidir({ userMessage: 'cual es la promocion?' }));
+  console.log('W5 2ª pasada no nombra el nicho:', r[0].json.estado === 'fallback: producto_nicho'
+    && !/promoci[oó]n cartel|inmobiliarias 6/i.test(r[0].json.reply) && !r[0].json.reply.includes('$')
+    && /inmobiliaria/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // W5b: y el residual de verdad (sin_match) sigue derivando a mail, como antes.
+  r = await armar2({ producto: 'Zzz', variante: '' }, [], decidir({ userMessage: 'zzz' }));
+  console.log('W5b 2ª pasada residual sigue a mail:', r[0].json.reply.includes('te lo cotiza el equipo') ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // W6: los candidatos que van al Aclarador respetan el guard de nicho (el rescate
+  // de menú ya lo hacía; esta lista no, y por ahí se colaba la promo).
+  r = await armar({ ...pBase, producto: 'cartel', variante: '' },
+    [{ ...base, variante: '.', match_rank: 2, nombre_canonico: 'Carteleria en plástico corrugado', producto_id: 'c1', precio_lista: 9750 },
+     { ...promo, variante: '.', match_rank: 2, producto_id: 'c2' }],
+    decidir({ userMessage: 'cuánto sale un cartel de 1x0.65' }));
+  console.log('W6 candidatos sin nicho:', r[0].json.needsAclarador === true && r[0].json.candidatos.length === 1
+    && r[0].json.candidatos[0].producto === 'Carteleria en plástico corrugado' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.candidatos));
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
