@@ -900,15 +900,21 @@ async function main() {
   const CAT = ['Cartón', 'Montado sobre cartón', 'Lona front brillo', 'Vinilo/Lona UV Brillo',
     'Impresiones papel obra 75 gr', 'Papel Kraft 130 Gr', 'Papel Kraft 300 Gr', 'Carpetas con Vaina'];
 
-  // G1: renombra a OTRO producto real -> RECHAZO. El precio era correcto; el nombre no.
+  // G1 (v8.2 — J-CARTON): renombra a OTRO producto real. Desde 2026-07-27 esto YA NO
+  // RECHAZA (decisión de Martin: el falso positivo estaba medido, el verdadero positivo
+  // era teórico). El golden se conserva invertido: la DETECCIÓN tiene que seguir viva en
+  // `compositorObs`, para poder volver a bloquear con una línea si algún día aparece un
+  // caso real. Éste es el caso testigo: "Cartón" $2.000 -> "montado sobre cartón" $4.000.
   let pg = (await prompt({ origen: 'precio', reply: 'La opción 35X50 CM de Cartón sale $2.000,00.', nombresCatalogo: CAT }))[0].json;
   r = await aplicar(pg, JSON.stringify({ mensaje: 'El montado sobre cartón de 35X50 CM te sale [[P1]].' }));
-  console.log('G1 rechaza producto ajeno:', String(r[0].json.compositor).startsWith('nombre_ajeno') && r[0].json.final === pg.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('G1 detecta producto ajeno sin bloquear:', r[0].json.compositor === 'ok'
+    && (r[0].json.compositorObs || []).some((o) => o.startsWith('nombre_ajeno'))
+    && r[0].json.final !== pg.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor + ' obs=' + JSON.stringify(r[0].json.compositorObs));
 
   // G2: la variante de 2 letras tambien cuenta (lona front brillo -> lona UV).
   pg = (await prompt({ origen: 'precio', reply: 'La opción Lona Brillo de Lona front brillo sale $16.000,00.', nombresCatalogo: CAT }))[0].json;
   r = await aplicar(pg, JSON.stringify({ mensaje: 'La lona uv brillo te sale [[P1]].' }));
-  console.log('G2 rechaza token corto ajeno:', String(r[0].json.compositor).startsWith('nombre_ajeno') ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('G2 detecta token corto ajeno:', (r[0].json.compositorObs || []).some((o) => o.startsWith('nombre_ajeno')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // G3: NO hay falso positivo por singular/plural ni por acortar el nombre.
   pg = (await prompt({ origen: 'menu', reply: 'Tenemos Papel Kraft 130 Gr y Papel Kraft 300 Gr.', nombresCatalogo: CAT }))[0].json;
@@ -1037,12 +1043,14 @@ async function main() {
   // D4: los 4 ataques de renombre siguen cazados con el diccionario nuevo.
   const ataque = async (borr, msg) => {
     const p0 = (await prompt({ origen: 'precio', reply: borr, nombresCatalogo: CAT2 }))[0].json;
-    return (await aplicar(p0, JSON.stringify({ mensaje: msg })))[0].json.compositor;
+    const o = (await aplicar(p0, JSON.stringify({ mensaje: msg })))[0].json;
+    // v8.2: la regla de nombre observa, no rechaza -> el ataque se mide en compositorObs
+    return (o.compositorObs || []).find((x) => x.startsWith('nombre_ajeno')) || o.compositor;
   };
   const v1 = await ataque('La opción 35X50 CM de Cartón sale $2.000,00.', 'El montado sobre cartón de 35X50 CM te sale [[P1]].');
   const v2 = await ataque('La opción Lona Brillo de Lona front brillo sale $16.000,00.', 'La lona uv brillo te sale [[P1]].');
   const v3 = await ataque('La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00.', 'Los módulos de medicina te salen [[P1]] la página.');
-  console.log('D4 ataques de renombre cazados:', [v1, v2, v3].every((v) => String(v).startsWith('nombre_ajeno')) ? 'OK' : 'FAIL ' + [v1, v2, v3].join(' / '));
+  console.log('D4 ataques de renombre detectados (no bloqueados):', [v1, v2, v3].every((v) => String(v).startsWith('nombre_ajeno')) ? 'OK' : 'FAIL ' + [v1, v2, v3].join(' / '));
 
   // D5: y la paráfrasis legítima que ANTES rechazaba, ahora pasa.
   const p5 = (await prompt({ origen: 'precio', reply: 'La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00.', nombresCatalogo: CAT2 }))[0].json;
@@ -1135,6 +1143,19 @@ async function main() {
   // U6b: borrar el aviso de canal entero -> rechazo por tokens (se lleva el mail).
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
   console.log('U6b borrar el aviso -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // W9 (v8.2): el veredicto y su MOTIVO salen como campos propios del nodo, tanto
+  // cuando rechaza como cuando pasa. Antes sólo viajaban dentro de `notas`, así que
+  // si el log fallaba la decisión se perdía y no había con qué depurar desde n8n.
+  const pw = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u — total estimado $8.000,00. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
+  r = await aplicar(pw, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado, y son $50 de envío. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
+  console.log('W9 motivo del rechazo en el output:', r[0].json.compositorRechazado === true
+    && typeof r[0].json.compositorMotivo === 'string' && r[0].json.compositorMotivo.length > 20
+    && r[0].json.compositorBorrador === pw.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+  // W9b: y cuando pasa, el motivo también viaja (para saber que pasó y no que no corrió).
+  r = await aplicar(pw, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
+  console.log('W9b motivo también cuando pasa:', r[0].json.compositor === 'ok'
+    && r[0].json.compositorRechazado === false && /pas[oó] todas las reglas/.test(r[0].json.compositorMotivo) ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8.2 — LOTE 1 (ronda real del 27). Cada caso fija la premisa NUEVA y la
