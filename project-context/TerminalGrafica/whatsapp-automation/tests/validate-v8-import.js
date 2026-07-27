@@ -92,7 +92,13 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   // v8.3 — búsqueda por palabra + filtro. Los 6 nodos nuevos, más los 3 que se
   // tocan para intercalarlos: Switch Acción (la rama precio ya no va directo a
   // Get Precio) y los dos ARP (hayCompetencia pre-filtro + fallback de nombre).
-  ...NUEVOS_V83, 'Switch Acción']);
+  ...NUEVOS_V83, 'Switch Acción',
+  // v8.3b (auditoría 2026-07-28) — el Aclarador leía el catálogo de 'Guardar Cache
+  // Catálogo', que sólo corre en cache MISS: con el TTL de 10 min el caso normal es
+  // HIT, $() tiraba y su catch dejaba la lista VACÍA, así que decidía 'nada' → mail
+  // teniendo el producto. Pasa a una cascada que arranca por 'Armar Mensajes LLM',
+  // que corre siempre y ahora republica `_catalogo`.
+  'Armar Prompt Aclarador']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
