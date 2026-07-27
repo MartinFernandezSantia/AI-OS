@@ -1,0 +1,557 @@
+<title>v8.2 — La ronda completa: 20 incidentes</title>
+<style>
+  :root{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a; --amber-soft:rgba(169,112,26,.12); --amber-line:rgba(169,112,26,.4);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+      --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+      --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+      --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+      --amber:#d9a441; --amber-soft:rgba(217,164,65,.14); --amber-line:rgba(217,164,65,.42);
+      --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#e9ebe4; --card:#f5f6f0; --ink:#16191a; --ink-soft:#464b4c;
+    --muted:#7c817d; --line:rgba(20,25,26,.16); --line-soft:rgba(20,25,26,.09);
+    --teal:#0f766e; --teal-soft:rgba(15,118,110,.13); --teal-line:rgba(15,118,110,.4);
+    --verm:#c23a1c; --verm-soft:rgba(194,58,28,.12); --verm-line:rgba(194,58,28,.42);
+    --amber:#a9701a; --amber-soft:rgba(169,112,26,.12); --amber-line:rgba(169,112,26,.4);
+    --sh:0 1px 0 rgba(255,255,255,.5),0 14px 40px rgba(18,22,20,.10);
+  }
+  :root[data-theme="dark"]{
+    --paper:#131618; --card:#1b1f21; --ink:#e8eae3; --ink-soft:#b0b5ae;
+    --muted:#7d827c; --line:rgba(232,234,227,.15); --line-soft:rgba(232,234,227,.08);
+    --teal:#3fb8ac; --teal-soft:rgba(63,184,172,.15); --teal-line:rgba(63,184,172,.42);
+    --verm:#e8674a; --verm-soft:rgba(232,103,74,.16); --verm-line:rgba(232,103,74,.44);
+    --amber:#d9a441; --amber-soft:rgba(217,164,65,.14); --amber-line:rgba(217,164,65,.42);
+    --sh:0 0 0 1px rgba(255,255,255,.03),0 18px 46px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;
+    align-items:center;justify-content:center;padding:18px;
+    background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);
+    background-size:22px 22px;}
+
+  .stage{position:relative;width:min(1160px,96vw);height:min(720px,92vh);
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    box-shadow:var(--sh);overflow:hidden;}
+
+  .cm{position:absolute;width:16px;height:16px;z-index:6;opacity:.6}
+  .cm::before,.cm::after{content:"";position:absolute;background:var(--muted)}
+  .cm::before{width:16px;height:1px;top:0;left:0}
+  .cm::after{width:1px;height:16px;top:0;left:0}
+  .cm-tl{top:10px;left:10px}
+  .cm-tr{top:10px;right:10px;transform:scaleX(-1)}
+  .cm-bl{bottom:10px;left:10px;transform:scaleY(-1)}
+  .cm-br{bottom:10px;right:10px;transform:scale(-1)}
+
+  .bar{position:absolute;top:0;left:0;right:0;height:2px;background:var(--line-soft);z-index:9}
+  .bar-fill{height:100%;background:var(--verm);width:0;transition:width .35s cubic-bezier(.4,0,.2,1)}
+
+  .slide{position:absolute;inset:0;padding:clamp(28px,4.2vh,50px) clamp(30px,4.4vw,64px) 76px;
+    display:none;flex-direction:column;opacity:0;overflow-y:auto;overflow-x:hidden;
+    transition:opacity .32s ease}
+  .slide.active{display:flex;opacity:1;animation:rise .4s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide.active{animation:none}.bar-fill{transition:none}}
+
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .eyebrow b{color:var(--teal);font-weight:700}
+  .s-head{margin-bottom:16px;flex:none}
+  .s-title{font-size:clamp(22px,3vw,34px);line-height:1.08;margin:10px 0 0;font-weight:800;
+    letter-spacing:-.02em;text-wrap:balance;max-width:26ch}
+  .s-body{flex:1;min-height:0}
+  .lead{font-size:clamp(14px,1.4vw,16px);color:var(--ink-soft);line-height:1.5;max-width:66ch;margin:10px 0 0}
+  .lead b{color:var(--ink)}
+  code,.mono{font-family:var(--mono);font-size:.87em}
+  .chip-code{font-family:var(--mono);background:var(--verm-soft);color:var(--verm);
+    padding:.08em .4em;border-radius:4px;font-size:.85em;font-weight:600;white-space:nowrap}
+  .chip-ok{font-family:var(--mono);background:var(--teal-soft);color:var(--teal);
+    padding:.08em .4em;border-radius:4px;font-size:.85em;font-weight:600;white-space:nowrap}
+
+  .cover{justify-content:center;gap:22px}
+  .cover .brandline{font-family:var(--mono);font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+  .cover h1{font-size:clamp(32px,5.4vw,56px);line-height:1.02;margin:0;font-weight:850;letter-spacing:-.03em;text-wrap:balance;max-width:19ch}
+  .cover .sub{font-size:clamp(15px,1.7vw,19px);color:var(--ink-soft);max-width:56ch;line-height:1.45}
+  .cover .meta{font-family:var(--mono);font-size:12.5px;color:var(--muted);letter-spacing:.04em}
+  .rule{height:2px;width:74px;background:var(--verm)}
+
+  .grid{display:grid;gap:11px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px 15px}
+  .card h4{margin:0 0 6px;font-size:14px;letter-spacing:-.01em}
+  .card p{margin:0;font-size:12.5px;color:var(--ink-soft);line-height:1.45}
+  .card p + p{margin-top:6px}
+
+  .bucket{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:14px 15px;
+    display:flex;flex-direction:column;gap:9px}
+  .bucket.plata{border-top:3px solid var(--verm)}
+  .bucket.res{border-top:3px solid var(--teal)}
+  .bucket.voz{border-top:3px solid var(--amber)}
+  .bucket .bh{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .bucket .bh h4{margin:0;font-size:14.5px;letter-spacing:-.01em}
+  .bucket .bh .n{font-family:var(--mono);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .bucket.plata .bh .n{color:var(--verm)} .bucket.res .bh .n{color:var(--teal)} .bucket.voz .bh .n{color:var(--amber)}
+  .il{display:flex;flex-direction:column;gap:5px}
+  .il div{font-size:12px;color:var(--ink-soft);line-height:1.35;display:flex;gap:7px}
+  .il div .t{font-family:var(--mono);font-size:10.5px;font-weight:700;min-width:22px;color:var(--muted);padding-top:1px}
+  .il div.cw .t{color:var(--verm)}
+  .il div.cw{color:var(--ink);font-weight:600}
+
+  .maptbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .maptbl th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);padding:0 9px 8px;border-bottom:1px solid var(--line);font-weight:600}
+  .maptbl td{padding:8px 9px;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.35}
+  .maptbl td.key{white-space:nowrap;font-family:var(--mono);font-weight:700;color:var(--verm);font-size:11.5px}
+  .maptbl td.keyt{white-space:nowrap;font-family:var(--mono);font-weight:700;color:var(--teal);font-size:11.5px}
+  .maptbl td b{color:var(--ink)}
+  .maptbl td.num{font-variant-numeric:tabular-nums;text-align:right;font-family:var(--mono);white-space:nowrap;font-weight:700}
+  .maptbl td.bad{color:var(--verm)}
+  .tblscroll{height:100%;overflow:auto}
+
+  pre.code{font-family:var(--mono);font-size:11.5px;line-height:1.55;background:var(--paper);
+    border:1px solid var(--line);border-radius:8px;padding:13px 15px;margin:0;overflow-x:auto;color:var(--ink-soft)}
+  pre.code b{color:var(--verm);font-weight:700}
+  pre.code i{color:var(--teal);font-style:normal;font-weight:700}
+  pre.code u{color:var(--muted);text-decoration:none}
+
+  .mine{border:1px solid var(--amber-line);border-radius:9px;padding:14px 16px;background:var(--amber-soft)}
+  .mine .warn{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:700}
+  .mine h4{margin:7px 0 6px;font-size:15px}
+  .mine p{margin:0;font-size:12.5px;color:var(--ink-soft);line-height:1.48}
+
+  .dkey{border:1px solid var(--teal-line);background:var(--teal-soft);border-radius:8px;padding:12px 14px}
+  .dkey .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  .dkey h4{margin:5px 0 0;font-size:14px;line-height:1.3}
+  .dkey p{margin:6px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.45}
+
+  .wa{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:12px 13px;
+    display:flex;flex-direction:column;gap:8px}
+  .msg{font-size:12.5px;line-height:1.4;border-radius:7px;padding:7px 10px;max-width:88%}
+  .msg.in{background:var(--teal-soft);align-self:flex-end;border:1px solid var(--teal-line)}
+  .msg.out{background:var(--card);border:1px solid var(--line);align-self:flex-start}
+  .msg .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px}
+  .msg em{font-style:normal;background:var(--verm-soft);color:var(--verm);font-weight:700;padding:0 .2em;border-radius:3px}
+
+  .steplist{display:flex;flex-direction:column;gap:10px}
+  .li{display:flex;gap:13px;align-items:flex-start}
+  .li .num{font-family:var(--mono);font-weight:800;color:var(--teal);font-size:14px;min-width:24px;padding-top:1px}
+  .li .txt{font-size:13px;color:var(--ink-soft);line-height:1.45}
+  .li .txt b{color:var(--ink)}
+
+  .lote{border:1px solid var(--line);border-radius:9px;background:var(--paper);padding:13px 14px;display:flex;flex-direction:column;gap:7px}
+  .lote .lh{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+  .lote.a{border-left:3px solid var(--verm)} .lote.a .lh{color:var(--verm)}
+  .lote.b{border-left:3px solid var(--teal)} .lote.b .lh{color:var(--teal)}
+  .lote.c{border-left:3px solid var(--amber);border-style:dashed} .lote.c .lh{color:var(--amber)}
+  .lote ul{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:4px}
+  .lote li{font-size:12px;color:var(--ink-soft);line-height:1.4}
+  .lote li b{color:var(--ink)}
+
+  .close-big{font-size:clamp(19px,2.4vw,28px);font-weight:800;letter-spacing:-.02em;line-height:1.2;text-wrap:balance;max-width:28ch}
+
+  .hud{position:absolute;left:0;right:0;bottom:0;height:54px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 clamp(20px,4vw,40px);
+    border-top:1px solid var(--line);background:var(--card);z-index:8}
+  .colorbar{display:flex;gap:0;align-items:center}
+  .colorbar span{width:22px;height:11px;display:block}
+  .colorbar b{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;margin-left:12px;text-transform:uppercase;font-weight:600}
+  .navwrap{display:flex;align-items:center;gap:6px}
+  .dots{display:flex;gap:5px;margin-right:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:0;padding:0;cursor:pointer;transition:background .2s,transform .2s}
+  .dot.on{background:var(--verm);transform:scale(1.35)}
+  .dot:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+  .nb{width:32px;height:32px;border-radius:6px;border:1px solid var(--line);background:var(--paper);
+    color:var(--ink);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .2s,color .2s}
+  .nb:hover{border-color:var(--teal);color:var(--teal)}
+  .nb:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .nb:disabled{opacity:.35;cursor:default}
+  .hint{position:absolute;bottom:64px;right:clamp(20px,4vw,40px);font-family:var(--mono);
+    font-size:10px;color:var(--muted);letter-spacing:.08em;z-index:8;opacity:.7}
+</style>
+
+<div class="stage" role="region" aria-label="Deck: la ronda completa de v8.2">
+  <span class="cm cm-tl"></span><span class="cm cm-tr"></span>
+  <span class="cm cm-bl"></span><span class="cm cm-br"></span>
+  <div class="bar"><div class="bar-fill"></div></div>
+
+  <!-- 1 -->
+  <section class="slide cover" data-t="Portada">
+    <div class="brandline">Terminal Gráfica · Bot de cotización WhatsApp</div>
+    <div class="rule"></div>
+    <h1>El guard se calla justo cuando el bot se equivoca con más confianza</h1>
+    <p class="sub">La ronda del 27 en tres lentes: 20 incidentes, 4 cotizaciones con número equivocado, y un solo defecto estructural que explica las cuatro.</p>
+    <div class="meta">2026-07-27 · faq-bot-v8 · plan completo en <span class="mono">plans/v8-2-ronda-completa.md</span></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide" data-t="El tablero">
+    <div class="s-head">
+      <div class="eyebrow"><b>01</b> Clasificación</div>
+      <h2 class="s-title">20 incidentes en tres baldes</h2>
+    </div>
+    <div class="s-body">
+      <p class="lead">El mensaje 1 fue <b>el único de la tanda A que salió limpio</b>: $8.800, "(100 hojas)", "por hoja". El paquete E0+v8.1 hizo lo que prometía. De ahí en adelante, todo lo demás.</p>
+      <div class="grid g3" style="margin-top:14px">
+        <div class="bucket plata">
+          <div class="bh"><h4>Plata</h4><span class="n">6</span></div>
+          <div class="il">
+            <div class="cw"><span class="t">A1</span><span>anillado → $3.400 (era $2.400) · <b>1,42×</b></span></div>
+            <div class="cw"><span class="t">A2</span><span>kraft a4 → $800, eligió el gramaje solo · <b>1,25×</b></span></div>
+            <div class="cw"><span class="t">A3</span><span>"papel normal" → obra 106 doble faz, $17.600 · <b>1,76×</b></span></div>
+            <div class="cw"><span class="t">A5</span><span>rifas: dijo "c/u" sobre un total · <b>hasta 100×</b></span></div>
+            <div><span class="t">A4</span><span>folletos: dio el techo ($66.000) y no el piso ($12.000)</span></div>
+            <div><span class="t">A6</span><span>nombró la promo de inmobiliarias a un cliente cualquiera</span></div>
+          </div>
+        </div>
+        <div class="bucket res">
+          <div class="bh"><h4>Resolución</h4><span class="n">7</span></div>
+          <div class="il">
+            <div><span class="t">R1</span><span>"anillar 3 apuntes" → silencio</span></div>
+            <div><span class="t">R2</span><span>"Hola?" → silencio, sin motivo</span></div>
+            <div><span class="t">R3</span><span>el menú le enseñó un nombre que no existe</span></div>
+            <div><span class="t">R4a</span><span>menú de variantes con una sola variante</span></div>
+            <div><span class="t">R4b</span><span>anillado plástico a3 con la variante llamada A4</span></div>
+            <div><span class="t">R5</span><span>"A4 y Oficio" para fotocopias: inventado</span></div>
+            <div><span class="t">R6</span><span>los 4 anti-loops no pueden disparar</span></div>
+          </div>
+        </div>
+        <div class="bucket voz">
+          <div class="bh"><h4>Voz</h4><span class="n">7</span></div>
+          <div class="il">
+            <div><span class="t">V1</span><span>el aviso de canal salió 4 veces</span></div>
+            <div><span class="t">V2</span><span>prometió presupuesto por mail teniendo el precio</span></div>
+            <div><span class="t">V3</span><span>"eso no lo tenemos en catálogo"</span></div>
+            <div><span class="t">V4</span><span>handoff a un humano que no existe</span></div>
+            <div><span class="t">V5</span><span>lona $18.000 sin el "por m²"</span></div>
+            <div><span class="t">V6</span><span>menú con viñetas donde iba prosa</span></div>
+            <div><span class="t">V7</span><span>el compositor: acá te contradigo</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:12px"><b>Confident-wrong</b> = número equivocado dicho sin hedge: A1, A2, A3, A5. Van primero.</p>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide" data-t="Causa raíz">
+    <div class="s-head">
+      <div class="eyebrow"><b>02</b> Causa raíz · explica A1 A2 A3 A4</div>
+      <h2 class="s-title">La compuerta mira el resultado del SQL, no lo que dijo el cliente</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <pre class="code"><u>// armar-respuesta-precio.js:523 — el guard de ancla</u>
+const hayCompetencia =
+  (main.<b>descartados</b>.length &gt; 0) || main.<b>filas</b> &gt; 1;</pre>
+        <div class="card">
+          <h4>Por qué se apaga solo</h4>
+          <p>Las dos señales salen del <b>rowcount del SQL</b>, que es <i>posterior</i> a la elección del LLM. Si el LLM sobre-especifica y emite el nombre canónico exacto, el SQL devuelve 1 fila, <span class="chip-code">descartados</span> queda vacío y la puerta no dispara.</p>
+        </div>
+        <div class="mine">
+          <div class="warn">El corolario, medido</div>
+          <h4>El bot es más seguro cuando el LLM es más vago</h4>
+          <p>Si en el kraft hubiera tipeado <span class="chip-code">"papel kraft"</span>, el de 300 gr entraba por rank 2, el filtro lo mandaba a <span class="chip-code">descartados</span> y la puerta salía. Tipeó <span class="chip-code">Papel Kraft 130 Gr</span> y nadie dijo nada.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>Todos los guards son detectores de contradicción</h4>
+          <p>Gramaje, dorso, faz inversa, papel especial, nicho: todos preguntan <i>"el cliente dijo X y la fila dice no-X"</i>. <b>No existe ningún detector de ausencia.</b> Y el único que la mira sólo agrega una frase blanda: nunca saca el número.</p>
+        </div>
+        <div class="card">
+          <h4>Dos agravantes del mismo guard</h4>
+          <p>La ventana es de <b>un solo turno</b> (los otros guards usan los últimos 3 mensajes), así que en una recolección multi-turno todo lo que el cliente ancló antes se lee como no dicho.</p>
+          <p>Y <span class="chip-code">EJES_CLIENTE</span> no incluye <b>medida</b> — el diámetro del anillo de A1 — ni plazo ni unidades por pack.</p>
+        </div>
+        <div class="dkey">
+          <div class="lbl">El dato que ya existe y nadie lee</div>
+          <h4><span class="mono">default_familia</span> en obra 75 y <span class="mono">default_variante</span> en simple faz b/n</h4>
+          <p>Curados y verificados en E0, llegan hasta ARP en cada consulta. Grep sobre los 17 nodos Code: <b>0 hits</b>. Es exactamente el dato que resolvía <i>"el papel no sé, normal"</i>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide" data-t="Los 4 confident-wrong">
+    <div class="s-head">
+      <div class="eyebrow"><b>03</b> Plata · lo que costó dinero</div>
+      <h2 class="s-title">Cuatro números equivocados, dichos sin una sola duda</h2>
+    </div>
+    <div class="s-body tblscroll">
+      <table class="maptbl">
+        <thead><tr><th style="width:44px">id</th><th>lo que preguntó</th><th>lo que salió</th><th>lo correcto</th><th style="width:74px">error</th><th>qué eje inventó</th></tr></thead>
+        <tbody>
+          <tr><td class="key">A3</td><td>"100 hojas" → <b>"b/n, el papel no sé, normal"</b></td><td class="bad">obra <b>106</b>, <b>doble faz</b> — $17.600</td><td>obra 75 simple faz — $10.000</td><td class="num bad">1,76×</td><td>gramaje <i>y</i> faz, después de que el cliente dijera que no sabía</td></tr>
+          <tr><td class="key">A1</td><td>"un anillado para 120 hojas"</td><td class="bad">metálico, medida 1" — $3.400</td><td>plástico — $2.400</td><td class="num bad">1,42×</td><td>material <i>y</i> medida de anillo</td></tr>
+          <tr><td class="key">A2</td><td>"papel kraft a4?"</td><td class="bad">kraft <b>130</b> — $800</td><td>preguntar 130 o 300 ($800 / $1.000)</td><td class="num bad">1,25×</td><td>gramaje</td></tr>
+          <tr><td class="key">A5</td><td>"300 rifas"</td><td class="bad">"100 a 101: $6.000,00 <b>c/u</b>"</td><td>$6.000 es el <b>total</b> de ese tramo</td><td class="num bad">100×</td><td>la unidad, no el producto</td></tr>
+          <tr><td class="keyt">A4</td><td>"papel ilustración para 500 folletos"</td><td>$66.000 — el número <b>es correcto</b></td><td>decir que folletos arranca en $12.000</td><td class="num">5,5×</td><td>anclaje al techo de la familia</td></tr>
+          <tr><td class="keyt">A6</td><td>"un cartel de 1x0.65"</td><td>nombró la promo de inmobiliarias</td><td>no debía existir para ese cliente</td><td class="num">—</td><td>el guard bloquea el número y filtra el nombre</td></tr>
+        </tbody>
+      </table>
+      <p class="lead" style="margin-top:12px">Lo que <b>sí</b> aguantó en A1: la regla del sustantivo de v8 mató el total ($3.400 y no $408.000). Y A6 no cotizó los $45.000 que la ronda 4 sí había cotizado.</p>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide" data-t="Las rifas">
+    <div class="s-head">
+      <div class="eyebrow"><b>04</b> Plata · el hallazgo que no estabas buscando</div>
+      <h2 class="s-title">Tres unidades distintas en un mismo mensaje, y ninguna correcta</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div class="wa">
+        <div class="msg in"><span class="who">cliente</span>La primera unas 300</div>
+        <div class="msg out"><span class="who">bot</span>Escala de rifas 10x7cm de Talonarios Rifas 100 numeros, precio de lista <em>por hoja</em> según cantidad:<br>· 100 a 101: $6.000,00 <em>c/u</em><br>· 250 a 251: $8.000,00 <em>c/u</em><br>· 500 a 501: $10.000,00 <em>c/u</em></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>La escalera <b>sube</b> con la cantidad</h4>
+          <p>$6.000 → $8.000 → $10.000 → $14.000 → $29.000 → $32.000. Un precio unitario nunca sube por volumen: <b><span class="mono">value</span> es el total del tramo</b>, no un unitario. Si el cliente lee "100 a 101: $6.000 c/u" literalmente, 100 rifas = $600.000.</p>
+        </div>
+        <div class="card">
+          <h4>De dónde salen las tres unidades</h4>
+          <p><b>encabezado</b> "por hoja" — usa <span class="chip-code">row.unidad</span>, la columna cruda del mostrador.</p>
+          <p><b>línea</b> "c/u" — hardcodeado. La rama <span class="chip-code">ok_rangos</span> es la única que no recibió el fix de unidad del 27.</p>
+          <p><b>lo curado</b> <span class="chip-ok">unidad_venta: pack</span>, 100 por pack. Nadie lo consulta acá.</p>
+        </div>
+        <div class="mine">
+          <div class="warn">De paso</div>
+          <p>Los rangos "100 a 101" son un espejo fiel del dato (<span class="mono">maxQty = minQty + 1</span>): eso es display. Lo que sí es un agujero: el código <b>acepta escaleras con huecos</b> — 102 a 249 no está cubierto por ningún tramo — y las publica como si fueran una tabla completa.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide" data-t="Resolución">
+    <div class="s-head">
+      <div class="eyebrow"><b>05</b> Resolución</div>
+      <h2 class="s-title">Dos silencios sin rastro y un nombre que el propio bot se enseñó</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>R1 · R2 — los silencios</h4>
+          <p>El noop lo emitió <b>el LLM</b>: la regla anti-repetición dice <i>"…y el cliente no sumó una pregunta ni un dato nuevo"</i>, y "3 apuntes" <b>es</b> un dato nuevo. Se saltó la mitad de una regla conjuntiva. No es la conducta que decidimos el 24.</p>
+          <p>Lo que falta es la red: <b>nada bloquea un noop cuando el mensaje del cliente trae un número, una cantidad o un signo de pregunta.</b></p>
+        </div>
+        <div class="mine">
+          <div class="warn">El agujero de fondo</div>
+          <h4>Cuatro finales mudos, cero filas</h4>
+          <p>Descartar por debounce, silencio por repetición, silencio Tier-2 y drop de firewall: ninguno escribe en <span class="mono">bot.decisiones</span>. <span class="mono">Log Turno</span> cuelga sólo de <span class="mono">Enviar Mensaje</span>. <b>Todo lo que el bot decide no contestar es invisible</b> — por eso no hay motivo.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>R3 — el contrato "verbatim" está roto por construcción</h4>
+          <p>El menú imprime <span class="mono">familia:</span> + viñetas; visualmente es una sola etiqueta. El prompt le pide al LLM mapear "a la línea EXACTA del historial", pero el historial que ve <b>es el texto ya reescrito por el compositor</b>, al que le ordenamos deshacer las listas. El borrador con los nombres reales nunca entra al contexto del turno siguiente.</p>
+          <p>Y el flag <span class="chip-code">producto_inventado</span> es sólo telemetría: el turno igual va a buscar a la base un nombre que ya se sabe inexistente.</p>
+        </div>
+        <div class="dkey">
+          <div class="lbl">Ya está guardado</div>
+          <h4>El menú persiste sus nombres canónicos en <span class="mono">notas</span></h4>
+          <p>El material para resolver "la opción que me mostraste" sin depender de que el LLM la re-tipee ya está en la base. Falta la query.</p>
+        </div>
+        <div class="card">
+          <h4>R6 — los anti-loops están vivos y no pueden disparar</h4>
+          <p>Los cuatro comparan por <b>igualdad exacta</b>, y dos comparan texto escrito por un LLM: tres formulaciones del mismo pedido imposible dan tres textos distintos y el contador nunca llega a 2. El tercero está tapado por el Aclarador, que pisa su repregunta fija.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide" data-t="Voz">
+    <div class="s-head">
+      <div class="eyebrow"><b>06</b> Voz</div>
+      <h2 class="s-title">El aviso de canal no tenía estado, y el mail se lo enseñamos nosotros</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>V1 · el aviso 4 veces</h4>
+          <p><span class="chip-code">avisoDado</span> no es estado: es un <span class="mono">includes()</span> del mail sobre lo que Chatwoot devuelva en <b>una ventana sin paginar</b>. Se llena con actividad y notas privadas, y vuelve a <span class="mono">false</span>. En una conversación nueva tras un handoff, tampoco.</p>
+          <p>Aparte: en un multi-ítem el aviso queda <b>en el medio</b> del mensaje, porque los extras se concatenan después.</p>
+        </div>
+        <div class="card">
+          <h4>V2 · "el equipo te enviará el presupuesto por mail"</h4>
+          <p>Esa frase <b>no existe en el repo</b>: la escribió el LLM. Pero se la enseñamos: hay <b>12 lugares</b> entre prompts y plantillas que dicen "lo cotiza el equipo", y <b>tres están en la lista de hedges del gate</b> — o sea el compositor tiene prohibido borrarlas.</p>
+        </div>
+        <div class="card">
+          <h4>V5 · falta el "por m²"</h4>
+          <p>El dato está y ARP lo calcula. El fix del 27 puso la unidad en los <b>cuatro caminos con total</b>; la lona cayó por el de <b>precio único sin total</b>, que quedó afuera. Y la regla 4c del gate impide el rescate: si el compositor lo agregara, lo rechaza por unidad intrusa.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>V3 · "no lo tenemos en catálogo"</h4>
+          <p>Dos strings, los dos en el Aclarador. El <b>System Prompt ya prohíbe la palabra</b> ("nunca digas 'el catálogo', 'la lista de precios', 'el sistema'"): el prompt lo prohíbe y el código lo escribe igual. Y el compositor no puede sacarla — tiene prohibido afirmar que algo existe o no existe, así que la blinda.</p>
+        </div>
+        <div class="mine">
+          <div class="warn">Atención · esto te frena la próxima ronda</div>
+          <h4>Después de un handoff el bot queda mudo <b>para siempre</b> en esa conversación</h4>
+          <p><span class="mono">Asignar a Humano</span> pone <span class="mono">assignee_id: 1</span> y el filtro de entrada exige que no haya asignado. La "impresora epson" fue el último mensaje de la ronda: <b>esa conversación ya no contesta.</b> Desasignala o abrí una nueva antes de seguir.</p>
+        </div>
+        <div class="card">
+          <h4>V4 · sacar el handoff sin perder la telemetría</h4>
+          <p>Tiene <b>tres entradas</b>, no una: la salida del switch, el fallback de cualquier acción no reconocida, y <b>la salida de error del LLM</b> (una caída de OpenRouter escala). El corte: cae la asignación y el trío de la nota — incluida una 2ª llamada LLM para un lector que no existe — y se recablea el mensaje a <span class="mono">Log Escalación</span>, donde vive <span class="mono">motivo</span>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide" data-t="Te contradigo">
+    <div class="s-head">
+      <div class="eyebrow"><b>07</b> Donde no te doy la razón</div>
+      <h2 class="s-title">El compositor no es sólo tokens prohibidos, y no se puede quitar</h2>
+    </div>
+    <div class="s-body grid g2" style="align-content:start">
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="card">
+          <h4>El gate valida diez cosas</h4>
+          <p><b>De plata:</b> los tokens de monto en el mismo orden (anti-swap de precios), ningún <span class="mono">$</span> propio, el mismo multiset de dígitos, conservación de unidad, y el <b>estampado</b> de los montos desde la base.</p>
+          <p><b>De voz:</b> conservación de hedge, léxico de riesgo, largo.</p>
+          <p><b>De nombre:</b> que no aparezca otro producto real — el caso medido fue "Cartón" $2.000 → "montado sobre cartón" $4.000. Esa es la regla de los tokens prohibidos, <b>la que te rompió dos veces</b>. Tu instinto apunta a la regla correcta.</p>
+        </div>
+        <div class="dkey">
+          <div class="lbl">Lo que sí hago</div>
+          <h4>El kill switch ya hace exactamente lo que pedís, en 5 segundos y sin re-importar</h4>
+          <p>Quitar el nodo manda <span class="mono">[[P1]]</span> literal al cliente: es el único que estampa los montos y el único que setea el campo que lee el envío. Y se lleva puesta la telemetría del veredicto, que es el instrumento para decidir. Cuando el gate rechaza no se pierde nada: sale el borrador determinístico.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div class="mine">
+          <div class="warn">Tres cosas que contradicen el handoff</div>
+          <p style="margin-top:8px"><b>1 · El mensaje 13 pedía algo que no se construyó.</b> Esperaba precio + puerta para "cuánto sale imprimir 100 hojas", pero la mitad que cotiza directo con defaults nunca entró. Que preguntara era lo correcto: el bug está en la respuesta siguiente.</p>
+          <p style="margin-top:8px"><b>2 · El aviso de canal sí necesitaba estado nuevo.</b> El plan dice "sin estado nuevo, lo apaga el <span class="mono">avisoDado</span> que ya existía". No alcanzaba.</p>
+          <p style="margin-top:8px"><b>3 · Los anti-loops no están restaurados en el sentido útil.</b> El handoff los cuenta como verde del harness. Están cableados; tres de los cuatro no pueden disparar.</p>
+        </div>
+        <div class="card">
+          <h4>El patrón del harness, ahora con nombre</h4>
+          <p>La firma es <span class="mono">armar(precioObj, rows, dec)</span>: <b>el resultado del SQL es un input escrito por el autor del test.</b> Todo caso pregunta "dada una resolución correcta, ¿la aritmética aguanta?". La clase entera <i>"la resolución fue mala"</i> queda afuera por construcción.</p>
+          <p>El caso <b>S6</b> llega a assertear que sin competencia SQL <b>no</b> debe haber puerta: el harness firma A3 en verde como conducta correcta.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide" data-t="Plan">
+    <div class="s-head">
+      <div class="eyebrow"><b>08</b> Qué hago ahora</div>
+      <h2 class="s-title">Dos lotes que aplico ya, uno que espera al contraste</h2>
+    </div>
+    <div class="s-body grid g3" style="align-content:start">
+      <div class="lote a">
+        <div class="lh">Lote 1 · plata, sin decisión</div>
+        <ul>
+          <li><b>Rifas:</b> unidad correcta, nunca "c/u" sobre una escalera creciente, y validar cobertura antes de publicar la tabla</li>
+          <li><b>Precio único sin total:</b> decir la unidad (m², metro, hoja, página, pack)</li>
+          <li><b>2ª pasada:</b> que no nombre el producto que el guard de nicho bloqueó</li>
+          <li><b>Aclarador:</b> candidatos filtrados por nicho</li>
+        </ul>
+      </div>
+      <div class="lote b">
+        <div class="lh">Lote 2 · tus directivas</div>
+        <ul>
+          <li><b>Fuera</b> "no lo tenemos en catálogo" → consultanos por mail</li>
+          <li><b>Fuera la ruta handoff</b> → mail, teléfono, local y horario. Se queda <span class="mono">Log Escalación</span> con el motivo</li>
+          <li><b>Menú:</b> colapso cuando la familia tiene una sola variante</li>
+          <li><b>Aviso de canal:</b> leerlo de la base por conversación, no del historial de Chatwoot</li>
+          <li><b>Telemetría del noop</b>, con su origen</li>
+        </ul>
+      </div>
+      <div class="lote c">
+        <div class="lh">Lote 3 · esperando el contraste</div>
+        <ul>
+          <li>El <b>guard de producto no anclado</b> (determinístico) contra la <b>recuperación por familia</b> que proponés vos</li>
+          <li>Cubre A1 · A2 · A3 · A4: los cuatro confident-wrong de resolución</li>
+          <li>Dos refutadores Opus corriendo: lente <b>plata/riesgo</b> y lente <b>costo por mensaje + voz</b></li>
+          <li>La pregunta que decide: <b>¿la "familia" existe de verdad en los datos?</b> Si no, se caen las dos</li>
+        </ul>
+      </div>
+      <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:10px;margin-top:2px">
+        <div class="dkey">
+          <div class="lbl">Para vos · lo único que no toco</div>
+          <h4>El SQL de la variante <span class="mono">A4</span> del <span class="mono">Anillado Plastico a3</span></h4>
+          <p>Te lo preparo por clave natural sobre <span class="mono">bot.variante_meta</span>, nunca <span class="mono">public.*</span> — pero primero hay que confirmar contra la base viva que sigue llamándose así: el export de referencia está cuatro curaciones atrás.</p>
+        </div>
+        <p class="lead"><b>Antes de la próxima ronda:</b> desasignar la conversación del handoff (o abrir una nueva), si no el bot no contesta.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="hud">
+    <div class="colorbar">
+      <span style="background:var(--verm)"></span><span style="background:var(--teal)"></span><span style="background:var(--amber)"></span>
+      <b>plata · resolución · voz</b>
+    </div>
+    <div class="navwrap">
+      <div class="dots" role="tablist" aria-label="Láminas"></div>
+      <button class="nb" id="prev" aria-label="Lámina anterior">‹</button>
+      <span class="count">01 / 09</span>
+      <button class="nb" id="next" aria-label="Lámina siguiente">›</button>
+    </div>
+  </div>
+  <div class="hint">← → para navegar</div>
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, n=slides.length;
+  var count=document.querySelector('.count');
+  var bar=document.querySelector('.bar-fill');
+  var prev=document.getElementById('prev');
+  var next=document.getElementById('next');
+  var dotsWrap=document.querySelector('.dots');
+  var pad=function(x){return (x<10?'0':'')+x;};
+  slides.forEach(function(s,k){
+    var d=document.createElement('button');
+    d.className='dot'; d.setAttribute('role','tab');
+    d.setAttribute('aria-label','Lámina '+(k+1)+': '+(s.getAttribute('data-t')||''));
+    d.addEventListener('click',function(){go(k);});
+    dotsWrap.appendChild(d);
+  });
+  var dots=[].slice.call(document.querySelectorAll('.dot'));
+  function go(x){
+    i=Math.max(0,Math.min(n-1,x));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    dots.forEach(function(d,k){d.classList.toggle('on',k===i);d.setAttribute('aria-selected',k===i);});
+    count.textContent=pad(i+1)+' / '+pad(n);
+    bar.style.width=((i+1)/n*100)+'%';
+    prev.disabled=(i===0); next.disabled=(i===n-1);
+    slides[i].scrollTop=0;
+  }
+  prev.addEventListener('click',function(){go(i-1);});
+  next.addEventListener('click',function(){go(i+1);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){e.preventDefault();go(0);}
+    else if(e.key==='End'){e.preventDefault();go(n-1);}
+  });
+  go(0);
+})();
+</script>
