@@ -97,6 +97,19 @@ const inv = [
 for (const [nombre, re] of inv) {
   if (re.test(sqlCodigo)) ok(nombre); else E('se perdió: ' + nombre);
 }
+// UNA SOLA NORMALIZACIÓN: el SQL no puede re-tokenizar ni re-normalizar $1. Eso ya
+// lo hizo `Extraer Palabras` en JS, y que las dos capas lo hicieran por separado es
+// una fuente silenciosa de divergencia (el translate() de Postgres sólo cubre
+// 'áéíóúñ'; el fold del JS cubre más). El único lado que se normaliza en SQL es el
+// del catálogo, que viene de la base y nunca pasó por JS.
+const pedidoM = /with pedido as \(([\s\S]*?)\n\),/.exec(sqlCodigo);
+if (pedidoM && /\$1/.test(pedidoM[1])) {
+  E('el CTE `pedido` toca $1: los tokens ya vienen normalizados de Extraer Palabras, el SQL no debe re-normalizarlos');
+} else ok('$1 no se re-normaliza en SQL (una sola capa de normalización)');
+if (/regexp_replace\([^)]*\bq\b/.test(sqlCodigo)) {
+  E('el SQL re-tokeniza el pedido con regexp_replace');
+} else ok('el SQL no re-tokeniza el pedido');
+
 // `solo_descuentos` NO debe filtrar: en la vista real es bool_and(rule_type='discount'),
 // o sea "la lista es techo garantizado" — mecánica de precio, NO la política comercial
 // "no ofrecer espontáneamente" que el plan §4 le atribuía. Filtrar por él escondería

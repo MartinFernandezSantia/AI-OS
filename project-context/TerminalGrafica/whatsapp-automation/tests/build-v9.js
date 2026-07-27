@@ -186,21 +186,28 @@ sub('Parsear Respuesta',
 // correcta (el pedido era ambiguo de verdad).
 // ───────────────────────────────────────────────────────────────────────────
 const SQL_BUSCAR = `-- v8.3 BUSQUEDA POR TOKEN CON PONDERACION POR RAREZA (IDF)
--- $1 = string de palabras que emitio el LLM 1 · $2 = ventana de mensajes del cliente
--- (para el guard de nicho) · $3 = cupo de candidatos.
+-- $1 = tokens YA normalizados y separados por espacio (los produce Extraer Palabras)
+-- $2 = ventana de mensajes del cliente, para el guard de nicho
+-- $3 = cupo de candidatos
 --
--- Devuelve productos (no variantes) ordenados por score, ya filtrados por las tres
+-- Devuelve productos (no variantes) ordenados por score, ya filtrados por las
 -- reglas de negocio que NO se le delegan al LLM (ver el comentario del build).
+--
+-- UNA SOLA NORMALIZACION. El SQL NO re-tokeniza ni re-normaliza $1: eso ya lo hizo
+-- el nodo Extraer Palabras en JS (NFC + fold de acentos + stopwords + numeros puros
+-- + filtro de largo + cap). Que las dos capas normalizaran por separado era el bug de
+-- fondo: el translate() de Postgres solo cubre 'áéíóúñ', asi que un 'ü' o un 'ç' que
+-- el JS ya habia limpiado quedaba fuera de sincronia, y la divergencia no daba error
+-- sino un match silenciosamente distinto. Misma clase que el acento descompuesto.
+-- El unico lado que se normaliza aca es el del CATALOGO (buscable), que viene de la
+-- base y no pasa por JS.
 with pedido as (
-  select translate(lower(trim($1)), 'áéíóúñ', 'aeioun') as q,
-         translate(lower(coalesce($2, '')), 'áéíóúñ', 'aeioun') as ventana
+  select translate(lower(coalesce($2, '')), 'áéíóúñ', 'aeioun') as ventana
 ),
--- tokens del cliente: >=3 caracteres (saca 'de', 'a4' queda porque es alfanumerico
--- de 2 y distintivo -> se rescata abajo con la whitelist corta).
 toks as (
   select distinct t as tok
-  from pedido, unnest(regexp_split_to_array(regexp_replace(q, '[^a-z0-9]+', ' ', 'g'), '\\\\s+')) as t
-  where length(t) >= 3 or t in ('a3','a4','a5','a2','a1','a0','opp','uv','pvc')
+  from unnest(string_to_array(trim($1), ' ')) as t
+  where t <> ''
 ),
 -- texto buscable por producto: nombre + sinonimos, normalizado igual que el pedido.
 buscable as (
