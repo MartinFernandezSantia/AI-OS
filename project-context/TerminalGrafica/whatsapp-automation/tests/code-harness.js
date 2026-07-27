@@ -1026,5 +1026,42 @@ async function main() {
   r = await aplicar(p5, JSON.stringify({ mensaje: 'Para tus apuntes, en obra de 75 y de un solo lado, te sale [[P1]] la hoja.' }));
   console.log('D5 paráfrasis con "en"/"para"/"apuntes":', r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.compositor);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // v8.1c — JSON CON BASURA DESPUÉS DEL OBJETO
+  // Caso real de la ronda: el modelo cierra bien y agrega '\n"}'. JSON.parse del
+  // string entero falla y el turno se pierde (handoff / degradado / ilegible),
+  // teniendo el objeto perfectamente formado adelante.
+  // ══════════════════════════════════════════════════════════════════════════
+  const SUCIO = '{"action": "precio", "producto": "Impresiones papel obra 75 gr", "variante": "doble faz b/n", "cantidad": 200, "paginas": 200, "reply": "El precio por 200 páginas doble faz en obra 75gr es de {{PRECIO}}."}\n"}';
+  r = await parsear(SUCIO, decidir());
+  console.log('J1 basura después del objeto:', r[0].json.action === 'precio' && r[0].json.precio.producto === 'Impresiones papel obra 75 gr' && r[0].json.precio.paginas === 200 ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // J2: basura ANTES (el modelo saluda y después manda el JSON).
+  r = await parsear('Claro, acá va:\n{"action":"answer","reply":"Abrimos de 9 a 18.","motivo":""}', decidir());
+  console.log('J2 basura antes del objeto:', r[0].json.action === 'answer' ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // J3: fences + basura, las dos juntas.
+  const FENCE = String.fromCharCode(96, 96, 96);
+  r = await parsear(FENCE + 'json\n{"action":"noop","reply":"","motivo":""}\n' + FENCE + '\nlisto', decidir());
+  console.log('J3 fences + basura:', r[0].json.action === 'noop' ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // J4: una llave DENTRO de un string no puede confundir al balanceador — si lo
+  //     hiciera, cortaría el objeto por la mitad y perdería el resto de los slots.
+  r = await parsear('{"action":"answer","reply":"Usá la plantilla {ejemplo} y listo","motivo":""}basura', decidir());
+  console.log('J4 llave dentro de un string:', r[0].json.action === 'answer' && r[0].json.reply.includes('{ejemplo}') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.reply));
+
+  // J5: nada parseable SIGUE dando handoff. El parser es tolerante, no crédulo.
+  r = await parsear('no puedo ayudarte con eso', decidir());
+  console.log('J5 sin objeto -> handoff:', r[0].json.action === 'handoff' ? 'OK' : 'FAIL ' + r[0].json.action);
+
+  // J6: el compositor tenía el mismo bug -> componía 'ilegible' y mandaba el borrador.
+  const pj = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00.' }))[0].json;
+  r = await aplicar(pj, '{"mensaje": "El A4 te sale [[P1]]."}\n"}');
+  console.log('J6 compositor con basura:', r[0].json.compositor === 'ok' && r[0].json.final === 'El A4 te sale $800,00.' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+
+  // J7: el Aclarador, ídem.
+  r = await aplicarAcl('{"accion":"preguntar","reply":"¿De qué gramaje?"}\ntrailing', arpJ, decidir());
+  console.log('J7 aclarador con basura:', r[0].json.accionAclarador === 'preguntar' ? 'OK' : 'FAIL ' + r[0].json.accionAclarador);
+
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });
