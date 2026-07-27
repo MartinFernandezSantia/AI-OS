@@ -3,8 +3,8 @@
 > **Qué es este archivo:** el estado vivo y el próximo paso. Todo lo que ya está cerrado vive en
 > los planes de `plans/` y en el log histórico de la memoria `chatwoot-whatsapp-impl-status`; acá
 > sólo queda lo que todavía decide algo. Si una sesión termina y esto no cambió, el archivo miente.
-> **Última actualización: 2026-07-27, cierre** (ronda completa + lotes 1 y 2 + curación de nombres
-> aplicada por Martin + el gate del compositor aflojado. Lo próximo es construir v8.3).
+> **Última actualización: 2026-07-27, noche** (v8.3 CONSTRUIDO en `faq-bot-v9.json`, 71 nodos.
+> Lo próximo es correr la **suite 7** en WhatsApp real y decidir qué optimizar con lo medido).
 
 **Reglas de trabajo que no cambian:**
 rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot)
@@ -24,30 +24,56 @@ mirar. El plan largo se commitea igual en `plans/`; el deck es cómo se presenta
 
 ## 1. Estado ahora — lo único que hay que leer para arrancar
 
-**Lo próximo es construir v8.3: la búsqueda por palabra + el filtro con la conversación.** El plan
-está medido y escrito en [`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md); falta la
-pasada adversarial y el código. Todo lo de la ronda del 27 está cerrado y aplicado.
+**v8.3 está construido en `faq-bot-v9.json` (71 nodos). Lo próximo es correrlo.** El plan
+([`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md)) pasó su pasada adversarial de 2
+lentes ([`v8-3-pasada-adversarial.md`](./v8-3-pasada-adversarial.md)) y el lote entero está aplicado,
+con los 3 prerrequisitos que estaban escritos en el repo y nunca se habían aplicado.
 
 | pieza | estado |
 |---|---|
-| Curación de nombres (`db/curacion-2026-07-27.sql`) | ✅ **aplicada por Martin**. Los 6 papeles láser ya son encontrables: *"imprimir 100 hojas a color"* los trae |
-| `n8n/flows/faq-bot-v8.json` | ⚠️ **re-importar: 65 nodos.** Trae los lotes 1 y 2, y el gate del compositor aflojado |
+| `n8n/flows/faq-bot-v9.json` | ⚠️ **re-importar: 71 nodos.** Búsqueda por palabra + filtro + los fixes 0a/0b/0c |
+| [`tests/suite-7-v9-busqueda.md`](../tests/suite-7-v9-busqueda.md) | ⚠️ **el próximo paso.** WhatsApp real; §0 primero (valida el fix del log) |
+| Migración SQL | ✅ **ninguna.** v9 no toca la base |
+| Curación de nombres (`db/curacion-2026-07-27.sql`) | ✅ aplicada por Martin |
 | Error workflow (`tg-bot-error`) | ⚠️ Martin lo dejó para después, a propósito |
 | La conversación de prueba vieja | 🔴 muda por un handoff previo (`assignee_id`). Ya no puede volver a pasar: la ruta se eliminó |
-| El log (`borrador`/`final`/`senales`) | ❓ **sin confirmar** — ver `v8-3` §5 quater. Una consulta lo resuelve, y hay que correrla ANTES de construir |
 
-### Los 3 pasos antes de construir
+### Lo que trae v9
 
-1. **Correr la consulta de `v8-3` §5 quater** sobre la conversación 343. Si `borrador` viene
-   `null`, el mapeo de `Log Turno` está roto y hay que arreglarlo primero: el pipeline nuevo
-   hereda esa telemetría y sin ella se depura a ciegas.
-2. **Pasada adversarial de 2 lentes** sobre el diseño de v8.3 (plata y costo por mensaje). Es
-   arquitectura, no parche: la disciplina la pide antes de aplicar.
-3. **Recién ahí, código.** El orden de construcción y el caso de aceptación están en `v8-3` §5 ter.
+**El pipeline nuevo** — `Switch[precio] → Extraer Palabras → Buscar Candidatos → ¿Filtrar? →
+Llamar LLM Filtro → Aplicar Filtro → Get Precio`. El LLM deja de elegir un nombre exacto y pasa a
+tirar palabras; Postgres busca ponderando por rareza (IDF: `kraft` pesa 3,5× más que `papel`); un
+2º LLM filtra con la conversación delante. `Get Precio` **no se tocó**: sigue resolviendo por clave
+natural, sólo que ahora el nombre que recibe existe por construcción.
 
-**Rollback:** re-importar `faq-bot-v7.json`. El SQL no necesita rollback. Rollback parcial más
-barato: el kill switch del compositor (`const COMPOSITOR = false` en la primera línea de
-`Armar Prompt Compositor`, se edita en la UI sin re-importar).
+**Tres prerrequisitos que estaban escritos y nunca aplicados:**
+- **0a — el log.** `Log Turno` colgaba de `Enviar Mensaje` (HTTP a Chatwoot), así que su `$json` era
+  la respuesta del API: `borrador`/`final`/`senales` se escribían **null siempre**. No era sólo
+  telemetría — `borradoresPrevios` sale de ahí y **los dos anti-loops nunca contaron nada**.
+- **0b — NFC** en los slots del LLM. v8.3 no heredaba el bug: lo **agravaba**.
+- **0c — timeout 20 s** en los nodos LLM (era el default de 300 s).
+
+**Guards de negocio que bajaron de prompt a SQL** (una regla comercial no se le delega a un modelo):
+`oculto`, nicho (medicina / promo inmobiliarias) y `solo_descuentos`.
+
+**`hayCompetencia` se mide antes de la elección**, sobre el candidato-set pre-filtro. Era el hallazgo
+más caro de la pasada: con el producto elegido de una lista, `Get Precio` resuelve exacto y la puerta
+quedaba apagada justo cuando más hace falta — la causa raíz del 27 movida un nodo adelante.
+
+**Y la decisión de Martin que cambió el diseño** (`decisions/log.md`, 2026-07-27): **el bot nunca
+repregunta para desambiguar, muestra todas las opciones de una.** La puerta abierta y la repregunta
+cuestan el mismo mensaje saliente, así que el plan se equivocaba al justificar la puerta con
+"informa gratis"; corregido el empate, gana listar, porque ahorra los turnos. Cae la política 1 del
+plan (no se invierte: se elimina) y el cupo pasa de 4 a 8.
+
+**Build reproducible:** `node tests/build-v9.js` regenera v9 desde v8; `--check` verifica sincronía.
+El JSON no se edita a mano.
+
+**Verde hoy:** harness **221/221** en v9 (19 tests nuevos para los 3 nodos Code) y **202/202** en v8
+— los 4 goldens de conducta cambiada son version-aware, así el rollback sigue verde. Gemelo en sync,
+validador 0 errores.
+
+**Rollback:** re-importar `faq-bot-v8.json`. No hay nada que revertir en la base.
 
 ---
 
