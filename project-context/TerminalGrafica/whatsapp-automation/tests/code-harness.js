@@ -839,8 +839,17 @@ async function main() {
     $: (name) => ({ first: () => ({ json: name === 'Armar Mensajes LLM' ? { nombresCatalogo: json.nombresCatalogo || [] } : {} }) }),
     $input: { first: () => ({ json }), all: () => [{ json }] },
   });
-  const aplicar = (promptJson, contenido) => runNodeCode('aplicar-comp.js', {
-    $: (name) => ({ first: () => ({ json: name === 'Armar Prompt Compositor' ? promptJson : {} }) }),
+  // `usos` mapea nodo LLM -> objeto usage de OpenRouter. Un nodo AUSENTE del mapa
+  // simula que no corrió en ese turno: el mock tira, igual que $() en n8n, y así el
+  // try/catch por nodo de la recolección se ejercita de verdad.
+  const aplicar = (promptJson, contenido, usos) => runNodeCode('aplicar-comp.js', {
+    $: (name) => {
+      if (usos && /^Llamar LLM /.test(name)) {
+        if (!(name in usos)) throw new Error('no ejecutado: ' + name);
+        return { first: () => ({ json: { usage: usos[name] } }) };
+      }
+      return { first: () => ({ json: name === 'Armar Prompt Compositor' ? promptJson : {} }) };
+    },
     $input: { first: () => ({ json: contenido === null ? { error: { message: 'timeout' } } : { choices: [{ message: { content: contenido } }] } }), all: () => [] },
   });
 
@@ -1318,6 +1327,44 @@ async function main() {
   console.log('OB2 token sin estampar sigue bloqueando:',
     r[0].json.compositor === 'token_residual' && r[0].json.final === pob.borrador
     && !/\[\[/.test(r[0].json.final) ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
+
+  // ===== TELEMETRÍA DE COSTO (usoLlm) =====
+  const okMsg = JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una. Escribinos a [[MAIL]].' });
+  const u = (i, o, c) => ({ prompt_tokens: i, completion_tokens: o, cost: c });
+
+  // turno completo: los 4 nodos corrieron y se suman
+  r = await aplicar(pob, okMsg, {
+    'Llamar LLM Respuesta': u(3800, 90, 0.00042), 'Llamar LLM Filtro': u(260, 30, 0.00004),
+    'Llamar LLM Aclarador': u(300, 40, 0.00005), 'Llamar LLM Compositor': u(150, 60, 0.00005),
+  });
+  console.log('UL1 suma tokens y costo de las 4 llamadas:',
+    r[0].json.usoLlm.tokens_in === 4510 && r[0].json.usoLlm.tokens_out === 220
+    && r[0].json.usoLlm.costo_usd === 0.00056 && r[0].json.usoLlm.llamadas === 4
+      ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.usoLlm));
+
+  // el desglose por nodo permite ver cuál se come el presupuesto
+  console.log('UL2 desglose por nodo:',
+    r[0].json.usoLlm.nodos.respuesta.in === 3800 && r[0].json.usoLlm.nodos.compositor.usd === 0.00005
+      ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.usoLlm.nodos));
+
+  // el Aclarador casi nunca corre: su $() tira y la recolección tiene que seguir
+  r = await aplicar(pob, okMsg, {
+    'Llamar LLM Respuesta': u(3800, 90, 0.00042), 'Llamar LLM Compositor': u(150, 60, 0.00005),
+  });
+  console.log('UL3 nodo que no corrió no rompe la suma:',
+    r[0].json.usoLlm.llamadas === 2 && r[0].json.usoLlm.tokens_in === 3950
+    && !('aclarador' in r[0].json.usoLlm.nodos) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.usoLlm));
+
+  // provider que no manda `cost`: quedan los tokens, el costo se calcula después
+  r = await aplicar(pob, okMsg, { 'Llamar LLM Respuesta': { prompt_tokens: 1000, completion_tokens: 50 } });
+  console.log('UL4 sin cost quedan los tokens:',
+    r[0].json.usoLlm.tokens_in === 1000 && r[0].json.usoLlm.costo_usd === 0 ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.usoLlm));
+
+  // la telemetría JAMÁS puede costar el mensaje: sin ningún usage, el turno sale igual
+  r = await aplicar(pob, okMsg, {});
+  console.log('UL5 sin telemetría el mensaje igual sale:',
+    r[0].json.compositor === 'ok' && r[0].json.usoLlm.llamadas === 0
+    && /\$800,00/.test(r[0].json.final) ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + JSON.stringify(r[0].json.usoLlm));
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8.2 — LOTE 1 (ronda real del 27). Cada caso fija la premisa NUEVA y la

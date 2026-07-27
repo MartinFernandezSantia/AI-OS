@@ -714,7 +714,7 @@ return [{
       method: 'POST', url: 'https://openrouter.ai/api/v1/chat/completions',
       authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth',
       sendBody: true, specifyBody: 'json',
-      jsonBody: "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: [{ role: 'user', content: $('Armar Prompt Filtro').first().json.promptFiltro }], max_tokens: 200, temperature: 0.1, response_format: { type: 'json_object' } }) }}",
+      jsonBody: "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: [{ role: 'user', content: $('Armar Prompt Filtro').first().json.promptFiltro }], max_tokens: 200, usage: { include: true }, temperature: 0.1, response_format: { type: 'json_object' } }) }}",
       options: { timeout: 20000 },
     },
     id: 'v83-llm-filtro', name: 'Llamar LLM Filtro',
