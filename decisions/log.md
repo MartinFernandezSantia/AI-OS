@@ -18,6 +18,36 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-28 — Bot TG: el gate del compositor observa en vez de bloquear
+
+**Decision:** El nodo `Aplicar Compositor` se queda con una sola responsabilidad: estampar los montos desde el mapa de la DB, para que el LLM nunca tipee plata. Las ocho reglas de conservación (tokens, plata propia, dígitos, léxico de riesgo, hedge, unidad, largo) siguen corriendo pero sólo registran: van a `compositorObs` con prefijo `habria_` y a `notas`, para una auditoría semanal (`db/auditoria-compositor.sql`). Sigue bloqueando únicamente `token_residual`, que no es una regla de política sino la verificación de que el estampado funcionó — si un `[[P1]]` sobrevive, el cliente lo recibe literal en WhatsApp.
+
+**Why:** El rechazo de reescrituras legítimas está medido (~31% de las frases naturales el 2026-07-27, y siguió pasando después del aflojamiento de ese día); los ataques que las reglas previenen son en su mayoría hipotéticos. Bloquear no es gratis: devuelve el borrador determinístico, que es justo lo que el compositor existe para mejorar. Observar conserva el dato — si la auditoría muestra un caso real donde el número del `final` difiere del que correspondía, esa regla vuelve a bloquear cambiando una línea.
+
+**Alternatives considered:** Seguir aflojando regla por regla (ya se hizo dos veces en un día y el falso positivo volvió); borrar las reglas (perdía la señal para siempre); apagar el compositor entero (perdía la mejora de voz que sí funciona).
+
+**Owner:** Martin.
+
+## 2026-07-28 — Bot TG: Get Precio se fusiona con la búsqueda; la variante se elige en código
+
+**Decision:** `Buscar Candidatos` devuelve una fila por variante con su precio y sus reglas, y `Get Precio` sale del camino de la primera pasada (queda vivo sólo para la rama del Aclarador). La elección de variante deja de ser SQL (`var_rank`) y pasa a código en `Armar Respuesta Precio`, con la misma escalera: ejes que el cliente nombró → `default_variante` curado → la más barata.
+
+**Why:** Get Precio volvía a la base a resolver el producto **por nombre** cuando el filtro ya lo había elegido de una lista cerrada, y armaba la consulta con el producto del filtro y la variante del LLM. El 2026-07-28 eso mandó "Impresiones láser color papel obra 80 gr" + "simple faz color" — variante que pertenece a otro producto — y devolvió 0 filas: el cliente se quedó sin respuesta. Con el producto ya elegido, la segunda resolución no aportaba nada y sólo agregaba una superficie de fallo. En código, además, el harness puede testear la elección.
+
+**Alternatives considered:** Arreglar sólo el cruce de fuentes en el `queryReplacement` (dejaba la resolución redundante en pie); mover también la escalera de estados y los guards de plata al SQL (es la parte que más plata protege y la más testeada; no había razón para tocarla).
+
+**Owner:** Martin.
+
+## 2026-07-28 — Bot TG: `default_familia` marca el trabajo normal y el bot lo declara
+
+**Decision:** El flag `default_familia` (que existía en el catálogo desde la atomización E0 y ningún nodo leía) se consume en dos lugares: el SQL lo usa para desempatar el orden **después** del corte por score, y el mensaje declara el supuesto cuando cotiza el default y el cliente no lo pidió por su nombre ("Eso es en A4, papel común"). Se extiende a 4 familias: impresiones, anillado/encuadernación, plastificado y librería. Las otras 13 no llevan default a propósito.
+
+**Why:** Ante un pedido sin especificar ("imprimir 100 hojas a color"), ganaba el de mayor score y no el trabajo normal: cotizó $750/hoja cuando el normal es riso. El default desempata pero no fuerza — si el cliente dice "ilustración mate", el score la pone arriba igual. Declarar el supuesto en idioma de cliente (nunca gramaje ni tecnología) evita los turnos de malentendido que costaría pedirle vocabulario de imprenta. Dos lentes adversariales refutaron la versión que anclaba **siempre** en el default: el de impresiones es otra tecnología, cobra por página y sus variantes son faz × color, o sea cuatro diferencias de motor y no de precio.
+
+**Alternatives considered:** Anclar siempre en el default y preguntar por los ejes (refutado: sub-cotiza 3-4× ante "A3 a color", que el default no tiene); listar los N candidatos con su precio (mensaje largo y no responde la pregunta); dejar que gane el score (el statu quo que produjo el incidente).
+
+**Owner:** Martin. Confirmación de los 4 defaults pendiente con TG (preguntas 70-73).
+
 ## 2026-07-27 — Bot TG: el bot nunca repregunta para desambiguar; muestra todas las opciones de una
 
 **Decision:** En la resolución de producto, cuando hay varios candidatos el bot **lista todo lo que sobrevive al filtro en un solo mensaje**, con el piso de precio incluido y una puerta abierta al final ("hay más opciones de X, decime cuál te interesa"). **No repregunta un eje.** Esto elimina la política 1 del plan de v8.3 (">4 candidatos → preguntar el eje que los separa"), no la invierte. La repregunta de desambiguación queda sólo donde el SQL devuelve cero filas y no hay nada que listar. El `LIMIT` de la búsqueda deja de ser un corte de payload del LLM y pasa a ser **el límite de lo que el cliente ve en un mensaje**.
