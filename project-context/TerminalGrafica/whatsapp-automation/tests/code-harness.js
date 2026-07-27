@@ -866,24 +866,24 @@ async function main() {
 
   // C5: el compositor escribe un $ propio -> RECHAZO, se manda el borrador.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]], o sea $800 redondeando. [[MAIL]]' }));
-  console.log('C5 rechaza plata propia:', r[0].json.compositor === 'plata_o_mail' && r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('C5 detecta plata propia (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_plata_o_mail')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C6: se come un token (perderia un precio) -> RECHAZO.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] y listo.' }));
-  console.log('C6 rechaza token faltante:', r[0].json.compositor === 'tokens' && r[0].json.final === pr.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('C6 detecta token faltante (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C7: invierte dos tokens (le daria a un producto el precio del otro) -> RECHAZO.
   const pr2 = (await prompt({ origen: 'menu', reply: 'El 130 sale $800,00 y el 300 sale $1.000,00.' }))[0].json;
   r = await aplicar(pr2, JSON.stringify({ mensaje: 'El 130 sale [[P2]] y el 300 sale [[P1]].' }));
-  console.log('C7 rechaza tokens invertidos:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('C7 detecta tokens invertidos (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C8: inventa un numero que no estaba (una cantidad, un gramaje, un plazo) -> RECHAZO.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]] y te lo tengo en 3 días. [[MAIL]]' }));
-  console.log('C8 rechaza numero inventado:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('C8 detecta numero inventado (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_digitos')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C9: promete algo del lexico de riesgo -> RECHAZO.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]], con envío gratis. [[MAIL]]' }));
-  console.log('C9 rechaza promesa:', r[0].json.compositor === 'lexico_riesgo' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('C9 detecta promesa (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_lexico_riesgo')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C10: el LLM se cae o devuelve basura -> borrador, sin ruido para el cliente.
   r = await aplicar(pr, 'esto no es json');
@@ -971,13 +971,13 @@ async function main() {
   // G4: borrar el caveat -> RECHAZO. Ese hedge marca que el total NO es firme.
   pg = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 (precio de lista; el precio final del trabajo te lo confirma el equipo).', nombresCatalogo: CAT }))[0].json;
   r = await aplicar(pg, JSON.stringify({ mensaje: 'El A4 te sale [[P1]].' }));
-  console.log('G4 rechaza caveat borrado:', r[0].json.compositor === 'hedge' && r[0].json.final === pg.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('G4 detecta caveat borrado (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_hedge')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // G5: "total estimado" -> "precio final" es la misma clase: un estimado presentado
   //     como firme. Los digitos no cambian, el lexico no aumenta: solo lo caza el hedge.
   pg = (await prompt({ origen: 'precio', reply: 'Por 100 unidades sale $900,00 c/u — total estimado $90.000,00.', nombresCatalogo: CAT }))[0].json;
   r = await aplicar(pg, JSON.stringify({ mensaje: 'Por 100 unidades te queda [[P1]] cada una, precio final [[P2]].' }));
-  console.log('G5 rechaza estimado->firme:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('G5 detecta estimado->firme (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_hedge')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // G6: el hedge conservado pasa aunque el resto se reescriba entero.
   pg = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 (precio de lista; el precio final del trabajo te lo confirma el equipo).', nombresCatalogo: CAT }))[0].json;
@@ -1169,7 +1169,7 @@ async function main() {
   //     tokens, mismo hedge: ninguna otra regla lo ve.
   const pu = (await prompt({ origen: 'precio', reply: 'Por 200 páginas a doble faz (100 hojas), la opción doble faz b/n de Impresiones papel obra 75 gr sale $88,00 por hoja — total estimado $8.800,00. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
   r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por página. El total estimado es [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
-  console.log('U3 rechaza cambio de unidad:', r[0].json.compositor === 'unidad:pagina' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('U3 detecta cambio de unidad (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_unidad:pagina')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // U4: conservar la unidad del borrador SI pasa.
   r = await aplicar(pu, JSON.stringify({ mensaje: 'Por 200 páginas doble faz (100 hojas) en blanco y negro, en obra de 75, te sale [[P1]] por hoja. El total estimado es [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
@@ -1185,11 +1185,11 @@ async function main() {
   //     (borrar el aviso de canal entero cae antes en la regla de tokens, porque
   //      el aviso lleva el mail: son dos redes distintas sobre la misma perdida.)
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]]. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
-  console.log('U6 borrar un hedge -> rechazo:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('U6 borrar un hedge -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_hedge')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // U6b: borrar el aviso de canal entero -> rechazo por tokens (se lleva el mail).
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
-  console.log('U6b borrar el aviso -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('U6b borrar el aviso -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8.2 — EL GATE MIDE CONTENIDO, NO FORMA (2026-07-27). Tres lentes corrieron el
@@ -1211,14 +1211,14 @@ async function main() {
 
   // X2: inventar un tamaño que no estaba (A5) -> sigue siendo rechazo.
   r = await aplicar(pm, JSON.stringify({ mensaje: 'Tenemos ilustración brillo de 150 gramos, mate de 250, obra de 80 y de 106, todas en A3, A3+, A4, A5 y Oficio. Decime cuál te sirve y cuántas necesitás.' }));
-  console.log('X2 inventar un tamaño -> rechazo:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X2 inventar un tamaño -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_digitos')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X3: PERDER una opción que el borrador ofrecía -> rechazo. Es el guard que la
   // regla vieja daba de yapa y que un "no inventar" a secas habría regalado: un
   // compositor con contexto truncado entrega el menú incompleto y el cliente nunca
   // se entera de las otras opciones.
   r = await aplicar(pm, JSON.stringify({ mensaje: 'Tenemos ilustración brillo de 150 gramos en A3. Decime cuál te sirve y cuántas necesitás.' }));
-  console.log('X3 perder una opción -> rechazo:', r[0].json.compositor === 'digitos' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X3 perder una opción -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_digitos')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X4: TOKENS — consolidar el mismo precio repetido ("todas a [[P1]]") es lo que
   // el prompt pide y rebotaba por contar apariciones en vez de mirar el orden.
@@ -1232,7 +1232,7 @@ async function main() {
   // el del 130.
   const pDos = (await prompt({ origen: 'precio', reply: 'La opción A4 de Papel Kraft 130 Gr sale $800,00. La opción A4 de Papel Kraft 300 Gr sale $1.000,00.', nombresCatalogo: CATX }))[0].json;
   r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 de 300 sale [[P2]] y el A4 de 130 sale [[P1]].' }));
-  console.log('X4b invertir el orden de dos precios -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X4b invertir el orden de dos precios -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X4d — HUECO CONOCIDO, documentado a propósito. Si el compositor conserva el
   // ORDEN de los tokens pero le cambia el producto al que cada uno pertenece
@@ -1247,7 +1247,7 @@ async function main() {
 
   // X4c: y perder un token del todo sigue siendo rechazo.
   r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]].' }));
-  console.log('X4c perder un token -> rechazo:', r[0].json.compositor === 'tokens' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X4c perder un token -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X5: HEDGE — la paráfrasis honesta pasa. Éste es el caso que más dolía: no
   // borraba el resguardo, lo hacía MÁS explícito, y rebotaba porque el substring
@@ -1260,7 +1260,7 @@ async function main() {
   // que justifica que la regla no se saque: sin esto, un número estimado se
   // presenta como firme.
   r = await aplicar(pH, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]]. El total es ése.' }));
-  console.log('X5b borrar el resguardo -> rechazo:', r[0].json.compositor === 'hedge' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X5b borrar el resguardo -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_hedge')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X6: UNIDAD — "cada una" pegado a "por hoja" REFUERZA, no contradice.
   const pU = (await prompt({ origen: 'precio', reply: 'La opción simple faz b/n de Impresiones papel obra 75 gr sale $100,00 por hoja, precio de lista.', nombresCatalogo: CATX }))[0].json;
@@ -1269,31 +1269,55 @@ async function main() {
 
   // X6b: pero CAMBIAR la unidad sigue siendo la mentira de 2x que motivó la regla.
   r = await aplicar(pU, JSON.stringify({ mensaje: 'Te sale [[P1]] por página, precio de lista.' }));
-  console.log('X6b cambiar hoja por página -> rechazo:', String(r[0].json.compositor).startsWith('unidad') ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X6b cambiar hoja por página -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_unidad')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X6c: y si el borrador NO declaraba unidad, afirmar "c/u" sigue siendo intruso
   // (ahí sí estaría diciendo que el precio es por unidad sin que nadie lo dijera).
   const pSinU = (await prompt({ origen: 'precio', reply: 'La opción A3 de Cartón sale $1.500,00, precio de lista.', nombresCatalogo: CATX }))[0].json;
   r = await aplicar(pSinU, JSON.stringify({ mensaje: 'El cartón A3 te sale [[P1]] c/u, precio de lista.' }));
-  console.log('X6c "c/u" sin unidad declarada -> rechazo:', r[0].json.compositor === 'unidad:cu' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X6c "c/u" sin unidad declarada -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_unidad:cu')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X7: lexico_riesgo NO se tocó (es la única barrera contra prometer plazos que el
   // sistema no puso). Se arregló en el prompt, que ahora prohíbe la muletilla.
   r = await aplicar(pH, JSON.stringify({ mensaje: 'Hoy el kraft A4 te sale [[P1]], precio de lista. El total te lo confirma el equipo.' }));
-  console.log('X7 "hoy" sigue frenado por el gate:', r[0].json.compositor === 'lexico_riesgo' ? 'OK' : 'FAIL ' + r[0].json.compositor);
+  console.log('X7 "hoy" sigue detectado por el gate:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_lexico_riesgo')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // W9 (v8.2): el veredicto y su MOTIVO salen como campos propios del nodo, tanto
   // cuando rechaza como cuando pasa. Antes sólo viajaban dentro de `notas`, así que
   // si el log fallaba la decisión se perdía y no había con qué depurar desde n8n.
   const pw = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u — total estimado $8.000,00. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
   r = await aplicar(pw, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado, y son $50 de envío. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
-  console.log('W9 motivo del rechazo en el output:', r[0].json.compositorRechazado === true
-    && typeof r[0].json.compositorMotivo === 'string' && r[0].json.compositorMotivo.length > 20
-    && r[0].json.compositorBorrador === pw.borrador ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+  // v8.3b: este caso (escribió "$50 de envío" propio) YA NO rechaza — observa. Lo que
+  // el test protege sigue siendo lo mismo: que la señal se pueda leer desde n8n sin
+  // ir a la base. Ahora la señal es la observación, que es lo que alimenta la
+  // auditoría semanal, y el borrador tiene que seguir viajando para poder comparar.
+  console.log('W9 la observación viaja en el output:',
+    (r[0].json.compositorObs || []).length > 0
+    && typeof r[0].json.compositorMotivo === 'string'
+    && r[0].json.compositorBorrador === pw.borrador
+    && /obs:/.test(r[0].json.notas || '') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs) + ' | ' + r[0].json.notas);
   // W9b: y cuando pasa, el motivo también viaja (para saber que pasó y no que no corrió).
   r = await aplicar(pw, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado. Los pedidos se hacen por mail a [[MAIL]] o en el local; este canal es solo informativo.' }));
   console.log('W9b motivo también cuando pasa:', r[0].json.compositor === 'ok'
     && r[0].json.compositorRechazado === false && /pas[oó] todas las reglas/.test(r[0].json.compositorMotivo) ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.compositorMotivo);
+
+  // ===== EL GATE OBSERVA, NO BLOQUEA (v8.3b) =====
+  // El punto entero del cambio: con una observación disparada, el mensaje del
+  // compositor IGUAL sale. Antes de esto se caía al borrador determinístico.
+  const pob = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00 c/u. Los pedidos se hacen por mail a terminalgrafica@gmail.com o en el local; este canal es solo informativo.' }))[0].json;
+  r = await aplicar(pob, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, con 15 de descuento. Escribinos a [[MAIL]].' }));
+  console.log('OB1 con observación el mensaje igual sale:',
+    r[0].json.compositor === 'ok' && r[0].json.final !== pob.borrador
+    && /\$800,00/.test(r[0].json.final) && (r[0].json.compositorObs || []).length > 0
+      ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
+
+  // Lo único que SIGUE bloqueando, y no es una regla de política: si un token no se
+  // estampa, el cliente recibiría "[[P1]]" literal en WhatsApp. El fallback al
+  // borrador es el manejo de error del estampado, no una decisión observable.
+  r = await aplicar({ ...pob, mapa: {} }, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una. Escribinos a [[MAIL]].' }));
+  console.log('OB2 token sin estampar sigue bloqueando:',
+    r[0].json.compositor === 'token_residual' && r[0].json.final === pob.borrador
+    && !/\[\[/.test(r[0].json.final) ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8.2 — LOTE 1 (ronda real del 27). Cada caso fija la premisa NUEVA y la
@@ -1567,6 +1591,13 @@ async function main() {
     console.log('T17 telemetría de descarte:', r[0].json.filtroDescarto === 2 ? 'OK' : 'FAIL ' + r[0].json.filtroDescarto);
   }
 
+  // ===== DEFAULT DE FAMILIA + ELECCIÓN DE VARIANTE (sólo v9) =====
+  // Estas dos conductas existen únicamente en v8.3: el supuesto del trabajo normal y
+  // la elección de variante en código (que reemplazó al var_rank de Get Precio). En
+  // v8 —el rollback— el nodo no las tiene, así que el bloque se saltea igual que los
+  // del pipeline de búsqueda. Sin este guard, correr el harness contra v8 daba 9
+  // fallos que no eran regresiones sino features ausentes.
+  if (CODES['aplicar-filtro.js']) {
   // ===== DEFAULT DE FAMILIA (el trabajo normal) =====
   // atributos del default real del catalogo: obra 75 + el tamano que le agrego la
   // curacion del 28. Sus variantes son faz x color, por eso color/faz vienen de la fila.
@@ -1677,5 +1708,6 @@ async function main() {
     decidir({ userMessage: 'imprimir 100 hojas' }), candsDef(false));
   console.log('EV6 variante inexistente del LLM no rompe:',
     /\$100,00/.test(r[0].json.reply) && !/cotiza el equipo/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+  }
 }
 main().then(() => console.log('HARNESS DONE')).catch((e) => { console.error('HARNESS CRASH:', e); process.exit(1); });

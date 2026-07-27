@@ -122,7 +122,11 @@ const comp = b['Aplicar Compositor'].parameters.jsCode;
 [['compositor: fail-safe al borrador', /salir\(borrador,/],
  ['compositor: tokens en orden', /tokens'\)/],
  ['compositor: prohibe $ y @ propios', /plata_o_mail/],
- ['compositor: multiset de digitos', /digitos'\)/],
+ // v8.3b: las reglas de conservación OBSERVAN en vez de rechazar (Martin,
+ // 2026-07-28), así que la marca ya no es `salir(borrador,'digitos')` sino la
+ // observación. Lo que el validador protege sigue siendo lo mismo: que la
+ // DETECCIÓN exista — es la que alimenta la auditoría semanal.
+ ['compositor: detecta cambio de digitos', /habria_digitos|digitos'\)/],
  ['compositor: lexico de riesgo', /lexico_riesgo/],
  ['compositor: estampa desde el mapa', /j\.mapa/],
  ['compositor: kill-switch', /saltar/]].forEach(([t, re]) => {
@@ -178,10 +182,15 @@ else console.log('  ok  Get Ruta Cotizador trae los 3 borradores');
 const comp2 = b['Aplicar Compositor'].parameters.jsCode;
 if (!/nombre_ajeno/.test(comp2)) E('el gate no protege el nombre del producto');
 else console.log('  ok  gate: conservacion de nombre');
-if (!/'hedge'/.test(comp2)) E('el gate no protege el hedge (precio de lista / lo confirma el equipo)');
-else console.log('  ok  gate: conservacion de hedge');
-if (!/unidad:/.test(comp2)) E('el gate no protege la UNIDAD (c/u -> por pagina es una mentira de 2x)');
-else console.log('  ok  gate: conservacion de unidad');
+// v8.3b: hedge y unidad se DETECTAN pero ya no bloquean. La regla verifica que la
+// detección siga viva (es lo que alimenta la auditoría), no que rechace.
+if (!/habria_hedge|'hedge'/.test(comp2)) E('el gate no detecta el hedge (precio de lista / lo confirma el equipo)');
+else console.log('  ok  gate: detecta pérdida de hedge');
+if (!/unidad:/.test(comp2)) E('el gate no detecta el cambio de UNIDAD (c/u -> por pagina es una mentira de 2x)');
+else console.log('  ok  gate: detecta cambio de unidad');
+// Lo único que TIENE que seguir bloqueando: un token sin estampar saldría literal.
+if (!/token_residual/.test(comp2)) E('el estampado no verifica tokens residuales: podría salir "[[P1]]" al cliente');
+else console.log('  ok  estampado: token residual sigue bloqueando');
 if (/precio de lista; el precio final/.test(b['Armar Respuesta Precio'].parameters.jsCode)) E('quedo la leyenda vieja inline');
 else console.log('  ok  sin la leyenda vieja');
 if (!/UNIDAD_FRASE/.test(b['Armar Respuesta Precio'].parameters.jsCode)) E('el borrador no dice la unidad de venta');
