@@ -145,6 +145,32 @@ y uno de prompt.** Construirlo antes de eso es construir sobre un catálogo que 
 3. **La leyenda de atributos en el prompt del LLM 2**, con las cinco frases de §4. Sin eso el
    modelo ignora la columna y vuelve a elegir por el nombre.
 
+### 5 bis. El acento descompuesto — bug vivo, arreglo de una línea (pendiente)
+
+Detectado el 2026-07-27 a partir de una pregunta de Martin. El `translate(lower(...),
+'áéíóúñ','aeioun')` de `Get Precio` se aplica **a los dos lados**, así que `Impresión` sí resuelve
+a `Impresiones` (el ancla del rank 2 queda abierta al final justo para conservar el plural). Eso
+funciona. Lo que **no** funciona es la otra forma de escribir la misma tilde:
+
+```
+translate("Impresión")   -> "impresion"    matchea
+translate("Impresión")  -> "impresión"    NO matchea   (o + U+0301, acento combinante)
+```
+
+Los teclados de iOS y macOS emiten la forma descompuesta. v8.1 ya lo arregló **para el mensaje del
+cliente** (`decidir.js:52`, `normalize('NFC')`), pero **el string que llega a Postgres no es el
+mensaje del cliente: es el campo `producto` que escribe el LLM**, y ese viaja crudo de
+`Parsear Respuesta` a `Get Precio`. Es el único `normalize()` del workflow entero.
+
+- **Arreglo:** NFC sobre los slots del LLM en `Parsear Respuesta`, donde ya se sanean los demás
+  campos. Va en el lote de v8.2 (código), no en la curación.
+- **La búsqueda por token de v8.3 hereda el bug tal cual**, porque compara las mismas palabras
+  contra los mismos nombres: arreglarlo antes es prerrequisito.
+- **Segundo agujero, dormido:** `translate` sólo cubre `áéíóúñ`. Un `ü` o un `ç` no se normaliza y
+  el match muere en silencio. Hoy no rompe nada — barrido sobre los 88 productos y 185 variantes:
+  ningún diacrítico fuera de ese set, ningún string en forma NFD. Es riesgo para nombres futuros,
+  y por eso la curación del 27 escribe "cristal" y no "crystal".
+
 Y dos cosas menores que salieron de paso: **filtrar `oculto` antes de pasarle la lista al LLM 2**
 (los 5 huérfanos de E0 están todos ocultos y aparecen como ruido en cualquier búsqueda de
 "anillado"), y **`Sobre Ingles` está duplicado** (visible en Librería, oculto en Soportes

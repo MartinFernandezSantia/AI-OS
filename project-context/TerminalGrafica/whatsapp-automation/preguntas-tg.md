@@ -72,7 +72,9 @@ Para cada uno: ¿lo hacen?, ¿cómo se calcula? (¿= valor impresión?, ¿por ho
 37. **"Sobre Inglés" figura dos veces** — uno a $500 (rubro Librería) y otro a
     $0 (rubro Soportes Especiales). ¿El de $0 es un duplicado viejo para borrar?
     Mientras tanto lo ocultamos (curación 1c) para que no salga un menú con un
-    ítem a $0; si es un producto vivo se revierte.
+    ítem a $0; si es un producto vivo se revierte. *(2026-07-27: confirmado en el
+    export nuevo que son **dos filas distintas** en `public.products`, no un error
+    de lectura. El ocultamiento sigue en pie y la pregunta también.)*
 63. **Doble faz: ¿cómo lo calculan?** — El bot va a tener que hacer esta cuenta
     solo, así que necesitamos que lo confirmen ustedes y no deducirlo de la lista.
     (a) El precio unitario cargado para doble faz, ¿es **por hoja** (las dos caras
@@ -156,9 +158,18 @@ Las tres salieron de comparar atributos entre productos: son pares que quedaron
     $600.000 por 100 rifas). Confirmar. Y de paso: los tramos están cargados como `[n, n+1]`
     (100 a 101, 250 a 251…), o sea **puntos sueltos**: ¿qué se cobra por 300, que no cae en
     ninguno? Hoy el bot muestra la escala entera y no elige.
-68. **`Anillado Plastico a3`: su única variante se llama `A4`.** — ¿Es un error de carga (debería
-    decir A3) o el producto es "anillado plástico" y el A4 es la medida real? Bloquea una curación
-    de una línea.
+68. **`Anillado Plastico a3`: su única variante se llama `A4`.** — *Ya no bloquea: curado a **A3**
+    el 2026-07-27.* El nombre del producto y el atributo `tamano` curado dicen los dos a3, contra
+    el nombre de la variante — dos fuentes independientes contra una, que es la regla de variante
+    única. Queda sólo como **confirmación**: si TG dice que el A4 era el dato bueno, se revierte.
+    Mismo caso en `A5 ILUST. MATE 250 GR`, cuya única variante también decía `A4` contra un
+    producto y un atributo que dicen a5 (curada a **A5**).
+69. **¿Cómo pide un cliente el `Microperforado` y el `Lineal obra 90 gr Color/Negro`?** — Son dos
+    de los seis productos que hoy **no se encuentran** si el cliente no conoce el término técnico:
+    nadie escribe "microperforado" ni "lineal obra 90" sin saber de antemano que existen. Necesito
+    las palabras que usa la gente en el mostrador para cargarlas como sinónimos. No las invento yo
+    porque no están en el dato. (El resto de los invisibles se resolvió el 27 metiendo el
+    sustantivo en el display — ver `db/curacion-2026-07-27.md`.)
 
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
