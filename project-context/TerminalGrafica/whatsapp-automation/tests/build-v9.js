@@ -1554,6 +1554,170 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 10. LA PREGUNTA PENDIENTE VIAJA ENTRE TURNOS (decisión Martin, 2026-07-28)
+//
+// Turno 2: el bot pregunta "¿Cuántos necesitás?".
+// Turno 3: el cliente contesta "3".
+// Turno 3: el bot responde "No me quedó claro qué producto necesitás imprimir".
+//
+// Dos causas que se suman:
+//
+//  a) EL MENÚ QUE YA NO EXISTE. El fallback de bajo_minimo deja accionLog
+//     'pregunto_opciones', lo que rutea el turno siguiente al prompt ESPECIALISTA.
+//     Ese prompt está escrito asumiendo que hubo un menú y manda a mapear contra
+//     "la línea EXACTA del último mensaje", con nombres "VERBATIM como los mostró
+//     el menú" y hasta un formato de packs literal ("<familia> — packs de 100...").
+//     Pero el COMPOSITOR reescribe todos los mensajes: ese formato no existe en lo
+//     que el cliente leyó. El especialista busca literales que nadie escribió y cae
+//     en sin_match (Martin: "esos menúes no sobreviven").
+//
+//  b) NADIE GUARDA QUÉ SE PREGUNTÓ. El bot pidió una CANTIDAD y el turno siguiente
+//     arranca sin memoria de eso, así que "3" a secas no tiene a qué pegarse.
+//
+// El estado va a bot.decisiones.senales (jsonb, ya existe, ya viaja de Armar
+// Respuesta Precio a Log Turno). El aislamiento entre conversaciones sale gratis:
+// Get Ruta Cotizador ya consulta `where conversation_id = $1`, el mismo `$1` que
+// protege hoy a borradoresPrevios, aviso_dado y producto_resuelto. staticData de n8n
+// NO sirve — es global al workflow y mezclaría conversaciones (ya pasó con el cache
+// del catálogo). El TTL es el que ya existe: 30 min de edad_seg.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  // ── 10a. El prompt deja de depender de un menú literal. La regla 2 pasa a hablar
+  // de "lo que le ofreciste", que sobrevive al compositor, en vez de líneas exactas.
+  const pc = node('Prompt Cotizador');
+  const asg = pc.parameters.assignments.assignments.find((a) => a.name === 'promptCotizador');
+  if (!asg) throw new Error('BUILD [10a]: no existe el assignment promptCotizador');
+  const rep = (de, a, etq) => {
+    const n = asg.value.split(de).length - 1;
+    if (n !== 1) throw new Error('BUILD [10a/' + etq + ']: el ancla aparece ' + n + ' veces');
+    asg.value = asg.value.replace(de, a);
+  };
+
+  rep('El cliente ya está eligiendo entre opciones que el sistema le mostró: el último menú del historial es LA referencia.',
+      'El cliente ya está en medio de una cotización: mirá TODA la conversación, no sólo el último mensaje. Lo que ya te dijo (producto, cantidad, páginas, material) sigue valiendo aunque lo haya dicho tres mensajes atrás.',
+      'referencia');
+
+  rep('mapeala a la línea EXACTA del último mensaje del historial donde ofreciste opciones y emití "precio" con ese producto y esa opción, más los datos que ya dio. NO existen opciones numeradas y NUNCA le pidas que conteste con un número: interpretás lo que escribió.',
+      'buscá a qué producto del catálogo corresponde y emití "precio" con ese producto y esa opción, más los datos que ya dio. Tus mensajes anteriores están REESCRITOS con otras palabras, así que NO busques coincidencias textuales con ellos: guiate por el sentido y por el catálogo, que es la única lista literal que tenés. NUNCA le pidas que conteste con un número.',
+      'mapeo');
+
+  rep('Los nombres van VERBATIM como los mostró el menú: PROHIBIDO abreviar, fusionar o inventar etiquetas',
+      'Los nombres van VERBATIM COMO LOS LISTA EL CATÁLOGO de más abajo (no como los escribiste vos en un mensaje anterior): PROHIBIDO abreviar, fusionar o inventar etiquetas',
+      'verbatim');
+
+  rep(' Si el menú vino agrupado en packs ("<familia> — packs de 100, 500 o 1000:"), "producto" se arma como "<pack elegido> <familia>" (ej. "500 Tarjetas Color/Negro") y "variante" es la opción elegida; si no dijo el pack, preguntáselo con action "answer" (sin montos), NUNCA con "opciones".',
+      ' Si el producto se vende por packs, "producto" se arma como "<pack elegido> <familia>" (ej. "500 Tarjetas Color/Negro"); si no dijo el pack, preguntáselo con action "answer" (sin montos), NUNCA con "opciones".',
+      'packs');
+
+  rep('Si lo que pide el cliente NO está entre las líneas del último menú (otro producto, otra faz, otro papel), NO fuerces un precio: emití "opciones" con los productos del catálogo que correspondan.',
+      'Si lo que pide el cliente es otro producto, otra faz u otro papel del que venían hablando, NO fuerces un precio: emití "opciones" con los productos del catálogo que correspondan.',
+      'fuera-de-menu');
+
+  rep(' Y cuando el cliente elige del menú, los OTROS ítems que ya había definido van en "mas"',
+      ' Y cuando el cliente elige uno, los OTROS ítems que ya había definido van en "mas"',
+      'elige-del-menu');
+
+  // La regla nueva: si el turno anterior preguntó algo concreto, la respuesta corta
+  // ES la respuesta a eso. Es lo que faltaba para que "3" signifique tres.
+  rep('9. Nada nuevo que aportar → noop.',
+      '9. Si el sistema te dice que quedó una PREGUNTA PENDIENTE, un mensaje corto del cliente ("3", "el de 300", "sí") es la RESPUESTA A ESA PREGUNTA. Un número suelto contra una pregunta de cantidad es la cantidad: no vuelvas a preguntar qué producto es, eso ya lo sabés.\n10. Nada nuevo que aportar → noop.',
+      'pendiente');
+  paso('10a · el Prompt Cotizador deja de depender del menú literal (el compositor lo reescribe)');
+
+  // ── 10b. La repregunta deja registrado QUÉ preguntó. Va en `senales`, que ya
+  // viaja a Log Turno; no hace falta columna nueva.
+  const PEND_ANCLA = "  if (estado === 'fallback: producto_nicho' || estado === 'fallback: bajo_minimo') {\n    reply = REPREGUNTA[estado];\n    accionLog = 'pregunto_opciones';";
+  const PEND_NUEVO = "  if (estado === 'fallback: producto_nicho' || estado === 'fallback: bajo_minimo') {\n    reply = REPREGUNTA[estado];\n    accionLog = 'pregunto_opciones';\n"
+    + "    // v9: QUE se pregunto, para que el turno siguiente sepa a que se contesta.\n"
+    + "    pendiente = { tipo: estado === 'fallback: bajo_minimo' ? 'cantidad' : 'nicho',\n"
+    + "                  producto: nombreProd(main, p.producto) || '' };";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, PEND_ANCLA, PEND_NUEVO, '10b · la repregunta registra qué preguntó (2ª pasada) en ' + nombre);
+  }
+
+  // Y la rama de PRIMERA pasada, que es la que corre en el caso real: el `else if
+  // (REPREGUNTA[estado])` del bloque r6. Sin esto el pendiente queda null justo en el
+  // camino del incidente (lo cazó el test PD1).
+  const PEND1_ANCLA = "  } else if (REPREGUNTA[estado]) {\n    reply = REPREGUNTA[estado];\n    accionLog = 'pregunto_opciones';";
+  const PEND1_NUEVO = "  } else if (REPREGUNTA[estado]) {\n    reply = REPREGUNTA[estado];\n    accionLog = 'pregunto_opciones';\n"
+    + "    // v9: idem 2ª pasada — que se pregunto, para el turno siguiente.\n"
+    + "    const TIPO_PEND = { 'fallback: bajo_minimo': 'cantidad', 'fallback: producto_nicho': 'nicho',\n"
+    + "                        'fallback: faz_incoherente': 'faz', 'fallback: sin_match': 'producto' };\n"
+    + "    if (TIPO_PEND[estado]) pendiente = { tipo: TIPO_PEND[estado], producto: nombreProd(main, p.producto) || '' };";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, PEND1_ANCLA, PEND1_NUEVO, '10b · la repregunta registra qué preguntó (1ª pasada) en ' + nombre);
+  }
+
+  // Declaración + salida en `senales`.
+  const DECL_ANCLA = "let reply;\nlet accionLog = 'informo_precio';";
+  const DECL_NUEVO = "let reply;\nlet accionLog = 'informo_precio';\n"
+    + "// v9 PREGUNTA PENDIENTE. Si este turno termina preguntando algo concreto, queda\n"
+    + "// anotado en `senales` -> bot.decisiones -> lo lee el turno siguiente via Get Ruta\n"
+    + "// Cotizador (que ya filtra por conversation_id, asi que no se mezclan clientes).\n"
+    + "let pendiente = null;";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, DECL_ANCLA, DECL_NUEVO, '10b · declara pendiente en ' + nombre);
+  }
+
+  // ── 10c. `pendiente` entra a senales (objeto inline del return, no una const).
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre,
+      "      puerta: puerta ? puerta.eje : null,\n      estado,\n    },",
+      "      puerta: puerta ? puerta.eje : null,\n      estado,\n      // v9: la pregunta que queda abierta, para que el turno siguiente sepa a que\n      // se le esta contestando. Lo lee Armar Mensajes LLM via Get Ruta Cotizador.\n      pendiente,\n    },",
+      '10c · pendiente entra a senales en ' + nombre);
+  }
+
+  // ── 10d. El router trae `senales` del turno anterior.
+  const gr = node('Get Ruta Cotizador');
+  if (!gr.parameters.query.includes('producto_resuelto')) throw new Error('BUILD [10d]: falta el paso 8a');
+  gr.parameters.query = gr.parameters.query.replace('select accion, borrador, producto_resuelto,',
+    'select accion, borrador, producto_resuelto, senales,');
+  paso('10d · Get Ruta Cotizador trae senales (de ahí sale la pregunta pendiente)');
+
+  // ── 10e. El prompt del LLM recibe la pregunta pendiente. Mismo mecanismo que
+  // avisoNote/repeatNote: un system message corto con ESTADO INTERNO.
+  sub('Armar Mensajes LLM',
+    "const lastBotReplies = decidir.lastBotReplies || [];",
+    "// v9 PREGUNTA PENDIENTE (decision Martin 2026-07-28). El turno anterior pudo\n"
+    + "// terminar preguntando algo concreto ('¿cuantos necesitas?'). Sin esto, la\n"
+    + "// respuesta corta del cliente ('3') llega sin referente y el especialista la\n"
+    + "// manda a sin_match: 'No me quedo claro que producto necesitas'.\n"
+    + "// Sale de bot.decisiones.senales, que Get Ruta Cotizador ya filtra por\n"
+    + "// conversation_id -> imposible que se cruce con otra conversacion.\n"
+    + "let pendNote = '';\n"
+    + "try {\n"
+    + "  const filas = ($('Get Ruta Cotizador').all() || []).map((i) => i.json);\n"
+    + "  const f0 = filas[0];\n"
+    + "  if (f0 && Number(f0.edad_seg) < RUTA_TTL_SEG) {\n"
+    + "    let s = f0.senales;\n"
+    + "    if (typeof s === 'string') { try { s = JSON.parse(s); } catch (e) { s = null; } }\n"
+    + "    const pd = s && s.pendiente;\n"
+    + "    if (pd && pd.tipo) {\n"
+    + "      const QUE = { cantidad: 'CUANTAS unidades necesita', nicho: 'para que lo necesita' };\n"
+    + "      pendNote = 'ESTADO INTERNO (no lo menciones textualmente): en tu mensaje anterior le preguntaste al cliente '\n"
+    + "        + (QUE[pd.tipo] || pd.tipo) + (pd.producto ? ', sobre ' + pd.producto : '')\n"
+    + "        + '. Si este mensaje es corto o es solo un numero, ES LA RESPUESTA A ESA PREGUNTA: usala y segui, no vuelvas a preguntar que producto es.';\n"
+    + "    }\n"
+    + "  }\n"
+    + "} catch (e) { pendNote = ''; }\n"
+    + "\n"
+    + "const lastBotReplies = decidir.lastBotReplies || [];",
+    '10e · la pregunta pendiente llega al prompt del LLM');
+
+  sub('Armar Mensajes LLM',
+    "const llmMessages = rutaCotizador\n  ? [{ role: 'system', content: systemPrompt }, { role: 'system', content: repeatNote }, ...conversation]\n  : [{ role: 'system', content: systemPrompt }, { role: 'system', content: avisoNote }, { role: 'system', content: repeatNote }, ...conversation];",
+    "// El pendNote va DESPUES del repeatNote a proposito: el repeatNote empuja al noop\n"
+    + "// ('si no agregas nada nuevo, callate') y este lo contrapesa diciendo que si hay\n"
+    + "// algo que hacer con el mensaje. El ultimo system message pesa mas.\n"
+    + "const extras = [{ role: 'system', content: repeatNote }];\n"
+    + "if (pendNote) extras.push({ role: 'system', content: pendNote });\n"
+    + "const llmMessages = rutaCotizador\n"
+    + "  ? [{ role: 'system', content: systemPrompt }, ...extras, ...conversation]\n"
+    + "  : [{ role: 'system', content: systemPrompt }, { role: 'system', content: avisoNote }, ...extras, ...conversation];",
+    '10e · el pendNote se inyecta después del repeatNote');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de

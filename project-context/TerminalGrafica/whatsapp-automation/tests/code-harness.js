@@ -1999,6 +1999,112 @@ async function main() {
       ? 'OK' : 'FAIL ' + r[0].json.reply);
   }
 
+  // ===== SUITE PD — PREGUNTA PENDIENTE ENTRE TURNOS (v9, 2026-07-28) =====
+  // Turno 2: "¿Cuántos necesitás?"  ->  Turno 3: "3"
+  //       -> "No me quedó claro qué producto necesitás imprimir."
+  // El bot preguntó y no guardó QUÉ preguntó, así que la respuesta llegó sin
+  // referente. El estado va en senales -> bot.decisiones -> Get Ruta Cotizador, que
+  // ya filtra por conversation_id (imposible cruzar conversaciones).
+  if (CODES['prompt-verif.js']) {
+  {
+    const vMin = { ...base, idx: 1, producto_id: 'promo',
+      nombre_canonico: 'Promoción para inmobiliarias (cartel de 1 × 0,65 m, llevando 6)',
+      variante: 'Promoción cartel plástico corrugado 1x0.65 mt', precio_lista: 15000,
+      unidad: 'unidad', mostrable: true, tiene_reglas: false,
+      atributos: { nicho: 'inmobiliarias', material: 'plastico_corrugado', unidad_venta: 'unidad', min_unidades: 6 } };
+    const pMin = { producto: vMin.nombre_canonico, variante: '', template: '', forzarPlantilla: true, mas: [], cantidad: 3 };
+    const cMin = [{ producto_id: 'promo', nombre_canonico: vMin.nombre_canonico, por_nombre: true, es_default: false }];
+
+    // PD1 — el turno que repregunta deja anotado QUÉ preguntó.
+    r = await armar(pMin, [vMin], decidir({ userMessage: 'soy de una inmobiliaria, necesito 3' }), false, cMin);
+    const pd = r[0].json.senales.pendiente;
+    console.log('PD1 la repregunta de cantidad deja pendiente:',
+      pd && pd.tipo === 'cantidad' && /inmobiliarias/.test(pd.producto || '') ? 'OK' : 'FAIL ' + JSON.stringify(pd));
+
+    // PD2 — un turno que SÍ cotizó no deja pregunta abierta (sería un fantasma que
+    // haría al LLM interpretar como respuesta el próximo mensaje cualquiera).
+    r = await armar({ ...pBase }, [base], decidir({ userMessage: 'precio a3?' }));
+    console.log('PD2 un turno resuelto no deja pendiente:',
+      !r[0].json.senales.pendiente ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales.pendiente));
+  }
+
+  // ---- el turno SIGUIENTE: el prompt tiene que traer la pregunta abierta ----
+  {
+    const CAT2 = 'RUBRO: Impresiones\n- Prod A — opciones: x**, y*';
+    const mens = (rutaRow, inputJson, dec) => runNodeCode('mensajes.js', {
+      $: (name) => ({
+        first: () => ({ json:
+          name === 'Decidir' ? dec :
+          name === 'Get Ruta Cotizador' ? (rutaRow || {}) :
+          name === 'Prompt Cotizador' ? { promptCotizador: 'PROMPT_COT __CATALOGO__' } :
+          name === 'System Prompt' ? { systemPrompt: 'PROMPT_MAIN __CATALOGO__' } : {} }),
+        all: () => (name === 'Get Ruta Cotizador' ? [{ json: rutaRow || {} }] : []),
+      }),
+      $input: { first: () => ({ json: inputJson }) },
+    });
+    const dec3 = decidir({ conversation: [{ role: 'user', content: '3' }], userMessage: '3' });
+    const PEND = { pendiente: { tipo: 'cantidad', producto: 'Promoción para inmobiliarias' } };
+
+    // PD3 — EL CASO. Con la pregunta abierta, el prompt le dice al LLM que "3" es la
+    // respuesta a la cantidad, no un producto sin identificar.
+    let m = await mens({ accion: 'pregunto_opciones', edad_seg: 60, senales: PEND }, { _catalogo: CAT2 }, dec3);
+    let sys = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('PD3 el prompt trae la pregunta abierta:',
+      /CUANTAS unidades/.test(sys) && /RESPUESTA A ESA PREGUNTA/.test(sys) ? 'OK' : 'FAIL ' + sys.slice(0, 300));
+
+    // PD4 — senales llega como STRING (jsonb serializado por el driver): mismo efecto.
+    m = await mens({ accion: 'pregunto_opciones', edad_seg: 60, senales: JSON.stringify(PEND) }, { _catalogo: CAT2 }, dec3);
+    sys = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('PD4 senales como string también funciona:',
+      /CUANTAS unidades/.test(sys) ? 'OK' : 'FAIL');
+
+    // PD5 — TTL: si el cliente vuelve al otro día y dice "3", eso no contesta nada.
+    m = await mens({ accion: 'pregunto_opciones', edad_seg: 99999, senales: PEND }, { _catalogo: CAT2 }, dec3);
+    sys = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('PD5 la pregunta vieja expira:',
+      !/RESPUESTA A ESA PREGUNTA/.test(sys) ? 'OK' : 'FAIL');
+
+    // PD6 — sin pregunta abierta no se inyecta nada (ruido cero en el caso normal).
+    m = await mens({ accion: 'informo_precio', edad_seg: 60, senales: {} }, { _catalogo: CAT2 }, dec3);
+    sys = m[0].json.llmMessages.map((x) => x.content).join(' ');
+    console.log('PD6 sin pendiente no agrega nada:',
+      !/RESPUESTA A ESA PREGUNTA/.test(sys) ? 'OK' : 'FAIL');
+
+    // PD7 — senales corrupto (jsonb ilegible) no puede tumbar el turno.
+    m = await mens({ accion: 'pregunto_opciones', edad_seg: 60, senales: '{roto' }, { _catalogo: CAT2 }, dec3);
+    console.log('PD7 senales corrupto no rompe:',
+      Array.isArray(m[0].json.llmMessages) && m[0].json.llmMessages.length >= 2 ? 'OK' : 'FAIL');
+
+    // PD8 — el pendNote va DESPUÉS del repeatNote: el repeatNote empuja al noop
+    // ("si no agregás nada nuevo, callate") y este lo contrapesa. El último system
+    // message pesa más, así que el orden no es cosmético.
+    m = await mens({ accion: 'pregunto_opciones', edad_seg: 60, senales: PEND }, { _catalogo: CAT2 }, dec3);
+    const roles = m[0].json.llmMessages.map((x) => x.content);
+    const iRepeat = roles.findIndex((c) => /ESTADO INTERNO.*últimas respuestas|todavía no diste/.test(c));
+    const iPend = roles.findIndex((c) => /RESPUESTA A ESA PREGUNTA/.test(c));
+    console.log('PD8 el pendNote va después del repeatNote:',
+      iRepeat >= 0 && iPend > iRepeat ? 'OK' : 'FAIL repeat=' + iRepeat + ' pend=' + iPend);
+  }
+
+  // ---- el prompt ya no depende de un menú literal ----
+  // El compositor reescribe todos los mensajes, así que mandar a mapear contra "la
+  // línea EXACTA del último mensaje" era mandar a buscar algo que no existe.
+  {
+    const pcTxt = wf.nodes.find((n) => n.name === 'Prompt Cotizador')
+      .parameters.assignments.assignments.find((a) => a.name === 'promptCotizador').value;
+    console.log('PD9 no manda a mapear contra la línea exacta del mensaje:',
+      !/línea EXACTA del último mensaje/.test(pcTxt) ? 'OK' : 'FAIL');
+    console.log('PD10 no pide nombres verbatim "como los mostró el menú":',
+      !/VERBATIM como los mostró el menú/.test(pcTxt) ? 'OK' : 'FAIL');
+    console.log('PD11 avisa que sus mensajes previos están reescritos:',
+      /REESCRITOS con otras palabras/.test(pcTxt) ? 'OK' : 'FAIL');
+    console.log('PD12 el catálogo queda como única lista literal:',
+      /COMO LOS LISTA EL CATÁLOGO/.test(pcTxt) ? 'OK' : 'FAIL');
+    console.log('PD13 la regla de pregunta pendiente está en el prompt:',
+      /PREGUNTA PENDIENTE/.test(pcTxt) && /es la RESPUESTA A ESA PREGUNTA/.test(pcTxt) ? 'OK' : 'FAIL');
+  }
+  }
+
   // ===== SUITE VS — VERIFICADOR DE SILENCIO (v9, 2026-07-28) =====
   // Incidente: "cual es el precio promocional?" -> silencio. El noop lo emitió el
   // LLM (noopOrigen 'llm') creyendo que ya había contestado; nunca dio el número.

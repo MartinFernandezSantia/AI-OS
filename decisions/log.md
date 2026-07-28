@@ -18,6 +18,18 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-28 — Bot TG: la pregunta pendiente viaja entre turnos, y el prompt deja de esperar un menú literal
+
+**Decision:** Dos cambios que atacan la misma clase de bug (cada check corta la conversación en vez de continuarla). (1) Cuando un turno termina repreguntando, queda anotado QUÉ preguntó en `bot.decisiones.senales.pendiente` (`{tipo, producto}`); el turno siguiente lo lee vía `Get Ruta Cotizador` y el prompt recibe un system message: *"le preguntaste CUÁNTAS unidades necesita; si este mensaje es corto o es sólo un número, ES LA RESPUESTA A ESA PREGUNTA"*. (2) El `Prompt Cotizador` deja de mandar a mapear contra "la línea EXACTA del último mensaje" y contra nombres "VERBATIM como los mostró el menú": ahora dice explícitamente que sus mensajes anteriores están REESCRITOS y que la única lista literal es el catálogo.
+
+**Why:** Conversación real: el bot preguntó *"¿Cuántos necesitás?"*, el cliente contestó *"3"*, y el bot respondió *"No me quedó claro qué producto necesitás imprimir"*. Dos causas sumadas: el fallback deja `accionLog: 'pregunto_opciones'`, que rutea al prompt especialista — escrito asumiendo un menú previo, incluido un formato de packs literal (`"<familia> — packs de 100, 500 o 1000:"`) que **el compositor reescribe**, así que no existe en lo que el cliente leyó; y nadie guardaba que la pregunta abierta era una cantidad. Martin: *"esos menúes no sobreviven"* y *"tantos checks estrictos que no permiten que el LLM siga una conversación medianamente normal"*.
+
+**Dónde vive el estado y por qué no se mezcla:** `bot.decisiones`, columna `senales` (jsonb, ya existía y ya viajaba a `Log Turno`). El aislamiento sale gratis: `Get Ruta Cotizador` ya consulta `where conversation_id = $1`, el mismo `$1` que hoy protege `borradoresPrevios`, `aviso_dado` y `producto_resuelto`. `staticData` de n8n NO sirve — es global al workflow y mezclaría conversaciones (ya pasó con el cache del catálogo). TTL: los 30 min de `edad_seg` que ya existen; una pregunta de ayer no la contesta un "3" de hoy.
+
+**Alternatives considered:** Cotizar el hermano sin nicho cuando cae `bajo_minimo` (arreglaba ese caso, no la clase — reaparecería con el próximo guard). Una tabla nueva de estado conversacional (`senales` ya hacía el trabajo). Aflojar los guards (el de `min_unidades` es correcto: evita cobrar $45.000 por algo que vale $58.500).
+
+**Owner:** Martin.
+
 ## 2026-07-28 — Bot TG: cuando cambia el producto cotizado, el mensaje lo dice
 
 **Decision:** Si el producto que se cotiza en este turno no es el del turno anterior, el borrador agrega una frase determinística: *"Ojo que este precio es de otro producto, no del X que te pasé antes."* El producto previo sale de `bot.decisiones.producto_resuelto` — la columna ya se escribía, sólo faltaba que la query de `Get Ruta Cotizador` la trajera. Se compara normalizado (acentos/mayúsculas) y se saltean los turnos que no resolvieron producto (silencio, menú). El paréntesis del nombre se saca por ruido; la barra NO, porque 6 productos se llaman "Tacos / Emblocados …" y cortar ahí los colapsa a "Tacos", que es ambiguo justo cuando el aviso tiene que distinguir.
