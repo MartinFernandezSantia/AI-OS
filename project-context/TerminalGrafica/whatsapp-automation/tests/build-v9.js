@@ -1422,6 +1422,92 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 8. CAMBIO DE PRODUCTO EXPLÍCITO (incidente 2026-07-28, decisión de Martin)
+//
+// La conversación real:
+//   Cliente: "cuánto sale un cartel de 1x0.65"
+//   Bot:     "$19.500,00"                          <- Impresión exterior s/ corrugado
+//   Cliente: "Necesito 3 para mi inmobiliaria"
+//   Bot:     "Ese precio es promocional llevando 6 o más."
+//
+// "Ese precio" son los $19.500, que NO son la promo: la promo son $15.000. El bot
+// cambió de producto (el filtro dejó vivo el de nicho, correctamente, porque el
+// cliente dijo "inmobiliaria") y habló del precio nuevo como si continuara el viejo.
+//
+// Diagnóstico de Martin, que corrige el mío: mostrar la promo estuvo BIEN. El error
+// es no avisar que el precio es de otro producto. Y por eso min_unidades no lo
+// arregla — con 6 pedidos de entrada pasaría igual: el turno 1 no dice "inmobiliaria"
+// y cotiza el cartel normal, el turno 2 sí y trae la promo. El disparador es el
+// CAMBIO, no la cantidad.
+//
+// El fix es simétrico al `supuesto` del default: una frase determinística en el
+// borrador cuando el producto cotizado no es el del turno anterior. El LLM nunca
+// tiene que deducir la relación entre dos precios — se la damos escrita.
+//
+// Dónde NO se arregla: el compositor. No recibe el historial a propósito (aislarlo
+// es lo que garantiza que no pueda contradecir turnos viejos), y de todos modos
+// tiene prohibido nombrar productos que el borrador no nombra. Si el borrador no
+// lo dice, el compositor no puede inventarlo.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  // ── 8a. La query del router trae el producto del turno anterior. La columna ya
+  // se escribe (Log Turno la mapea desde Aplicar Compositor) — sólo faltaba leerla.
+  const gr = node('Get Ruta Cotizador');
+  const q = gr.parameters.query;
+  if (!q.includes('select accion, borrador,')) throw new Error('BUILD [8a]: la query de Get Ruta Cotizador no es la de v8');
+  gr.parameters.query = q.replace('select accion, borrador,', 'select accion, borrador, producto_resuelto,');
+  paso('8a · Get Ruta Cotizador trae producto_resuelto (la columna ya se escribía)');
+
+  // ── 8b. La frase. Va PEGADA al precio, antes del supuesto y de la puerta abierta:
+  // el orden del mensaje es "acá está el número → de qué producto es → qué más hay".
+  const AVISO_ANCLA = "let supuesto = '';";
+  const AVISO_NUEVO = "// ── CAMBIO DE PRODUCTO ────────────────────────────────────────────────────\n"
+    + "// Si el turno anterior cotizó OTRO producto, el mensaje lo dice. Sin esto el\n"
+    + "// cliente lee dos precios seguidos y asume que el segundo corrige al primero:\n"
+    + "// \"Ese precio es promocional llevando 6\" (incidente 2026-07-28), donde 'ese\n"
+    + "// precio' era el del producto ANTERIOR y la promo costaba otra cosa.\n"
+    + "// Determinístico a propósito: el LLM no tiene que inferir la relación entre dos\n"
+    + "// montos, que es exactamente donde inventa.\n"
+    + "let cambioProd = '';\n"
+    + "if (okEstado && row && row.nombre_canonico) {\n"
+    + "  let previo = '';\n"
+    + "  try {\n"
+    + "    // La fila mas reciente de bot.decisiones para esta conversacion que haya\n"
+    + "    // resuelto un producto. Las de silencio/opciones lo dejan en null y no cuentan.\n"
+    + "    const filas = ($('Get Ruta Cotizador').all() || []).map((i) => i.json);\n"
+    + "    const conProd = filas.filter((f) => f && typeof f.producto_resuelto === 'string' && f.producto_resuelto.trim());\n"
+    + "    if (conProd.length) previo = String(conProd[0].producto_resuelto).trim();\n"
+    + "  } catch (e) { previo = ''; }\n"
+    + "  const norm = (s) => String(s || '').toLowerCase()\n"
+    + "    .replace(/[áéíóúü]/g, (c) => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' }[c]))\n"
+    + "    .replace(/ñ/g, 'n').replace(/\\\\s+/g, ' ').trim();\n"
+    + "  const ahora = String(row.nombre_canonico).trim();\n"
+    + "  // Solo si HUBO un producto antes y es OTRO. Primer turno de la conversacion:\n"
+    + "  // no hay nada que contrastar y la frase seria ruido.\n"
+    + "  if (previo && norm(previo) !== norm(ahora)) {\n"
+    + "    // El parentesis del nombre es una aclaracion tecnica que en una frase de\n"
+    + "    // WhatsApp es ruido ('Lona front brillo (ancho max 1,52 m)'). Se saca.\n"
+    + "    // La BARRA no se toca aunque tiente: 6 productos se llaman 'Tacos / Emblocados\n"
+    + "    // <medida> <color>' y cortar ahi los colapsa todos a 'Tacos' — el aviso quedaria\n"
+    + "    // ambiguo justo cuando su unico laburo es distinguir dos productos.\n"
+    + "    const corto = previo.split(' (')[0].trim() || previo;\n"
+    + "    cambioProd = ' Ojo que este precio es de otro producto, no del ' + corto + ' que te pasé antes.';\n"
+    + "  }\n"
+    + "}\n"
+    + "let supuesto = '';";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, AVISO_ANCLA, AVISO_NUEVO, '8b · aviso de cambio de producto en ' + nombre);
+  }
+
+  // ── 8c. Se pega al reply. Antes del supuesto: primero de QUÉ es el precio, después
+  // sobre qué base se calculó.
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, "if (supuesto) reply += supuesto;", "if (cambioProd) reply += cambioProd;\nif (supuesto) reply += supuesto;",
+      '8c · el aviso entra al borrador en ' + nombre);
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de

@@ -86,10 +86,15 @@ async function main() {
   // hayCompetencia (nCandidatos) y el supuesto del default (por_nombre). Sin el .all()
   // el nodo cae al catch y por_nombre queda false SIEMPRE: los tests de esa rama
   // pasarian verdes sin ejercitarla nunca.
+  // `dec.rutaFilas` son las filas de bot.decisiones que devuelve Get Ruta Cotizador
+  // (las 3 mas recientes de la conversacion). De ahi sale `producto_resuelto`, que
+  // alimenta el aviso de cambio de producto. Sin filas -> primer turno.
   const armar = (precioObj, rows, dec, errored, cands) => runNodeCode('armar.js', {
     $: (name) => ({
       first: () => ({ json: name === 'Decidir' ? dec : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] } : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }),
-      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j })) : []),
+      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j }))
+        : name === 'Get Ruta Cotizador' ? (dec.rutaFilas || []).map((j) => ({ json: j }))
+        : []),
     }),
     $input: { all: () => rows.map((j) => ({ json: j })).concat(errored ? [{ json: { error: { message: 'column x does not exist' } } }] : []), first: () => ({ json: rows[0] || {} }) },
   });
@@ -1727,7 +1732,9 @@ async function main() {
           : name === 'Aplicar Filtro' ? { filasPrecio }
           : { precio: precioObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage },
       }),
-      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j })) : []),
+      all: () => (name === 'Buscar Candidatos' ? (cands || []).map((j) => ({ json: j }))
+        : name === 'Get Ruta Cotizador' ? (dec.rutaFilas || []).map((j) => ({ json: j }))
+        : []),
     }),
     $input: { all: () => [], first: () => ({ json: {} }) },
   });
@@ -1860,6 +1867,105 @@ async function main() {
   r = await armarF(pAn, AN, decidir({ userMessage: 'anillado de 1 pulgada' }), candAn);
   console.log('DI3 "1 pulgada" no cae en 3/4 por tolerancia:',
     /\$3\.800,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ===== SUITE CP — CAMBIO DE PRODUCTO (v9, 2026-07-28) =====
+  // La conversación real:
+  //   "cuánto sale un cartel de 1x0.65"     -> $19.500 (cartel normal)
+  //   "Necesito 3 para mi inmobiliaria"     -> "Ese precio es promocional llevando 6"
+  // "Ese precio" eran los $19.500, que NO son la promo ($15.000). El bot cambió de
+  // producto sin decirlo. Mostrar la promo estuvo BIEN (el cliente dijo que es de una
+  // inmobiliaria); lo que faltó fue avisar que el precio es de otro producto.
+  {
+  const CARTEL = 'Impresión exterior / montado sobre plástico corrugado';
+  const PROMO = 'Promoción para inmobiliarias (cartel de 1 × 0,65 m, llevando 6)';
+  const vPromo = { ...base, idx: 1, producto_id: 'promo', nombre_canonico: PROMO,
+    variante: 'Promoción cartel plástico corrugado 1x0.65 mt', precio_lista: 15000,
+    unidad: 'unidad', mostrable: true, tiene_reglas: false,
+    atributos: { nicho: 'inmobiliarias', material: 'plastico_corrugado', unidad_venta: 'unidad', min_unidades: 6 } };
+  const pPromo = { producto: PROMO, variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candPromo = [{ producto_id: 'promo', nombre_canonico: PROMO, por_nombre: true, es_default: false }];
+
+  // CP1 — EL CASO. El turno anterior cotizó el cartel normal; este trae la promo.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: CARTEL, edad_seg: 120 }] }), false, candPromo);
+  console.log('CP1 avisa que el precio es de otro producto:',
+    /otro producto/.test(r[0].json.reply) && r[0].json.reply.includes(CARTEL)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP2 — mismo producto en los dos turnos: la frase sería ruido puro.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'y si llevo 10?',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: PROMO, edad_seg: 60 }] }), false, candPromo);
+  console.log('CP2 mismo producto no avisa:',
+    !/otro producto/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP3 — primer turno de la conversación: no hay nada con qué contrastar.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'promo inmobiliarias?' }), false, candPromo);
+  console.log('CP3 primer turno no avisa:',
+    !/otro producto/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP4 — turnos que NO resolvieron producto (silencio, menú de opciones) dejan la
+  // columna en null. Se saltean: el contraste es contra el último producto COTIZADO,
+  // no contra el último turno.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+    rutaFilas: [{ accion: 'pregunto_opciones', producto_resuelto: null, edad_seg: 30 },
+                { accion: 'informo_precio', producto_resuelto: CARTEL, edad_seg: 200 }] }), false, candPromo);
+  console.log('CP4 saltea los turnos sin producto:',
+    /otro producto/.test(r[0].json.reply) && r[0].json.reply.includes(CARTEL)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP5 — el mismo producto con acentos/mayúsculas distintas NO es un cambio. Si la
+  // comparación fuera literal, cada turno avisaría de un cambio inexistente.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'y 8?',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: PROMO.toUpperCase(), edad_seg: 60 }] }), false, candPromo);
+  console.log('CP5 la comparación normaliza:',
+    !/otro producto/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP6 — el aviso va PEGADO al precio y ANTES de la puerta abierta: el orden del
+  // mensaje es "acá está el número -> de qué producto es -> qué más hay".
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: CARTEL, edad_seg: 120 }] }), false, candPromo);
+  {
+    const t = r[0].json.reply;
+    const iPrecio = t.indexOf('$');
+    const iAviso = t.indexOf('otro producto');
+    console.log('CP7 el aviso va después del monto:',
+      iPrecio >= 0 && iAviso > iPrecio ? 'OK' : 'FAIL ' + t);
+  }
+
+  // CP7 — el paréntesis del nombre previo se saca (es aclaración técnica), pero la
+  // BARRA no: 6 productos se llaman "Tacos / Emblocados <medida> <color>" y cortar
+  // ahí los colapsa a "Tacos", dejando el aviso ambiguo justo cuando su único
+  // trabajo es distinguir dos productos.
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: 'Lona front brillo (ancho máx 1,52 m)', edad_seg: 90 }] }), false, candPromo);
+  console.log('CP9 saca el paréntesis del nombre previo:',
+    /no del Lona front brillo que/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  r = await armar(pPromo, [vPromo], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+    rutaFilas: [{ accion: 'informo_precio', producto_resuelto: 'Tacos / Emblocados 10x15 cm color', edad_seg: 90 }] }), false, candPromo);
+  console.log('CP10 NO corta en la barra (los 6 Tacos colapsarían):',
+    /Tacos \/ Emblocados 10x15 cm color/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // CP8 — Get Ruta Cotizador no corrió en este turno: $() tira. Se degrada a "no
+  // aviso", nunca a perder el precio.
+  r = await runNodeCode('armar.js', {
+    $: (name) => ({
+      // El mensaje NOMBRA el nicho: si no, el guard de producto_nicho manda a
+      // repregunta y el test no llega nunca a la rama del precio.
+      first: () => ({ json: name === 'Decidir' ? decidir({ userMessage: 'soy de una inmobiliaria, necesito 6' })
+        : name === 'Armar Mensajes LLM' ? { borradoresPrevios: [] }
+        : { precio: pPromo, conversationId: 9, accountId: 1, userMessage: 'soy de una inmobiliaria, necesito 6' } }),
+      // Tira SOLO Get Ruta Cotizador (que es lo que se quiere probar). 'Buscar
+      // Candidatos' usa el mismo mock y romperlo dispara el guard de nicho: el reply
+      // cambia por completo y el test mediría otra cosa.
+      all: () => { if (name === 'Get Ruta Cotizador') throw new Error('nodo no ejecutado en este turno'); return name === 'Buscar Candidatos' ? candPromo.map((j) => ({ json: j })) : []; },
+    }),
+    $input: { all: () => [vPromo].map((j) => ({ json: j })), first: () => ({ json: vPromo }) },
+  });
+  console.log('CP8 sin el router no explota:',
+    /\$15\.000,00/.test(r[0].json.reply) && !/otro producto/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+  }
 
   // ===== SUITE VS — VERIFICADOR DE SILENCIO (v9, 2026-07-28) =====
   // Incidente: "cual es el precio promocional?" -> silencio. El noop lo emitió el

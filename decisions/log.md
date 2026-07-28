@@ -18,6 +18,16 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-28 — Bot TG: cuando cambia el producto cotizado, el mensaje lo dice
+
+**Decision:** Si el producto que se cotiza en este turno no es el del turno anterior, el borrador agrega una frase determinística: *"Ojo que este precio es de otro producto, no del X que te pasé antes."* El producto previo sale de `bot.decisiones.producto_resuelto` — la columna ya se escribía, sólo faltaba que la query de `Get Ruta Cotizador` la trajera. Se compara normalizado (acentos/mayúsculas) y se saltean los turnos que no resolvieron producto (silencio, menú). El paréntesis del nombre se saca por ruido; la barra NO, porque 6 productos se llaman "Tacos / Emblocados …" y cortar ahí los colapsa a "Tacos", que es ambiguo justo cuando el aviso tiene que distinguir.
+
+**Why:** Conversación real: el bot cotizó un cartel a $19.500, el cliente dijo "necesito 3 para mi inmobiliaria", y el bot respondió *"Ese precio es promocional llevando 6 o más"*. "Ese precio" eran los $19.500, que no son la promo — la promo son $15.000. El bot cambió de producto y habló del precio nuevo como si continuara el viejo. Diagnóstico de Martin, que corrigió dos hipótesis mías: mostrar la promo estuvo **bien** (el cliente dijo que es de una inmobiliaria); el error fue no avisar el cambio. Y por eso un gate de `min_unidades` no lo arregla — con 6 pedidos de entrada pasaría igual, porque el turno 1 no menciona el nicho y el turno 2 sí: el disparador es el CAMBIO, no la cantidad. Determinístico y no vía prompt porque inferir la relación entre dos montos es exactamente donde el LLM inventa (los 4 confident-wrong del 27 salieron de ahí).
+
+**Alternatives considered:** Darle el historial al compositor (era la hipótesis de Martin): no sirve — el compositor tiene prohibido nombrar productos que el borrador no nombra, así que si el borrador no lo dice él no puede agregarlo; y su aislamiento es lo que garantiza que no contradiga turnos viejos. Exponer `min_unidades`/`nicho` al filtro: no cubre el contraejemplo. Una regla en el prompt del LLM principal: pide disciplina justo donde el modelo no tiene el dato.
+
+**Owner:** Martin.
+
 ## 2026-07-28 — Bot TG: una 2ª opinión sobre el silencio, en vez de una regla nueva por caso
 
 **Decision:** Cuando el LLM principal decide callarse (`action: noop`), un verificador barato revisa ese juicio antes de que el turno muera. Su rol es concreto: **decidir si lo que el cliente quería saber quedó resuelto**, y cuando no, decir QUÉ falta (campo `pendiente`). Cinco nodos nuevos entre `Switch Acción [noop]` y `Silencio Repetición`: si el veredicto es `responder`, el turno se reinyecta por `Forzar Ruta General` **con el `pendiente` y sin el `repeatNote`**; si es `callar`, sigue como hoy.
