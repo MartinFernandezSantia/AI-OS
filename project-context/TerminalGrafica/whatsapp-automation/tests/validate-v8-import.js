@@ -258,6 +258,39 @@ else console.log('  ok  Log Turno guarda senales');
 if (!/senales/.test(b['Normalizar Envío'].parameters.jsCode)) E('el sobre no lleva las señales hasta el log');
 else console.log('  ok  el sobre lleva las señales');
 
+// 7b-bis. LAS COLUMNAS DE Log Turno APUNTAN A CAMPOS QUE EL SOBRE EMITE.
+// El bug (2026-07-28): la columna `accion` mapeaba `.accionLog`, un nombre que solo
+// existe DENTRO de la rama precio — `Normalizar Envío` lo colapsa a `accion`. La
+// columna es NOT NULL, asi que el INSERT rebotaba, y con onError:continueRegularOutput
+// fallaba EN SILENCIO: cero filas de la rama normal, ninguna alarma. Sin fila no hay
+// `senales`, sin `senales` no viaja la pregunta pendiente, y el bot repregunta lo que
+// el cliente ya contesto. Un bug de UNA palabra que apagaba la memoria del bot.
+//
+// El harness no podia cazarlo: testea nodos Code sueltos, y esto es la COSTURA entre
+// el sobre y el mapeo declarativo del nodo Postgres. Se chequea aca, contra el JSON.
+{
+  const cols = b['Log Turno'].parameters.columns.value;
+  const norm = b['Normalizar Envío'].parameters.jsCode;
+  // Los campos que Normalizar Envío realmente pone en el sobre, mas los que agregan
+  // los dos nodos del compositor rio abajo (ambos hacen Object.assign sobre el sobre).
+  const DEL_COMPOSITOR = ['borrador', 'final', 'notas'];
+  const refs = Object.entries(cols)
+    .map(([col, v]) => [col, String(v).match(/\.first\(\)\.json\.(\w+)/g) || []])
+    .filter(([, ms]) => ms.length);
+  for (const [col, ms] of refs) {
+    for (const m of ms) {
+      const campo = m.replace(/^.*\.json\./, '');
+      if (DEL_COMPOSITOR.includes(campo)) continue;
+      // El sobre lo emite si Normalizar Envío lo nombra como clave del return.
+      const emitido = new RegExp('(^|[\\s,{])' + campo + '\\s*[,:]', 'm').test(norm);
+      if (!emitido) E('Log Turno.' + col + ' lee `' + campo + '`, que el sobre de Normalizar Envío NO emite (columna quedaria null)');
+    }
+  }
+  if (!/(^|[\s,{])accion\s*[,:]/m.test(norm)) E('Normalizar Envío dejo de emitir `accion`');
+  if (!/\.json\.accion\s/.test(String(cols.accion))) E('Log Turno.accion no lee `accion` del sobre (el bug del 28: leia accionLog)');
+  else console.log('  ok  las columnas de Log Turno existen en el sobre');
+}
+
 // 7c. conjunto cerrado (E): el nombre que emite el LLM se valida contra el catalogo,
 // y el Aclarador ya no puede imprimirle al cliente un nombre que no existe.
 if (!/producto_inventado/.test(b['Parsear Respuesta'].parameters.jsCode)) E('Parsear Respuesta no valida contra el conjunto cerrado');

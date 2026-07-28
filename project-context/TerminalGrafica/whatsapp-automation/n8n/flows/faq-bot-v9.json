@@ -1426,7 +1426,7 @@
             "mensaje_cliente": "={{ $('Aplicar Compositor').first().json.userMessage }}",
             "producto_resuelto": "={{ $('Aplicar Compositor').first().json.productoResuelto }}",
             "nivel_resolucion": "n2_llm",
-            "accion": "={{ $('Aplicar Compositor').first().json.accionLog }}",
+            "accion": "={{ $('Aplicar Compositor').first().json.accion }}",
             "filas_sql": "={{ $('Aplicar Compositor').first().json.filasSql }}",
             "hubo_handoff": false,
             "notas": "={{ $('Aplicar Compositor').first().json.notas }}",

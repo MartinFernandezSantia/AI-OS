@@ -77,7 +77,18 @@ paso('0 · name -> faq-bot-v9 (v8.json decia todavia "faq-bot-v7")');
     mensaje_cliente: '={{ ' + FUENTE + '.userMessage }}',
     producto_resuelto: '={{ ' + FUENTE + '.productoResuelto }}',
     nivel_resolucion: 'n2_llm',
-    accion: '={{ ' + FUENTE + '.accionLog }}',
+    // v9 (2026-07-28): `accion` y NO `accionLog`. `Normalizar Envio` es un
+    // normalizador real: colapsa los 3 vocabularios de las 5 ramas (accionLog de
+    // precio, antiLoop del menu, action del answer) en UN campo `accion`, y de ahi
+    // en adelante `accionLog` ya no existe en el sobre. El fix 0a corrigio la
+    // FUENTE ($json -> Aplicar Compositor) pero arrastro el nombre viejo, que solo
+    // vale dos nodos mas arriba. Resultado: null en una columna NOT NULL -> el
+    // INSERT rebotaba y, con onError:continueRegularOutput, fallaba EN SILENCIO.
+    // Cero filas de la rama normal (solo sobrevivian las de Log Escalacion, que
+    // escribe literales). Sin fila no hay `senales`, sin `senales` no viaja
+    // `pendiente` -> el bot llega a cada turno sin memoria y repregunta lo ya
+    // contestado. Todo el trabajo del 28 leia de una fila que nunca se escribio.
+    accion: '={{ ' + FUENTE + '.accion }}',
     filas_sql: '={{ ' + FUENTE + '.filasSql }}',
     hubo_handoff: false,
     notas: '={{ ' + FUENTE + '.notas }}',
@@ -86,8 +97,10 @@ paso('0 · name -> faq-bot-v9 (v8.json decia todavia "faq-bot-v7")');
     execution_id: "={{ $execution.id || '' }}",
     senales: '={{ JSON.stringify(' + FUENTE + '.senales || {}) }}',
   };
-  // `accion` mapeaba $json.accion, que ni siquiera es el nombre del campo: el sobre
-  // lo llama accionLog. O sea la columna estaba mal por dos razones distintas.
+  // `accion` en v8 mapeaba $json.accion: el NOMBRE del campo estaba bien (el sobre de
+  // Normalizar Envio lo llama asi), lo que estaba mal era la FUENTE — $json en un nodo
+  // colgado de un HTTP node es la respuesta de Chatwoot. Corregir tambien el nombre,
+  // como hizo la primera version de 0a, fue el bug: ver el comentario de arriba.
   if (col.accion !== '={{ $json.accion }}') throw new Error('BUILD [0a]: Log Turno.accion no es el esperado de v8');
   if (col.borrador !== '={{ $json.borrador || $json.reply }}') throw new Error('BUILD [0a]: Log Turno.borrador no es el esperado de v8');
   lt.parameters.columns.value = esperado;
