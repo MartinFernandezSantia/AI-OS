@@ -30,8 +30,18 @@ const TARGETS = {
     credenciales: {
       // nombre visible en n8n -> { id, name } que va en el JSON
       'Chatwoot API Token': { id: 'KxbAlYAWQ95ZZKQ5', name: 'Chatwoot API Token' },
-      'OpenRouter API': { id: 'H2piFG5pdrtGWP6p', name: 'OpenRouter API' },
-      'OpenRouter': { id: 'REPLACE_WITH_OPENROUTER_API_CRED', name: 'OpenRouter' },
+      // 2026-07-28 (Martin): las dos credenciales de OpenRouter pasan a estos ids.
+      // 'OpenRouter API' es el httpHeaderAuth de los 5 nodos httpRequest; 'OpenRouter'
+      // es la api key del nodo langchain del guard Tier-2 (que hasta hoy tenia un id
+      // placeholder sin resolver, o sea el guard nunca pudo autenticar en prod).
+      //
+      // OJO: son los MISMOS ids que figuran abajo como credenciales de test. Eso
+      // anula la separacion de cuota que se monto el 2026-07-27 (una suite en loop
+      // ahora consume la cuota de produccion y ensucia el costo que se le factura a
+      // TG). Se aplica porque Martin lo pidio explicitamente; si la separacion se
+      // quiere de vuelta, alcanza con darle a prod ids propios aca.
+      'OpenRouter API': { id: 'rwhlhrRvC0TbZZNI', name: 'OpenRouter API' },
+      'OpenRouter': { id: 'widAoSc9Weo8PxAN', name: 'OpenRouter' },
     },
   },
   test: {
