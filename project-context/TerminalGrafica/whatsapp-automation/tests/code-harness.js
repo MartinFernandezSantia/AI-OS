@@ -1060,6 +1060,24 @@ async function main() {
     [obra75], decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }));
   console.log('S6 sin competencia no hay puerta:', r[0].json.senales.puerta === null && !/avisame/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
+  // S6b: UN producto con VARIAS variantes no es competencia. `Buscar Candidatos`
+  //      devuelve una fila por VARIANTE (join a bot.variantes), asi que contar filas
+  //      daba nCandidatos=4 para un producto unico y la puerta se abria SIEMPRE —
+  //      el guard del 27 llevaba desde entonces encendido de punta a punta.
+  //      S6 no lo cazaba porque no pasa `cands`: sin candidatos el contador da 0 y
+  //      la rama real nunca se ejercitaba (los fixtures mienten).
+  const cuatroVariantes = [1, 2, 3, 4].map((n) => ({ producto_id: 'p-obra75', variante_id: 'v' + n }));
+  r = await armar({ producto: 'impresiones papel obra 75 gr', variante: 'simple faz b/n', template: null, forzarPlantilla: true, mas: [] },
+    [obra75], decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }), false, cuatroVariantes);
+  console.log('S6b 1 producto/4 variantes no es competencia:', r[0].json.senales.puerta === null && !/avisame/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // S6c: y DOS productos distintos si lo son — el guard tiene que seguir prendiendo.
+  const dosProductos = [{ producto_id: 'p-obra75', variante_id: 'v1' }, { producto_id: 'p-obra75', variante_id: 'v2' },
+    { producto_id: 'p-obra106', variante_id: 'v3' }];
+  r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
+    [obra75, obra106], decidir({ userMessage: 'cuanto sale imprimir 100 hojas' }), false, dosProductos);
+  console.log('S6c 2 productos si es competencia:', r[0].json.senales.puerta !== null ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales));
+
   // S7: el gramaje anclado por el cliente cuenta aunque venga pegado ("75gr").
   r = await armar({ producto: 'impresiones', variante: '', template: null, forzarPlantilla: true, mas: [] },
     [obra75, obra106], decidir({ userMessage: 'imprimir en obra 75gr color' }));

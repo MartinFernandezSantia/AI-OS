@@ -787,8 +787,17 @@ const NUEVO_COMP = `  // v8.3: la competencia se mide ANTES de la elección, no 
   // Get Precio es posterior a que el filtro ya eligió, así que con un producto
   // elegido de una lista da 1 fila SIEMPRE y la puerta quedaba muda. El candidato-set
   // de la búsqueda es el mismo dato medido en el momento correcto.
+  // v9 (2026-07-28): PRODUCTOS distintos, no FILAS. El SQL devuelve una fila por
+  // VARIANTE (join a bot.variantes), asi que contar filas hacia que un producto
+  // unico con 4 variantes diera nCandidatos=4 y la puerta se abriera SIEMPRE. El
+  // guard que se construyo para cerrar la causa raiz del 27 quedaba encendido de
+  // punta a punta: un guard que nunca se apaga no discrimina nada. Lo cazo la
+  // pasada adversarial del 28 (las 3 lentes, independientemente).
   let nCandidatos = 0;
-  try { nCandidatos = ($('Buscar Candidatos').all() || []).filter((i) => i.json && i.json.producto_id).length; } catch (e) { nCandidatos = 0; }
+  try {
+    nCandidatos = new Set(($('Buscar Candidatos').all() || [])
+      .map((i) => i.json && i.json.producto_id).filter(Boolean)).size;
+  } catch (e) { nCandidatos = 0; }
   const hayCompetencia = nCandidatos > 1
     || (main.descartados && main.descartados.length > 0) || main.filas > 1;`;
 
