@@ -1,8 +1,13 @@
 # v9.1 — Que la capa determinística emita HECHOS, no una negativa redactada
 
-> **Estado:** plan, sin construir. Pendiente de pasada adversarial (§7).
+> **Estado:** ⛔ **REFUTADO — no se construye tal como está escrito.** La pasada
+> adversarial del 2026-07-28 (3 lentes Opus, independientes) tumbó la premisa central.
+> Se conserva por el §0 (el pedido textual de Martin, que sigue vigente) y como
+> registro de por qué no se hizo. **Leer §9 ANTES que cualquier otra sección.**
 > **Fecha:** 2026-07-28. **Decisión de Martin** (ver §0).
 > **Incidente que lo origina:** conversación real del 28, cartel de inmobiliarias.
+
+> ⚠️ **§3 y §4b son FALSOS.** Están marcados en su lugar. No construir sobre ellos.
 
 ---
 
@@ -89,7 +94,15 @@ estaba apagado por el mismo fallback.
 
 ---
 
-## 3. El dato ya está — verificado, no supuesto
+## 3. ~~El dato ya está — verificado, no supuesto~~ ⛔ FALSO
+
+> **Esta sección es el error central del plan.** La tabla de abajo describe el turno 2
+> (*"Necesito 3 para mi inmobiliaria"*), donde el hermano SÍ está en el candidato-set.
+> Pero `bajoMinimo` dispara en el turno 3 (*"3"* pelado), y ahí la búsqueda la maneja el
+> eco del LLM (*"promoción inmobiliarias"*): el corte relativo del SQL (`score >= 0.4*max`)
+> deja al cartel normal en 0,23 del máximo, o sea **ni entra al pre-filtro**. El fix
+> habría sido inerte: el 100% de los casos seguiría cayendo al template.
+> Se verificó sobre el turno equivocado. Ver §9.
 
 | paso | qué pasa con el hermano |
 |---|---|
@@ -150,8 +163,15 @@ Promoción inmobiliarias — desde 6 unidades: [[P2]] c/u
 ```
 
 El compositor lo redacta. Nunca ve ni escribe un número de plata (se re-estampan en
-`Aplicar Compositor`). Las reglas del gate ya cubren esto: *"separar un monto de su
-condición"* está prohibido, así que "desde 6" no se puede despegar de `[[P2]]`.
+`Aplicar Compositor`). ~~Las reglas del gate ya cubren esto: *"separar un monto de su
+condición"* está prohibido, así que "desde 6" no se puede despegar de `[[P2]]`.~~
+
+> ⛔ **FALSO.** Esa es una regla del **prompt** — texto que el LLM puede ignorar — no un
+> chequeo programático. Y peor: el gate de `Aplicar Compositor` **dejó de bloquear** el
+> 2026-07-28 (decisión de Martin, v8.3b). Hoy las conservaciones sólo OBSERVAN y loguean
+> en `compositorObs` con prefijo `habria_`; lo único que todavía rechaza es
+> `token_residual`. O sea: no hay ninguna garantía de que el monto quede pegado a su
+> condición. Un mensaje de dos precios con dos condiciones distintas no está protegido.
 
 ### 4c. El aviso de cambio de producto tiene que correr
 
@@ -234,3 +254,47 @@ Cómo sabemos si estuvo bien, medido sobre `bot.decisiones` (ahora que persiste)
   hay que volver a una sola cifra + oferta.
 - Si `filtroDescarto` muestra que el hermano se pierde seguido, la mitigación del §6 pasa
   de red a camino principal.
+
+---
+
+## 9. Veredicto adversarial — 2026-07-28
+
+Tres lentes Opus, consigna de refutar, sin coordinación entre ellas. **Las tres tumbaron
+el plan**, y por razones distintas que se acumulan:
+
+| # | hallazgo | consecuencia |
+|---|---|---|
+| 1 | **El hermano no está en el candidato-set en el turno donde el guard dispara** (§3 verificó el turno 2; `bajoMinimo` corre en el turno 3). El corte `score >= 0.4*max` lo deja en 0,23 del máximo. | El fix habría sido **inerte**: 100% de los casos seguía cayendo al template. |
+| 2 | **`familias` + `material` no identifica al hermano.** `material` es `null` en la mayoría de las fichas, así que el criterio degenera a 1-a-10 para el otro nicho del catálogo. | Riesgo de cotizar un producto no relacionado. |
+| 3 | **Aun encontrándolo, se cotizaba mal.** `elegirVariante()` puntúa sobre el mensaje ACTUAL — en el turno del incidente es *"3"* — y sin medida gana la más barata: **A3 a $10.500 en vez del 1x0,65 a $19.500. Sub-cotización de 1,86×**, la misma magnitud que los confident-wrong del 27. | El fix habría *creado* un bug de plata. |
+| 4 | **§4b invocaba una garantía inexistente** (regla de prompt, no chequeo; y el gate ya no bloquea desde el 07-28). | Dos precios con dos condiciones quedaban sin protección. |
+
+**Enmienda #1 de la lente resolución, textual:** *"Antes de construir nada, medir."*
+
+### Qué se hizo en su lugar
+
+- **Curación en vez de inferencia** (`db/curacion-2026-07-28b.sql`, commit `e3f405b`): el
+  vínculo promo → hermano se **escribe** como dato (`producto_base` + `variante_base`),
+  porque la medida vive en el propio nombre de la promo (*"6 carteles 1 x 0.65 mt"*). No
+  se adivina en runtime. Cierra los hallazgos 1, 2 y 3 de una.
+- **Dos bugs cazados por las lentes fuera de su consigna**, ambos arreglados:
+  - `1dd3040` — `Log Turno` escribía `null` en `accion` (NOT NULL) → el INSERT rebotaba en
+    silencio → **cero filas de la rama normal** → sin `senales` no viajaba `pendiente` →
+    el bot llegaba a cada turno sin memoria.
+  - `3e9fe17` — `hayCompetencia` contaba FILAS (una por variante) en vez de PRODUCTOS, así
+    que un producto con 4 variantes daba `nCandidatos=4` y **la puerta se abría siempre**.
+    El guard construido el 27 llevaba desde entonces sin discriminar nada.
+
+### El pedido de Martin (§0) sigue vigente
+
+Nada de esto contesta *"que el LLM decida con el contexto de la conversación"*. El guard
+`bajoMinimo` **sigue negándose a cotizar algo que el sistema sabe**. Lo que cambió es que
+ahora existe el dato curado para hacerlo bien, y que `bot.decisiones` por fin se escribe,
+así que la próxima iteración se puede **medir** en vez de simular.
+
+### Continuación
+
+El incidente del turno 4 (*"Ok y si solo necesito 3?"* → $10.500) es un bug **distinto**,
+descubierto después: la variante elegida **no se recuerda entre turnos** (`senales` guarda
+`producto_nombre` pero no la variante), así que en cuanto el cliente deja de repetir la
+medida, el desempate cae en "la más barata". Se trata aparte.
