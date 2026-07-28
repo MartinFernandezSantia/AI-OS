@@ -1724,6 +1724,50 @@ async function main() {
     r = await aplicarFiltro(tres, null);
     console.log('T13b LLM caído -> lista completa:', r[0].json.filtrados.length === 3 ? 'OK' : 'FAIL ' + r[0].json.filtrados.length);
 
+    // ── T13c-f · v9.2: EL PEDIDO DEL HERMANO ────────────────────────────────
+    // `Get Precio` corre entre este nodo y ARP, y necesita saber QUE uuid buscar.
+    // La 1a version del bloque 12 calculaba el pedido en ARP — que corre DESPUES —
+    // así que Get Precio mandaba dos uuid vacíos y el texto degradaba siempre. En
+    // producción se vio como "el bot sigue sin decir los precios".
+    // Estos tests ejercitan el nodo DE VERDAD: los de CP6 inyectan la fila del
+    // hermano a mano y por eso pasaban en verde con el bug puesto.
+    const vPromoAtr = { producto_id: 'p-promo', variante_id: 'v-promo', precio_lista: 15000,
+      atributos: { nicho: 'inmobiliarias', min_unidades: 6,
+        producto_base: 'b81891bf-bfcb-449e-96ae-f01acaac6f44',
+        variante_base: '4aa42c6d-2d01-4fb3-bcaa-b559e4d6871d' } };
+    const candPromoAtr = { producto_id: 'p-promo', nombre_canonico: 'Promoción Inmobiliarias',
+      n_variantes: 1, variantes: [vPromoAtr] };
+
+    // T13c: el camino saltarFiltro (0 o 1 candidato) — el MÁS FRECUENTE según el
+    //       comentario del propio nodo. Tocar solo el return final lo dejaba afuera.
+    r = await aplicarFiltro({ candidatos: [candPromoAtr], saltarFiltro: true, elegidos: [0], precio: {} }, null);
+    console.log('T13c saltarFiltro emite el pedido del hermano:',
+      r[0].json.hermanoPide && r[0].json.hermanoPide.variante === '4aa42c6d-2d01-4fb3-bcaa-b559e4d6871d'
+        ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hermanoPide));
+
+    // T13d: y el camino con filtro LLM.
+    r = await aplicarFiltro({ candidatos: [candPromoAtr], saltarFiltro: false, precio: {} },
+      JSON.stringify({ elegidos: [0], motivo: 'la promo' }));
+    console.log('T13d el filtro LLM también lo emite:',
+      r[0].json.hermanoPide && r[0].json.hermanoPide.producto === 'b81891bf-bfcb-449e-96ae-f01acaac6f44'
+        ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hermanoPide));
+
+    // T13e: sin vínculo curado -> null, y el camino degrada al texto de v9.
+    const candSinBase = { producto_id: 'p1', nombre_canonico: 'Producto 1', n_variantes: 1,
+      variantes: [{ producto_id: 'p1', variante_id: 'v1', precio_lista: 100, atributos: { unidad_venta: 'unidad' } }] };
+    r = await aplicarFiltro({ candidatos: [candSinBase], saltarFiltro: true, elegidos: [0], precio: {} }, null);
+    console.log('T13e sin vínculo curado el pedido es null:',
+      r[0].json.hermanoPide === null ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hermanoPide));
+
+    // T13f: atributos como STRING (jsonb que llega sin parsear) — el helper tiene
+    //       que aguantarlo igual, como hace `objDe` en Armar Prompt Filtro.
+    const candStr = { producto_id: 'p-promo', nombre_canonico: 'Promo', n_variantes: 1,
+      variantes: [{ ...vPromoAtr, atributos: JSON.stringify(vPromoAtr.atributos) }] };
+    r = await aplicarFiltro({ candidatos: [candStr], saltarFiltro: true, elegidos: [0], precio: {} }, null);
+    console.log('T13f atributos como string igual funciona:',
+      r[0].json.hermanoPide && r[0].json.hermanoPide.variante === '4aa42c6d-2d01-4fb3-bcaa-b559e4d6871d'
+        ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hermanoPide));
+
     // T14: índices fuera de rango se descartan sin romper (el modelo alucina un [7]
     // sobre una lista de 3).
     r = await aplicarFiltro(tres, JSON.stringify({ elegidos: [0, 7, -1, 'dos'], motivo: '' }));

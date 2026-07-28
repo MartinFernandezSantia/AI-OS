@@ -2009,20 +2009,60 @@ return [{
     paso('12a · Get Precio (huérfano desde v8.3b) resuelve el hermano por uuid');
   }
 
-  // ── 12b. ARP pide el hermano cuando el guard dispara ──────────────────────
-  // El pedido viaja en el sobre; el cableado lo hace 12d. Se emite SIEMPRE que haya
-  // vínculo curado, no solo en bajo_minimo: el mismo dato sirve para el aviso de
-  // cambio de producto, y pedirlo es una query indexada por PK.
-  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
-    sub(nombre,
-      "const bajoMinimo = Number.isInteger(atr.min_unidades) && qtyPedida !== null && qtyPedida < atr.min_unidades;",
-      "const bajoMinimo = Number.isInteger(atr.min_unidades) && qtyPedida !== null && qtyPedida < atr.min_unidades;\n"
-      + "// v9.2: el HERMANO de la promo (el producto normal). La curacion 28b escribio\n"
-      + "// el vinculo en atributos; aca solo se lee. Sin vinculo curado esto queda null\n"
-      + "// y todo el camino degrada al texto de hoy — fail-safe, no supone nada.\n"
-      + "const hermanoPide = (atr.producto_base && atr.variante_base)\n"
-      + "  ? { producto: String(atr.producto_base), variante: String(atr.variante_base) } : null;",
-      '12b · ' + nombre + ' emite el pedido del hermano');
+  // ── 12b. EL PEDIDO SE ARMA EN `Aplicar Filtro`, NO EN ARP ─────────────────
+  // v9.2-fix (2026-07-28): la 1a version lo calculaba en `Armar Respuesta Precio`,
+  // que corre DESPUES de `Get Precio` en el cableado de 12d. O sea: le pedi a un
+  // nodo que usara un dato que todavia no existia. `Get Precio` mandaba dos uuid
+  // vacios, el SQL devolvia 0 filas y el texto degradaba — el sintoma que Martin vio
+  // en produccion. Un ciclo logico, y el harness no lo cazo porque sus fixtures
+  // INYECTAN la fila del hermano en vez de evaluar el queryReplacement.
+  //
+  // El dato para decidir ya esta en `Aplicar Filtro`: cada fila de `filasPrecio`
+  // trae `atributos` (la vista bot.variantes ya mergea producto||variante), y ahi
+  // viven producto_base/variante_base que dejo la curacion 28b. No hace falta ARP.
+  //
+  // Van los DOS returns: el camino `saltarFiltro` (0 o 1 candidato) es el mas comun
+  // segun el comentario del propio nodo, y tocar solo el final lo dejaba afuera.
+  {
+    const HELPER = "const objAtr = (x) => { let a = x; if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = null; } }\n"
+      + "  return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; };\n"
+      + "// v9.2: el pedido del HERMANO de una promo, para que `Get Precio` (rio abajo)\n"
+      + "// sepa que uuid buscar. Se arma ACA porque aca el dato ya existe: `Armar\n"
+      + "// Respuesta Precio` corre DESPUES de Get Precio y no llega a tiempo.\n"
+      + "// Sin vinculo curado queda null y todo el camino degrada — fail-safe.\n"
+      + "const pedirHermano = (filas) => {\n"
+      + "  for (const r of (filas || [])) {\n"
+      + "    const a = objAtr(r && r.atributos);\n"
+      + "    if (a.producto_base && a.variante_base) {\n"
+      + "      return { producto: String(a.producto_base), variante: String(a.variante_base) };\n"
+      + "    }\n"
+      + "  }\n"
+      + "  return null;\n"
+      + "};\n";
+    // El helper va pegado a `aplanar`, que es lo que los dos returns ya usan.
+    sub('Aplicar Filtro',
+      "const aplanar = (ps) => {",
+      HELPER + "const aplanar = (ps) => {",
+      '12b · Aplicar Filtro declara el pedido del hermano');
+
+    // Return A — camino saltarFiltro (0 o 1 candidato). El más frecuente.
+    sub('Aplicar Filtro',
+      "  return [{ json: { ...sobre, filtrados: elegidosOk, filtroMotivo: 'sin llamada',\n                    filasPrecio: aplanar(elegidosOk) }, pairedItem: { item: 0 } }];",
+      "  const filasA = aplanar(elegidosOk);\n"
+      + "  return [{ json: { ...sobre, filtrados: elegidosOk, filtroMotivo: 'sin llamada',\n"
+      + "                    filasPrecio: filasA, hermanoPide: pedirHermano(filasA) }, pairedItem: { item: 0 } }];",
+      '12b · el pedido viaja en el return de saltarFiltro');
+
+    // Return B — el final.
+    sub('Aplicar Filtro',
+      "return [{\n  json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length,\n          filasPrecio: aplanar(filtrados) },\n  pairedItem: { item: 0 },\n}];",
+      "const filasB = aplanar(filtrados);\n"
+      + "return [{\n"
+      + "  json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length,\n"
+      + "          filasPrecio: filasB, hermanoPide: pedirHermano(filasB) },\n"
+      + "  pairedItem: { item: 0 },\n"
+      + "}];",
+      '12b · el pedido viaja en el return final');
   }
 
   // ── 12c. El texto: dos precios, cada uno con su condición ─────────────────
