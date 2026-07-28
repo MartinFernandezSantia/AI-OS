@@ -1855,11 +1855,17 @@ async function main() {
     /\$10\.500,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // PACKS: folletos b/n, 4 tiers. El cliente dice la cantidad y el tier sale de ahí.
-  const vPack = (nombre, precio) => ({ ...base, idx: 1, producto_id: 'fol',
+  // v9.2: el fixture lleva `pack_unidades`, como la base real — los 5 packs de verdad
+  // del catálogo lo tienen curado al 100%. Antes NO lo tenía y el test pasaba gracias
+  // al fallback que leía el primer número del nombre ('x500' -> 500), o sea el mismo
+  // regex que convertía '35X50 CM' en un pack de 35 y cotizaba la A3 del PVC a
+  // $13.000 contra $35.000. El fixture estaba MENOS curado que la DB y por eso el
+  // harness no podía ver el bug: los fixtures mienten, acá por defecto.
+  const vPack = (nombre, precio, unidades) => ({ ...base, idx: 1, producto_id: 'fol',
     nombre_canonico: 'Folletos 10x15 cm papel obra de 75 gr b/n', variante: nombre,
     precio_lista: precio, unidad: 'unidad', mostrable: true, tiene_reglas: false,
-    atributos: { papel: 'obra', gramaje_gr: 75, multiplica: false, unidad_venta: 'pack' } });
-  const PACK = [vPack('x500', 12000), vPack('x1000', 20000), vPack('x2000', 34000), vPack('x3000', 49000)];
+    atributos: { papel: 'obra', gramaje_gr: 75, multiplica: false, unidad_venta: 'pack', pack_unidades: unidades } });
+  const PACK = [vPack('x500', 12000, 500), vPack('x1000', 20000, 1000), vPack('x2000', 34000, 2000), vPack('x3000', 49000, 3000)];
   const pPack = { producto: 'Folletos 10x15 cm papel obra de 75 gr b/n', variante: '', template: '', forzarPlantilla: true, mas: [] };
   const candPack = [{ producto_id: 'fol', nombre_canonico: 'Folletos 10x15 cm papel obra de 75 gr b/n', por_nombre: true, es_default: false }];
 
@@ -1876,6 +1882,40 @@ async function main() {
   r = await armarF(pPack, PACK, decidir({ userMessage: 'quiero 8000 folletos' }), candPack);
   console.log('PK3 más que el tier tope gana el tope:',
     /\$49\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // PK4: una familia por MEDIDA no es una escalera de packs. Sin `pack_unidades`
+  //      curado, hayPack tiene que quedar APAGADO: si no, la cantidad que pide el
+  //      cliente elige la MEDIDA. Es el bug vivo de 7 productos (PVC x2, Cartón,
+  //      Montado sobre cartón, Kraft 130/300, Vegetal) que cazó la pasada
+  //      adversarial del 28. Con el fallback regex puesto, 'necesito 3' leía un
+  //      "tier de pack 3" y ganaba la A3 ($13.000) contra el 60x90 real ($35.000):
+  //      2,69x de sub-cotización. Ninguna de estas variantes declara pack_unidades,
+  //      igual que en la base.
+  const vPvc = (nombre, precio, medida) => ({ ...base, idx: 1, producto_id: 'pvc',
+    nombre_canonico: 'Carteleria en Pvc c/ Papel obra/130 gr', variante: nombre,
+    precio_lista: precio, unidad: 'unidad', mostrable: true, tiene_reglas: false,
+    atributos: { material: 'pvc', multiplica: false, unidad_venta: 'unidad', medida } });
+  const PVC = [vPvc('35X50 CM', 20000, { alto: 35, ancho: 50, unidad: 'cm' }),
+    vPvc('60X90 CM', 35000, { alto: 60, ancho: 90, unidad: 'cm' }),
+    vPvc('100X 70 CM', 42000, { alto: 100, ancho: 70, unidad: 'cm' }),
+    vPvc('A3', 13000, { alto: 29.7, ancho: 42, unidad: 'cm' })];
+  const pPvc = { producto: 'Carteleria en Pvc c/ Papel obra/130 gr', variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candPvc = [{ producto_id: 'pvc', nombre_canonico: 'Carteleria en Pvc c/ Papel obra/130 gr', por_nombre: true, es_default: false }];
+
+  // El mensaje trae SOLO la cantidad. Con el fallback regex, 'necesito 500' se leía
+  // como "tier de pack 500" y ganaba la variante cuyo nombre empieza con el número
+  // más cercano por arriba — acá la de 100X70 ($42.000), que no tiene NADA que ver
+  // con lo que el cliente pidió. Sin el regex hayPack queda apagado y la cantidad
+  // deja de tocar la elección de medida.
+  //
+  // OJO al armar este fixture: si el mensaje incluye TAMBIÉN la medida ('pvc de
+  // 60x90, necesito 3'), la medida pesa doble y gana igual con el bug puesto — el
+  // test pasaría sin probar nada. Y la aserción NO puede ser "no sale la A3": sin
+  // ancla el desempate cae en `la más barata`, que es la A3 por otro camino (el que
+  // v9.2 §5a todavía no cierra). Lo que PK4 prueba es que la CANTIDAD no manda.
+  r = await armarF(pPvc, PVC, decidir({ userMessage: 'necesito 500' }), candPvc);
+  console.log('PK4 la cantidad sola no elige la medida (pvc):',
+    !/\$42\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // DIÁMETRO: anillado metálico, el único producto con {diametro, unidad:'pulg'}.
   const vAn = (nombre, precio, d) => ({ ...base, idx: 1, producto_id: 'an',
