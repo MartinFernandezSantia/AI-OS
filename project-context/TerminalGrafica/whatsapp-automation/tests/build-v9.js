@@ -1508,6 +1508,52 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 9. "ESE PRECIO" ESTABA HARDCODEADO (re-test 2026-07-28, tras el re-import)
+//
+// Martin re-importó con el bloque 8 aplicado y salió EXACTAMENTE el mismo mensaje.
+// Causa: el turno no llega a la rama de precio. Existe un guard `bajo_minimo` que
+// lee atr.min_unidades (o sea el atributo SÍ se consumía — me equivoqué al decir que
+// era texto muerto: lo consume este guard, no el filtro), fuerza el estado a
+// 'fallback: bajo_minimo' y emite un template FIJO:
+//
+//   'Ese precio es promocional llevando N o más. Por menos, el precio es otro: ...'
+//
+// "Ese precio" está escrito en el código. No lo inventó el LLM ni el compositor. Y
+// como es un fallback, el aviso del bloque 8 (que vive dentro de `okEstado`) nunca
+// corre. Dos problemas en la misma frase:
+//
+//   1. "Ese precio" no tiene referente: el precio de la promo NO se dijo nunca, y el
+//      único monto en pantalla es el del producto ANTERIOR. El cliente lee que sus
+//      $19.500 eran promocionales, y son $15.000.
+//   2. Se niega a cotizar algo que el sistema sabe. El cliente YA dijo 3; el cartel
+//      normal a 3 unidades es un número que existe. Deriva al equipo un pedido que
+//      podía cerrar.
+//
+// El (1) se arregla acá: la frase deja de referirse a un precio que no dijo y nombra
+// el producto. El (2) es más profundo (habría que re-cotizar el hermano sin nicho) y
+// queda anotado, no construido.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const VIEJA = "  'fallback: bajo_minimo': 'Ese precio es promocional llevando ' + (atr.min_unidades || 6) + ' o más. Por menos, el precio es otro: decime cuántos necesitás y te lo paso.',";
+  // Sin "ese precio": el sujeto es la promoción, que es lo que el cliente no vio.
+  // nombreProd() da el nombre real del catálogo; el fallback genérico cubre las filas
+  // sin nombre resuelto. El paréntesis se saca igual que en el bloque 8 (ruido).
+  const NUEVA = "  'fallback: bajo_minimo': (() => {\n"
+    + "    // v9 (2026-07-28): la frase NO puede empezar por 'Ese precio'. El precio de la\n"
+    + "    // promo todavia no se dijo, asi que el unico monto en pantalla es el del\n"
+    + "    // producto ANTERIOR y el cliente entiende que ESE era el promocional.\n"
+    + "    // Incidente reproducido dos veces con el cartel de inmobiliarias.\n"
+    + "    const nProm = nombreProd(main, p.producto);\n"
+    + "    const cual = nProm ? 'La ' + String(nProm).split(' (')[0].trim() : 'Esa promoción';\n"
+    + "    return cual + ' es un precio especial desde ' + (atr.min_unidades || 6)\n"
+    + "      + ' unidades, distinto del que te pasé antes. ¿Cuántos necesitás? Así te paso el que corresponde.';\n"
+    + "  })(),";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, VIEJA, NUEVA, '9 · "ese precio" sale del template de bajo_minimo en ' + nombre);
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de

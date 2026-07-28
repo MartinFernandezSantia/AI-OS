@@ -765,9 +765,17 @@ async function main() {
     && /inmobiliaria/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
   // Nicho mencionado pero BAJO EL MÍNIMO -> sin total (3 x $15.000 = $45.000 era el bug).
+  // v9 2026-07-28: el golden pedía "6 o más", que venía de la frase vieja ("Ese precio
+  // es promocional llevando 6 o más"). Esa frase era el incidente: "ese precio" no
+  // tiene referente y el cliente la lee sobre el monto del producto anterior. Lo que
+  // el test protege — que NO salga el total de $45.000 — se conserva; el mínimo se
+  // sigue comunicando, con otras palabras.
+  // El rollback (v8) conserva la frase vieja a propósito: es su versión congelada.
   r = await armar({ ...pPromo, cantidad: 3 }, [promo], decidir({ userMessage: 'soy de una inmobiliaria, necesito 3 carteles' }));
+  const minComunicado = V83 ? (/desde 6 unidades/.test(r[0].json.reply) && !/^Ese precio/.test(r[0].json.reply))
+    : r[0].json.reply.includes('6 o más');
   console.log('V8-10 bajo mínimo sin total:', r[0].json.estado === 'fallback: bajo_minimo' && !r[0].json.reply.includes('$45.000')
-    && r[0].json.reply.includes('6 o más') ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+    && minComunicado ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
 
   // Nicho mencionado y EN el mínimo -> total correcto.
   r = await armar({ ...pPromo, cantidad: 6 }, [promo], decidir({ userMessage: 'somos una inmobiliaria y queremos 6 carteles' }));
@@ -1930,6 +1938,30 @@ async function main() {
     const iAviso = t.indexOf('otro producto');
     console.log('CP7 el aviso va después del monto:',
       iPrecio >= 0 && iAviso > iPrecio ? 'OK' : 'FAIL ' + t);
+  }
+
+  // CP6 — EL CASO DEL SCREENSHOT, reproducido dos veces en producción. La promo
+  // exige 6 y el cliente pide 3: el guard `bajo_minimo` fuerza un fallback y emite un
+  // template FIJO que arrancaba con "Ese precio es promocional llevando 6 o más".
+  // "Ese precio" no tiene referente — el precio de la promo nunca se dijo, así que el
+  // único monto en pantalla es el del producto ANTERIOR y el cliente entiende que
+  // esos $19.500 eran los promocionales. Nada de esto lo escribió un LLM.
+  {
+    const vMin = { ...vPromo, atributos: { ...vPromo.atributos, min_unidades: 6 } };
+    const pMin = { ...pPromo, cantidad: 3 };
+    r = await armar(pMin, [vMin], decidir({ userMessage: 'Necesito 3 para mi inmobiliaria',
+      rutaFilas: [{ accion: 'informo_precio', producto_resuelto: CARTEL, edad_seg: 180 }] }), false, candPromo);
+    const t = r[0].json.reply;
+    console.log('CP6 bajo_minimo: el estado es el del incidente:',
+      r[0].json.estado === 'fallback: bajo_minimo' ? 'OK' : 'FAIL ' + r[0].json.estado);
+    console.log('CP6b la frase NO arranca con "Ese precio":',
+      !/^Ese precio/.test(t) ? 'OK' : 'FAIL ' + t);
+    console.log('CP6c nombra la promoción y su mínimo:',
+      /Promoción para inmobiliarias/.test(t) && /desde 6 unidades/.test(t) ? 'OK' : 'FAIL ' + t);
+    // El monto de la promo NO se dice: el cliente no califica todavía. Decirlo sería
+    // ofrecer un precio al que no tiene derecho.
+    console.log('CP6d no filtra el monto de la promo:',
+      !/\$/.test(t) ? 'OK' : 'FAIL ' + t);
   }
 
   // CP7 — el paréntesis del nombre previo se saca (es aclaración técnica), pero la
