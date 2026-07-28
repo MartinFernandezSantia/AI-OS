@@ -960,12 +960,12 @@ async function main() {
 
   // C6: se come un token (perderia un precio) -> RECHAZO.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] y listo.' }));
-  console.log('C6 detecta token faltante (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+  console.log('C6 detecta token faltante (no bloquea):', (r[0].json.compositorObs || []).some((o) => /^(habria_tokens|cruce_montos)/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C7: invierte dos tokens (le daria a un producto el precio del otro) -> RECHAZO.
   const pr2 = (await prompt({ origen: 'menu', reply: 'El 130 sale $800,00 y el 300 sale $1.000,00.' }))[0].json;
   r = await aplicar(pr2, JSON.stringify({ mensaje: 'El 130 sale [[P2]] y el 300 sale [[P1]].' }));
-  console.log('C7 detecta tokens invertidos (no bloquea):', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+  console.log('C7 detecta tokens invertidos (no bloquea):', (r[0].json.compositorObs || []).some((o) => /^(habria_tokens|cruce_montos)/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // C8: inventa un numero que no estaba (una cantidad, un gramaje, un plazo) -> RECHAZO.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]] y te lo tengo en 3 días. [[MAIL]]' }));
@@ -1297,7 +1297,7 @@ async function main() {
 
   // U6b: borrar el aviso de canal entero -> rechazo por tokens (se lleva el mail).
   r = await aplicar(pc, JSON.stringify({ mensaje: 'El A4 te sale [[P1]] cada una, o sea [[P2]] en total estimado.' }));
-  console.log('U6b borrar el aviso -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+  console.log('U6b borrar el aviso -> se detecta:', (r[0].json.compositorObs || []).some((o) => /^(habria_tokens|cruce_montos)/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // ══════════════════════════════════════════════════════════════════════════
   // v8.2 — EL GATE MIDE CONTENIDO, NO FORMA (2026-07-27). Tres lentes corrieron el
@@ -1340,7 +1340,7 @@ async function main() {
   // el del 130.
   const pDos = (await prompt({ origen: 'precio', reply: 'La opción A4 de Papel Kraft 130 Gr sale $800,00. La opción A4 de Papel Kraft 300 Gr sale $1.000,00.', nombresCatalogo: CATX }))[0].json;
   r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 de 300 sale [[P2]] y el A4 de 130 sale [[P1]].' }));
-  console.log('X4b invertir el orden de dos precios -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+  console.log('X4b invertir el orden de dos precios -> se detecta:', (r[0].json.compositorObs || []).some((o) => /^(habria_tokens|cruce_montos)/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X4d — HUECO CONOCIDO, documentado a propósito. Si el compositor conserva el
   // ORDEN de los tokens pero le cambia el producto al que cada uno pertenece
@@ -1355,7 +1355,21 @@ async function main() {
 
   // X4c: y perder un token del todo sigue siendo rechazo.
   r = await aplicar(pDos, JSON.stringify({ mensaje: 'El kraft A4 te sale [[P1]].' }));
-  console.log('X4c perder un token -> se detecta:', (r[0].json.compositorObs || []).some((o) => String(o).startsWith('habria_tokens')) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+  console.log('X4c perder un token -> se detecta:', (r[0].json.compositorObs || []).some((o) => /^(habria_tokens|cruce_montos)/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+
+  // X4e — v9.2: con DOS montos el reorden se marca aparte, con su conteo. Martin
+  //       decidió el 2026-07-28 NO bloquear ("no quiero seguir limitando
+  //       funcionalidades"), así que la única defensa es poder MEDIRLO: la etiqueta
+  //       lleva el número de montos para contar en bot.decisiones
+  //       (`where notas like '%cruce_montos%'`) y decidir con datos reales.
+  //       Con UN monto el reorden es imposible y la etiqueta vieja se conserva.
+  console.log('X4e el cruce se marca con su conteo:',
+    (r[0].json.compositorObs || []).includes('cruce_montos:2') ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
+
+  const pUno = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00.' }))[0].json;
+  r = await aplicar(pUno, JSON.stringify({ mensaje: 'Te sale [[P1]], y lo confirma el equipo.' }));
+  console.log('X4f un solo monto no es cruce:',
+    !(r[0].json.compositorObs || []).some((o) => /^cruce_montos/.test(String(o))) ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.compositorObs));
 
   // X5: HEDGE — la paráfrasis honesta pasa. Éste es el caso que más dolía: no
   // borraba el resguardo, lo hacía MÁS explícito, y rebotaba porque el substring
@@ -2081,10 +2095,58 @@ async function main() {
       !/^Ese precio/.test(t) ? 'OK' : 'FAIL ' + t);
     console.log('CP6c nombra la promoción y su mínimo:',
       /Promoción para inmobiliarias/.test(t) && /desde 6 unidades/.test(t) ? 'OK' : 'FAIL ' + t);
-    // El monto de la promo NO se dice: el cliente no califica todavía. Decirlo sería
-    // ofrecer un precio al que no tiene derecho.
-    console.log('CP6d no filtra el monto de la promo:',
+    // CP6d — v9.2: SIN vínculo curado (este fixture no lo tiene) el texto degrada al
+    // de v9 y sigue sin decir montos. Es el piso: nunca peor que antes.
+    console.log('CP6d sin hermano curado no hay monto (degradación):',
       !/\$/.test(t) ? 'OK' : 'FAIL ' + t);
+  }
+
+  // ── CP6e-h — v9.2: EL CAMINO COMPLETO. Decisión de Martin 2026-07-28.
+  // La política anterior era "el monto de la promo NO se dice: el cliente no
+  // califica todavía, decirlo sería ofrecer un precio al que no tiene derecho".
+  // En la práctica eso dejaba al cliente sin NINGÚN número y con una repregunta
+  // por la cantidad que acababa de decir — el incidente, tres veces reproducido.
+  // Martin lo revirtió: los dos precios se dicen, con el mínimo pegado al de la
+  // promo (la condición que hace legítimo a ese número).
+  {
+    const HERMANO = { variante_id: 'vh-1', variante: '1 x 0.65 mt', precio_lista: 19500,
+      unidad: 'Hoja', mostrable: false, solo_descuentos: false, tiene_override: false,
+      n_reglas_cantidad: 0, nombre_canonico: CARTEL };
+    // La promo con el vínculo que dejó la curación 28b.
+    const vMinH = { ...vPromo, atributos: { ...vPromo.atributos, min_unidades: 6,
+      producto_base: 'ph-1', variante_base: 'vh-1' } };
+    const pMinH = { ...pPromo, cantidad: 3 };
+    const rH = await runNodeCode('armar.js', {
+      $: (name) => ({
+        first: () => ({ json: name === 'Decidir' ? decidir({ userMessage: 'Necesito 3 para mi inmobiliaria' })
+          : name === 'Armar Mensajes LLM' ? { borradoresPrevios: [] }
+          : { precio: pMinH, conversationId: 9, accountId: 1, userMessage: 'Necesito 3 para mi inmobiliaria' } }),
+        all: () => (name === 'Buscar Candidatos' ? candPromo.map((j) => ({ json: j }))
+          : name === 'Get Precio' ? [{ json: HERMANO }]
+          : name === 'Get Ruta Cotizador' ? [{ json: { accion: 'informo_precio', senales: { producto_nombre: CARTEL }, edad_seg: 180 } }]
+          : []),
+      }),
+      $input: { all: () => [{ json: vMinH }], first: () => ({ json: vMinH }) },
+    });
+    const th = rH[0].json.reply;
+    console.log('CP6e con hermano: dice el precio del producto normal:',
+      /\$19\.500,00/.test(th) ? 'OK' : 'FAIL ' + th);
+    console.log('CP6f y el de la promo:',
+      /\$15\.000,00/.test(th) ? 'OK' : 'FAIL ' + th);
+    // El mínimo va pegado al monto de la promo: separarlos ofrece un precio al que
+    // el cliente todavía no califica. Se verifica que "6" esté ENTRE los dos montos.
+    const i15 = th.indexOf('$15.000,00');
+    const i6 = th.search(/llevando 6|desde 6|6 o m[áa]s/i);
+    console.log('CP6g el mínimo va pegado al monto de la promo:',
+      i6 >= 0 && i15 > i6 && (i15 - i6) < 60 ? 'OK' : 'FAIL ' + th);
+    // NO se totaliza: el hermano tiene reglas activas (recargo UV) y precio_lista es
+    // el precio BASE. 3 × $19.500 = $58.500 sería sub-cotizar.
+    console.log('CP6h no inventa un total:',
+      !/\$58\.500/.test(th) && !/\$45\.000/.test(th) ? 'OK' : 'FAIL ' + th);
+    // Y el estado no se levanta: con estado ok, el camino de total calcularía
+    // 3 × $15.000 con la promo, que es el bug que el guard existe para matar.
+    console.log('CP6i el guard sigue en pie:',
+      rH[0].json.estado === 'fallback: bajo_minimo' ? 'OK' : 'FAIL ' + rH[0].json.estado);
   }
 
   // CP7 — el paréntesis del nombre previo se saca (es aclaración técnica), pero la

@@ -158,11 +158,30 @@ else console.log('  ok  kill-switch COMPOSITOR editable desde la UI');
 if (/\d+ \+ '\. '/.test(b['Armar Menu Opciones'].parameters.jsCode)) E('quedo numeracion en el menu');
 else console.log('  ok  sin menu numerado');
 
-const gp = b['Get Precio'].parameters.query;
-if (!gp.includes('v.atributos')) E('Get Precio no expone atributos');
-else console.log('  ok  Get Precio expone atributos y familias');
-if (!/var_rank = \(select min/.test(gp)) E('Get Precio: falta el filtro de var_rank minimo (el match por atributo dejaria de ser aditivo)');
+// v9.2: estos tres chequeos apuntaban a `Get Precio` cuando ese nodo era el
+// resolvedor POR NOMBRE de la 1a pasada. Ya no lo es: v8.3b lo dejó huérfano
+// (Buscar Candidatos absorbió su trabajo) y el bloque 12 lo reusó para resolver el
+// HERMANO de una promo POR UUID. El que sigue resolviendo por nombre es `Get Precio
+// 2` (la 2a pasada del Aclarador), y es ahí donde estas garantías tienen sentido.
+const gp = b['Get Precio 2'].parameters.query;
+if (!gp.includes('v.atributos')) E('Get Precio 2 no expone atributos');
+else console.log('  ok  Get Precio 2 expone atributos y familias');
+if (!/var_rank = \(select min/.test(gp)) E('Get Precio 2: falta el filtro de var_rank minimo (el match por atributo dejaria de ser aditivo)');
 else console.log('  ok  match por atributo es estrictamente aditivo');
+
+// Y el rol NUEVO de `Get Precio`: resolver el hermano por uuid. Si alguien lo
+// vuelve a cablear a una resolución por nombre, el borrador de bajo_minimo
+// cotizaría un producto que nadie pidió.
+{
+  const gp1 = b['Get Precio'].parameters.query;
+  if (!/producto_id = \$1::uuid/.test(gp1) || !/variante_id = \$2::uuid/.test(gp1)) {
+    E('Get Precio dejo de resolver el hermano por uuid (bloque 12a)');
+  } else console.log('  ok  Get Precio resuelve el hermano por uuid');
+  const cn = v8.connections['Get Precio'];
+  if (!cn || !cn.main || !cn.main[0] || cn.main[0][0].node !== 'Armar Respuesta Precio') {
+    E('Get Precio no alimenta a Armar Respuesta Precio (bloque 12d)');
+  } else console.log('  ok  Get Precio -> Armar Respuesta Precio');
+}
 
 console.log('\n=== 6. v8.1 — BLOQUEANTES DEL CONSEJO ===');
 
@@ -237,7 +256,10 @@ console.log('\n=== 7. v8.1 — SEÑAL, CONJUNTO CERRADO, MATCHING ===');
 
 // 7a. el rank-2 no puede volver a ser substring crudo: producto='lona' matcheaba
 // 'ta<lona>rios rifas'. Ancla a inicio de palabra, sin ancla al final (plural).
-['Get Precio', 'Get Precio 2'].forEach((nm) => {
+// v9.2: sale `Get Precio` de la lista — desde el bloque 12a no resuelve por nombre
+// sino por uuid, así que no tiene rank ni tokenización que proteger. `Get Precio 2`
+// sí, y es el que queda.
+['Get Precio 2'].forEach((nm) => {
   const q = b[nm].parameters.query;
   if (/like '%' \|\| replace\(replace\(p\.prod/.test(q)) E(nm + ': el rank-2 sigue siendo substring crudo (lona ⊂ talonarios)');
   else if (!/prod_tok/.test(q)) E(nm + ': falta la tokenizacion del rank-2');

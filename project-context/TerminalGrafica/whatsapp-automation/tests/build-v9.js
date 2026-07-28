@@ -1959,6 +1959,176 @@ return [{
     + "  '- Si el CONTEXTO dice que el cliente ya definió algo, NO se lo vuelvas a preguntar, aunque el borrador lo pregunte: sacá esa pregunta y quedate con el resto.',\n"
     + "  '- El CONTEXTO es para que entiendas la situación. No lo cites, no lo leas en voz alta y no menciones estados internos del sistema.',",
     '11c · la regla que le dice al compositor qué hacer con el contexto');
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 12. BAJO MÍNIMO DEJA DE SER UNA NEGATIVA — decisión de Martin 2026-07-28
+  //
+  // El incidente, reproducido tres veces: el cliente pide 3 carteles para su
+  // inmobiliaria y el bot le contesta "¿Cuántos necesitás?" — a alguien que acaba
+  // de decir 3. El guard `bajoMinimo` tiraba un precio YA CALCULADO y lo cambiaba
+  // por una repregunta.
+  //
+  // DOS DECISIONES DE MARTIN, las dos explícitas:
+  //  · el precio de la promo SE DICE, con el mínimo pegado. Revierte la política
+  //    anterior ("decirlo sería ofrecer un precio al que no tiene derecho", test
+  //    CP6d), que en la práctica dejaba al cliente sin ningún número.
+  //  · el cruce de montos SOLO SE REGISTRA. Martin: "no quiero seguir limitando
+  //    funcionalidades". El mensaje sale como el compositor lo escribe.
+  //
+  // LO QUE NO CAMBIA, y es a propósito:
+  //  · el estado sigue siendo `fallback: bajo_minimo`. Levantarlo re-habilitaría
+  //    el camino de total y calcularía 3 × $15.000 = $45.000 con la promo, que es
+  //    el bug que el guard existe para matar.
+  //  · NO se da el total de los 3. El recargo UV (Martin, hoy) vive en
+  //    pricing_rules y `precio_lista` es el precio BASE: multiplicar sub-cotiza.
+  //    El código ya se negaba (`totalPermitidoFijo` exige solo_descuentos) y sigue.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 12a. El precio del hermano: se reusa el nodo huérfano `Get Precio` ─────
+  // v8.3b lo sacó del camino (Buscar Candidatos absorbió su trabajo) pero quedó en
+  // el canvas, con su credencial y YA CABLEADO a `Armar Respuesta Precio`. Se
+  // re-parametriza para resolver por UUID —el que la curación 28b dejó escrito en
+  // `atributos.producto_base`/`variante_base` de la promo— en vez de por nombre.
+  // Alternativas descartadas: meter al hermano en `Buscar Candidatos` es inerte (el
+  // corte `score >= 0.4*max` lo deja en 0,23 del máximo cuando el turno dice "3"
+  // pelado) y contaminaría `rows` de todos los productos; `Get Precio 2` solo corre
+  // tras el Aclarador, y bajo_minimo no lo dispara.
+  {
+    const gp12 = node('Get Precio');
+    gp12.parameters.query = "select v.variante_id, v.variante, v.precio_lista, v.unidad,\n"
+      + "       v.mostrable, v.solo_descuentos, v.tiene_override, v.n_reglas_cantidad,\n"
+      + "       v.nombre_canonico\n"
+      + "  from bot.variantes v\n"
+      + " where v.producto_id = $1::uuid and v.variante_id = $2::uuid\n"
+      + " limit 1;";
+    // Los uuid salen del sobre de ARP. Si la promo no tiene el vínculo curado, van
+    // dos uuid nulos: el SQL devuelve 0 filas y el camino degrada al texto de hoy.
+    gp12.parameters.options = gp12.parameters.options || {};
+    gp12.parameters.options.queryReplacement =
+      "={{ (() => { const h = $json.hermanoPide || {}; return [h.producto || '00000000-0000-0000-0000-000000000000', h.variante || '00000000-0000-0000-0000-000000000000']; })() }}";
+    paso('12a · Get Precio (huérfano desde v8.3b) resuelve el hermano por uuid');
+  }
+
+  // ── 12b. ARP pide el hermano cuando el guard dispara ──────────────────────
+  // El pedido viaja en el sobre; el cableado lo hace 12d. Se emite SIEMPRE que haya
+  // vínculo curado, no solo en bajo_minimo: el mismo dato sirve para el aviso de
+  // cambio de producto, y pedirlo es una query indexada por PK.
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre,
+      "const bajoMinimo = Number.isInteger(atr.min_unidades) && qtyPedida !== null && qtyPedida < atr.min_unidades;",
+      "const bajoMinimo = Number.isInteger(atr.min_unidades) && qtyPedida !== null && qtyPedida < atr.min_unidades;\n"
+      + "// v9.2: el HERMANO de la promo (el producto normal). La curacion 28b escribio\n"
+      + "// el vinculo en atributos; aca solo se lee. Sin vinculo curado esto queda null\n"
+      + "// y todo el camino degrada al texto de hoy — fail-safe, no supone nada.\n"
+      + "const hermanoPide = (atr.producto_base && atr.variante_base)\n"
+      + "  ? { producto: String(atr.producto_base), variante: String(atr.variante_base) } : null;",
+      '12b · ' + nombre + ' emite el pedido del hermano');
+  }
+
+  // ── 12c. El texto: dos precios, cada uno con su condición ─────────────────
+  // Reemplaza la repregunta seca. El monto del hermano sale de la fila que trajo
+  // `Get Precio`; el de la promo de `row`, que SIEMPRE estuvo ahí (el guard cambia
+  // `estado`, nunca `row`) y se venía descartando.
+  // El mínimo va PEGADO al monto de la promo, en la misma oración: es la condición
+  // que hace que ese número sea legítimo, y separarlos es ofrecer un precio al que
+  // el cliente no califica.
+  const TXT_ANCLA = "    return cual + ' es un precio especial desde ' + (atr.min_unidades || 6)\n      + ' unidades' + (huboAntes ? ', distinto del que te pasé antes' : '')\n      + '. ¿Cuántos necesitás? Así te paso el que corresponde.';";
+  const TXT_NUEVO = "    // v9.2 (2026-07-28, decision de Martin): el mensaje LLEVA LOS DOS PRECIOS.\n"
+    + "    // Antes preguntaba '¿Cuantos necesitas?' a un cliente que acababa de decir 3,\n"
+    + "    // y no daba ningun numero. El del hermano hace que la respuesta sea util; el\n"
+    + "    // de la promo, con su minimo pegado, hace que la alternativa se entienda.\n"
+    + "    const min = atr.min_unidades || 6;\n"
+    + "    let herm = null;\n"
+    + "    try {\n"
+    + "      const f = $('Get Precio').all().map((i) => i.json).filter((x) => x && Number(x.precio_lista) > 0)[0];\n"
+    + "      if (f) herm = f;\n"
+    + "    } catch (e) { herm = null; }\n"
+    + "    // CAMINO COMPLETO: hay hermano con precio. Se dice lo que el cliente pidio\n"
+    + "    // primero (es lo suyo) y la promo despues, como alternativa.\n"
+    + "    if (herm) {\n"
+    + "      const nH = String(herm.nombre_canonico || '').split(' (')[0].trim();\n"
+    + "      const uH = UNIDAD_FRASE[atr.unidad_venta] || 'c/u';\n"
+    + "      // 'precio de lista' es el hedge que corresponde: el hermano tiene reglas\n"
+    + "      // activas (recargo UV) y su precio_lista es el BASE, sin recargo aplicado.\n"
+    + "      // Sin esta frase el numero se leeria como final y estariamos sub-cotizando.\n"
+    + "      // Sin articulo: los nombres del catalogo son sintagmas largos ('Impresion\n"
+    + "      // exterior / montado sobre plastico corrugado') y 'El' delante concuerda mal\n"
+    + "      // la mitad de las veces. El compositor lo redacta natural; el borrador solo\n"
+    + "      // tiene que ser correcto por si el LLM no corre.\n"
+    + "      return (nH || 'Ese producto') + ': ' + fmt(herm.precio_lista)\n"
+    + "        + ' ' + uH + ', precio de lista. Llevando ' + min + ' o más hay un precio especial de '\n"
+    + "        + fmt(row.precio_lista) + ' ' + uH + '.';\n"
+    + "    }\n"
+    + "    // DEGRADACION: sin vinculo curado o sin fila, el texto de v9 — que al menos\n"
+    + "    // no miente. Nunca peor que hoy.\n"
+    + "    return cual + ' es un precio especial desde ' + min\n"
+    + "      + ' unidades' + (huboAntes ? ', distinto del que te pasé antes' : '')\n"
+    + "      + '. ¿Cuántos necesitás? Así te paso el que corresponde.';";
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    sub(nombre, TXT_ANCLA, TXT_NUEVO, '12c · ' + nombre + ' dice los dos precios');
+  }
+
+  // ── 12d. El cableado: Aplicar Filtro → Get Precio → Armar Respuesta Precio ─
+  // `Get Precio` ya apuntaba a ARP desde v8.3b (quedó huérfano de entrada, no de
+  // salida). Solo falta darle entrada. `onError: continueRegularOutput` ya está en
+  // el nodo: si la query falla, el flujo sigue y `herm` queda null.
+  {
+    const c = wf.connections;
+    if (!c['Aplicar Filtro'] || c['Aplicar Filtro'].main[0][0].node !== 'Armar Respuesta Precio') {
+      throw new Error('BUILD [12d]: Aplicar Filtro no apunta a Armar Respuesta Precio (¿cambió 4d?)');
+    }
+    c['Aplicar Filtro'] = { main: [[{ node: 'Get Precio', type: 'main', index: 0 }]] };
+    c['Get Precio'] = { main: [[{ node: 'Armar Respuesta Precio', type: 'main', index: 0 }]] };
+    paso('12d · cableado: Aplicar Filtro → Get Precio → Armar Respuesta Precio');
+  }
+
+  // ── 12e. ARP deja de leer $input como candidato-set ────────────────────────
+  // Con 12d, `$input` pasa a ser la salida de `Get Precio` (la fila del hermano),
+  // no la de `Aplicar Filtro`. El fallback `if (!desdeFiltro) todo = $input.all()`
+  // se comería la fila del hermano como si fuera un candidato y cotizaría el
+  // producto equivocado. En la 1a pasada la fuente SIEMPRE es `Aplicar Filtro`.
+  sub('Armar Respuesta Precio',
+    "if (!desdeFiltro) todo = $input.all().map((i) => i.json).filter((r) => r && r.precio_lista !== undefined);",
+    "// v9.2: desde el bloque 12d, `$input` de la 1a pasada puede traer la fila del\n"
+    + "// HERMANO (la salida de `Get Precio`), que no es un candidato: tomarla como tal\n"
+    + "// cotizaria el producto equivocado. Se descarta POR LO QUE ES —la fila que\n"
+    + "// coincide con el uuid que ARP mismo pidio— y no anulando la fuente: el fallback\n"
+    + "// a $input sigue vivo para cuando `Aplicar Filtro` no trae nada, que es para lo\n"
+    + "// que existe. Anularlo entero dejaba a la 1a pasada sin candidatos.\n"
+    + "// Se distingue por ORIGEN, no por uuid: las filas que trajo `Get Precio` son, por\n"
+    + "// construccion, las del hermano — es el unico trabajo que ese nodo hace ahora.\n"
+    + "// Comparar contra `hermanoPide` no serviria: esa variable se declara 300 lineas\n"
+    + "// mas abajo (junto al guard) y aca seria un uso antes de inicializar.\n"
+    + "if (!desdeFiltro) {\n"
+    + "  const idsHermano = new Set();\n"
+    + "  try {\n"
+    + "    for (const it of ($('Get Precio').all() || [])) {\n"
+    + "      if (it && it.json && it.json.variante_id) idsHermano.add(String(it.json.variante_id));\n"
+    + "    }\n"
+    + "  } catch (e) { /* Get Precio no corrio: no hay nada que descartar */ }\n"
+    + "  todo = $input.all().map((i) => i.json)\n"
+    + "    .filter((r) => r && r.precio_lista !== undefined)\n"
+    + "    .filter((r) => !idsHermano.has(String(r.variante_id)));\n"
+    + "}",
+    '12e · ARP no confunde la fila del hermano con un candidato');
+
+  // ── 12f. El cruce de montos, registrado (no bloqueado) ────────────────────
+  // Martin: "no quiero seguir limitando funcionalidades". El mensaje sale como el
+  // compositor lo escribe. Pero con DOS montos aparece un riesgo que con uno no
+  // existía: que queden pegados a la condición cambiada y la promo parezca MAS CARA
+  // que el suelto. La regla `habria_tokens` ya observa el reorden; esto le agrega el
+  // dato que hace accionable la observación — cuántos montos había en juego.
+  sub('Aplicar Compositor',
+    "if (secuencia(toks(j.tokenizado)).join('|') !== secuencia(toks(msg)).join('|')) obs.push('habria_tokens');",
+    "if (secuencia(toks(j.tokenizado)).join('|') !== secuencia(toks(msg)).join('|')) {\n"
+    + "  // v9.2: con 2+ montos el reorden deja de ser estilo y pasa a ser un cruce de\n"
+    + "  // precios (la promo con el precio del suelto y viceversa). Se marca aparte para\n"
+    + "  // poder contarlo en bot.decisiones: `select ... where notas like '%cruce_montos%'`.\n"
+    + "  // Registrar, NO bloquear (decision de Martin 2026-07-28).\n"
+    + "  const nMontos = Object.keys(j.mapa || {}).filter((k) => k !== '[[MAIL]]').length;\n"
+    + "  obs.push(nMontos >= 2 ? 'cruce_montos:' + nMontos : 'habria_tokens');\n"
+    + "}",
+    '12f · el cruce de montos queda registrado (2+ montos, sin bloquear)');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
