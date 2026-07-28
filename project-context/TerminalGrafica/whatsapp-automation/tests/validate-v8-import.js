@@ -313,6 +313,46 @@ else console.log('  ok  el sobre lleva las señales');
   else console.log('  ok  las columnas de Log Turno existen en el sobre');
 }
 
+// 7b-ter. EL ENUM. `bot.decisiones.accion` acepta 5 valores y nada mas. Escribir
+// otro hace rebotar el INSERT ENTERO — y con onError:continueRegularOutput, en
+// silencio: cero filas, sin memoria entre turnos, sin telemetria. Paso desde v7
+// hasta el 2026-07-28 tapado por el bug de la columna nula.
+// `noop` va aparte: no tiene equivalente entre los 5 (callarse no es informar, ni
+// preguntar, ni escalar) y se agrega al enum por ALTER. Los `firewall_*` los
+// escribe bot.fw_log() del lado SQL, no el workflow.
+{
+  const ENUM = ['informo_precio', 'informo_capacidad', 'repregunto', 'handoff', 'fallback_error', 'noop'];
+  const PRODUCTORES = ['Armar Respuesta Precio', 'Armar Respuesta Precio 2', 'Aplicar Aclarador', 'Normalizar Envío'];
+  // Los strings que se asignan a accionLog/accion, o el ternario de Normalizar.
+  const RE = /(?:accionLog|accion)\s*[:=]\s*'([a-z_]+)'|\?\s*'([a-z_]+)'\s*:\s*'([a-z_]+)'/g;
+  const fuera = new Set();
+  for (const nombre of PRODUCTORES) {
+    if (!b[nombre]) continue;
+    const js = b[nombre].parameters.jsCode || '';
+    let m;
+    while ((m = RE.exec(js))) {
+      for (const v of [m[1], m[2], m[3]]) {
+        // El ternario tambien matchea strings que no son acciones (frases sueltas).
+        // Solo interesan los que PARECEN una accion: sin espacios y ya conocidos, o
+        // asignados explicitamente a accionLog/accion (grupo 1).
+        if (!v) continue;
+        if (m[1] === v) { if (!ENUM.includes(v)) fuera.add(nombre + ':' + v); }
+        else if (/^(pregunto_opciones|cotizador_answer|informo_\w+|repregunto|handoff|noop|fallback_\w+)$/.test(v)
+          && !ENUM.includes(v)) fuera.add(nombre + ':' + v);
+      }
+    }
+  }
+  // Y los literales de los tres nodos Postgres que escriben la tabla.
+  for (const nombre of ['Log Turno', 'Log Escalación', 'Log Silencio']) {
+    if (!b[nombre]) continue;
+    const v = b[nombre].parameters.columns && b[nombre].parameters.columns.value;
+    const a = v && v.accion;
+    if (typeof a === 'string' && !a.startsWith('=') && !ENUM.includes(a)) fuera.add(nombre + ':' + a);
+  }
+  if (fuera.size) E('valores fuera del enum bot.accion -> el INSERT rebota en silencio: ' + [...fuera].join(', '));
+  else console.log('  ok  todos los valores de `accion` existen en el enum');
+}
+
 // 7c. conjunto cerrado (E): el nombre que emite el LLM se valida contra el catalogo,
 // y el Aclarador ya no puede imprimirle al cliente un nombre que no existe.
 if (!/producto_inventado/.test(b['Parsear Respuesta'].parameters.jsCode)) E('Parsear Respuesta no valida contra el conjunto cerrado');

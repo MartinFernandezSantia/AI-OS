@@ -2169,6 +2169,86 @@ return [{
     + "  obs.push(nMontos >= 2 ? 'cruce_montos:' + nMontos : 'habria_tokens');\n"
     + "}",
     '12f · el cruce de montos queda registrado (2+ montos, sin bloquear)');
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 13. EL VOCABULARIO DEL CODIGO Y EL DE LA BASE SE HABLAN — 2026-07-28
+  //
+  // `bot.decisiones.accion` es un enum de 5 valores:
+  //   informo_precio · informo_capacidad · repregunto · handoff · fallback_error
+  // El codigo escribia `pregunto_opciones`, `cotizador_answer` y `noop`, que no
+  // existen ahi. El INSERT rebotaba con "invalid input value for enum bot.accion".
+  //
+  // NO ES NUEVO: viene de v7. Estaba TAPADO por el bug de la columna nula (commit
+  // 1dd3040 de hoy) — el INSERT fallaba antes de llegar al enum, asi que el enum
+  // nunca se ejercitaba. Arreglar el de arriba destapo el de abajo.
+  //
+  // Decision de Martin (2026-07-28): normalizar el CODIGO a los 5 que ya existen,
+  // en vez de ensanchar el enum. Asi no quedan dos etiquetas para lo mismo
+  // (`repregunto` y `pregunto_opciones` significan identico).
+  //
+  // `noop` y los `firewall_*` NO se mapean: no tienen equivalente entre los 5 y
+  // colapsarlos perderia informacion real. Van por ALTER (db/enum-accion-*.sql).
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 13a. El productor: `accionLog` habla el idioma del enum ───────────────
+  // Los 4 sitios que asignan 'pregunto_opciones' producen todos un reply que
+  // TERMINA EN UNA PREGUNTA y espera respuesta — que es exactamente `repregunto`.
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2', 'Aplicar Aclarador']) {
+    const js = node(nombre).parameters.jsCode;
+    const n = (js.match(/'pregunto_opciones'/g) || []).length;
+    if (!n) throw new Error('BUILD [13a]: ' + nombre + " no menciona 'pregunto_opciones'");
+    node(nombre).parameters.jsCode = js.split("'pregunto_opciones'").join("'repregunto'");
+    paso('13a · ' + nombre + ": 'pregunto_opciones' -> 'repregunto' (" + n + ')');
+  }
+
+  // ── 13b. El normalizador ──────────────────────────────────────────────────
+  // `cotizador_answer` no era una accion: era una etiqueta de RUTA. El propio
+  // ternario lo delata — las dos ramas son el mismo evento (el LLM contesto sin
+  // dar precio) y solo se distinguen por que prompt paso. Esa distincion ya vive
+  // en `origen` y en `notas`, asi que colapsarla no pierde nada.
+  sub('Normalizar Envío',
+    "const accion = esPrecio\n  ? (j.accionLog || 'informo_precio')\n  : esMenu\n    ? (j.antiLoop ? 'informo_capacidad' : 'pregunto_opciones')\n    : (rutaCot ? 'cotizador_answer' : 'informo_capacidad');",
+    "// v9.2 (2026-07-28): los valores son los del enum `bot.accion`. Escribir otros\n"
+    + "// hacia rebotar el INSERT entero — y con onError:continueRegularOutput, en\n"
+    + "// silencio. `cotizador_answer` no era una accion sino una etiqueta de RUTA: esa\n"
+    + "// distincion vive en `origen` y en `notas`, no en esta columna.\n"
+    + "const accion = esPrecio\n"
+    + "  ? (j.accionLog || 'informo_precio')\n"
+    + "  : esMenu\n"
+    + "    ? (j.antiLoop ? 'informo_capacidad' : 'repregunto')\n"
+    + "    : 'informo_capacidad';",
+    '13b · Normalizar Envío emite solo valores del enum');
+
+  // ── 13c. LA TRAMPA: el lector de la ruta cotizador ────────────────────────
+  // `Armar Mensajes LLM` decide si el turno va al prompt especialista mirando la
+  // accion del turno anterior. Si se renombra el productor y no el lector, la ruta
+  // cotizador no se activa NUNCA MAS — y el sintoma seria mudo (el bot contestaria
+  // con el prompt generico, sin error). Va en el mismo commit, a proposito.
+  // `cotizador_answer` desaparecio: lo que lo distinguia era la ruta, y para eso
+  // esta `rutaCotizador` misma. Queda `informo_capacidad`, que es donde cae ahora.
+  {
+    const nombre = 'Armar Mensajes LLM';
+    const js = node(nombre).parameters.jsCode;
+    const viejo = "['pregunto_opciones', 'cotizador_answer'].includes(r.accion)";
+    const n = (js.split(viejo).length - 1);
+    if (n !== 1) throw new Error('BUILD [13c]: el filtro de rutaCotizador aparece ' + n + ' veces (esperaba 1)');
+    node(nombre).parameters.jsCode = js.split(viejo)
+      .join("['repregunto', 'informo_capacidad'].includes(r.accion)");
+    paso('13c · el lector de la ruta cotizador sigue al productor');
+  }
+
+  // ── 13d. `noop` se queda ──────────────────────────────────────────────────
+  // NO se mapea. Es una decision exitosa (el bot eligio callarse), no un error, y
+  // `fallback_error` seria activamente falso: ensuciaria el indice que alimenta el
+  // digest de revision humana. Ademas `Get Ruta Cotizador` filtra por el string
+  // 'noop' para saltear el ruido del debounce — traducirlo romperia ese filtro.
+  // Va al enum por ALTER. Este paso solo verifica que sigue intacto.
+  {
+    const lg = node('Log Silencio');
+    const v = lg.parameters.columns && lg.parameters.columns.value;
+    if (!v || v.accion !== 'noop') throw new Error('BUILD [13d]: Log Silencio dejo de escribir noop');
+    paso('13d · `noop` intacto (va al enum por ALTER, no se mapea)');
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
