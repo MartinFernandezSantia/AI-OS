@@ -549,7 +549,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Mensajes LLM').first().json.llmMessages, max_tokens: 500, usage: { include: true }, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ ({ model: 'google/gemini-3.1-flash-lite', models: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Mensajes LLM').first().json.llmMessages, max_tokens: 500, usage: { include: true }, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 20000
         }
@@ -568,7 +568,7 @@
       "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
+          "id": "rwhlhrRvC0TbZZNI",
           "name": "OpenRouter API"
         }
       }
@@ -1053,7 +1053,7 @@
     },
     {
       "parameters": {
-        "model": "google/gemini-2.5-flash-lite",
+        "model": "google/gemini-3.1-flash-lite",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
@@ -1066,7 +1066,7 @@
       "name": "OpenRouter Chat Model",
       "credentials": {
         "openRouterApi": {
-          "id": "REPLACE_WITH_OPENROUTER_API_CRED",
+          "id": "widAoSc9Weo8PxAN",
           "name": "OpenRouter"
         }
       }
@@ -1675,14 +1675,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Aclarador').first().json.aclaradorMessages, max_tokens: 300, usage: { include: true }, temperature: 0.2, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ ({ model: 'google/gemini-3.1-flash-lite', models: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Aclarador').first().json.aclaradorMessages, max_tokens: 300, usage: { include: true }, temperature: 0.2, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 20000
         }
       },
       "credentials": {
         "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
+          "id": "rwhlhrRvC0TbZZNI",
           "name": "OpenRouter API"
         }
       },
@@ -1849,14 +1849,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Compositor').first().json.compositorMessages, max_tokens: 400, usage: { include: true }, temperature: 0.4, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ ({ model: 'google/gemini-3.1-flash-lite', models: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Compositor').first().json.compositorMessages, max_tokens: 400, usage: { include: true }, temperature: 0.4, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 20000
         }
       },
       "credentials": {
         "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
+          "id": "rwhlhrRvC0TbZZNI",
           "name": "OpenRouter API"
         }
       },
@@ -1979,7 +1979,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: [{ role: 'user', content: $('Armar Prompt Filtro').first().json.promptFiltro }], max_tokens: 200, usage: { include: true }, temperature: 0.1, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ ({ model: 'google/gemini-3.1-flash-lite', models: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: [{ role: 'user', content: $('Armar Prompt Filtro').first().json.promptFiltro }], max_tokens: 200, usage: { include: true }, temperature: 0.1, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 20000
         }
@@ -1994,7 +1994,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
+          "id": "rwhlhrRvC0TbZZNI",
           "name": "OpenRouter API"
         }
       },
@@ -2108,7 +2108,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ model: 'google/gemini-2.5-flash-lite', models: ['google/gemini-2.5-flash-lite', 'google/gemini-3.1-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Verificador').first().json.verifMessages, max_tokens: 200, usage: { include: true }, temperature: 0, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ ({ model: 'google/gemini-3.1-flash-lite', models: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash-lite'], provider: { order: ['google-ai-studio'] }, messages: $('Armar Prompt Verificador').first().json.verifMessages, max_tokens: 200, usage: { include: true }, temperature: 0, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 15000
         }
@@ -2123,7 +2123,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "H2piFG5pdrtGWP6p",
+          "id": "rwhlhrRvC0TbZZNI",
           "name": "OpenRouter API"
         }
       },

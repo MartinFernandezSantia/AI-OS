@@ -108,7 +108,12 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   // v9 — verificador de silencio (decisión Martin 2026-07-28). Los 5 nodos nuevos.
   // 'Switch Acción' ya está arriba (la rama noop ahora entra al verificador) y
   // 'Armar Mensajes LLM' también (republica el flag de la cota anti-ciclo).
-  ...NUEVOS_V9]);
+  ...NUEVOS_V9,
+  // v9 (2026-07-28) — modelo primario a gemini-3.1-flash-lite en los 6 nodos LLM, y
+  // las 2 credenciales de OpenRouter a los ids nuevos. 'OpenRouter Chat Model' (el
+  // guard Tier-2) es el único que no aparecía ya en esta lista: cambia por las dos
+  // cosas a la vez (su modelo vive en parameters.model, no en un jsonBody).
+  'OpenRouter Chat Model']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
@@ -266,6 +271,27 @@ const llms = v8.nodes.filter((nd) => nd.type === 'n8n-nodes-base.httpRequest' &&
 const sinPin = llms.filter((nd) => !/provider: \{ order:/.test(nd.parameters.jsonBody || ''));
 if (sinPin.length) E('nodos LLM sin endpoint pineado: ' + sinPin.map((x) => x.name).join(', '));
 else console.log('  ok  los ' + llms.length + ' nodos LLM pinean el endpoint');
+
+// 7e. MODELO PRIMARIO (v9, 2026-07-28). gemini-2.5-flash-lite se apaga el 16-oct-2026:
+// un nodo nuevo que nazca con el modelo viejo pegado del hermano de al lado funciona
+// hoy y falla ese dia, en produccion y sin aviso. Se congela acá.
+// El fallback SÍ puede seguir en 2.5 mientras viva — es la lista de reintento de
+// OpenRouter, no el modelo que se usa.
+// Sólo aplica a v9: v8 es el ROLLBACK y se queda congelado como está — retocarlo
+// para pasar una validación anularía justamente lo que lo hace un rollback.
+const MODELO = 'google/gemini-3.1-flash-lite';
+const VIEJO_OFF = 'google/gemini-2.5-flash-lite';
+const modelosMal = [];
+if (conVerif) v8.nodes.forEach((nd) => {
+  const p = nd.parameters || {};
+  const m = typeof p.jsonBody === 'string' ? (p.jsonBody.match(/model: '([^']+)'/) || [])[1] : p.model;
+  if (!m) return;
+  if (!/gemini|gpt|claude|llama|qwen|deepseek/i.test(m)) return; // no es un nodo LLM
+  if (m !== MODELO) modelosMal.push(nd.name + ' -> ' + m);
+});
+if (modelosMal.length) E('nodos con el modelo primario viejo (' + VIEJO_OFF + ' muere el 16-oct-2026): ' + modelosMal.join(', '));
+else if (conVerif) console.log('  ok  todos los nodos LLM corren ' + MODELO);
+else console.log('  ok  (rollback: el modelo no se valida, v8 queda congelado)');
 if (!/normalize\('NFC'\)/.test(b['Decidir'].parameters.jsCode)) E('el mensaje del cliente no se normaliza a NFC');
 else console.log('  ok  mensaje del cliente en NFC');
 

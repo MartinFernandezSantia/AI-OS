@@ -1378,6 +1378,50 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 7. MODELO PRIMARIO -> gemini-3.1-flash-lite (pedido de Martin, 2026-07-28)
+//
+// gemini-2.5-flash-lite se apaga el 16-oct-2026 y 3.1 es el sucesor ya elegido
+// (audio nativo, $0.25/$1.50). Se adelanta el corte en vez de esperar la fecha:
+// migrar con tiempo permite medir fidelidad contra el catálogo real, migrar el
+// 15-oct sería a ciegas.
+//
+// El FALLBACK queda en 2.5 mientras siga vivo: `models` es la lista de reintento de
+// OpenRouter, y que las dos entradas sean el mismo modelo convierte el fallback en
+// decorado. Cuando 2.5 se apague, esta lista pasa a un solo elemento (o al challenger
+// gpt-5.4-nano). Se hace acá y no a mano en el JSON porque son 6 nodos y el build es
+// la única fuente de verdad.
+//
+// `OpenRouter Chat Model` (el guard Tier-2, un nodo langchain) no tiene jsonBody:
+// su modelo vive en parameters.model. Se cubre aparte, si no quedaba en 2.5.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const VIEJO = 'google/gemini-2.5-flash-lite';
+  const NUEVO = 'google/gemini-3.1-flash-lite';
+  let http = 0, lang = 0;
+  for (const n of wf.nodes) {
+    const p = n.parameters || {};
+    // a) nodos httpRequest: el modelo primario está en jsonBody.
+    if (typeof p.jsonBody === 'string' && p.jsonBody.includes("model: '" + VIEJO + "'")) {
+      p.jsonBody = p.jsonBody.replace("model: '" + VIEJO + "'", "model: '" + NUEVO + "'")
+        // orden de reintento: primero el nuevo, 2.5 detrás como fallback real.
+        .replace("models: ['" + VIEJO + "', '" + NUEVO + "']",
+                 "models: ['" + NUEVO + "', '" + VIEJO + "']");
+      http++;
+    }
+    // b) el nodo langchain del guard Tier-2.
+    if (p.model === VIEJO) { p.model = NUEVO; lang++; }
+  }
+  // Guardia: si mañana alguien agrega un nodo LLM y no entra acá, el conteo lo grita.
+  const quedan = wf.nodes.filter((n) => JSON.stringify(n.parameters || {}).includes("model: '" + VIEJO + "'")
+    || (n.parameters || {}).model === VIEJO);
+  if (quedan.length) throw new Error('BUILD [7]: quedaron nodos en ' + VIEJO + ': ' + quedan.map((x) => x.name).join(', '));
+  if (http !== 5 || lang !== 1) {
+    throw new Error('BUILD [7]: esperaba 5 http + 1 langchain, cambie ' + http + ' + ' + lang);
+  }
+  paso('7 · modelo primario -> ' + NUEVO + ' (' + (http + lang) + ' nodos; 2.5 queda de fallback hasta el 16-oct)');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de
