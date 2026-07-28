@@ -37,25 +37,29 @@
 --
 -- IDEMPOTENTE. `add value if not exists`. Se puede correr dos veces.
 --
--- OJO — NO SE PUEDE CORRER DENTRO DE UNA TRANSACCIÓN. Postgres exige que
--- `ALTER TYPE ... ADD VALUE` vaya en autocommit. En el SQL Editor de Supabase
--- pegalo tal cual (ya corre en autocommit). Si lo corrés por psql, NO lo envuelvas
--- en begin/commit.
+-- ⚠️ SE CORRE EN DOS PASOS, Y NO SE PUEDEN JUNTAR.
+--
+-- Postgres no deja USAR un valor de enum recién agregado hasta que el ALTER esté
+-- COMMITEADO ("unsafe use of new value ... must be committed before they can be
+-- used", SQLSTATE 55P04). El SQL Editor de Supabase manda todo el buffer como una
+-- sola unidad, así que cualquier `select` que LEA el enum tiene que ir en una
+-- corrida aparte — incluso un `enum_range()` de verificación.
+--
+--   PASO 1 → pegar y ejecutar SOLO la sección "PASO 1" (los ALTER).
+--   PASO 2 → después, pegar y ejecutar SOLO la sección "PASO 2" (verificación).
+--
+-- Si lo corrés por psql: los ALTER tampoco pueden ir dentro de begin/commit.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- ── 1. Antes de tocar nada: qué acepta HOY ────────────────────────────────
--- Correr esto PRIMERO y guardar la salida. Si el enum real ya trae valores que
--- este archivo agrega, es que la base y las migraciones versionadas están
--- desincronizadas — no rompe (el `if not exists` lo cubre) pero conviene saberlo.
-select 'accion' as enum, unnest(enum_range(null::bot.accion))::text as valor
-union all
-select 'nivel_resolucion', unnest(enum_range(null::bot.nivel_resolucion))::text
-order by 1, 2;
 
--- ── 2. El silencio deliberado ─────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 1 — LOS ALTER. Correr esta sección sola.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── 1. El silencio deliberado ─────────────────────────────────────────────
 alter type bot.accion add value if not exists 'noop';
 
--- ── 3. El firewall (Tier-1) ───────────────────────────────────────────────
+-- ── 2. El firewall (Tier-1) ───────────────────────────────────────────────
 -- Los escribe bot.fw_log() desde db/firewall-tier1.sql:86.
 alter type bot.accion add value if not exists 'firewall_drop_blocklist';
 alter type bot.accion add value if not exists 'firewall_drop_silenciado';
@@ -64,7 +68,7 @@ alter type bot.accion add value if not exists 'firewall_silence_rate';
 alter type bot.accion add value if not exists 'firewall_refusal';
 alter type bot.accion add value if not exists 'firewall_strike_max';
 
--- ── 4. El firewall (Tier-2) ───────────────────────────────────────────────
+-- ── 3. El firewall (Tier-2) ───────────────────────────────────────────────
 -- db/firewall-tier2-strike.sql:68 escribe el literal; :75 escribe
 -- 'firewall_tier2_' || p_reason, o sea CARDINALIDAD ABIERTA: cualquier razón
 -- nueva que se agregue del lado del código va a rebotar acá otra vez.
@@ -76,12 +80,15 @@ alter type bot.accion add value if not exists 'firewall_tier2_jailbreak';
 alter type bot.accion add value if not exists 'firewall_tier2_offtopic';
 alter type bot.accion add value if not exists 'firewall_tier2_abuso';
 
--- ── 5. El nivel de resolución del firewall ────────────────────────────────
+-- ── 4. El nivel de resolución del firewall ────────────────────────────────
 -- db/firewall-tier1.sql:87 escribe 'firewall', que tampoco existe.
 alter type bot.nivel_resolucion add value if not exists 'firewall';
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- VERIFICACIÓN (read-only). Correr DESPUÉS.
+-- PASO 2 — VERIFICACIÓN (read-only). Correr esta sección SOLA, después del PASO 1.
+--
+-- Va aparte porque leer el enum en la misma corrida que lo modifica da
+-- "unsafe use of new value" (55P04): el ALTER todavía no commiteó.
 --
 -- Lo que hay que ver:
 --   · `accion` tiene los 5 originales + noop + los firewall_*
@@ -90,12 +97,18 @@ alter type bot.nivel_resolucion add value if not exists 'firewall';
 --     el código; si aparecen, alguien ensanchó el enum por otro lado y quedaron
 --     dos etiquetas para lo mismo.
 -- ═══════════════════════════════════════════════════════════════════════════
+
 select 'accion' as enum, unnest(enum_range(null::bot.accion))::text as valor
 union all
 select 'nivel_resolucion', unnest(enum_range(null::bot.nivel_resolucion))::text
 order by 1, 2;
 
--- Y que las filas empiecen a entrar. Después de una ronda real, esto tiene que
--- devolver algo — hasta hoy la rama normal escribía CERO filas.
---   select accion, count(*) from bot.decisiones
---    where created_at > now() - interval '1 hour' group by 1 order by 2 desc;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 3 (opcional) — que las filas EMPIECEN A ENTRAR.
+-- Correr después de re-importar el workflow y hacer una ronda real por WhatsApp.
+-- Hasta hoy la rama normal escribía CERO filas, así que cualquier resultado > 0
+-- ya es la confirmación de que la costura quedó cerrada.
+-- ═══════════════════════════════════════════════════════════════════════════
+-- select accion, count(*) from bot.decisiones
+--  where created_at > now() - interval '1 hour' group by 1 order by 2 desc;
