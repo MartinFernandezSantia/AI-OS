@@ -1860,6 +1860,105 @@ return [{
     + "  ? [{ role: 'system', content: systemPrompt }, ...extras, ...conversation]\n"
     + "  : [{ role: 'system', content: systemPrompt }, { role: 'system', content: avisoNote }, ...extras, ...conversation];",
     '10e · el pendNote se inyecta después del repeatNote');
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 11. EL COMPOSITOR VE LOS HECHOS, NO SOLO EL TEXTO — decisión de Martin 2026-07-28
+  //
+  //   "si queres pasale la intencion y la data al compositor para que le informe al
+  //    usuario"  ·  "para que pueda tener más contexto sobre lo que esta haciendo,
+  //    el estado de la conversacion y la informacion con la que se trabaja"
+  //
+  // Hasta acá el compositor recibía UNA sola cosa: `j.reply`, prosa ya redactada.
+  // Todo lo que el sistema sabía —qué producto resolvió, qué cantidad pidió el
+  // cliente, qué quedó pendiente del turno anterior, por qué el estado terminó en
+  // fallback— moría en `Normalizar Envío`, que lo tenía en la mano y no lo pasaba.
+  // El compositor redactaba a ciegas y por eso solo podía parafrasear.
+  //
+  // NO se toca el límite: la plata sigue tokenizada y el LLM sigue sin tipear un
+  // monto. Lo que cambia es que ahora SABE de qué está hablando.
+  //
+  // Se hace en dos mitades:
+  //   11a — `Normalizar Envío` deja de tirar los datos (los tiene, no los emitía).
+  //   11b — el prompt del compositor los recibe como bloque CONTEXTO.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 11a. El sobre lleva los hechos ────────────────────────────────────────
+  // `senales` ya viaja (v8.3b) pero nadie río abajo lo lee: `Armar Prompt
+  // Compositor` solo mira `j.reply`. Se agrega `hechos`, un objeto CHICO y
+  // explícito — no el sobre entero: lo que entre acá termina en el prompt de un
+  // LLM, así que se elige campo por campo y no por spread.
+  sub('Normalizar Envío',
+    "    senales,\n    conversationId: pick(j.conversationId, parsear.conversationId),",
+    "    senales,\n"
+    + "    // v9.2 (2026-07-28): los HECHOS que el compositor necesita para redactar con\n"
+    + "    // criterio. Antes solo le llegaba `reply` en prosa y componía a ciegas: no\n"
+    + "    // sabía qué producto era, ni cuánto pidió el cliente, ni qué había quedado\n"
+    + "    // pendiente. Se arma campo por campo A PROPOSITO — esto viaja al prompt de un\n"
+    + "    // LLM y un spread del sobre entero le filtraría uuids, SQL y datos internos.\n"
+    + "    // La PLATA NO ESTA ACA: sigue tokenizada dentro de `reply`. El limite de\n"
+    + "    // Martin (el LLM no tipea montos) no se mueve.\n"
+    + "    hechos: (() => {\n"
+    + "      const s = senales || {};\n"
+    + "      const h = {};\n"
+    + "      if (s.producto_nombre) h.producto = s.producto_nombre;\n"
+    + "      if (s.variante_pedida) h.variante_pedida = s.variante_pedida;\n"
+    + "      // El estado es el POR QUE de la forma del borrador: 'ok' es un precio\n"
+    + "      // firme, 'fallback: bajo_minimo' es una promo que no llega al minimo.\n"
+    + "      if (s.estado) h.estado = s.estado;\n"
+    + "      // Lo que el cliente eligió y lo que todavía no: sin esto el compositor\n"
+    + "      // repregunta lo ya contestado, que es el incidente del 28.\n"
+    + "      if (Array.isArray(s.anclados) && s.anclados.length) h.ya_dijo = s.anclados;\n"
+    + "      if (Array.isArray(s.sin_anclar) && s.sin_anclar.length) h.falta_definir = s.sin_anclar;\n"
+    + "      // La pregunta que quedó abierta del turno anterior.\n"
+    + "      if (s.pendiente && s.pendiente.tipo) h.pregunta_abierta = s.pendiente.tipo;\n"
+    + "      return Object.keys(h).length ? h : null;\n"
+    + "    })(),\n"
+    + "    conversationId: pick(j.conversationId, parsear.conversationId),",
+    '11a · el sobre lleva los hechos (Normalizar Envío los tenía y los tiraba)');
+
+  // ── 11b. El prompt los recibe ──────────────────────────────────────────────
+  // Bloque CONTEXTO separado del BORRADOR, y con una advertencia explícita: son
+  // datos para ENTENDER, no material para copiar. Sin esa línea el LLM los trata
+  // como contenido y termina recitando "estado: fallback: bajo_minimo" al cliente.
+  sub('Armar Prompt Compositor',
+    "const USUARIO = [\n  'BORRADOR:',\n  tokenizado,\n  '',\n  'Reescribilo como lo diría una persona del mostrador, respetando todas las reglas.',\n].join('\\n');",
+    "// v9.2 (2026-07-28): CONTEXTO. Los hechos que el sistema ya resolvió, para que el\n"
+    + "// compositor sepa QUE esta diciendo y no solo COMO decirlo. Sin esto redactaba a\n"
+    + "// ciegas: no sabia si el borrador era un precio firme o una repregunta, ni si el\n"
+    + "// cliente ya habia contestado lo que el mensaje vuelve a preguntar.\n"
+    + "// Va ANTES del borrador y marcado como no-copiable: son datos para entender, no\n"
+    + "// texto para recitar. Si `hechos` viene vacio el bloque no se arma y el prompt\n"
+    + "// queda identico al de v9 — fail-safe.\n"
+    + "const ETQ = { producto: 'Producto', variante_pedida: 'Variante que pidió',\n"
+    + "  estado: 'Estado de la resolución', ya_dijo: 'El cliente YA definió',\n"
+    + "  falta_definir: 'Todavía sin definir', pregunta_abierta: 'Pregunta abierta del turno anterior' };\n"
+    + "const hechos = (j.hechos && typeof j.hechos === 'object') ? j.hechos : null;\n"
+    + "const lineasCtx = hechos ? Object.keys(ETQ).filter((k) => hechos[k] !== undefined && hechos[k] !== null)\n"
+    + "  .map((k) => '- ' + ETQ[k] + ': ' + (Array.isArray(hechos[k]) ? hechos[k].join(', ') : String(hechos[k]))) : [];\n"
+    + "const CONTEXTO = lineasCtx.length ? ['CONTEXTO (para que entiendas la situación; NO lo copies ni lo cites):',\n"
+    + "  ...lineasCtx, ''].join('\\n') : '';\n"
+    + "const USUARIO = [\n"
+    + "  CONTEXTO,\n"
+    + "  'BORRADOR:',\n"
+    + "  tokenizado,\n"
+    + "  '',\n"
+    + "  'Reescribilo como lo diría una persona del mostrador, respetando todas las reglas.',\n"
+    + "].filter(Boolean).join('\\n');",
+    '11b · el prompt del compositor recibe los hechos como bloque CONTEXTO');
+
+  // ── 11c. La regla que hace útil al contexto ────────────────────────────────
+  // Tener los datos no alcanza: el prompt hoy dice "no agregues una pregunta que el
+  // borrador no tenía", pero no dice nada sobre SACAR una que sobra. Sin esta regla
+  // el compositor conserva la repregunta aunque el CONTEXTO le muestre que el
+  // cliente ya la contestó — que es exactamente el incidente del 28 ("3" dos veces).
+  sub('Armar Prompt Compositor',
+    "  '- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',",
+    "  '- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',\n"
+    + "  '',\n"
+    + "  '## Usá el contexto',\n"
+    + "  '- Si el CONTEXTO dice que el cliente ya definió algo, NO se lo vuelvas a preguntar, aunque el borrador lo pregunte: sacá esa pregunta y quedate con el resto.',\n"
+    + "  '- El CONTEXTO es para que entiendas la situación. No lo cites, no lo leas en voz alta y no menciones estados internos del sistema.',",
+    '11c · la regla que le dice al compositor qué hacer con el contexto');
 }
 
 // ───────────────────────────────────────────────────────────────────────────

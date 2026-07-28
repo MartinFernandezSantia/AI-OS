@@ -887,6 +887,63 @@ async function main() {
   const prAns = (await prompt({ origen: 'answer', reply: 'Las tarjetas salen $12.000 más o menos.' }))[0].json;
   console.log('C2 answer con plata no compone:', prAns.saltar === true ? 'OK' : 'FAIL');
 
+  // ── v9.2 · EL CANAL DE HECHOS ────────────────────────────────────────────
+  // Hasta v9 el compositor recibía SOLO `reply` en prosa y redactaba a ciegas:
+  // no sabía qué producto era, ni qué había pedido el cliente, ni qué quedaba
+  // pendiente. `Normalizar Envío` tenía todo eso en la mano (vía `senales`) y lo
+  // tiraba. Decisión de Martin 2026-07-28: pasarle la data, manteniendo intacto
+  // el único límite (el LLM no tipea montos).
+  const senBajoMin = { producto_nombre: 'Promoción Inmobiliarias 6 carteles 1 x 0.65 mt',
+    variante_pedida: '1 x 0.65 mt', estado: 'fallback: bajo_minimo',
+    anclados: ['medida', 'cantidad'], sin_anclar: [], pendiente: { tipo: 'cantidad', producto: 'cartel' } };
+
+  // CX1: el sobre transporta los hechos, campo por campo (no un spread del sobre).
+  r = await norm({ estado: 'fallback: bajo_minimo', accionLog: 'pregunto_opciones', reply: 'X',
+    senales: senBajoMin, conversationId: 9, accountId: 1, userMessage: '3' });
+  console.log('CX1 el sobre lleva los hechos:',
+    r[0].json.hechos && r[0].json.hechos.producto === 'Promoción Inmobiliarias 6 carteles 1 x 0.65 mt'
+    && r[0].json.hechos.estado === 'fallback: bajo_minimo'
+    && Array.isArray(r[0].json.hechos.ya_dijo) && r[0].json.hechos.ya_dijo.includes('cantidad')
+    && r[0].json.hechos.pregunta_abierta === 'cantidad' ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hechos));
+
+  // CX2: sin señales no se inventa un bloque vacío — el prompt queda como en v9.
+  r = await norm({ estado: 'ok', accionLog: 'informo_precio', reply: 'X', conversationId: 9, accountId: 1, userMessage: 'u' });
+  console.log('CX2 sin senales no hay hechos:', r[0].json.hechos === null ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hechos));
+
+  // CX3: los hechos llegan al prompt del LLM, etiquetados y en castellano.
+  const prCtx = (await prompt({ origen: 'precio', reply: 'Decime cuántos necesitás.', hechos: {
+    producto: 'Promoción Inmobiliarias', estado: 'fallback: bajo_minimo',
+    ya_dijo: ['cantidad'], pregunta_abierta: 'cantidad' } }))[0].json;
+  const usrCtx = prCtx.compositorMessages[1].content;
+  console.log('CX3 el contexto llega al prompt:',
+    /CONTEXTO/.test(usrCtx) && /El cliente YA definió: cantidad/.test(usrCtx)
+    && /Promoción Inmobiliarias/.test(usrCtx) && usrCtx.indexOf('CONTEXTO') < usrCtx.indexOf('BORRADOR')
+      ? 'OK' : 'FAIL ' + usrCtx);
+
+  // CX4: y el prompt le dice qué hacer con él. Sin esta regla el compositor
+  //      conserva la repregunta aunque el contexto muestre que ya fue contestada.
+  const sysCtx = prCtx.compositorMessages[0].content;
+  console.log('CX4 la regla de uso del contexto está:',
+    /Usá el contexto/.test(sysCtx) && /NO se lo vuelvas a preguntar/.test(sysCtx)
+    && /No lo cites/.test(sysCtx) ? 'OK' : 'FAIL');
+
+  // CX5: sin hechos el USUARIO queda idéntico a v9 (fail-safe, sin bloque huérfano).
+  const prSin = (await prompt({ origen: 'precio', reply: 'La opción A4 sale $800,00.' }))[0].json;
+  console.log('CX5 sin hechos el prompt no cambia:',
+    !/CONTEXTO/.test(prSin.compositorMessages[1].content)
+    && prSin.compositorMessages[1].content.startsWith('BORRADOR:') ? 'OK' : 'FAIL ' + prSin.compositorMessages[1].content);
+
+  // CX6: LA PLATA NO VIAJA EN LOS HECHOS. El límite de Martin es que el LLM no
+  //      tipee montos: si un precio se colara al CONTEXTO en texto plano, el LLM
+  //      lo vería sin tokenizar y podría copiarlo. `hechos` se arma por lista
+  //      blanca justamente para que esto sea imposible.
+  r = await norm({ estado: 'ok', accionLog: 'informo_precio', reply: 'Sale $19.500,00.',
+    senales: { ...senBajoMin, precio_lista: 19500, filas: 4, descartados: ['x'], match_rank: 1 },
+    conversationId: 9, accountId: 1, userMessage: 'u' });
+  console.log('CX6 la plata no entra en los hechos:',
+    !/\d{3}/.test(JSON.stringify(r[0].json.hechos)) && r[0].json.hechos.precio_lista === undefined
+    && r[0].json.hechos.match_rank === undefined ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hechos));
+
   // C3: happy path — el compositor redacta y los montos se re-estampan desde el mapa.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'Dale, el A4 te sale [[P1]]. Si querés lo cerramos por [[MAIL]].' }));
   console.log('C3 compone y estampa:', r[0].json.final === 'Dale, el A4 te sale $800,00. Si querés lo cerramos por terminalgrafica@gmail.com.'
