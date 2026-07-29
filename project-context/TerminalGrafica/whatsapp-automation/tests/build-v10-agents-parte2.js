@@ -226,30 +226,81 @@ codeNode('Calcular Montos', `
 // tipea montos. Los 4 confident-wrong del 27 y el 1,86x del 28 salieron todos de
 // un LLM eligiendo un numero.
 const d = $('Armar Candidatos').first().json;
-let out = {};
-try {
-  const raw = $input.first().json;
-  out = raw.output || raw.data || raw;
-  if (typeof out === 'string') out = JSON.parse(out);
-} catch (e) { out = {}; }
+
+// DESANIDADO ROBUSTO de la salida del agente.
+//
+// El nodo Agent con output parser no garantiza UNA forma: segun version y si
+// returnIntermediateSteps esta prendido, \`elegidos\` puede venir en raw.output,
+// raw.output.output, raw.data, como string JSON, o en la raiz. Buscar solo en
+// tres lugares fijos hacia que una forma inesperada diera elegidos=[] — que es
+// indistinguible de "el agente decidio que ninguno servia" y escala a mail sin
+// dejar rastro. Se busca la CLAVE, no la ruta.
+const desanidar = (raw, clave) => {
+  const vistos = new Set();
+  const pila = [raw];
+  while (pila.length) {
+    let n = pila.shift();
+    if (typeof n === 'string') {
+      const t = n.trim();
+      if (t.startsWith('{') || t.startsWith('[')) { try { n = JSON.parse(t); } catch (e) { continue; } }
+      else continue;
+    }
+    if (!n || typeof n !== 'object' || vistos.has(n)) continue;
+    vistos.add(n);
+    if (Array.isArray(n[clave])) return n;
+    for (const k of ['output', 'data', 'json', 'result', 'response', 'text']) {
+      if (n[k] !== undefined) pila.push(n[k]);
+    }
+  }
+  return null;
+};
+
+const raw = $input.first().json;
+const encontrado = desanidar(raw, 'elegidos');
+const out = encontrado || {};
+// Si NO se encontro la clave, el agente fallo de forma que no se puede
+// interpretar. Eso NO es lo mismo que "no hay nada que decir": se marca para
+// poder distinguir los dos casos en el log.
+const salidaIlegible = !encontrado;
 
 const candidatos = Array.isArray(d.candidatos) ? d.candidatos : [];
 const porIdx = new Map(candidatos.map((c) => [Number(c.idx), c]));
 
 const elegidosRaw = Array.isArray(out.elegidos) ? out.elegidos : [];
 
-// GUARD: el agente solo puede nombrar idx que existan y sean mostrables. Un idx
-// inventado se descarta en silencio (y se cuenta, para poder auditarlo).
+// GUARD: el agente solo puede nombrar idx que existan y sean mostrables.
 let idxInvalidos = 0;
 const elegidos = [];
 for (const e of elegidosRaw) {
   const c = porIdx.get(Number(e.idx));
   if (!c || !c.mostrable) { idxInvalidos++; continue; }
-  elegidos.push({ ...c, confianza: Number(e.confianza) || 0, porque: String(e.porque || '') });
+  // confianza ausente != confianza cero. Un agente que elige un producto y no
+  // llena el campo esta diciendo "este es", no "no estoy seguro". Antes
+  // \`Number(undefined) || 0\` daba 0 y el umbral lo descartaba: el turno moria
+  // por un campo opcional que el LLM no lleno.
+  const cf = Number(e.confianza);
+  elegidos.push({
+    ...c,
+    confianza: Number.isFinite(cf) ? cf : 1,
+    confianzaDeclarada: Number.isFinite(cf),
+    porque: String(e.porque || ''),
+  });
 }
 
-const UMBRAL = 0.45;
+// UMBRAL BAJO A PROPOSITO (0.2, no 0.45).
+//
+// La confianza que emite un LLM no esta calibrada: 0.4 y 0.9 no significan lo
+// mismo entre corridas ni entre modelos. Filtrar fuerte por ese numero es la
+// misma clase de error que dejarlo tipear un precio — se le esta delegando una
+// decision de negocio a un valor inventado.
+//
+// El umbral queda solo como red contra un candidato que el propio agente marca
+// como malo (confianza muy baja). Quien decide de verdad si la respuesta sale
+// es el VERIFICADOR, que ve el mensaje y las filas crudas. Mejor que el turno
+// llegue al verificador y se rechace ahi con motivo, que morir mudo aca.
+const UMBRAL = 0.2;
 const confiables = elegidos.filter((c) => c.confianza >= UMBRAL);
+const descartadosPorConfianza = elegidos.length - confiables.length;
 
 const fmt = (n) => '$' + new Intl.NumberFormat('es-AR').format(Number(n));
 
@@ -289,6 +340,20 @@ const montosAutorizados = hechos.map((h) => h.monto);
 
 const hayAlgoQueDecir = hechos.length > 0 || caveats.length > 0;
 
+// POR QUE NO HAY NADA QUE DECIR. Sin esto, el turno escala y no queda registro
+// de cual de las cuatro causas fue — que es exactamente lo que paso el
+// 2026-07-29 con "200 paginas doble faz en obra 75": la busqueda traia los
+// productos correctos y el turno murio igual, sin forma de saber por que.
+let motivoVacio = null;
+if (!hayAlgoQueDecir) {
+  if (salidaIlegible) motivoVacio = 'salida_ilegible';                      // el agente devolvio algo no interpretable
+  else if (!candidatos.length) motivoVacio = 'busqueda_vacia';              // el SQL no trajo filas
+  else if (!elegidosRaw.length) motivoVacio = 'agente_no_eligio';           // el agente devolvio lista vacia
+  else if (!elegidos.length) motivoVacio = 'idx_invalidos';                 // eligio idx que no existen
+  else if (!confiables.length) motivoVacio = 'confianza_baja';              // todos por debajo del umbral
+  else motivoVacio = 'sin_precio_publicable';                               // eligio, pero ninguno tiene precio
+}
+
 return [{ json: {
   ...d,
   hechos,
@@ -296,6 +361,12 @@ return [{ json: {
   montosAutorizados,
   elegidos: confiables,
   idxInvalidos,
+  salidaIlegible,
+  descartadosPorConfianza,
+  motivoVacio,
+  // se guarda la salida cruda del agente cuando no se pudo interpretar: es el
+  // unico material para diagnosticar sin volver a mirar las ejecuciones a mano
+  crudoAgente: salidaIlegible ? JSON.stringify(raw).slice(0, 800) : null,
   dudaNicho: !!out.dudaNicho,
   motivoRelevancia: String(out.motivo || ''),
   hayAlgoQueDecir,
@@ -661,7 +732,7 @@ for (const [nodo, viejo, nuevo] of REESCRIBIR) {
   le.parameters.columns.value.notas =
     "={{ (() => {" +
     " try { const v = $('Leer Verificador').first().json; if (v && v.falla) return 'v10 rechazo=' + v.falla + (v.queFalta ? ' · ' + v.queFalta : ''); } catch (e) {}" +
-    " try { const c = $('Calcular Montos').first().json; if (c && !c.hayAlgoQueDecir) return 'v10 sin_candidatos idxInv=' + (c.idxInvalidos || 0); } catch (e) {}" +
+    " try { const c = $('Calcular Montos').first().json; if (c && !c.hayAlgoQueDecir) return 'v10 vacio=' + (c.motivoVacio || '?') + ' cand=' + ((c.candidatos || []).length) + ' idxInv=' + (c.idxInvalidos || 0) + ' confBaja=' + (c.descartadosPorConfianza || 0) + (c.crudoAgente ? ' crudo=' + c.crudoAgente.slice(0, 200) : ''); } catch (e) {}" +
     " try { const i = $('Leer Intención').first().json; if (i && i.intencion === 'info') return 'v10 info_sin_dato'; } catch (e) {}" +
     " return 'v10 escalacion'; })() }}";
   paso('refs · Log Escalación.notas: cascada tolerante (3 ramas posibles)');
