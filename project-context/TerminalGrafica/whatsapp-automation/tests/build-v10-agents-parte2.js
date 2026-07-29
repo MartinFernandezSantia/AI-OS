@@ -456,34 +456,55 @@ paso('7 nodos Code puente (incl. Calcular Montos: unico productor de montos)');
 // ───────────────────────────────────────────────────────────────────────────
 // CABLEADO
 // ───────────────────────────────────────────────────────────────────────────
+// CADA salida de switch va con su indice EXPLICITO y en el orden en que el switch
+// declara sus reglas. Los indices se verifican contra las reglas en
+// validarSwitches(), abajo — no alcanza con escribirlos bien una vez.
+//
+// El orden REAL de v9, que es el que manda:
+//   Switch Ruteo         0 skip · 1 greeting · 2 injection · 3 process · 4 cap
+//   Switch Firewall      0 pass · 1 refusal · 2 silence · 3 drop · 4 fallback(=pass)
+//   Switch Strike Tier-2 0 refusal · 1 silence · 2 fallback(=silencio)
 const C = [
-  // entrada y firewall (heredado de v9)
-  ['Chatwoot Webhook', 'Verificar HMAC'],
-  ['Verificar HMAC', 'Filtro Ingreso'],
-  ['Filtro Ingreso', '¿Tiene Texto?'],
+  // ENTRADA. Ojo el orden: en v9 el firewall corre ANTES de ¿Tiene Texto?, no
+  // despues. Un adjunto sin texto tambien tiene que contar para el rate-limit.
+  ['Chatwoot Webhook', 'Verificar HMAC', 'main', 0],
+  ['Verificar HMAC', 'Filtro Ingreso', 'main', 0],
+  ['Filtro Ingreso', 'Firewall Tier-1', 'main', 0],
+  ['Firewall Tier-1', 'Switch Firewall', 'main', 0],
+
+  // FIREWALL TIER-1. `pass` (0) y el fallback (4) siguen el flujo: un `action`
+  // inesperado NO puede dejar mudo al bot, se comporta como pass (igual que v9).
+  ['Switch Firewall', '¿Tiene Texto?', 'main', 0],              // pass
+  ['Switch Firewall', 'Mensaje Firewall Refusal', 'main', 1],   // refusal
+  ['Switch Firewall', 'Aviso Rate Firewall', 'main', 2],        // silence
+  ['Switch Firewall', 'Descartar Firewall (drop)', 'main', 3],  // drop
+  ['Switch Firewall', '¿Tiene Texto?', 'main', 4],              // fallback -> pass
+
   ['¿Tiene Texto?', 'Wait — Debounce', 'main', 0],
   ['¿Tiene Texto?', 'Respuesta No-Texto', 'main', 1],
-  ['Wait — Debounce', 'Get Historial'],
-  ['Get Historial', 'Decidir'],
-  ['Decidir', 'Switch Ruteo'],
-  ['Switch Ruteo', 'Descartar (debounce/dup)', 'main', 0],
-  ['Switch Ruteo', 'Saludo Bienvenida', 'main', 1],
-  ['Switch Ruteo', 'Mensaje Anti-Injection', 'main', 2],
-  ['Switch Ruteo', 'Firewall Tier-1', 'main', 3],
-  ['Firewall Tier-1', 'Switch Firewall'],
-  ['Switch Firewall', 'Mensaje Firewall Refusal', 'main', 0],
-  ['Switch Firewall', 'Aviso Rate Firewall', 'main', 1],
-  ['Switch Firewall', 'Descartar Firewall (drop)', 'main', 2],
-  ['Switch Firewall', 'Guardrails Tier-2', 'main', 3],
+  ['Wait — Debounce', 'Get Historial', 'main', 0],
+  ['Get Historial', 'Decidir', 'main', 0],
+  ['Decidir', 'Switch Ruteo', 'main', 0],
+
+  // RUTEO. La salida 4 (cap) tiene que estar cableada: sin eso, una conversacion
+  // que llega al tope de 25 respuestas/24h muere muda.
+  ['Switch Ruteo', 'Descartar (debounce/dup)', 'main', 0],   // skip
+  ['Switch Ruteo', 'Saludo Bienvenida', 'main', 1],          // greeting
+  ['Switch Ruteo', 'Mensaje Anti-Injection', 'main', 2],     // injection
+  ['Switch Ruteo', 'Guardrails Tier-2', 'main', 3],          // process
+  ['Switch Ruteo', 'Mensaje Cap Email', 'main', 4],          // cap
+
+  // TIER-2 semantico
   ['Guardrails Tier-2', '¿Violación Real Tier-2?', 'main', 0],
   ['Guardrails Tier-2', 'Router Fail Tier-2', 'main', 1],
-  ['Router Fail Tier-2', '¿Violación Real Tier-2?'],
+  ['Router Fail Tier-2', '¿Violación Real Tier-2?', 'main', 0],
   ['¿Violación Real Tier-2?', 'Strike Tier-2', 'main', 0],
   // pasa el firewall -> arranca la cadena de agentes
   ['¿Violación Real Tier-2?', 'Prompt Intención', 'main', 1],
-  ['Strike Tier-2', 'Switch Strike Tier-2'],
-  ['Switch Strike Tier-2', 'Mensaje Refusal Tier-2', 'main', 0],
-  ['Switch Strike Tier-2', 'Silencio Tier-2', 'main', 1],
+  ['Strike Tier-2', 'Switch Strike Tier-2', 'main', 0],
+  ['Switch Strike Tier-2', 'Mensaje Refusal Tier-2', 'main', 0],  // refusal
+  ['Switch Strike Tier-2', 'Silencio Tier-2', 'main', 1],         // silence
+  ['Switch Strike Tier-2', 'Silencio Tier-2', 'main', 2],         // fallback
 
   // A1 intencion
   ['Prompt Intención', 'Agente Intención'],
@@ -522,9 +543,10 @@ const C = [
   ['¿Aprobado?', 'Label Escalación', 'main', 1],
 
   // salidas
-  ['Enviar Mensaje', 'Log Turno'],
-  ['Label Escalación', 'Mensaje Escalación'],
-  ['Mensaje Escalación', 'Log Escalación'],
+  ['Enviar Mensaje', 'Log Turno', 'main', 0],
+  ['Label Escalación', 'Mensaje Escalación', 'main', 0],
+  ['Mensaje Escalación', 'Log Escalación', 'main', 0],
+  ['Mensaje Cap Email', 'Label Cap', 'main', 0],
 ];
 
 // Nodos chicos que faltaban del cableado
@@ -552,6 +574,83 @@ add({
 
 for (const [a, b, tipo, salida] of C) conectar(a, b, tipo || 'main', salida || 0);
 paso('cableado: ' + C.length + ' conexiones main');
+
+// ───────────────────────────────────────────────────────────────────────────
+// GUARD DE RUTEO — que cada salida de switch vaya a donde dice su regla
+//
+// El bug que motiva esto (2026-07-29, lo vio Martin leyendo el JSON): las cuatro
+// salidas de `Switch Firewall` estaban corridas un lugar. La salida 0 es `pass`
+// — el mensaje legitimo — y apuntaba a `Mensaje Firewall Refusal`. O sea que
+// TODO cliente normal recibia "solo puedo ayudarte con consultas sobre Terminal
+// Grafica" y no llegaba nunca al bot. El JSON era valido, el grafo estaba
+// conectado, y los 37 invariantes daban verde: nada miraba la SEMANTICA de cada
+// salida.
+//
+// EXPECTATIVAS declara, para cada switch, que outputKey tiene que ir a que nodo.
+// Si alguien reordena las reglas o inserta una nueva, el build rompe.
+const EXPECTATIVAS = {
+  'Switch Ruteo': {
+    skip: 'Descartar (debounce/dup)',
+    greeting: 'Saludo Bienvenida',
+    injection: 'Mensaje Anti-Injection',
+    process: 'Guardrails Tier-2',
+    cap: 'Mensaje Cap Email',
+  },
+  'Switch Firewall': {
+    pass: '¿Tiene Texto?',
+    refusal: 'Mensaje Firewall Refusal',
+    silence: 'Aviso Rate Firewall',
+    drop: 'Descartar Firewall (drop)',
+    // el fallback se comporta como pass: un `action` inesperado no deja mudo al bot
+    fallback: '¿Tiene Texto?',
+  },
+  'Switch Strike Tier-2': {
+    refusal: 'Mensaje Refusal Tier-2',
+    silence: 'Silencio Tier-2',
+    fallback: 'Silencio Tier-2',
+  },
+  'Switch Intención': {
+    info: 'Salida Info',
+    otro: 'Silencio Otro',
+    catalogo: 'Prompt Selector',
+  },
+};
+
+const clavesDeSwitch = (nodo) => {
+  const p = nodo.parameters || {};
+  const keys = (p.rules && p.rules.values ? p.rules.values : []).map((r, i) => r.outputKey || ('regla' + i));
+  const opts = p.options || {};
+  if (opts.fallbackOutput === 'extra') keys.push(opts.renameFallbackOutput || 'fallback');
+  return keys;
+};
+
+for (const [nombre, esperado] of Object.entries(EXPECTATIVAS)) {
+  const nodo = wf.nodes.find((n) => n.name === nombre);
+  if (!nodo) throw new Error('GUARD RUTEO: no existe el switch "' + nombre + '"');
+  const keys = clavesDeSwitch(nodo);
+  const salidas = (wf.connections[nombre] || {}).main || [];
+
+  for (const [clave, destinoEsperado] of Object.entries(esperado)) {
+    const idx = keys.indexOf(clave);
+    if (idx === -1) {
+      throw new Error('GUARD RUTEO: "' + nombre + '" no declara la salida "' + clave + '" (declara: ' + keys.join(', ') + ')');
+    }
+    const destinos = (salidas[idx] || []).map((x) => x.node);
+    if (!destinos.includes(destinoEsperado)) {
+      throw new Error(
+        'GUARD RUTEO: "' + nombre + '" salida ' + idx + ' (' + clave + ') deberia ir a "' +
+        destinoEsperado + '" y va a [' + (destinos.join(', ') || 'NADA') + ']'
+      );
+    }
+  }
+  // ninguna salida declarada puede quedar sin cablear: un switch mudo mata el turno
+  keys.forEach((k, i) => {
+    if (!(salidas[i] || []).length) {
+      throw new Error('GUARD RUTEO: "' + nombre + '" salida ' + i + ' (' + k + ') quedo SIN CABLEAR');
+    }
+  });
+}
+paso('guard de ruteo: ' + Object.keys(EXPECTATIVAS).length + ' switches verificados contra sus reglas');
 
 // ───────────────────────────────────────────────────────────────────────────
 // VALIDACIONES — el build rompe antes de emitir un JSON invalido

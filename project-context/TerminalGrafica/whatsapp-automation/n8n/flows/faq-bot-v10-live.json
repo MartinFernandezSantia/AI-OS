@@ -1067,6 +1067,60 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: 'Uy, venimos con muchos mensajes en esta conversación y no quiero que se nos escape nada. Para seguir bien con tu consulta o pedido, escribinos por email a terminalgrafica@gmail.com con el detalle, o pasá por el local (Rodríguez Peña 3865, Mar del Plata). ¡Gracias!', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "20314253-6e7f-4809-9142-536475891ab2",
+      "name": "Mensaje Cap Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1408,
+        416
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ labels: ['revisar-volumen'] }) }}",
+        "options": {}
+      },
+      "id": "31425364-7f80-491a-a253-6475891ab2c3",
+      "name": "Label Cap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        416
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "promptType": "define",
         "text": "={{ $json.promptAgente }}",
         "hasOutputParser": true,
@@ -1870,6 +1924,56 @@
       "main": [
         [
           {
+            "node": "Firewall Tier-1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firewall Tier-1": {
+      "main": [
+        [
+          {
+            "node": "Switch Firewall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Firewall": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene Texto?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje Firewall Refusal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aviso Rate Firewall",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Descartar Firewall (drop)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "¿Tiene Texto?",
             "type": "main",
             "index": 0
@@ -1953,50 +2057,14 @@
         ],
         [
           {
-            "node": "Firewall Tier-1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Firewall Tier-1": {
-      "main": [
-        [
-          {
-            "node": "Switch Firewall",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Switch Firewall": {
-      "main": [
-        [
-          {
-            "node": "Mensaje Firewall Refusal",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Aviso Rate Firewall",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Descartar Firewall (drop)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Guardrails Tier-2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje Cap Email",
             "type": "main",
             "index": 0
           }
@@ -2066,6 +2134,13 @@
         [
           {
             "node": "Mensaje Refusal Tier-2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Silencio Tier-2",
             "type": "main",
             "index": 0
           }
@@ -2372,6 +2447,17 @@
         [
           {
             "node": "Log Escalación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Cap Email": {
+      "main": [
+        [
+          {
+            "node": "Label Cap",
             "type": "main",
             "index": 0
           }

@@ -95,6 +95,10 @@ const HEREDADOS = [
   'Label Escalación',
   'Mensaje Escalación',
   'Log Escalación',
+  // rama `cap` del Switch Ruteo (salida 4): el tope de 25 respuestas/24h. Sin
+  // estos dos la salida queda sin cablear y la conversacion muere muda.
+  'Mensaje Cap Email',
+  'Label Cap',
 ];
 // NO se heredan, a proposito:
 //   - Chequear/Guardar Cache Catálogo, Get Catálogo, ¿Cache Fresco?, Refrescar
@@ -132,11 +136,21 @@ const pos = (x, y) => [x, y != null ? y : (_y += 180)];
 
 const add = (n) => { wf.nodes.push(n); return n; };
 
+// El indice de salida es POSICIONAL y absoluto: connections[nodo].main[i] es la
+// salida i del nodo, se haya cableado o no la i-1. Los huecos quedan como [].
+//
+// Esto costo caro (2026-07-29): antes esto rellenaba con `while (length <= salida)
+// push([])` y despues hacia push en el indice pedido — pero como el cableado se
+// recorre en orden de lista, una salida que se declaraba DESPUES ocupaba el hueco
+// de la anterior. `Switch Firewall` quedo corrido un lugar entero: la salida `pass`
+// (mensaje legitimo) apuntaba a `Mensaje Firewall Refusal`, o sea que TODO cliente
+// normal recibia la negativa y nunca llegaba al bot. Ahora el indice se respeta
+// literal y `validarSwitches()` (parte 2) compara contra las reglas declaradas.
 const conectar = (desde, hacia, tipo = 'main', salida = 0) => {
   wf.connections[desde] = wf.connections[desde] || {};
-  wf.connections[desde][tipo] = wf.connections[desde][tipo] || [];
-  while (wf.connections[desde][tipo].length <= salida) wf.connections[desde][tipo].push([]);
-  wf.connections[desde][tipo][salida].push({ node: hacia, type: tipo, index: 0 });
+  const arr = (wf.connections[desde][tipo] = wf.connections[desde][tipo] || []);
+  while (arr.length <= salida) arr.push([]);
+  arr[salida].push({ node: hacia, type: tipo, index: 0 });
 };
 
 // Un agente = 3 nodos (agent + modelo + parser) + sus tools.

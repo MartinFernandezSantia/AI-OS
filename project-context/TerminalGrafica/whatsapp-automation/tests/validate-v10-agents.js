@@ -185,6 +185,77 @@ else if (!haciaIntencion.every((s) => /Tier-2|Firewall/.test(s))) {
 } else OK('todo el trafico a los agentes pasa por el firewall Tier-2');
 
 // ───────────────────────────────────────────────────────────────────────────
+console.log('\n6b. RUTEO DE SWITCHES — cada salida a donde dice su regla');
+//
+// El bug de 2026-07-29: las salidas de `Switch Firewall` estaban corridas un
+// lugar y `pass` (mensaje legitimo) apuntaba a la negativa. Todo cliente normal
+// recibia "solo puedo ayudarte con consultas sobre Terminal Grafica". El grafo
+// estaba conectado y los invariantes daban verde: nada miraba la SEMANTICA.
+// ───────────────────────────────────────────────────────────────────────────
+const RUTEO = {
+  'Switch Ruteo': {
+    skip: 'Descartar (debounce/dup)', greeting: 'Saludo Bienvenida',
+    injection: 'Mensaje Anti-Injection', process: 'Guardrails Tier-2',
+    cap: 'Mensaje Cap Email',
+  },
+  'Switch Firewall': {
+    pass: '¿Tiene Texto?', refusal: 'Mensaje Firewall Refusal',
+    silence: 'Aviso Rate Firewall', drop: 'Descartar Firewall (drop)',
+    fallback: '¿Tiene Texto?',
+  },
+  'Switch Strike Tier-2': {
+    refusal: 'Mensaje Refusal Tier-2', silence: 'Silencio Tier-2',
+    fallback: 'Silencio Tier-2',
+  },
+  'Switch Intención': {
+    info: 'Salida Info', otro: 'Silencio Otro', catalogo: 'Prompt Selector',
+  },
+};
+
+for (const [nombre, esperado] of Object.entries(RUTEO)) {
+  const nodo = N(nombre);
+  if (!nodo) { E('falta el switch "' + nombre + '"'); continue; }
+  const p = nodo.parameters || {};
+  const keys = (p.rules && p.rules.values ? p.rules.values : []).map((r, i) => r.outputKey || ('regla' + i));
+  const opts = p.options || {};
+  if (opts.fallbackOutput === 'extra') keys.push(opts.renameFallbackOutput || 'fallback');
+  const salidas = (wf.connections[nombre] || {}).main || [];
+
+  let malas = 0;
+  for (const [clave, destino] of Object.entries(esperado)) {
+    const idx = keys.indexOf(clave);
+    if (idx === -1) { E(nombre + ': no declara la salida "' + clave + '"'); malas++; continue; }
+    const van = (salidas[idx] || []).map((x) => x.node);
+    if (!van.includes(destino)) {
+      E(nombre + ' salida ' + idx + ' (' + clave + ') deberia ir a "' + destino + '" y va a [' + (van.join(', ') || 'NADA') + ']');
+      malas++;
+    }
+  }
+  keys.forEach((k, i) => {
+    if (!(salidas[i] || []).length) { E(nombre + ' salida ' + i + ' (' + k + ') SIN CABLEAR'); malas++; }
+  });
+  if (!malas) OK(nombre + ': ' + keys.length + ' salidas al destino correcto');
+}
+
+// Los IF: salida 0 = true, salida 1 = false. Un IF invertido es igual de mudo.
+const IFS = {
+  '¿Tiene Texto?': ['Wait — Debounce', 'Respuesta No-Texto'],
+  '¿Violación Real Tier-2?': ['Strike Tier-2', 'Prompt Intención'],
+  '¿Hay Algo Que Decir?': ['Agente Compositor', 'Label Escalación'],
+  '¿Aprobado?': ['Enviar Mensaje', 'Label Escalación'],
+  '¿Info Resuelta?': ['Enviar Mensaje', 'Label Escalación'],
+};
+for (const [nombre, [siTrue, siFalse]] of Object.entries(IFS)) {
+  if (!N(nombre)) { E('falta el IF "' + nombre + '"'); continue; }
+  const s = (wf.connections[nombre] || {}).main || [];
+  const t = (s[0] || []).map((x) => x.node);
+  const f = (s[1] || []).map((x) => x.node);
+  if (!t.includes(siTrue)) E(nombre + ' (true) deberia ir a "' + siTrue + '" y va a [' + (t.join(', ') || 'NADA') + ']');
+  else if (!f.includes(siFalse)) E(nombre + ' (false) deberia ir a "' + siFalse + '" y va a [' + (f.join(', ') || 'NADA') + ']');
+  else OK(nombre + ': true/false en el sentido correcto');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 console.log('\n7. GRAFO — sin referencias colgadas');
 // ───────────────────────────────────────────────────────────────────────────
 const nombres = new Set(wf.nodes.map((n) => n.name));
