@@ -187,12 +187,22 @@ const COBRO = {
   m2: 'por m2',
   metro: 'por metro',
 };
+// SIN FALLBACK A \`unidad\`. Medido sobre el catalogo real (2026-07-29): hay 6
+// variantes sin unidad_venta, y en LAS SEIS \`unidad\` dice "Hoja" cuando en
+// realidad son 3 anillados (por trabajo), Ojales (por unidad) y 2 Papel Vegetal
+// (pack de 10). O sea: justo donde \`unidad\` es el unico dato disponible, miente.
+// Caer a esa columna no rescata el caso — le pone una unidad incorrecta con
+// cara de correcta, que es peor que no decir nada.
+//
+// Cuando no se sabe como se cobra, el precio NO se afirma: va a caveat (ver
+// Calcular Montos). Los 5 anillados/vegetales ademas estan \`oculto: true\` y no
+// llegan al cliente; el caso vivo es Ojales.
 const comoSeCobra = (r) => {
   const uv = String(((r.atributos || {}).unidad_venta) || '').toLowerCase().trim();
   if (uv && Object.prototype.hasOwnProperty.call(COBRO, uv)) return { clave: uv, texto: COBRO[uv] };
-  // sin unidad_venta se cae a \`unidad\`, que es lo que habia antes
-  const u = String(r.unidad || '').trim();
-  return { clave: null, texto: u ? 'por ' + u : null };
+  // \`unidad\` NO se usa como fallback a proposito. Se conserva el valor crudo solo
+  // para poder diagnosticar desde el log cual fila vino sin unidad_venta.
+  return { clave: null, texto: null, sinDato: true, unidadCruda: r.unidad || null };
 };
 
 // CUANTAS UNIDADES TRAE EL PACK.
@@ -219,7 +229,10 @@ const lista = filas.map((r, i) => ({
   idx: i + 1,
   producto: r.nombre_canonico,
   variante: (r.variante && String(r.variante).trim()) || 'única',
-  unidad: r.unidad || null,
+  // \`unidad\` NO viaja en el candidato: el nombre promete la unidad de cobro y
+  // trae otra cosa (dice "Hoja" en 142 de 165 variantes; solo 48 lo son). Si el
+  // campo no existe, ningun nodo lo puede leer por error. El unico dato de
+  // cobro es \`cobro\`, que sale de unidad_venta.
   unidadVenta: ((r.atributos || {}).unidad_venta) || null,
   cobro: comoSeCobra(r),
   precioLista: r.precio_lista,
@@ -257,6 +270,8 @@ const texto = lista.map((c) => [
   c.producto,
   '| variante: ' + c.variante,
   c.precioTexto ? '| precio: ' + c.precioTexto + (c.cobro.texto ? ' ' + c.cobro.texto : '') : '| precio: no publicado',
+  // el hueco se dice, no se disimula: sin unidad de cobro el precio no se afirma
+  (c.precioTexto && c.cobro.sinDato && !c.porPagina && !c.esPack) ? '| (no consta como se cobra)' : '',
   c.porPagina ? '| se cobra por pagina' : '',
   c.porPack ? '| el precio es por un pack de ' + c.porPack + ' unidades' : (c.esPack ? '| se vende por pack' : ''),
   c.packsDisponibles ? '| tambien hay packs de ' + c.packsDisponibles.join(', ') : '',
@@ -421,18 +436,33 @@ for (const c of confiables) {
   }
 
   // COMO SE COBRA. El orden importa: por_pagina y por_pack son flags explicitos
-  // del producto y ganan. Despues manda \`cobro\` (que sale de unidad_venta), y
-  // recien al final la columna \`unidad\` — que miente en 94 de 165 variantes
-  // (ver el comentario largo en Armar Candidatos). Decir "por hoja" en algo que
-  // se cobra por trabajo es un 120x si el cliente multiplica.
+  // del producto y ganan. Despues manda \`cobro\`, que sale de unidad_venta.
+  // NO hay fallback a la columna \`unidad\`: miente en 94 de 165 variantes, y en
+  // las 6 donde seria el unico dato tambien miente (ver Armar Candidatos).
   const unidad = c.porPagina ? 'por pagina'
     // \`porPack\` ahora es la CANTIDAD (pack_unidades), no el booleano: antes esto
     // decia "el pack de true" porque leia \`por_pack\`, que es un flag.
     : c.porPack ? ('el pack de ' + c.porPack + ' unidades')
     : c.esPack ? 'el pack'
     : (c.cobro && c.cobro.texto) ? c.cobro.texto
-    : c.unidad ? ('por ' + c.unidad)
     : null;
+
+  // SIN UNIDAD DE COBRO NO SE AFIRMA EL PRECIO.
+  //
+  // Un monto suelto ("sale $500") lo lee cada cliente como quiere: por unidad,
+  // por trabajo, por hoja. Ese hueco es justo el que produjo el 120x del
+  // anillado. Antes esto se tapaba cayendo a \`unidad\`, que devolvia "por Hoja"
+  // — incorrecto en las 6 filas donde pasa. Ahora va a caveat honesto.
+  //
+  // Solo aplica cuando NINGUNA fuente sabe: si hay por_pagina, pack o
+  // unidad_venta, \`unidad\` ya quedo resuelta arriba.
+  if (!unidad) {
+    caveats.push({
+      producto: base,
+      nota: 'lo tenemos, pero te confirmamos por mail como se cobra para no pasarte un dato equivocado',
+    });
+    continue;
+  }
 
   // Un precio POR TRABAJO no se multiplica por la cantidad. Si el cliente dijo
   // "120 hojas" y esto se cobra por trabajo, el monto ES el total: hay que
@@ -694,7 +724,12 @@ const crudas = (d.filasCrudas || []).map((r, i) => [
   // lo saco, y entonces rechazo por sacarlo citando "los hechos dicen por
   // Hoja". Dos veredictos opuestos, los dos correctos para la evidencia que
   // le daba. La contradiccion estaba en el dato, no en el LLM.
-  '| se cobra: ' + (((r.atributos || {}).unidad_venta) || ('(sin dato, columna unidad dice ' + (r.unidad || '-') + ')')),
+  // Aca \`unidad\` SI se muestra, pero etiquetada como no confiable: el auditor
+  // esta diagnosticando, no cotizando, y saber que la columna dice "Hoja"
+  // mientras no hay unidad_venta es exactamente lo que necesita para entender
+  // por que el mensaje no afirma como se cobra.
+  '| se cobra: ' + (((r.atributos || {}).unidad_venta)
+    || ('SIN DATO (la columna unidad dice ' + (r.unidad || '-') + ', pero NO es confiable: dice "Hoja" en 142 de 165 variantes)')),
   // el pack: \`por_pack\` es un booleano, la cantidad esta en pack_unidades
   ((r.atributos || {}).pack_unidades) ? '| pack de ' + (r.atributos.pack_unidades) + ' unidades' : '',
   // el minimo condiciona el precio: sin esto el auditor no puede detectar que se

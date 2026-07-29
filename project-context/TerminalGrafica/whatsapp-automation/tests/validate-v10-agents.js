@@ -381,7 +381,19 @@ console.log('\n8b. UNIDAD DE COBRO — unidad_venta manda sobre la columna `unid
     else OK('Calcular Montos arma el texto desde `cobro` (unidad_venta)');
     if (!/esPorTrabajo/.test(js)) E('Calcular Montos no marca esPorTrabajo: el compositor no sabe que ese monto NO se multiplica');
     else OK('marca esPorTrabajo (el monto es el trabajo completo)');
+    // NADIE puede volver a caer a `unidad`: en las 6 variantes donde seria el
+    // unico dato, dice "Hoja" y las 6 se cobran de otra forma.
+    if (/c\.unidad\b/.test(js)) E('Calcular Montos volvio a leer c.unidad: ese fallback devuelve una unidad incorrecta');
+    else OK('Calcular Montos NO cae a `unidad` como fallback');
+    if (!/if \(!unidad\)/.test(js)) E('Calcular Montos no bloquea el precio sin unidad de cobro: un monto suelto lo lee cada cliente como quiere');
+    else OK('sin unidad de cobro el precio va a caveat, no a hecho');
   }
+  // el campo confuso no puede viajar en el candidato: si no existe, nadie lo lee
+  // ojo la regex: `unidadVenta:` y `unidadCruda:` SI tienen que estar, se busca
+  // la clave `unidad:` exacta.
+  if (arm && /^\s*unidad:\s*r\./m.test(arm.parameters.jsCode)) {
+    E('`unidad` volvio al objeto candidato: el nombre promete la unidad de cobro y trae otra cosa');
+  } else if (arm) OK('`unidad` NO viaja en el candidato (solo `cobro`)');
   if (pv) {
     const js = pv.parameters.jsCode;
     if (!/se cobra/.test(js)) E('Prompt Verificador no le muestra al auditor como se cobra');

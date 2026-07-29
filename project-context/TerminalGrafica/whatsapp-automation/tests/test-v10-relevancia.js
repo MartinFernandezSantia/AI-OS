@@ -292,11 +292,14 @@ check('el prompt le dice al auditor que no juzgue la unidad por su cuenta',
 check('el guard no marca el monto como inventado',
   (pvAn.numerosNoAutorizados || []).length === 0, JSON.stringify(pvAn.numerosNoAutorizados));
 
-// FALLBACK: sin unidad_venta se sigue usando `unidad` (no se rompe lo que andaba)
+// SIN FALLBACK a `unidad` (decision 2026-07-29, tras medir el catalogo): las 6
+// variantes sin unidad_venta tienen unidad="Hoja" y en las 6 esta mal. Caer a
+// esa columna no rescata el caso, le pone una unidad incorrecta con cara de
+// correcta. Ver la seccion "Sin unidad_venta" al final.
 const sinUV = correr('Armar Candidatos', [{ ...FILAS_ANILLADO[0], atributos: {} }],
   { 'Leer Selector': SOBRE_ANILLADO });
-check('sin unidad_venta se cae a la columna `unidad`',
-  /por Hoja/i.test(sinUV.promptAgente), sinUV.promptAgente.split('\n')[3]);
+check('sin unidad_venta NO se cae a `unidad` (diria "por Hoja" en un anillado)',
+  !/por Hoja/i.test(sinUV.promptAgente), sinUV.promptAgente.split('\n')[3]);
 
 // las impresiones (unidad_venta: hoja) tienen que seguir diciendo por pagina
 const impr = correr('Calcular Montos', { output: { elegidos: [{ idx: 2, confianza: 0.9 }] } }, ctx);
@@ -403,6 +406,64 @@ const pvMin = correr('Prompt Verificador', {}, { 'Leer Compositor': {
   conversation: sobreMin(3).conversation, seleccion: sobreMin(3).seleccion,
 } });
 check('el verificador ve el minimo en la fila cruda', /MINIMO 6 unidades/.test(pvMin.promptAgente));
+
+// ── SIN unidad_venta: NO se cae a `unidad` ─────────────────────────────
+//
+// Medido sobre el catalogo real: 6 variantes no tienen unidad_venta, y en LAS
+// SEIS `unidad` dice "Hoja" cuando son 3 anillados (por trabajo), Ojales (por
+// unidad) y 2 Papel Vegetal (pack de 10). Justo donde `unidad` seria el unico
+// dato, miente. Caer a esa columna no rescata el caso: le pone una unidad
+// incorrecta con cara de correcta.
+console.log('\n=== Sin unidad_venta: caveat honesto, no "por Hoja" ===');
+const FILA_OJALES = {
+  producto_id: 'oj1', nombre_canonico: 'Ojales', score: '3.9',
+  variante_id: 'ov1', variante: '.', precio_lista: '500', unidad: 'Hoja',
+  mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
+  tiene_reglas: false, nicho: null, rangos_cantidad: null,
+  atributos: {},   // <- sin unidad_venta, como en el catalogo real
+};
+const SOBRE_OJ = {
+  userMessage: 'cuanto sale ponerle ojales a una lona?',
+  conversation: [{ role: 'user', content: 'cuanto sale ponerle ojales a una lona?' }],
+  conversationId: 383, accountId: 1,
+  seleccion: { terminos: ['ojales'], productos: [], cantidad: null },
+};
+const armOj = correr('Armar Candidatos', [FILA_OJALES], { 'Leer Selector': SOBRE_OJ });
+check('el candidato NO dice "por Hoja"', !/por Hoja/i.test(armOj.promptAgente),
+  armOj.promptAgente.split('\n')[3]);
+check('el candidato avisa que no consta como se cobra',
+  /no consta como se cobra/.test(armOj.promptAgente), armOj.promptAgente.split('\n')[3]);
+check('`unidad` NO viaja en el objeto candidato',
+  !('unidad' in armOj.candidatos[0]), Object.keys(armOj.candidatos[0]).join(','));
+
+const oj = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': armOj });
+check('sin unidad de cobro NO emite el precio como hecho', oj.hechos.length === 0,
+  JSON.stringify(oj.hechos));
+check('va a caveat honesto', oj.caveats.some((c) => /como se cobra/.test(c.nota)),
+  JSON.stringify(oj.caveats));
+check('NO escala: el caveat deja hablar', oj.hayAlgoQueDecir === true);
+check('$500 NO queda autorizado', !(oj.montosAutorizados || []).includes(500),
+  JSON.stringify(oj.montosAutorizados));
+
+const pvOj = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+  ...oj, borrador: 'Los ojales los tenemos, te confirmamos por mail cómo se cobran.',
+  conversation: SOBRE_OJ.conversation, seleccion: SOBRE_OJ.seleccion,
+} });
+check('el verificador ve "SIN DATO" y por que no es confiable',
+  /SIN DATO/.test(pvOj.promptAgente) && /NO es confiable/.test(pvOj.promptAgente));
+
+// `por_pack` SIGUE siendo util como flag: "es un pack" aunque no diga cuantos
+const FILA_VEG = { ...FILA_OJALES, nombre_canonico: 'Papel Vegetal a4 x 10 unid',
+  por_pack: true, precio_lista: '3000', atributos: {} };
+const armVeg = correr('Armar Candidatos', [FILA_VEG], { 'Leer Selector': SOBRE_OJ });
+check('por_pack sin pack_unidades igual dice "se vende por pack"',
+  /se vende por pack/.test(armVeg.promptAgente), armVeg.promptAgente.split('\n')[3]);
+const veg = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': armVeg });
+check('un pack sin cantidad SI cotiza (el flag alcanza para la unidad)',
+  veg.hechos.length === 1 && /el pack/.test(veg.hechos[0].texto),
+  JSON.stringify(veg.hechos));
 
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
