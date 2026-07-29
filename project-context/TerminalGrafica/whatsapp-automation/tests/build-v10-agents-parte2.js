@@ -422,6 +422,16 @@ const aprobado = aprobadoLLM && !montoInventado;
 
 const falla = montoInventado ? 'precio_inventado' : String(out.falla || (aprobado ? 'ninguna' : 'otra'));
 
+// El sobre que sale de aca es el que leen Log Turno y Log Escalacion, asi que
+// tiene que traer TODAS las columnas que esos dos mapean. Si falta una, el
+// INSERT escribe null; y si la columna es NOT NULL el INSERT REBOTA ENTERO y,
+// con onError:continueRegularOutput, falla EN SILENCIO — cero filas y ninguna
+// senal de que algo anda mal. Es exactamente el bug del 2026-07-28 (Log Turno
+// escribia null en \`accion\`), que dejo sin datos todo el trabajo de ese dia.
+const productoResuelto = (d.hechos || []).map((h) => h.producto).join(' | ')
+  || (d.elegidos || []).map((c) => c.producto).join(' | ')
+  || null;
+
 return [{ json: {
   ...d,
   aprobado,
@@ -429,10 +439,27 @@ return [{ json: {
   montoInventado,
   falla,
   motivoVerificador: String(out.motivo || ''),
+  // Log Escalacion mapea \`.motivo\`: se emite con ese nombre tambien.
+  motivo: String(out.motivo || '') || ('v10 falla=' + falla),
   queFalta: String(out.queFalta || ''),
   final: aprobado ? d.borrador : '',
   accion: aprobado ? 'respuesta_verificada' : 'handoff',
   notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0),
+  // columnas que Log Turno espera y que la cadena de agentes no producia
+  productoResuelto,
+  filasSql: Number(d.nFilas) || 0,
+  senales: {
+    intencion: d.intencion || null,
+    confianzaIntencion: d.confianzaIntencion || 0,
+    nCandidatos: (d.candidatos || []).length,
+    nElegidos: (d.elegidos || []).length,
+    nHechos: (d.hechos || []).length,
+    idxInvalidos: d.idxInvalidos || 0,
+    dudaNicho: !!d.dudaNicho,
+    montoInventado,
+    aprobadoLLM,
+    falla,
+  },
 } }];
 `.trim(), 2400, 0);
 
@@ -574,6 +601,92 @@ add({
 
 for (const [a, b, tipo, salida] of C) conectar(a, b, tipo || 'main', salida || 0);
 paso('cableado: ' + C.length + ' conexiones main');
+
+// ───────────────────────────────────────────────────────────────────────────
+// REFERENCIAS DE NODOS HEREDADOS
+//
+// En n8n un nodo Code puede leer CUALQUIER nodo del workflow con $('Nombre'),
+// sin que exista conexion entre los dos. Esas referencias no aparecen en
+// `connections`, asi que el guard de grafo no las ve: el JSON importa perfecto
+// y revienta EN EJECUCION con "Referenced node doesn't exist".
+//
+// Paso en la primera corrida real (2026-07-29): `Extraer Palabras` leia
+// $('Parsear Respuesta'), que es de la arquitectura de v9 y aca no existe.
+//
+// Los tres nodos heredados que leen nodos de v9 se re-apuntan a su equivalente
+// de v10, y el guard de abajo verifica que no quede ninguna referencia colgada.
+const REESCRIBIR = [
+  // Extraer Palabras leia el JSON del LLM monolitico. En v10 el que decide los
+  // terminos de busqueda es el Agente Selector, cuya salida normaliza
+  // `Leer Selector` al MISMO contrato ({ precio: {producto}, opciones: {productos} }).
+  ['Extraer Palabras', 'Parsear Respuesta', 'Leer Selector'],
+  // Log Turno cuelga SIEMPRE de la rama aprobada, asi que Leer Verificador
+  // corrio con seguridad.
+  ['Log Turno', 'Aplicar Compositor', 'Leer Verificador'],
+  // Log Escalacion NO: a `Label Escalación` se llega desde TRES lugares y solo
+  // uno paso por el verificador (¿Info Resuelta?=false y ¿Hay Algo Que Decir?=
+  // false no lo ejecutan). $('Leer Verificador') en esos casos vuelve a tirar
+  // "Referenced node doesn't exist" en ejecucion. `Decidir` es el ultimo nodo
+  // por el que pasan las tres ramas, asi que el motivo se arma abajo con un
+  // fallback tolerante en vez de leer un nodo que puede no haber corrido.
+  ['Log Escalación', 'Parsear Respuesta', 'Decidir'],
+];
+
+for (const [nodo, viejo, nuevo] of REESCRIBIR) {
+  const n = wf.nodes.find((x) => x.name === nodo);
+  if (!n) throw new Error('BUILD [refs]: no existe el nodo "' + nodo + '"');
+  if (!wf.nodes.some((x) => x.name === nuevo)) {
+    throw new Error('BUILD [refs]: el destino "' + nuevo + '" no existe');
+  }
+  const antes = JSON.stringify(n.parameters);
+  // se cubren las dos formas de comilla que puede traer la expresion
+  const despues = antes
+    .split("$('" + viejo + "')").join("$('" + nuevo + "')")
+    .split('$(\\"' + viejo + '\\")').join('$(\\"' + nuevo + '\\")');
+  if (antes === despues) {
+    throw new Error('BUILD [refs]: "' + nodo + '" no referencia a "' + viejo + '" (ya se aplico?)');
+  }
+  n.parameters = JSON.parse(despues);
+  paso('refs · ' + nodo + ': $(' + viejo + ') -> $(' + nuevo + ')');
+}
+
+// `notas` de Log Escalacion venia de $('Parsear Respuesta').motivo, y el paso de
+// arriba ya la re-apunto a `Decidir` — que no tiene ese campo. Se reescribe
+// entera: a esta rama se llega desde TRES lugares distintos y cada uno sabe algo
+// diferente, asi que se arma con try/catch en cascada (gana el que haya corrido).
+// NUNCA null: la columna es NOT NULL y un INSERT rebotado se pierde en silencio,
+// que es el bug del 2026-07-28.
+{
+  const le = wf.nodes.find((x) => x.name === 'Log Escalación');
+  le.parameters.columns.value.notas =
+    "={{ (() => {" +
+    " try { const v = $('Leer Verificador').first().json; if (v && v.falla) return 'v10 rechazo=' + v.falla + (v.queFalta ? ' · ' + v.queFalta : ''); } catch (e) {}" +
+    " try { const c = $('Calcular Montos').first().json; if (c && !c.hayAlgoQueDecir) return 'v10 sin_candidatos idxInv=' + (c.idxInvalidos || 0); } catch (e) {}" +
+    " try { const i = $('Leer Intención').first().json; if (i && i.intencion === 'info') return 'v10 info_sin_dato'; } catch (e) {}" +
+    " return 'v10 escalacion'; })() }}";
+  paso('refs · Log Escalación.notas: cascada tolerante (3 ramas posibles)');
+}
+
+// GUARD: ninguna expresion puede referenciar un nodo que no existe.
+{
+  const nombres = new Set(wf.nodes.map((n) => n.name));
+  const rotas = [];
+  for (const n of wf.nodes) {
+    const blob = JSON.stringify(n.parameters || {});
+    const refs = new Set();
+    // $('Nodo') y $("Nodo") tal como quedan serializados en el JSON
+    for (const m of blob.matchAll(/\$\(\\?['"]([^'"\\]+)\\?['"]\)/g)) refs.add(m[1]);
+    for (const r of refs) if (!nombres.has(r)) rotas.push(n.name + ' -> $(' + r + ')');
+  }
+  if (rotas.length) {
+    throw new Error(
+      'BUILD [refs]: hay expresiones que referencian nodos inexistentes.\n  ' +
+      rotas.join('\n  ') +
+      '\n  (n8n importa igual y falla EN EJECUCION con "Referenced node doesn\'t exist")'
+    );
+  }
+  paso('guard de referencias: ninguna expresion $(...) apunta a un nodo inexistente');
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // GUARD DE RUTEO — que cada salida de switch vaya a donde dice su regla

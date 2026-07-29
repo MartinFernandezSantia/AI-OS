@@ -274,6 +274,59 @@ const dup = wf.nodes.map((n) => n.name).filter((n, i, a) => a.indexOf(n) !== i);
 if (dup.length) E('nodos duplicados: ' + dup.join(', '));
 else OK('sin nodos duplicados');
 
+// REFERENCIAS $('Nodo') — no viven en `connections`, asi que el chequeo de grafo
+// no las ve: el JSON importa perfecto y revienta EN EJECUCION con "Referenced
+// node doesn't exist". Paso en la primera corrida real (2026-07-29): tres nodos
+// heredados de v9 apuntaban a nodos que esta arquitectura no tiene.
+{
+  let rotas = 0;
+  for (const n of wf.nodes) {
+    const blob = JSON.stringify(n.parameters || {});
+    const refs = new Set();
+    for (const m of blob.matchAll(/\$\(\\?['"]([^'"\\]+)\\?['"]\)/g)) refs.add(m[1]);
+    for (const r of refs) {
+      if (!nombres.has(r)) { E('"' + n.name + '" referencia $(\'' + r + '\'), que no existe'); rotas++; }
+    }
+  }
+  if (!rotas) OK('ninguna expresion $(...) apunta a un nodo inexistente');
+}
+
+// Las columnas de los logs tienen que existir en el sobre del nodo que leen. Una
+// columna NOT NULL que llega null hace REBOTAR el INSERT entero y, con
+// onError:continueRegularOutput, falla EN SILENCIO (bug del 2026-07-28: cero
+// filas de la rama normal durante un dia entero de trabajo).
+{
+  const lt = N('Log Turno');
+  const lv = N('Leer Verificador');
+  if (lt && lv) {
+    // El sobre de Leer Verificador = lo que declara explicitamente + todo lo que
+    // arrastra el spread `...d`. Se rastrea la cadena de spreads hacia atras
+    // hasta `Decidir`, que es donde nacen conversationId/userMessage.
+    const CADENA = ['Leer Verificador', 'Prompt Verificador', 'Leer Compositor',
+      'Calcular Montos', 'Armar Candidatos', 'Leer Selector', 'Prompt Selector',
+      'Leer Intención', 'Prompt Intención'];
+    let sobre = '';
+    for (const nombre of CADENA) {
+      const n = N(nombre);
+      if (!n) continue;
+      sobre += '\n' + n.parameters.jsCode;
+      // si el nodo NO hace spread, la cadena se corta ahi
+      if (!/\.\.\.d\b/.test(n.parameters.jsCode)) break;
+    }
+    // `Decidir` es el origen del sobre: sus campos viajan por toda la cadena.
+    const dec = N('Decidir');
+    if (dec) sobre += '\n' + dec.parameters.jsCode;
+
+    const faltan = [];
+    for (const [col, expr] of Object.entries(lt.parameters.columns.value)) {
+      const m = String(expr).match(/\$\('Leer Verificador'\)\.first\(\)\.json\.(\w+)/);
+      if (m && !new RegExp('\\b' + m[1] + '\\b').test(sobre)) faltan.push(col + ' (' + m[1] + ')');
+    }
+    if (faltan.length) E('Log Turno mapea campos que no existen en el sobre: ' + faltan.join(', '));
+    else OK('Log Turno: todas las columnas existen en el sobre (incl. las heredadas por spread)');
+  }
+}
+
 // Nodos huerfanos (sin entrada y sin ser trigger)
 const conEntrada = new Set();
 for (const conns of Object.values(wf.connections)) {

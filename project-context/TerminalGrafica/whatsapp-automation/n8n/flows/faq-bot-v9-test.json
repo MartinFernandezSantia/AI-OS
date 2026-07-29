@@ -160,7 +160,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -200,7 +200,7 @@
       "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       }
@@ -390,7 +390,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -417,7 +417,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -583,7 +583,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -610,7 +610,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -836,7 +836,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -880,7 +880,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// v8.3 EXTRAER PALABRAS — puente determinístico entre el LLM 1 y la búsqueda.\n// NO es una llamada nueva: reusa el string que el LLM ya emite en `producto` y lo\n// mezcla con las palabras del propio cliente. La búsqueda pondera por rareza, así\n// que sumar palabras del cliente NO ensucia: un token genérico pesa ~1 y uno raro\n// ~3,8, y el corte es relativo al mejor score.\nconst parsear = $('Parsear Respuesta').first().json;\nconst decidir = $('Decidir').first().json;\nconst p = parsear.precio || {};\n// v9.3: la accion 'opciones' no llena `precio` — sus nombres (hasta 4, ya\n// copiados del catalogo por el LLM) viven en `opciones.productos`. Se los suma\n// como pista igual que al `producto` de la rama precio.\nconst nombresOpciones = ((parsear.opciones || {}).productos || []).filter(Boolean);\n\n// Ventana de mensajes del cliente: la usa el guard de nicho del SQL (el cliente pudo\n// decir \"medicina\" dos mensajes atrás y el guard tiene que verlo igual).\nconst msgsCliente = (Array.isArray(decidir.conversation) ? decidir.conversation : [])\n  .filter((m) => m && m.role === 'user').map((m) => String(m.content || ''));\nconst ventana = (msgsCliente.join(' ') || String(decidir.userMessage || '')).normalize('NFC');\n\n// STOPWORDS: palabras de pedido que no discriminan NADA en un catálogo de imprenta.\n// Ojo con la línea: acá NO van sustantivos de producto ('hoja', 'papel', 'cartel')\n// aunque sean frecuentes — de esos se encarga el IDF, que los pondera bajo sin\n// perderlos. Sacarlos a mano rompería \"papel kraft\" (kraft solo, sin papel, matchea\n// menos). Sólo salen las que no nombran nada.\nconst STOP = new Set(['que','como','para','por','con','sin','una','uno','unos','unas',\n  'del','las','los','mas','muy','pero','este','esta','esto','ese','esa','eso','tiene',\n  'tienen','hacen','haces','hace','puedo','quiero','queria','necesito','necesitaria',\n  'cuanto','cuanta','cuantos','cuantas','sale','salen','vale','valen','cuesta','cuestan',\n  'precio','precios','presupuesto','cotizacion','cotizar','hola','buenas','gracias',\n  'porfa','favor','decime','pasame','mandame','saber','consulta','consultar','tengo',\n  'seria','serian','estan','esta','son','ser','hay','algo','todo','toda','y','o','de',\n  'el','la','lo','en','a','al','un','mi','me','te','se','su','es','si','no']);\n\nconst norm = (s) => String(s || '').normalize('NFC').toLowerCase()\n  .replace(/[áéíóúü]/g, (c) => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' }[c]))\n  .replace(/ñ/g, 'n');\n\n// NÚMEROS PUROS FUERA (medido en la 1ª corrida real, 2026-07-27): \"imprimir 100\n// hojas\" mandaba el token `100` a la búsqueda, y como está en 4 productos su IDF es\n// alto (3,09) — así que \"100 Tarjetas\", \"1000 Tarjetas\" y \"Talonarios Rifas 100\n// numeros\" se metían en el top-8 de una consulta de impresiones. La cantidad NO es\n// un sustantivo de producto: es la misma clase de bug que la regla de sustantivo de\n// v8 (\"anillado para 120 hojas\" no son 120 anillados).\n// Los gramajes SÍ se conservan: van pegados a su unidad (\"80gr\") o los aporta el\n// LLM en el nombre del producto, y ahí discriminan de verdad.\n// Los packs no se pierden: se siguen encontrando por \"tarjetas\".\nconst tokenizar = (txt) => norm(txt).replace(/[^a-z0-9]+/g, ' ').split(' ')\n  .filter((t) => t && !STOP.has(t) && !/^\\d+$/.test(t)\n    && (t.length >= 3 || /^(a[0-5]|opp|uv|pvc)$/.test(t)));\n\n// Fuente 1: lo que el LLM eligió como producto y variante. Es su mejor aporte —\n// acierta el sustantivo — y acá deja de ser una elección para pasar a ser una pista.\n// Fuente 2: el mensaje del cliente, que trae los ejes que el LLM suele omitir.\nconst delLlm = tokenizar((p.producto || '') + ' ' + (p.variante || '') + ' ' + nombresOpciones.join(' '));\nconst delCliente = tokenizar(decidir.userMessage || '');\n\n// Orden: primero las del LLM (más señal), después las del cliente que no estén ya.\n// Dedupe conservando orden. Cap de 12 para que un mensaje larguísimo no dispare un\n// SQL con 40 tokens (el IDF los pondera, pero el LIKE por token cuesta).\nconst vistas = new Set();\nconst palabras = [];\nfor (const t of delLlm.concat(delCliente)) {\n  if (vistas.has(t)) continue;\n  vistas.add(t); palabras.push(t);\n  if (palabras.length >= 12) break;\n}\n\n// CUPO: cuántos candidatos ve el cliente. Decisión de Martin (2026-07-27): el bot\n// NUNCA repregunta para desambiguar, muestra todo de una — el mensaje de WhatsApp es\n// el costo dominante y listar N opciones ahorra los turnos que la repregunta gasta.\n// Por eso 8 y no 4: el cupo dejó de ser \"cuánto tolera el LLM\" y pasó a ser \"cuánto\n// entra en un mensaje legible\" (el compositor comprime la lista en prosa).\nconst CUPO = 8;\n\nreturn [{\n  json: {\n    ...parsear,\n    palabras: palabras.join(' '),\n    ventana,\n    cupo: CUPO,\n    // Telemetría: sin esto no hay forma de saber si una resolución mala fue culpa\n    // de la búsqueda (trajo mal) o del filtro (eligió mal de una lista buena).\n    _busqueda: { delLlm, delCliente, usadas: palabras },\n  },\n  pairedItem: { item: 0 },\n}];"
+        "jsCode": "// v8.3 EXTRAER PALABRAS — puente determinístico entre el LLM 1 y la búsqueda.\n// NO es una llamada nueva: reusa el string que el LLM ya emite en `producto` y lo\n// mezcla con las palabras del propio cliente. La búsqueda pondera por rareza, así\n// que sumar palabras del cliente NO ensucia: un token genérico pesa ~1 y uno raro\n// ~3,8, y el corte es relativo al mejor score.\nconst parsear = $('Leer Selector').first().json;\nconst decidir = $('Decidir').first().json;\nconst p = parsear.precio || {};\n// v9.3: la accion 'opciones' no llena `precio` — sus nombres (hasta 4, ya\n// copiados del catalogo por el LLM) viven en `opciones.productos`. Se los suma\n// como pista igual que al `producto` de la rama precio.\nconst nombresOpciones = ((parsear.opciones || {}).productos || []).filter(Boolean);\n\n// Ventana de mensajes del cliente: la usa el guard de nicho del SQL (el cliente pudo\n// decir \"medicina\" dos mensajes atrás y el guard tiene que verlo igual).\nconst msgsCliente = (Array.isArray(decidir.conversation) ? decidir.conversation : [])\n  .filter((m) => m && m.role === 'user').map((m) => String(m.content || ''));\nconst ventana = (msgsCliente.join(' ') || String(decidir.userMessage || '')).normalize('NFC');\n\n// STOPWORDS: palabras de pedido que no discriminan NADA en un catálogo de imprenta.\n// Ojo con la línea: acá NO van sustantivos de producto ('hoja', 'papel', 'cartel')\n// aunque sean frecuentes — de esos se encarga el IDF, que los pondera bajo sin\n// perderlos. Sacarlos a mano rompería \"papel kraft\" (kraft solo, sin papel, matchea\n// menos). Sólo salen las que no nombran nada.\nconst STOP = new Set(['que','como','para','por','con','sin','una','uno','unos','unas',\n  'del','las','los','mas','muy','pero','este','esta','esto','ese','esa','eso','tiene',\n  'tienen','hacen','haces','hace','puedo','quiero','queria','necesito','necesitaria',\n  'cuanto','cuanta','cuantos','cuantas','sale','salen','vale','valen','cuesta','cuestan',\n  'precio','precios','presupuesto','cotizacion','cotizar','hola','buenas','gracias',\n  'porfa','favor','decime','pasame','mandame','saber','consulta','consultar','tengo',\n  'seria','serian','estan','esta','son','ser','hay','algo','todo','toda','y','o','de',\n  'el','la','lo','en','a','al','un','mi','me','te','se','su','es','si','no']);\n\nconst norm = (s) => String(s || '').normalize('NFC').toLowerCase()\n  .replace(/[áéíóúü]/g, (c) => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' }[c]))\n  .replace(/ñ/g, 'n');\n\n// NÚMEROS PUROS FUERA (medido en la 1ª corrida real, 2026-07-27): \"imprimir 100\n// hojas\" mandaba el token `100` a la búsqueda, y como está en 4 productos su IDF es\n// alto (3,09) — así que \"100 Tarjetas\", \"1000 Tarjetas\" y \"Talonarios Rifas 100\n// numeros\" se metían en el top-8 de una consulta de impresiones. La cantidad NO es\n// un sustantivo de producto: es la misma clase de bug que la regla de sustantivo de\n// v8 (\"anillado para 120 hojas\" no son 120 anillados).\n// Los gramajes SÍ se conservan: van pegados a su unidad (\"80gr\") o los aporta el\n// LLM en el nombre del producto, y ahí discriminan de verdad.\n// Los packs no se pierden: se siguen encontrando por \"tarjetas\".\nconst tokenizar = (txt) => norm(txt).replace(/[^a-z0-9]+/g, ' ').split(' ')\n  .filter((t) => t && !STOP.has(t) && !/^\\d+$/.test(t)\n    && (t.length >= 3 || /^(a[0-5]|opp|uv|pvc)$/.test(t)));\n\n// Fuente 1: lo que el LLM eligió como producto y variante. Es su mejor aporte —\n// acierta el sustantivo — y acá deja de ser una elección para pasar a ser una pista.\n// Fuente 2: el mensaje del cliente, que trae los ejes que el LLM suele omitir.\nconst delLlm = tokenizar((p.producto || '') + ' ' + (p.variante || '') + ' ' + nombresOpciones.join(' '));\nconst delCliente = tokenizar(decidir.userMessage || '');\n\n// Orden: primero las del LLM (más señal), después las del cliente que no estén ya.\n// Dedupe conservando orden. Cap de 12 para que un mensaje larguísimo no dispare un\n// SQL con 40 tokens (el IDF los pondera, pero el LIKE por token cuesta).\nconst vistas = new Set();\nconst palabras = [];\nfor (const t of delLlm.concat(delCliente)) {\n  if (vistas.has(t)) continue;\n  vistas.add(t); palabras.push(t);\n  if (palabras.length >= 12) break;\n}\n\n// CUPO: cuántos candidatos ve el cliente. Decisión de Martin (2026-07-27): el bot\n// NUNCA repregunta para desambiguar, muestra todo de una — el mensaje de WhatsApp es\n// el costo dominante y listar N opciones ahorra los turnos que la repregunta gasta.\n// Por eso 8 y no 4: el cupo dejó de ser \"cuánto tolera el LLM\" y pasó a ser \"cuánto\n// entra en un mensaje legible\" (el compositor comprime la lista en prosa).\nconst CUPO = 8;\n\nreturn [{\n  json: {\n    ...parsear,\n    palabras: palabras.join(' '),\n    ventana,\n    cupo: CUPO,\n    // Telemetría: sin esto no hay forma de saber si una resolución mala fue culpa\n    // de la búsqueda (trajo mal) o del filtro (eligió mal de una lista buena).\n    _busqueda: { delLlm, delCliente, usadas: palabras },\n  },\n  pairedItem: { item: 0 },\n}];"
       },
       "id": "v83-extraer-palabras",
       "name": "Extraer Palabras",
@@ -912,7 +912,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -933,18 +933,18 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "conversation_id": "={{ $('Aplicar Compositor').first().json.conversationId }}",
-            "mensaje_cliente": "={{ $('Aplicar Compositor').first().json.userMessage }}",
-            "producto_resuelto": "={{ $('Aplicar Compositor').first().json.productoResuelto }}",
+            "conversation_id": "={{ $('Leer Verificador').first().json.conversationId }}",
+            "mensaje_cliente": "={{ $('Leer Verificador').first().json.userMessage }}",
+            "producto_resuelto": "={{ $('Leer Verificador').first().json.productoResuelto }}",
             "nivel_resolucion": "n2_llm",
-            "accion": "={{ $('Aplicar Compositor').first().json.accion }}",
-            "filas_sql": "={{ $('Aplicar Compositor').first().json.filasSql }}",
+            "accion": "={{ $('Leer Verificador').first().json.accion }}",
+            "filas_sql": "={{ $('Leer Verificador').first().json.filasSql }}",
             "hubo_handoff": false,
-            "notas": "={{ $('Aplicar Compositor').first().json.notas }}",
-            "borrador": "={{ $('Aplicar Compositor').first().json.borrador || $('Aplicar Compositor').first().json.reply }}",
-            "final": "={{ $('Aplicar Compositor').first().json.final }}",
+            "notas": "={{ $('Leer Verificador').first().json.notas }}",
+            "borrador": "={{ $('Leer Verificador').first().json.borrador || $('Leer Verificador').first().json.reply }}",
+            "final": "={{ $('Leer Verificador').first().json.final }}",
             "execution_id": "={{ $execution.id || '' }}",
-            "senales": "={{ JSON.stringify($('Aplicar Compositor').first().json.senales || {}) }}"
+            "senales": "={{ JSON.stringify($('Leer Verificador').first().json.senales || {}) }}"
           },
           "matchingColumns": [],
           "schema": []
@@ -988,7 +988,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -1015,7 +1015,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -1041,7 +1041,7 @@
             "nivel_resolucion": "ninguno",
             "accion": "handoff",
             "hubo_handoff": true,
-            "notas": "={{ (() => { try { return $('Parsear Respuesta').first().json.motivo || 'error_llm'; } catch (e) { return 'error_llm'; } })() }}",
+            "notas": "={{ (() => { try { const v = $('Leer Verificador').first().json; if (v && v.falla) return 'v10 rechazo=' + v.falla + (v.queFalta ? ' · ' + v.queFalta : ''); } catch (e) {} try { const c = $('Calcular Montos').first().json; if (c && !c.hayAlgoQueDecir) return 'v10 sin_candidatos idxInv=' + (c.idxInvalidos || 0); } catch (e) {} try { const i = $('Leer Intención').first().json; if (i && i.intencion === 'info') return 'v10 info_sin_dato'; } catch (e) {} return 'v10 escalacion'; })() }}",
             "execution_id": "={{ $execution.id || '' }}"
           },
           "matchingColumns": [],
@@ -1086,7 +1086,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -1113,7 +1113,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
+          "id": "dummy",
           "name": "Chatwoot API Token (test)"
         }
       },
@@ -1673,7 +1673,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Prompt Verificador').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\n// El guard deterministico MANDA sobre el agente: si hay un monto no autorizado\n// en el texto, se rechaza aunque el verificador haya dicho que si. Un LLM no\n// puede habilitar un numero que el calculo no produjo.\nconst montoInventado = (d.numerosNoAutorizados || []).length > 0;\nconst aprobadoLLM = out.aprobado === true;\nconst aprobado = aprobadoLLM && !montoInventado;\n\nconst falla = montoInventado ? 'precio_inventado' : String(out.falla || (aprobado ? 'ninguna' : 'otra'));\n\nreturn [{ json: {\n  ...d,\n  aprobado,\n  aprobadoLLM,\n  montoInventado,\n  falla,\n  motivoVerificador: String(out.motivo || ''),\n  queFalta: String(out.queFalta || ''),\n  final: aprobado ? d.borrador : '',\n  accion: aprobado ? 'respuesta_verificada' : 'handoff',\n  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0),\n} }];"
+        "jsCode": "const d = $('Prompt Verificador').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\n// El guard deterministico MANDA sobre el agente: si hay un monto no autorizado\n// en el texto, se rechaza aunque el verificador haya dicho que si. Un LLM no\n// puede habilitar un numero que el calculo no produjo.\nconst montoInventado = (d.numerosNoAutorizados || []).length > 0;\nconst aprobadoLLM = out.aprobado === true;\nconst aprobado = aprobadoLLM && !montoInventado;\n\nconst falla = montoInventado ? 'precio_inventado' : String(out.falla || (aprobado ? 'ninguna' : 'otra'));\n\n// El sobre que sale de aca es el que leen Log Turno y Log Escalacion, asi que\n// tiene que traer TODAS las columnas que esos dos mapean. Si falta una, el\n// INSERT escribe null; y si la columna es NOT NULL el INSERT REBOTA ENTERO y,\n// con onError:continueRegularOutput, falla EN SILENCIO — cero filas y ninguna\n// senal de que algo anda mal. Es exactamente el bug del 2026-07-28 (Log Turno\n// escribia null en `accion`), que dejo sin datos todo el trabajo de ese dia.\nconst productoResuelto = (d.hechos || []).map((h) => h.producto).join(' | ')\n  || (d.elegidos || []).map((c) => c.producto).join(' | ')\n  || null;\n\nreturn [{ json: {\n  ...d,\n  aprobado,\n  aprobadoLLM,\n  montoInventado,\n  falla,\n  motivoVerificador: String(out.motivo || ''),\n  // Log Escalacion mapea `.motivo`: se emite con ese nombre tambien.\n  motivo: String(out.motivo || '') || ('v10 falla=' + falla),\n  queFalta: String(out.queFalta || ''),\n  final: aprobado ? d.borrador : '',\n  accion: aprobado ? 'respuesta_verificada' : 'handoff',\n  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0),\n  // columnas que Log Turno espera y que la cadena de agentes no producia\n  productoResuelto,\n  filasSql: Number(d.nFilas) || 0,\n  senales: {\n    intencion: d.intencion || null,\n    confianzaIntencion: d.confianzaIntencion || 0,\n    nCandidatos: (d.candidatos || []).length,\n    nElegidos: (d.elegidos || []).length,\n    nHechos: (d.hechos || []).length,\n    idxInvalidos: d.idxInvalidos || 0,\n    dudaNicho: !!d.dudaNicho,\n    montoInventado,\n    aprobadoLLM,\n    falla,\n  },\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
