@@ -312,22 +312,35 @@ flags as (
 -- color" y descartaba justo la opcion mas barata (incidente 2026-07-27: el cliente
 -- vio \$750 y nunca supo que existia la de \$400).
 -- Solo los ejes que un cliente nombra; el resto es ruido para el prompt.
+-- v9.4 (2026-07-29): el group by iba ADENTRO del lateral, o sea agrupaba dentro de
+-- UNA variante. El lateral emitia una fila por (variante, eje) y el jsonb_object_agg
+-- externo recibia la misma clave N veces: ante clave repetida se queda con UNA fila,
+-- arbitraria, y NO une nada. El jsonb_agg(distinct) interno era decorativo.
+-- Resultado: `ejes_variantes` no describia el producto sino una variante al azar, y
+-- cada eje podia venir de una variante distinta (un Frankenstein que no existe en el
+-- catalogo). 9 productos del catalogo real emitian una linea de prompt enganosa.
+-- Medido 2026-07-29: 'Impresiones papel obra 75 gr' (4 variantes: simple/doble faz x
+-- bn/color) se presentaba como "color=color · faz=doble". El cliente pidio simple faz
+-- blanco y negro, el filtro leyo que ese producto no lo tenia, lo descarto con motivo
+-- "unica opcion blanco y negro disponible" y cotizo 'Impresiones a3 tonner negro' a
+-- \$450/hoja x 120 = \$54.000 contra \$8.400 reales (6,4x).
+-- El fix: un solo nivel de agrupacion, por (producto, eje).
 ejes as (
-  select v.producto_id,
+  select e.producto_id,
          jsonb_object_agg(e.k, e.vals) as ejes_variantes
-  from bot.variantes v
-  cross join lateral (
-    select kv.key as k, jsonb_agg(distinct vv.val) as vals
-    from jsonb_each(coalesce(v.atributos, '{}'::jsonb)) kv
+  from (
+    select v.producto_id, kv.key as k, jsonb_agg(distinct vv.val) as vals
+    from bot.variantes v
+    cross join lateral jsonb_each(coalesce(v.atributos, '{}'::jsonb)) kv
     cross join lateral jsonb_array_elements_text(
       case when jsonb_typeof(kv.value) = 'array'  then kv.value
            when jsonb_typeof(kv.value) = 'string' then jsonb_build_array(kv.value)
            when jsonb_typeof(kv.value) = 'number' then jsonb_build_array(kv.value #>> '{}')
            else '[]'::jsonb end) as vv(val)
     where kv.key in ('tamano','faz','color','acabado','cobertura','material','papel','gramaje_gr')
-    group by kv.key
+    group by v.producto_id, kv.key
   ) e
-  group by v.producto_id
+  group by e.producto_id
 ),
 -- Atributos a nivel PRODUCTO: los que valen para TODAS sus variantes. Salen de
 -- bot.taxonomia y NO de bot.variantes, que ya viene mergeada producto||variante y
