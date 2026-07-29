@@ -242,7 +242,9 @@ const IFS = {
   '¿Tiene Texto?': ['Wait — Debounce', 'Respuesta No-Texto'],
   '¿Violación Real Tier-2?': ['Strike Tier-2', 'Prompt Intención'],
   '¿Hay Algo Que Decir?': ['Agente Compositor', 'Label Escalación'],
-  '¿Aprobado?': ['Enviar Mensaje', 'Label Escalación'],
+  // false NO va derecho a mail: pasa por el IF de reintento (seccion 9)
+  '¿Aprobado?': ['Enviar Mensaje', '¿Reintentar?'],
+  '¿Reintentar?': ['Prompt Reintento', 'Label Escalación'],
   '¿Info Resuelta?': ['Enviar Mensaje', 'Label Escalación'],
 };
 for (const [nombre, [siTrue, siFalse]] of Object.entries(IFS)) {
@@ -348,6 +350,99 @@ const sinEntrada = wf.nodes.filter((n) =>
   !TRIGGERS.includes(n.type) &&
   !SUBNODOS.some((s) => n.type.endsWith(s)));
 if (sinEntrada.length) console.log('  aviso  nodos sin entrada: ' + sinEntrada.map((n) => n.name).join(', '));
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
+//
+// Es el unico ciclo del grafo. Un ciclo mal acotado no se cae: gira contra la
+// API paga y le manda N mensajes al cliente. Estos chequeos son estructurales
+// a proposito — que exista el IF no alcanza, tiene que ser IMPOSIBLE dar dos
+// vueltas.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const reint = N('¿Reintentar?');
+  const prompt = N('Prompt Reintento');
+  const leerV = N('Leer Verificador');
+  const leerC = N('Leer Compositor');
+
+  if (!reint) E('falta el IF "¿Reintentar?"');
+  else OK('existe el IF "¿Reintentar?"');
+  if (!prompt) E('falta "Prompt Reintento"');
+  else OK('existe "Prompt Reintento"');
+
+  // el ciclo se cierra donde tiene que cerrarse
+  const salidasReint = ((wf.connections['¿Reintentar?'] || {}).main || []);
+  const dest = (i) => (salidasReint[i] || []).map((c) => c.node);
+  if (!dest(0).includes('Prompt Reintento')) E('¿Reintentar? salida 0 (true) no va a Prompt Reintento');
+  else OK('¿Reintentar? true -> Prompt Reintento');
+  if (!dest(1).includes('Label Escalación')) E('¿Reintentar? salida 1 (false) no va a Label Escalación: el turno moriria mudo');
+  else OK('¿Reintentar? false -> Label Escalación (mail)');
+
+  const salidasPR = ((wf.connections['Prompt Reintento'] || {}).main || [])[0] || [];
+  if (!salidasPR.some((c) => c.node === 'Agente Compositor')) E('Prompt Reintento no vuelve al Agente Compositor: el loop no cierra');
+  else OK('Prompt Reintento -> Agente Compositor (el ciclo cierra)');
+
+  // ¿Aprobado? false tiene que ir al IF de reintento, NO derecho a mail
+  const salidasAprob = ((wf.connections['¿Aprobado?'] || {}).main || []);
+  if (!((salidasAprob[1] || []).map((c) => c.node).includes('¿Reintentar?'))) {
+    E('¿Aprobado? salida 1 (false) no pasa por ¿Reintentar?: el rechazo escalaria sin intentar corregir');
+  } else OK('¿Aprobado? false -> ¿Reintentar?');
+
+  // LA COTA. Sin esto el ciclo es infinito.
+  if (leerV) {
+    const js = leerV.parameters.jsCode;
+    if (!/puedeReintentar/.test(js)) E('Leer Verificador no calcula puedeReintentar');
+    else OK('Leer Verificador calcula puedeReintentar');
+    if (!/intento\s*<\s*2/.test(js)) E('COTA AUSENTE: puedeReintentar no exige intento < 2 — el loop seria infinito');
+    else OK('cota dura: solo reintenta si intento < 2');
+    // la plata no se reintenta: los montos son identicos en la 2da vuelta
+    if (!/!montoInventado/.test(js)) E('puedeReintentar no excluye montoInventado: reintentar no puede arreglar un monto');
+    else OK('montoInventado NO es reintentable (va derecho a mail)');
+  }
+
+  // el contador tiene que venir de n8n ($runIndex), no de un campo del sobre
+  // que se pueda arrastrar sin incrementarse.
+  if (leerC) {
+    const js = leerC.parameters.jsCode;
+    if (!/\$runIndex/.test(js)) E('Leer Compositor no deriva `intento` de $runIndex: un contador propio se desincroniza y el loop no termina');
+    else OK('`intento` sale de $runIndex (lo lleva n8n, no nosotros)');
+  }
+
+  // el feedback tiene que llegar de verdad al compositor
+  if (prompt) {
+    const js = prompt.parameters.jsCode;
+    if (!/queFalta/.test(js)) E('Prompt Reintento no pasa queFalta: el compositor reintentaria a ciegas');
+    else OK('Prompt Reintento le pasa el feedback del auditor al compositor');
+    if (!/Calcular Montos/.test(js)) E('Prompt Reintento no relee Calcular Montos: perderia los hechos autorizados');
+    else OK('Prompt Reintento conserva los hechos autorizados originales');
+  }
+
+  // NO puede haber otro ciclo en el grafo. Este es el unico permitido.
+  {
+    const salidas = (n) => Object.values((wf.connections[n] || {}).main || [])
+      .flat().map((c) => c.node);
+    const ciclos = [];
+    const visitar = (nodo, camino, vistos) => {
+      if (camino.length > 60) return;
+      for (const sig of salidas(nodo)) {
+        if (sig === camino[0]) { ciclos.push([...camino, sig].join(' -> ')); continue; }
+        if (vistos.has(sig)) continue;
+        visitar(sig, [...camino, sig], new Set([...vistos, sig]));
+      }
+    };
+    const arranques = wf.nodes.map((n) => n.name);
+    const encontrados = new Set();
+    for (const a of arranques) {
+      ciclos.length = 0;
+      visitar(a, [a], new Set([a]));
+      for (const c of ciclos) encontrados.add(c);
+    }
+    const permitido = (c) => /Prompt Reintento/.test(c) && /Agente Compositor/.test(c);
+    const inesperados = [...encontrados].filter((c) => !permitido(c));
+    if (inesperados.length) E('ciclo(s) inesperado(s) en el grafo: ' + inesperados.slice(0, 3).join(' ;; '));
+    else OK('el reintento es el UNICO ciclo del grafo');
+  }
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 console.log('\n' + '='.repeat(60));

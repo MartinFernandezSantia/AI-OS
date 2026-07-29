@@ -1,5 +1,5 @@
 {
-  "name": "faq-bot-v10-agents",
+  "name": "faq-bot-v10-agents (live)",
   "nodes": [
     {
       "parameters": {
@@ -142,7 +142,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -160,8 +160,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -182,7 +182,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -200,8 +200,8 @@
       "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       }
     },
@@ -372,7 +372,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -390,8 +390,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -399,7 +399,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -417,8 +417,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -565,7 +565,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -583,8 +583,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -592,7 +592,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -610,8 +610,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -643,7 +643,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -818,7 +818,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -836,8 +836,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -894,7 +894,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -912,8 +912,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -970,7 +970,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -988,8 +988,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -997,7 +997,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -1015,8 +1015,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -1068,7 +1068,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -1086,8 +1086,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -1095,7 +1095,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -1113,8 +1113,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "dummy",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -1158,7 +1158,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1239,7 +1239,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1320,7 +1320,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1343,7 +1343,7 @@
         "text": "={{ $json.promptAgente }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Escribis los mensajes de WhatsApp de una imprenta argentina (Terminal Gráfica).\n\nRecibis HECHOS ya verificados. Tu trabajo es redactarlos, no calcularlos.\n\nREGLA ABSOLUTA SOBRE LOS NUMEROS:\n  Cada hecho trae un campo `texto` con el monto ya formateado.\n  Lo copias EXACTO, caracter por caracter. No lo redondeas, no lo sumas,\n  no lo multiplicas por la cantidad, no calculas totales, no estimas.\n  Si el cliente pide un total que no esta en los hechos, decis que se lo\n  confirmamos por mail. NUNCA lo calculas vos.\n\nVOZ:\n  - Castellano rioplatense, vos (no tu). Cordial y directo.\n  - Corto: es WhatsApp. 2 a 5 lineas. Sin saludos largos ni firmas.\n  - Sin emojis salvo que el cliente use.\n  - No prometas plazos, stock ni descuentos que no esten en los hechos.\n  - Si hay varias opciones, listalas cortito para que pueda elegir.",
+          "systemMessage": "Escribis los mensajes de WhatsApp de una imprenta argentina (Terminal Gráfica).\n\nRecibis HECHOS ya verificados. Tu trabajo es redactarlos, no calcularlos.\n\nREGLA ABSOLUTA SOBRE LOS NUMEROS:\n  Cada hecho trae un campo `texto` con el monto ya formateado.\n  Lo copias EXACTO, caracter por caracter. No lo redondeas, no lo sumas,\n  no lo multiplicas por la cantidad, no calculas totales, no estimas.\n  Si el cliente pide un total que no esta en los hechos, decis que se lo\n  confirmamos por mail. NUNCA lo calculas vos.\n\nVOZ:\n  - Castellano rioplatense, vos (no tu). Cordial y directo.\n  - Corto: es WhatsApp. 2 a 5 lineas. Sin saludos largos ni firmas.\n  - Sin emojis salvo que el cliente use.\n  - No prometas plazos, stock ni descuentos que no esten en los hechos.\n  - Si hay varias opciones, listalas cortito para que pueda elegir.\n\nSI EL PEDIDO TRAE UN BLOQUE \"SEGUNDO INTENTO\":\n  Un auditor rechazo tu mensaje anterior y te dice por que. Corregí ESO\n  puntualmente — no reescribas de cero ni cambies de tema.\n  Los montos NO se tocan: son los mismos hechos autorizados de siempre.\n  Si el reclamo fue que no contestabas la pregunta, contestala derecho y\n  primero, antes de cualquier aclaracion.",
           "maxIterations": 5,
           "returnIntermediateSteps": true
         }
@@ -1376,7 +1376,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1432,7 +1432,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1649,7 +1649,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Calcular Montos').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst mensaje = String(out.mensaje || '').trim();\nreturn [{ json: { ...d, borrador: mensaje, huboCompositor: mensaje.length > 0 } }];"
+        "jsCode": "const d = $('Calcular Montos').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst mensaje = String(out.mensaje || '').trim();\n\n// QUE VUELTA ES. El contador NO puede vivir en el sobre: `d` sale de\n// $('Calcular Montos'), que corre UNA sola vez, asi que en el reintento\n// devolveria el mismo valor de siempre y el loop no terminaria nunca.\n// $runIndex del compositor lo lleva n8n: 0 la primera pasada, 1 la segunda.\nlet intento = 1;\ntry { intento = Number($runIndex) + 1; } catch (e) { intento = 1; }\nif (!Number.isFinite(intento) || intento < 1) intento = 1;\n\nreturn [{ json: {\n  ...d,\n  borrador: mensaje,\n  huboCompositor: mensaje.length > 0,\n  intento,\n  // se arrastra el feedback de la vuelta anterior para poder loguearlo aunque\n  // el segundo intento salga aprobado (queremos saber que hubo que corregir)\n  feedbackPrevio: String(d.feedbackPrevio || ''),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1673,7 +1673,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Prompt Verificador').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\n// El guard deterministico MANDA sobre el agente: si hay un monto no autorizado\n// en el texto, se rechaza aunque el verificador haya dicho que si. Un LLM no\n// puede habilitar un numero que el calculo no produjo.\nconst montoInventado = (d.numerosNoAutorizados || []).length > 0;\nconst aprobadoLLM = out.aprobado === true;\nlet fallaLLM = String(out.falla || '');\n\n// EL CHEQUEO DE MONTOS ES DETERMINISTICO Y MANDA EN LAS DOS DIRECCIONES.\n//\n// Ya mandaba para RECHAZAR (un monto no autorizado tumba un OK del LLM). Faltaba\n// la direccion inversa: si el codigo comparo numero por numero y NINGUNO esta\n// fuera de la lista, el LLM NO puede alegar 'precio_inventado' — no es una\n// opinion, es un hecho ya verificado.\n//\n// Bug del 2026-07-29 (2do rechazo): el verificador rechazo $88 y $120 diciendo\n// que no estaban \"en la base cruda\", porque el prompt le mostraba solo\n// precio_lista y no la escalera de donde salen. El chequeo automatico decia OK\n// y el LLM lo contradijo igual. Se arreglo el prompt (ahora ve la escalera) y\n// se agrega este piso: el veredicto del codigo sobre PLATA no se discute.\nlet vetoInvalido = false;\nif (!montoInventado && /precio_inventado/.test(fallaLLM)) {\n  vetoInvalido = true;\n  fallaLLM = '';  // el rechazo por plata se descarta: el codigo ya dijo que no hubo\n}\n\n// El rechazo sobrevive solo si NO era por plata (producto equivocado, no\n// contesta, dato inventado son juicios legitimos del LLM sobre el texto).\nconst rechazoLLM = !aprobadoLLM && !vetoInvalido;\nconst aprobado = !montoInventado && !rechazoLLM;\n\nconst falla = montoInventado ? 'precio_inventado'\n  : (aprobado ? 'ninguna' : (fallaLLM || 'otra'));\n\n// El sobre que sale de aca es el que leen Log Turno y Log Escalacion, asi que\n// tiene que traer TODAS las columnas que esos dos mapean. Si falta una, el\n// INSERT escribe null; y si la columna es NOT NULL el INSERT REBOTA ENTERO y,\n// con onError:continueRegularOutput, falla EN SILENCIO — cero filas y ninguna\n// senal de que algo anda mal. Es exactamente el bug del 2026-07-28 (Log Turno\n// escribia null en `accion`), que dejo sin datos todo el trabajo de ese dia.\nconst productoResuelto = (d.hechos || []).map((h) => h.producto).join(' | ')\n  || (d.elegidos || []).map((c) => c.producto).join(' | ')\n  || null;\n\nreturn [{ json: {\n  ...d,\n  aprobado,\n  aprobadoLLM,\n  montoInventado,\n  // el LLM quiso rechazar por plata cuando el codigo ya habia dicho que no\n  // habia monto inventado. Se registra para vigilar si pasa seguido: seria\n  // sintoma de que el prompt del verificador sigue mostrando mal la evidencia.\n  vetoInvalido,\n  falla,\n  motivoVerificador: String(out.motivo || ''),\n  // Log Escalacion mapea `.motivo`: se emite con ese nombre tambien.\n  motivo: String(out.motivo || '') || ('v10 falla=' + falla),\n  queFalta: String(out.queFalta || ''),\n  final: aprobado ? d.borrador : '',\n  accion: aprobado ? 'respuesta_verificada' : 'handoff',\n  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0)\n    + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),\n  // columnas que Log Turno espera y que la cadena de agentes no producia\n  productoResuelto,\n  filasSql: Number(d.nFilas) || 0,\n  senales: {\n    intencion: d.intencion || null,\n    confianzaIntencion: d.confianzaIntencion || 0,\n    nCandidatos: (d.candidatos || []).length,\n    nElegidos: (d.elegidos || []).length,\n    nHechos: (d.hechos || []).length,\n    idxInvalidos: d.idxInvalidos || 0,\n    dudaNicho: !!d.dudaNicho,\n    montoInventado,\n    aprobadoLLM,\n    vetoInvalido,\n    falla,\n  },\n} }];"
+        "jsCode": "const d = $('Prompt Verificador').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\n// El guard deterministico MANDA sobre el agente: si hay un monto no autorizado\n// en el texto, se rechaza aunque el verificador haya dicho que si. Un LLM no\n// puede habilitar un numero que el calculo no produjo.\nconst montoInventado = (d.numerosNoAutorizados || []).length > 0;\nconst aprobadoLLM = out.aprobado === true;\nlet fallaLLM = String(out.falla || '');\n\n// EL CHEQUEO DE MONTOS ES DETERMINISTICO Y MANDA EN LAS DOS DIRECCIONES.\n//\n// Ya mandaba para RECHAZAR (un monto no autorizado tumba un OK del LLM). Faltaba\n// la direccion inversa: si el codigo comparo numero por numero y NINGUNO esta\n// fuera de la lista, el LLM NO puede alegar 'precio_inventado' — no es una\n// opinion, es un hecho ya verificado.\n//\n// Bug del 2026-07-29 (2do rechazo): el verificador rechazo $88 y $120 diciendo\n// que no estaban \"en la base cruda\", porque el prompt le mostraba solo\n// precio_lista y no la escalera de donde salen. El chequeo automatico decia OK\n// y el LLM lo contradijo igual. Se arreglo el prompt (ahora ve la escalera) y\n// se agrega este piso: el veredicto del codigo sobre PLATA no se discute.\nlet vetoInvalido = false;\nif (!montoInventado && /precio_inventado/.test(fallaLLM)) {\n  vetoInvalido = true;\n  fallaLLM = '';  // el rechazo por plata se descarta: el codigo ya dijo que no hubo\n}\n\n// El rechazo sobrevive solo si NO era por plata (producto equivocado, no\n// contesta, dato inventado son juicios legitimos del LLM sobre el texto).\nconst rechazoLLM = !aprobadoLLM && !vetoInvalido;\nconst aprobado = !montoInventado && !rechazoLLM;\n\nconst falla = montoInventado ? 'precio_inventado'\n  : (aprobado ? 'ninguna' : (fallaLLM || 'otra'));\n\n// El sobre que sale de aca es el que leen Log Turno y Log Escalacion, asi que\n// tiene que traer TODAS las columnas que esos dos mapean. Si falta una, el\n// INSERT escribe null; y si la columna es NOT NULL el INSERT REBOTA ENTERO y,\n// con onError:continueRegularOutput, falla EN SILENCIO — cero filas y ninguna\n// senal de que algo anda mal. Es exactamente el bug del 2026-07-28 (Log Turno\n// escribia null en `accion`), que dejo sin datos todo el trabajo de ese dia.\nconst productoResuelto = (d.hechos || []).map((h) => h.producto).join(' | ')\n  || (d.elegidos || []).map((c) => c.producto).join(' | ')\n  || null;\n\n// ¿SE REINTENTA? (decision de Martin 2026-07-29: un rebote al compositor y basta)\n//\n// Tres condiciones, y las tres tienen que darse:\n//\n//  1. Es la PRIMERA vuelta. `intento` viene de $runIndex del compositor, que lo\n//     lleva n8n — no de un contador nuestro que se pueda desincronizar.\n//\n//  2. NO fue por plata. `montoInventado` significa que el codigo encontro un\n//     numero que el calculo no produjo. Reescribir la prosa no arregla eso: los\n//     montos autorizados son IDENTICOS en la segunda vuelta (Calcular Montos no\n//     se re-ejecuta), asi que el reintento solo gastaria dos llamadas mas para\n//     llegar al mismo rechazo. Va derecho a mail.\n//\n//  3. Hay algo concreto que corregir. Si el auditor rechazo sin decir por que,\n//     el compositor no tiene con que trabajar y el reintento es una moneda al\n//     aire con la plata del cliente en el medio.\nconst intento = Number(d.intento) || 1;\nconst hayFeedback = String(out.motivo || '').trim().length > 0\n  || String(out.queFalta || '').trim().length > 0;\nconst puedeReintentar = !aprobado && intento < 2 && !montoInventado && hayFeedback;\n\n// por que NO se reintenta, para poder auditarlo desde bot.decisiones\nconst motivoNoReintento = (aprobado || puedeReintentar) ? null\n  : (intento >= 2 ? 'ya_reintento'\n    : montoInventado ? 'plata_no_es_reintentable'\n    : 'sin_feedback_accionable');\n\nreturn [{ json: {\n  ...d,\n  aprobado,\n  aprobadoLLM,\n  montoInventado,\n  // el LLM quiso rechazar por plata cuando el codigo ya habia dicho que no\n  // habia monto inventado. Se registra para vigilar si pasa seguido: seria\n  // sintoma de que el prompt del verificador sigue mostrando mal la evidencia.\n  vetoInvalido,\n  falla,\n  intento,\n  puedeReintentar,\n  motivoNoReintento,\n  motivoVerificador: String(out.motivo || ''),\n  // Log Escalacion mapea `.motivo`: se emite con ese nombre tambien.\n  motivo: String(out.motivo || '') || ('v10 falla=' + falla),\n  queFalta: String(out.queFalta || ''),\n  final: aprobado ? d.borrador : '',\n  accion: aprobado ? 'respuesta_verificada' : 'handoff',\n  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0)\n    + ' intento=' + intento\n    + (puedeReintentar ? ' REINTENTA' : '')\n    + (motivoNoReintento ? ' no-reintenta=' + motivoNoReintento : '')\n    + (intento > 1 && aprobado ? ' RESCATADO-POR-REINTENTO' : '')\n    + (d.feedbackPrevio ? ' feedback1=' + String(d.feedbackPrevio).slice(0, 160) : '')\n    + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),\n  // columnas que Log Turno espera y que la cadena de agentes no producia\n  productoResuelto,\n  filasSql: Number(d.nFilas) || 0,\n  senales: {\n    intencion: d.intencion || null,\n    confianzaIntencion: d.confianzaIntencion || 0,\n    nCandidatos: (d.candidatos || []).length,\n    nElegidos: (d.elegidos || []).length,\n    nHechos: (d.hechos || []).length,\n    idxInvalidos: d.idxInvalidos || 0,\n    dudaNicho: !!d.dudaNicho,\n    montoInventado,\n    aprobadoLLM,\n    vetoInvalido,\n    falla,\n    intento,\n    puedeReintentar,\n    motivoNoReintento,\n    // el reintento salvo un turno que antes moria en mail\n    rescatadoPorReintento: intento > 1 && aprobado,\n  },\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1712,6 +1712,48 @@
         0
       ],
       "name": "¿Aprobado?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.puedeReintentar }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        300
+      ],
+      "name": "¿Reintentar?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rearma el prompt del compositor sumandole el feedback del auditor. Los HECHOS\n// son los mismos de la primera vuelta (salen de Calcular Montos, que no se\n// re-ejecuta): lo unico que cambia es que ahora sabe que fallo.\nconst v = $('Leer Verificador').first().json;\nconst base = $('Calcular Montos').first().json;\n\nconst queFalta = String(v.queFalta || '').trim();\nconst motivo = String(v.motivoVerificador || v.motivo || '').trim();\n\nreturn [{ json: {\n  ...base,\n  intento: 2,\n  feedbackPrevio: (motivo + (queFalta ? ' · ' + queFalta : '')).slice(0, 600),\n  borradorRechazado: String(v.borrador || ''),\n  fallaPrevia: String(v.falla || ''),\n  promptAgente: [\n    String(base.promptAgente || ''),\n    '',\n    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n    'SEGUNDO INTENTO — TU MENSAJE ANTERIOR FUE RECHAZADO POR EL AUDITOR.',\n    '',\n    'Lo que escribiste antes:',\n    '\"\"\"', String(v.borrador || ''), '\"\"\"',\n    '',\n    'Por que lo rechazo:',\n    motivo || '(sin motivo)',\n    queFalta ? '' : null,\n    queFalta ? 'Que falta corregir:' : null,\n    queFalta || null,\n    '',\n    'Reescribi el mensaje corrigiendo ESO. Los HECHOS AUTORIZADOS de arriba no',\n    'cambiaron: son los mismos montos y no se tocan. Si el auditor dijo que el',\n    'mensaje no contestaba lo que el cliente pregunto, contestalo derecho.',\n    'Es tu ultima oportunidad: si vuelve a fallar, el cliente termina en un mail.',\n  ].filter((l) => l !== null).join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        480
+      ],
+      "name": "Prompt Reintento"
     },
     {
       "parameters": {},
@@ -2413,7 +2455,36 @@
         ],
         [
           {
+            "node": "¿Reintentar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Reintentar?": {
+      "main": [
+        [
+          {
+            "node": "Prompt Reintento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Label Escalación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Reintento": {
+      "main": [
+        [
+          {
+            "node": "Agente Compositor",
             "type": "main",
             "index": 0
           }

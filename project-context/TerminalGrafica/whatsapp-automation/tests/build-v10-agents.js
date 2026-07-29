@@ -444,6 +444,13 @@ const A4 = agente(
     '  - Sin emojis salvo que el cliente use.',
     '  - No prometas plazos, stock ni descuentos que no esten en los hechos.',
     '  - Si hay varias opciones, listalas cortito para que pueda elegir.',
+    '',
+    'SI EL PEDIDO TRAE UN BLOQUE "SEGUNDO INTENTO":',
+    '  Un auditor rechazo tu mensaje anterior y te dice por que. Corregí ESO',
+    '  puntualmente — no reescribas de cero ni cambies de tema.',
+    '  Los montos NO se tocan: son los mismos hechos autorizados de siempre.',
+    '  Si el reclamo fue que no contestabas la pregunta, contestala derecho y',
+    '  primero, antes de cualquier aclaracion.',
   ].join('\n'),
   {
     type: 'object',

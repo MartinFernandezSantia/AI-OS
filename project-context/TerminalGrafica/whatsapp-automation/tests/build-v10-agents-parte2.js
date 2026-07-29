@@ -478,7 +478,24 @@ try {
 } catch (e) { out = {}; }
 
 const mensaje = String(out.mensaje || '').trim();
-return [{ json: { ...d, borrador: mensaje, huboCompositor: mensaje.length > 0 } }];
+
+// QUE VUELTA ES. El contador NO puede vivir en el sobre: \`d\` sale de
+// $('Calcular Montos'), que corre UNA sola vez, asi que en el reintento
+// devolveria el mismo valor de siempre y el loop no terminaria nunca.
+// $runIndex del compositor lo lleva n8n: 0 la primera pasada, 1 la segunda.
+let intento = 1;
+try { intento = Number($runIndex) + 1; } catch (e) { intento = 1; }
+if (!Number.isFinite(intento) || intento < 1) intento = 1;
+
+return [{ json: {
+  ...d,
+  borrador: mensaje,
+  huboCompositor: mensaje.length > 0,
+  intento,
+  // se arrastra el feedback de la vuelta anterior para poder loguearlo aunque
+  // el segundo intento salga aprobado (queremos saber que hubo que corregir)
+  feedbackPrevio: String(d.feedbackPrevio || ''),
+} }];
 `.trim(), 1600, 0);
 
 codeNode('Prompt Verificador', `
@@ -618,6 +635,33 @@ const productoResuelto = (d.hechos || []).map((h) => h.producto).join(' | ')
   || (d.elegidos || []).map((c) => c.producto).join(' | ')
   || null;
 
+// ¿SE REINTENTA? (decision de Martin 2026-07-29: un rebote al compositor y basta)
+//
+// Tres condiciones, y las tres tienen que darse:
+//
+//  1. Es la PRIMERA vuelta. \`intento\` viene de $runIndex del compositor, que lo
+//     lleva n8n — no de un contador nuestro que se pueda desincronizar.
+//
+//  2. NO fue por plata. \`montoInventado\` significa que el codigo encontro un
+//     numero que el calculo no produjo. Reescribir la prosa no arregla eso: los
+//     montos autorizados son IDENTICOS en la segunda vuelta (Calcular Montos no
+//     se re-ejecuta), asi que el reintento solo gastaria dos llamadas mas para
+//     llegar al mismo rechazo. Va derecho a mail.
+//
+//  3. Hay algo concreto que corregir. Si el auditor rechazo sin decir por que,
+//     el compositor no tiene con que trabajar y el reintento es una moneda al
+//     aire con la plata del cliente en el medio.
+const intento = Number(d.intento) || 1;
+const hayFeedback = String(out.motivo || '').trim().length > 0
+  || String(out.queFalta || '').trim().length > 0;
+const puedeReintentar = !aprobado && intento < 2 && !montoInventado && hayFeedback;
+
+// por que NO se reintenta, para poder auditarlo desde bot.decisiones
+const motivoNoReintento = (aprobado || puedeReintentar) ? null
+  : (intento >= 2 ? 'ya_reintento'
+    : montoInventado ? 'plata_no_es_reintentable'
+    : 'sin_feedback_accionable');
+
 return [{ json: {
   ...d,
   aprobado,
@@ -628,6 +672,9 @@ return [{ json: {
   // sintoma de que el prompt del verificador sigue mostrando mal la evidencia.
   vetoInvalido,
   falla,
+  intento,
+  puedeReintentar,
+  motivoNoReintento,
   motivoVerificador: String(out.motivo || ''),
   // Log Escalacion mapea \`.motivo\`: se emite con ese nombre tambien.
   motivo: String(out.motivo || '') || ('v10 falla=' + falla),
@@ -635,6 +682,11 @@ return [{ json: {
   final: aprobado ? d.borrador : '',
   accion: aprobado ? 'respuesta_verificada' : 'handoff',
   notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0)
+    + ' intento=' + intento
+    + (puedeReintentar ? ' REINTENTA' : '')
+    + (motivoNoReintento ? ' no-reintenta=' + motivoNoReintento : '')
+    + (intento > 1 && aprobado ? ' RESCATADO-POR-REINTENTO' : '')
+    + (d.feedbackPrevio ? ' feedback1=' + String(d.feedbackPrevio).slice(0, 160) : '')
     + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),
   // columnas que Log Turno espera y que la cadena de agentes no producia
   productoResuelto,
@@ -651,6 +703,11 @@ return [{ json: {
     aprobadoLLM,
     vetoInvalido,
     falla,
+    intento,
+    puedeReintentar,
+    motivoNoReintento,
+    // el reintento salvo un turno que antes moria en mail
+    rescatadoPorReintento: intento > 1 && aprobado,
   },
 } }];
 `.trim(), 2400, 0);
@@ -669,6 +726,73 @@ add({
   position: pos(2600, 0),
   name: '¿Aprobado?',
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// REINTENTO · un solo rebote al compositor con el feedback del verificador
+//
+// DECISION DE MARTIN (2026-07-29): cuando el verificador desaprueba, el turno no
+// muere — vuelve al compositor con el motivo para que corrija. UNA vez. Si el
+// verificador rechaza de nuevo, ahi si escala a mail.
+//
+// POR QUE VUELVE AL COMPOSITOR Y NO MAS ATRAS:
+//   El reintento reescribe PROSA, no plata. `Calcular Montos` no se re-ejecuta,
+//   asi que `montosAutorizados` es identico en las dos vueltas. Eso es
+//   deliberado: si el problema fuera el monto, redactar de nuevo no lo arregla —
+//   por eso `precio_inventado` NO es reintentable (ver abajo).
+// ───────────────────────────────────────────────────────────────────────────
+add({
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, version: 2 },
+      combinator: 'and',
+      conditions: [{ leftValue: '={{ $json.puedeReintentar }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+    },
+    options: {},
+  },
+  type: 'n8n-nodes-base.if',
+  typeVersion: 2.2,
+  position: pos(2600, 300),
+  name: '¿Reintentar?',
+});
+
+codeNode('Prompt Reintento', `
+// Rearma el prompt del compositor sumandole el feedback del auditor. Los HECHOS
+// son los mismos de la primera vuelta (salen de Calcular Montos, que no se
+// re-ejecuta): lo unico que cambia es que ahora sabe que fallo.
+const v = $('Leer Verificador').first().json;
+const base = $('Calcular Montos').first().json;
+
+const queFalta = String(v.queFalta || '').trim();
+const motivo = String(v.motivoVerificador || v.motivo || '').trim();
+
+return [{ json: {
+  ...base,
+  intento: 2,
+  feedbackPrevio: (motivo + (queFalta ? ' · ' + queFalta : '')).slice(0, 600),
+  borradorRechazado: String(v.borrador || ''),
+  fallaPrevia: String(v.falla || ''),
+  promptAgente: [
+    String(base.promptAgente || ''),
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'SEGUNDO INTENTO — TU MENSAJE ANTERIOR FUE RECHAZADO POR EL AUDITOR.',
+    '',
+    'Lo que escribiste antes:',
+    '"""', String(v.borrador || ''), '"""',
+    '',
+    'Por que lo rechazo:',
+    motivo || '(sin motivo)',
+    queFalta ? '' : null,
+    queFalta ? 'Que falta corregir:' : null,
+    queFalta || null,
+    '',
+    'Reescribi el mensaje corrigiendo ESO. Los HECHOS AUTORIZADOS de arriba no',
+    'cambiaron: son los mismos montos y no se tocan. Si el auditor dijo que el',
+    'mensaje no contestaba lo que el cliente pregunto, contestalo derecho.',
+    'Es tu ultima oportunidad: si vuelve a fallar, el cliente termina en un mail.',
+  ].filter((l) => l !== null).join('\\n'),
+} }];
+`.trim(), 2600, 480);
 
 paso('7 nodos Code puente (incl. Calcular Montos: unico productor de montos)');
 
@@ -759,7 +883,13 @@ const C = [
   ['Agente Verificador', 'Leer Verificador'],
   ['Leer Verificador', '¿Aprobado?'],
   ['¿Aprobado?', 'Enviar Mensaje', 'main', 0],
-  ['¿Aprobado?', 'Label Escalación', 'main', 1],
+  // rechazado -> se pregunta si da para reintentar antes de mandarlo a mail
+  ['¿Aprobado?', '¿Reintentar?', 'main', 1],
+  // EL LOOP: vuelve al compositor con el feedback. Una sola vez — lo garantiza
+  // `puedeReintentar` (intento < 2), que se calcula en Leer Verificador.
+  ['¿Reintentar?', 'Prompt Reintento', 'main', 0],
+  ['¿Reintentar?', 'Label Escalación', 'main', 1],
+  ['Prompt Reintento', 'Agente Compositor', 'main', 0],
 
   // salidas
   ['Enviar Mensaje', 'Log Turno', 'main', 0],
