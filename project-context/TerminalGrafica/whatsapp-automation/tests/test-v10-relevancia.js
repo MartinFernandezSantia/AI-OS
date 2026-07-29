@@ -375,7 +375,14 @@ const FILA_MIN = {
   score: '4.2', variante_id: 'pv1', variante: '.', precio_lista: '15000', unidad: 'unidad',
   mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
   tiene_reglas: false, nicho: 'inmobiliarias', rangos_cantidad: null,
-  atributos: { unidad_venta: 'unidad', min_unidades: 6, nicho: 'inmobiliarias' },
+  // `multiplica: true` es lo que dice la fila REAL del catalogo (verificado en
+  // db/export-actualizado-catalogo.json, producto "Promocion Inmobiliarias 6
+  // carteles"). El fixture no lo declaraba, asi que el no-total se atribuia a
+  // `no_multiplica` y tapaba la razon verdadera (`bajo_minimo`) — el test pasaba
+  // por el motivo equivocado.
+  atributos: {
+    unidad_venta: 'unidad', min_unidades: 6, nicho: 'inmobiliarias', multiplica: true,
+  },
 };
 const sobreMin = (cant) => ({
   userMessage: 'necesito ' + cant + ' carteles para la inmobiliaria',
@@ -384,24 +391,48 @@ const sobreMin = (cant) => ({
   seleccion: { terminos: ['cartel inmobiliaria'], productos: [], cantidad: cant },
 });
 
-// pide 3, el minimo es 6 -> NO puede cotizar $15.000
+// POLITICA NUEVA (Martin, 2026-07-29): bajo el minimo la OFERTA SE DICE.
+//
+// Estos 4 checks afirmaban lo contrario ("NO emite el precio", "avisa por
+// caveat") y pasaban en verde mientras el bot fallaba en WhatsApp: el cliente
+// dijo que era de una inmobiliaria, pidio 3 carteles, y nunca se enrero de que
+// llevando 6 le salian $15.000 en vez de $19.500. El `continue` que los hacia
+// pasar era el bug.
+//
+// Lo que NO cambia: no se cotiza un TOTAL con el precio de la promo (3 x $15.000
+// = $45.000 seria 1,3x por debajo de los $58.500 reales). El monto se dice, el
+// total no.
 const bajo = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
   { 'Armar Candidatos': correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(3) }) });
-check('bajo el minimo NO emite el precio como hecho', bajo.hechos.length === 0,
+check('bajo el minimo SI emite la oferta como hecho', bajo.hechos.length === 1,
   JSON.stringify(bajo.hechos));
-check('bajo el minimo avisa por caveat con el numero',
-  bajo.caveats.some((c) => /llevando 6 o mas/.test(c.nota)), JSON.stringify(bajo.caveats));
+check('la marca como oferta condicionada', bajo.hechos[0].ofertaBajoMinimo === true);
+check('el minimo viaja PEGADO al monto (no como caveat borrable)',
+  /\$15\.000.*llevando 6 o mas/.test(bajo.hechos[0].texto), bajo.hechos[0].texto);
+check('bajo el minimo NO da total', bajo.hechos[0].total === null,
+  JSON.stringify(bajo.hechos[0].total));
+check('el motivo del no-total es el minimo', bajo.hechos[0].motivoSinTotal === 'bajo_minimo',
+  bajo.hechos[0].motivoSinTotal);
 check('bajo el minimo NO escala: hay algo que decir', bajo.hayAlgoQueDecir === true);
-check('$15.000 NO queda autorizado bajo el minimo',
-  !(bajo.montosAutorizados || []).includes(15000), JSON.stringify(bajo.montosAutorizados));
+check('$15.000 queda autorizado (el compositor tiene que poder decirlo)',
+  (bajo.montosAutorizados || []).includes(15000), JSON.stringify(bajo.montosAutorizados));
+check('NO autoriza el total que no se calculo',
+  !(bajo.montosAutorizados || []).includes(45000), JSON.stringify(bajo.montosAutorizados));
+check('le pide al compositor decir las DOS cosas',
+  /DECI LAS DOS COSAS/.test(bajo.promptAgente));
+check('le explica que es una oferta y no el precio de lo que pidio',
+  /OFERTA que arranca en 6/.test(bajo.promptAgente), bajo.promptAgente.slice(0, 400));
 
-// pide 10, arriba del minimo -> cotiza, pero el minimo se dice igual
+// pide 10, arriba del minimo -> cotiza normal, y el minimo se dice igual
 const alto = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
   { 'Armar Candidatos': correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(10) }) });
 check('arriba del minimo SI cotiza', alto.hechos.length === 1 && alto.hechos[0].monto === 15000,
   JSON.stringify(alto.hechos));
+check('arriba del minimo NO es oferta condicionada', alto.hechos[0].ofertaBajoMinimo === false);
 check('arriba del minimo igual aclara el minimo',
-  alto.caveats.some((c) => /llevando 6 o mas/.test(c.nota)), JSON.stringify(alto.caveats));
+  /llevando 6 o mas/.test(alto.hechos[0].texto), alto.hechos[0].texto);
+check('el minimo NO se dice dos veces (estaba duplicado en caveats)',
+  !alto.caveats.some((c) => /llevando 6 o mas/.test(c.nota)), JSON.stringify(alto.caveats));
 
 const armMin = correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(3) });
 check('el candidato le muestra el minimo al agente',
@@ -509,6 +540,61 @@ console.log('\n=== Verificador: correccion con guard de plata ===');
     { output: { aprobado: true, falla: 'ninguna', motivo: 'ok' } }, { 'Prompt Verificador': base });
   check('sin correccion sale el borrador original', sinCorr.final === base.borrador);
   check('sin correccion no marca nada', sinCorr.correccionAplicada === false);
+
+  // ── GUARD DE OFERTA BORRADA ─────────────────────────────────────────
+  //
+  // EL CASO REAL DEL 2026-07-29. El verificador aprobo el mensaje pero le borro
+  // la promo de inmobiliarias ($15.000 llevando 6), dejando solo el suelto
+  // ($19.500). Motivo declarado: "informacion innecesaria sobre otras medidas y
+  // promociones que no venian al caso". El cliente se fue sin saber que existia
+  // un precio mejor, y el log decia CORREGIDO-POR-VERIFICADOR sin mas detalle.
+  console.log('\n=== Guard: el verificador NO puede borrar una oferta ===');
+  const conOferta = {
+    ...pv,
+    borrador: 'El cartel suelto sale $19.500 por unidad. Llevando 6 te sale $15.000 cada uno.',
+    montosAutorizados: [19500, 15000],
+    hechos: [
+      { producto: 'Cartel 1x0.65', texto: '$19.500 por unidad', monto: 19500 },
+      { producto: 'Promo inmobiliarias', texto: '$15.000 por unidad llevando 6 o mas',
+        monto: 15000, ofertaBajoMinimo: true, minUnidades: 6 },
+    ],
+  };
+
+  const borroOferta = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna',
+    motivo: 'El mensaje incluia informacion innecesaria sobre promociones que no venian al caso',
+    mensajeCorregido: 'El cartel de 1 x 0.65 mt sale $19.500 por unidad. Para un presupuesto escribinos a terminalgrafica@gmail.com.',
+    queCorregi: 'Elimine la mencion a la promocion de 6 unidades',
+  } }, { 'Prompt Verificador': conOferta });
+  check('la correccion que borra la oferta se descarta',
+    borroOferta.correccionAplicada === false);
+  check('sale el borrador ORIGINAL, que tenia la promo',
+    /15\.000/.test(borroOferta.final), borroOferta.final);
+  check('el turno NO se rechaza (el borrador estaba bien)', borroOferta.aprobado === true);
+  check('NO lo confunde con plata inventada', borroOferta.montoInventado === false);
+  check('queda el rastro con el monto borrado',
+    /CORRECCION-BORRO-OFERTA\(15000\)/.test(borroOferta.notas), borroOferta.notas);
+  check('se cuenta en senales para vigilarlo', borroOferta.senales.ofertasBorradas === 1);
+
+  // CONTRACARA: reformular la oferta SI se permite. El guard compara el monto,
+  // no el texto — si comparara la frase, romperia justo la libertad que se le dio.
+  const reformulo = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna', motivo: 'acorte',
+    mensajeCorregido: 'Suelto: $19.500 c/u. Desde 6 unidades: $15.000 c/u.',
+    queCorregi: 'lo acorte',
+  } }, { 'Prompt Verificador': conOferta });
+  check('reformular la oferta SI se permite', reformulo.correccionAplicada === true);
+  check('la correccion reformulada es la que sale',
+    /Desde 6 unidades/.test(reformulo.final), reformulo.final);
+
+  // y borrar OTRA cosa (no una oferta) sigue estando permitido
+  const borroRelleno = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna', motivo: 'saque relleno',
+    mensajeCorregido: '$19.500 por unidad. Llevando 6, $15.000 cada uno.',
+    queCorregi: 'saque la frase de cierre',
+  } }, { 'Prompt Verificador': conOferta });
+  check('borrar relleno sigue permitido si la oferta queda',
+    borroRelleno.correccionAplicada === true);
 
   // una correccion identica al original no cuenta como correccion
   const igual = correr('Leer Verificador', { output: {
@@ -677,12 +763,23 @@ console.log('\n=== Totales: solo donde no hay recargo posible ===');
 console.log('\n=== Aviso de canal (una sola vez) ===');
 {
   const FILA_IMPR = { ...FILAS[1], atributos: { unidad_venta: 'hoja', multiplica: true } };
+  // EL FLAG SE MOCKEA EN `Decidir`, NO EN EL SOBRE.
+  //
+  // Antes este fixture lo ponia en el sobre de `Leer Selector` y pasaba — pero en
+  // produccion el mail se tipeo DOS VECES en la misma conversacion (2026-07-29).
+  // El test mentia: al armar el sobre a mano garantizaba una propagacion que en
+  // el flujo real atraviesa 7 nodos, y cualquiera que no copie la clave la deja
+  // en undefined (=falso, "primera vez", siempre). El nodo ahora lee
+  // $('Decidir') por nombre, asi que el test tiene que mockear ESE nodo.
   const conAviso = (avisoDado) => correr('Calcular Montos',
     { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
-    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR], { 'Leer Selector': {
-      userMessage: 'cuanto sale?', conversation: [], conversationId: 386, accountId: 1,
-      avisoDado, seleccion: { terminos: ['obra'], productos: [], cantidad: 200 },
-    } }) });
+    {
+      'Decidir': { avisoDado },
+      'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR], { 'Leer Selector': {
+        userMessage: 'cuanto sale?', conversation: [], conversationId: 386, accountId: 1,
+        seleccion: { terminos: ['obra'], productos: [], cantidad: 200 },
+      } }),
+    });
 
   const primera = conAviso(false);
   check('la 1a vez le pide cerrar con el canal', /CERRA CON EL CANAL/.test(primera.promptAgente));
@@ -691,6 +788,67 @@ console.log('\n=== Aviso de canal (una sola vez) ===');
   const repetida = conAviso(true);
   check('la 2a vez le prohibe repetirlo', /NO repitas que el canal es informativo/.test(repetida.promptAgente));
   check('la 2a vez NO le pide cerrar con el canal', !/CERRA CON EL CANAL/.test(repetida.promptAgente));
+
+  // EL FLAG NO PUEDE VENIR DEL SOBRE. Este es el test que faltaba: si alguien
+  // vuelve a leer `d.avisoDado`, el sobre dice true y Decidir dice false, asi
+  // que el mail se repetiria. Gana Decidir.
+  const soloEnSobre = correr('Calcular Montos',
+    { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    {
+      'Decidir': { avisoDado: false },
+      'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR], { 'Leer Selector': {
+        userMessage: 'cuanto sale?', conversation: [], conversationId: 386, accountId: 1,
+        avisoDado: true,   // el sobre miente
+        seleccion: { terminos: ['obra'], productos: [], cantidad: 200 },
+      } }),
+    });
+  check('el flag sale de Decidir, no del sobre heredado',
+    /CERRA CON EL CANAL/.test(soloEnSobre.promptAgente));
+}
+
+// ── EL ENVIO PUEDE FALLAR Y EL LOG NO PUEDE MENTIR ─────────────────────
+//
+// Caso real (2026-07-29): Chatwoot devolvio "Service temporarily unavailable",
+// el cliente nunca recibio la respuesta, y como el nodo tiene
+// onError:continueRegularOutput el flujo siguio como si todo hubiera salido
+// bien — Log Turno escribio el mensaje en `final` y la base afirmaba una entrega
+// que no ocurrio. Martin lo descubrio mirando WhatsApp y reenvio a mano.
+console.log('\n=== Chequear Envio: el log no puede mentir ===');
+{
+  const SOBRE_V = {
+    conversationId: 382, accountId: 1, userMessage: 'cuanto sale?',
+    final: 'Sale $800 la hoja.', accion: 'respuesta_verificada',
+    notas: 'v10-agents falla=ninguna', senales: { nHechos: 1 },
+  };
+
+  // Chatwoot acepto: devuelve el mensaje creado con su id
+  const ok = correr('Chequear Envio', { id: 99123, content: 'Sale $800 la hoja.' },
+    { 'Leer Verificador': SOBRE_V });
+  check('con id de Chatwoot se considera entregado', ok.entregado === true);
+  check('guarda el id para poder rastrearlo', ok.idMensajeChatwoot === 99123);
+  check('la accion no se toca', ok.accion === 'respuesta_verificada');
+  check('no ensucia las notas', !/ENVIO-FALLIDO/.test(ok.notas));
+
+  // EL CASO DEL 503: el nodo emite el item de error, sin id
+  const err = correr('Chequear Envio',
+    { error: { message: 'Service temporarily unavailable' } },
+    { 'Leer Verificador': SOBRE_V });
+  check('un 503 NO se considera entregado', err.entregado === false);
+  check('la accion pasa a envio_fallido (el log deja de mentir)',
+    err.accion === 'envio_fallido', err.accion);
+  check('el motivo queda en las notas',
+    /ENVIO-FALLIDO\(Service temporarily unavailable\)/.test(err.notas), err.notas);
+  check('queda en senales para poder contarlos', err.senales.envioFallido === true);
+
+  // SIN id Y SIN error: tampoco se creo nada. Es el caso silencioso.
+  const vacio = correr('Chequear Envio', {}, { 'Leer Verificador': SOBRE_V });
+  check('sin id de mensaje tampoco se da por entregado', vacio.entregado === false);
+  check('lo dice explicito en las notas',
+    /no devolvio id/.test(vacio.notas), vacio.notas);
+
+  // el sobre del verificador tiene que llegar intacto: Log Turno lee de ACA
+  check('conserva las columnas que Log Turno mapea',
+    ok.conversationId === 382 && ok.final === 'Sale $800 la hoja.');
 }
 
 // ── El compositor cotiza, pero no calcula ──────────────────────────────

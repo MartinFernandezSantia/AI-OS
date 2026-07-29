@@ -125,6 +125,39 @@ for (const nombre of HEREDADOS) {
 }
 paso('heredados de v9: ' + HEREDADOS.length + ' nodos (plomeria, firewall, busqueda SQL)');
 
+// ═══ EL ENVIO SE REINTENTA (Martin, 2026-07-29: caso real) ═══
+//
+// Chatwoot devolvio "Service temporarily unavailable" y el cliente NUNCA recibio
+// la respuesta. El mensaje estaba bien generado y verificado; se perdio en el
+// ultimo metro, y Martin lo tuvo que reenviar a mano.
+//
+// Dos problemas distintos, los dos en este nodo:
+//
+//  1. NO REINTENTABA. Un 503 de Chatwoot es transitorio (contenedor reiniciando,
+//     Rails saturado): el segundo intento casi siempre pasa. Se le ponen 3
+//     intentos con 3s de espera.
+//
+//     Es seguro reintentar: un 503 significa que Chatwoot no proceso nada, asi
+//     que no hay mensaje a medio crear que se pueda duplicar.
+//
+//  2. EL FALLO SE VEIA COMO EXITO. \`onError: continueRegularOutput\` (que se
+//     CONSERVA a proposito, ver abajo) hace que el flujo siga como si nada:
+//     Log Turno escribia \`final\` con el mensaje y la base afirmaba que el
+//     cliente lo habia recibido. El log mentia, que es peor que el error — te
+//     ciega justo para diagnosticarlo. Eso lo arregla 'Chequear Envio' (parte 2).
+//
+// POR QUE NO SE QUITA EL onError: si el nodo tira error, el flujo se corta y no
+// se loguea NADA. Quedaria sin mensaje Y sin rastro: peor que ahora.
+const nodoEnvio = wf.nodes.find((n) => n.name === 'Enviar Mensaje');
+if (!nodoEnvio) throw new Error('Enviar Mensaje no se heredo: el fix del 503 no se aplico');
+nodoEnvio.retryOnFail = true;
+nodoEnvio.maxTries = 3;
+nodoEnvio.waitBetweenTries = 3000;
+// hace falta para poder LEER la respuesta de Chatwoot en el nodo siguiente: sin
+// esto, un fallo no deja item y el chequeo no tiene con que trabajar.
+nodoEnvio.alwaysOutputData = true;
+paso('Enviar Mensaje: 3 reintentos + alwaysOutputData (503 de Chatwoot, 2026-07-29)');
+
 const CRED_PG = srcNode('Buscar Candidatos').credentials.postgres;
 const CRED_OR = srcNode('OpenRouter Chat Model').credentials.openRouterApi;
 
@@ -549,6 +582,16 @@ const A5 = agente(
     'RECHAZAS igual (sin corregir) cuando el problema es de FONDO: el producto',
     'esta equivocado, no contesta lo que preguntaron, o hay un monto mal. Eso no',
     'se arregla editando el texto.',
+    '',
+    'NUNCA BORRES UNA OFERTA POR CANTIDAD (Martin, 2026-07-29).',
+    'Cuando un hecho dice "llevando N o mas", ese es un precio mejor que existe de',
+    'verdad y que el cliente tiene derecho a conocer, aunque haya pedido menos.',
+    'Ejemplo real que salio mal: el cliente dijo que era de una inmobiliaria y pidio',
+    '3 carteles. El mensaje traia el suelto ($19.500 c/u) Y la promo ($15.000 c/u',
+    'llevando 6). Se borro la promo por "innecesaria" y el cliente se fue sin saber',
+    'que existia. NO es relleno: es la razon de ser de ese producto.',
+    'Lo mismo con cualquier alternativa mas barata o pack mas grande que figure en',
+    'los hechos. Podes acortar como esta redactada; el dato tiene que quedar.',
     '',
     'REGLA ABSOLUTA AL CORREGIR: los montos del mensaje corregido tienen que ser',
     'EXACTAMENTE los de los hechos autorizados. No agregues ni cambies un solo',

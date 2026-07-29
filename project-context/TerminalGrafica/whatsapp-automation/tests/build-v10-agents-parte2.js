@@ -322,6 +322,20 @@ codeNode('Calcular Montos', `
 // un LLM eligiendo un numero.
 const d = $('Armar Candidatos').first().json;
 
+// ¿YA SE LE AVISO AL CLIENTE QUE ESTE CANAL SOLO INFORMA?
+//
+// Se lee del nodo \`Decidir\` POR NOMBRE, no del sobre heredado: son 7 nodos de
+// distancia y cualquiera que no propague la clave la convierte en undefined
+// (=falso, o sea "primera vez"), que es como el mail termino tipeado dos veces en
+// la misma conversacion el 2026-07-29.
+//
+// El try/catch NO es decorativo: si algun dia esta rama corriera sin que Decidir
+// se haya ejecutado, $() tira "Referenced node doesn't exist" y mata el turno.
+// Ante la duda se asume que NO se aviso — repetir el mail es molesto, callarlo
+// deja al cliente sin saber como encargar.
+let avisoYaDado = false;
+try { avisoYaDado = $('Decidir').first().json.avisoDado === true; } catch (e) { avisoYaDado = false; }
+
 // DESANIDADO ROBUSTO de la salida del agente.
 //
 // El nodo Agent con output parser no garantiza UNA forma: segun version y si
@@ -464,25 +478,30 @@ for (const c of confiables) {
     continue;
   }
 
-  // PEDIDO MINIMO: por debajo del minimo ESTE PRECIO NO VALE.
+  // PEDIDO MINIMO: el precio vale a partir de esa cantidad, pero la OFERTA se
+  // dice igual.
   //
   // La promo inmobiliarias son $15.000 el cartel LLEVANDO 6; el cartel suelto
-  // sale $19.500 (otra fila). Emitir el hecho igual seria cotizar 1,3x por
-  // debajo — ya diagnosticado en v9 (preguntas-tg.md): "3 carteles" daba
-  // $45.000 contra $58.500 reales.
+  // sale $19.500 (otra fila del catalogo, que llega como su propio candidato).
   //
-  // Va a caveat con el minimo explicito: el cliente tiene que poder decidir si
-  // le sirve llevar mas. No se cotiza el suelto por nuestra cuenta — es otra
-  // fila del catalogo y el precio no esta autorizado aca.
+  // ANTES ACA HABIA UN \`continue\` Y ESTABA MAL (Martin, 2026-07-29, ronda real).
+  // El cliente dijo que era de una inmobiliaria y pidio 3 carteles: el suelto se
+  // cotizo bien ($19.500) y la promo se descarto por no llegar al minimo, asi que
+  // NUNCA se la ofrecio. Un vendedor diria las dos: "3 sueltos salen $19.500 cada
+  // uno; llevando 6 te sale $15.000 cada uno". Es informacion verdadera y es la
+  // razon de existir del producto.
+  //
+  // El razonamiento viejo confundia dos cosas distintas:
+  //   · cotizar 3 A $15.000 seria mentir (1,3x por debajo) -> eso sigue prohibido:
+  //     NO se emite total ni se presenta como el precio de lo que pidio.
+  //   · nombrar la promo con su minimo NO es mentir -> es la oferta.
+  //
+  // Asi que en vez de descartar, se emite el hecho MARCADO como oferta
+  // condicionada: sin total (el cliente no llega al minimo) y con el minimo
+  // pegado al monto, de modo que el numero nunca viaje solo.
   const cantPedida = Number((d.seleccion || {}).cantidad);
-  if (c.minUnidades && Number.isFinite(cantPedida) && cantPedida > 0 && cantPedida < c.minUnidades) {
-    caveats.push({
-      producto: base,
-      nota: 'ese precio es llevando ' + c.minUnidades + ' o mas; por ' + cantPedida
-        + ' el precio es otro y lo confirmamos por mail',
-    });
-    continue;
-  }
+  const bajoMinimo = !!(c.minUnidades && Number.isFinite(cantPedida)
+    && cantPedida > 0 && cantPedida < c.minUnidades);
 
   // COMO SE COBRA. El orden importa: por_pagina y por_pack son flags explicitos
   // del producto y ganan. Despues manda \`cobro\`, que sale de unidad_venta.
@@ -640,6 +659,11 @@ for (const c of confiables) {
     else if (!multiplicable) motivoSinTotal = 'no_multiplica';
     else if (!cantidadEsLaUnidad) motivoSinTotal = 'unidad_distinta';
     else if (escalon) motivoSinTotal = 'cantidad_intermedia';  // el precio ya es de otra cantidad
+    // BAJO EL MINIMO NO HAY TOTAL. El monto es de la promo, la cantidad es la que
+    // el cliente pidio: multiplicarlos cotizaria 3 x $15.000 = $45.000 cuando lo
+    // real son $58.500. Es el 1,3x que el \`continue\` viejo evitaba — se sigue
+    // evitando, pero sin tirar la oferta a la basura.
+    else if (bajoMinimo) motivoSinTotal = 'bajo_minimo';
     else total = monto * cantidad;
   }
 
@@ -650,7 +674,19 @@ for (const c of confiables) {
     totalTexto: total ? fmt(total) + ' por ' + cantidad + ' unidades' : null,
     cantidadPedida: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : null,
     motivoSinTotal,
-    texto: fmt(monto) + (unidad ? ' ' + unidad : '') + porTramo,
+    // EL MINIMO VIAJA PEGADO AL MONTO, no como aclaracion aparte.
+    //
+    // Un caveat es una linea suelta que el compositor puede resumir, mover o
+    // perder — y el verificador la borro entera creyendola relleno. Dentro de
+    // \`texto\` es intocable: el compositor copia ese string caracter por caracter
+    // (es su regla mas fuerte) y el guard de plata compara el monto ahi mismo.
+    // Asi el numero de la promo NUNCA aparece sin la condicion que lo habilita.
+    texto: fmt(monto) + (unidad ? ' ' + unidad : '') + porTramo
+      + (c.minUnidades ? ' llevando ' + c.minUnidades + ' o mas' : ''),
+    // marca de OFERTA CONDICIONADA: el cliente pidio menos que el minimo, asi que
+    // esto es un "te conviene si llevas mas", no el precio de lo que pidio.
+    ofertaBajoMinimo: bajoMinimo,
+    minUnidades: c.minUnidades || null,
     monto,
     tramo,
     // se propaga para que el compositor sepa que ese numero NO se multiplica
@@ -673,12 +709,10 @@ for (const c of confiables) {
   // 500 tarjetas ve el precio del pack de 100 y no se entera de que hay uno que
   // le sirve mejor. Va como caveat (texto), no como monto: los precios de los
   // otros packs son OTRAS filas del catalogo y no estan autorizados aca.
-  // El minimo se dice SIEMPRE que exista, aunque el cliente pida de sobra: es
-  // una condicion del precio, no una objecion. Si no, el cliente que pide 10 no
-  // se entera de que por 5 le cambia.
-  if (c.minUnidades) {
-    caveats.push({ producto: base, nota: 'ese precio es llevando ' + c.minUnidades + ' o mas' });
-  }
+  // EL MINIMO YA NO VA POR ACA: viaja dentro de \`texto\` (ver arriba), pegado al
+  // monto. Como caveat era una linea aparte que el verificador podia borrar
+  // creyendola relleno — y lo hizo. Duplicarlo aca ademas hacia que el compositor
+  // dijera la condicion dos veces en el mismo mensaje.
 
   if (c.packsDisponibles && c.porPack) {
     const otros = c.packsDisponibles.filter((n) => n !== c.porPack);
@@ -753,8 +787,28 @@ return [{ json: {
         + (m === 'uv' ? 'lleva impresion UV y el precio final depende del trabajo; deci que el total se confirma por mail.'
         : m === 'no_multiplica' ? 'el precio ya es por el pack completo, no se multiplica.'
         : m === 'unidad_distinta' ? 'la cantidad que dijo el cliente NO son unidades de este producto; deci el precio unitario y que el total se confirma por mail.'
+        : m === 'bajo_minimo' ? 'es una OFERTA que arranca en ' + h.minUnidades
+          + ' unidades y el cliente pidio menos. NO calcules el total ni la presentes'
+          + ' como el precio de lo que pidio: ofrecela como alternativa que le conviene'
+          + ' si lleva ' + h.minUnidades + ' o mas.'
         : 'el precio corresponde a otra cantidad; deci el total se confirma por mail.');
     }).join('\\n') || null,
+    // OFERTA POR CANTIDAD (promo inmobiliarias, 2026-07-29).
+    //
+    // El cliente pidio menos que el minimo y hay un precio mejor esperandolo mas
+    // arriba. Sin esta instruccion el compositor trata la oferta como un estorbo
+    // (no encaja con lo que pidieron) y la omite — que es medio bug: el otro medio
+    // fue el verificador borrandola.
+    hechos.some((h) => h.ofertaBajoMinimo) ? '' : null,
+    hechos.some((h) => h.ofertaBajoMinimo)
+      ? 'DECI LAS DOS COSAS: el precio de lo que el cliente pidio Y la oferta por'
+      : null,
+    hechos.some((h) => h.ofertaBajoMinimo)
+      ? 'cantidad. El cliente tiene que poder comparar y decidir si le sirve llevar'
+      : null,
+    hechos.some((h) => h.ofertaBajoMinimo)
+      ? 'mas. Callarse la oferta le esconde un precio mejor: eso no se hace.'
+      : null,
     caveats.length ? '' : null,
     caveats.length ? 'ACLARACIONES QUE TENES QUE DECIR:' : null,
     caveats.length ? caveats.map((c) => '- ' + c.producto + ': ' + c.nota).join('\\n') : null,
@@ -786,22 +840,29 @@ return [{ json: {
     // AVISO DE CANAL: UNA sola vez por conversacion, en el primer mensaje que
     // lleva precio (decision de Martin 2026-07-29). Repetirlo en cada turno es
     // ruido pago; no decirlo nunca deja al cliente sin saber como encargar.
-    // avisoDado lo calcula el nodo Decidir buscando el mail del negocio en los
-    // salientes del bot: si ya aparecio, no se repite.
-    hechos.length && !d.avisoDado
-      ? 'CERRA CON EL CANAL (es la primera vez que le pasas un precio): una linea corta'
-      : null,
-    hechos.length && !d.avisoDado
-      ? 'diciendo que por acá informamos y que el pedido se hace por mail a'
-      : null,
-    hechos.length && !d.avisoDado
-      ? 'terminalgrafica@gmail.com o en el local. Una sola vez, sin insistir.'
-      : null,
-    hechos.length && d.avisoDado
+    //
+    // SE LEE DE $('Decidir') DIRECTO, NO DEL SOBRE (\`d.avisoDado\`).
+    //
+    // Bug encontrado el 2026-07-29 (el mail dos veces en la misma conversacion):
+    // \`Decidir\` calcula el flag bien (busca el mail del negocio en los salientes
+    // del bot), pero entre Decidir y este nodo hay SIETE nodos que rearman el
+    // sobre, y basta que uno no propague la clave para que llegue undefined —
+    // que es falso, o sea "primera vez", siempre. Leyendo el nodo por nombre el
+    // dato no puede diluirse en la cadena.
+    avisoYaDado
       ? 'NO repitas que el canal es informativo ni el mail: ya se lo dijiste antes'
       : null,
-    hechos.length && d.avisoDado
+    avisoYaDado
       ? 'en esta conversacion. Repetirlo en cada mensaje es molesto.'
+      : null,
+    hechos.length && !avisoYaDado
+      ? 'CERRA CON EL CANAL (es la primera vez que le pasas un precio): una linea corta'
+      : null,
+    hechos.length && !avisoYaDado
+      ? 'diciendo que por acá informamos y que el pedido se hace por mail a'
+      : null,
+    hechos.length && !avisoYaDado
+      ? 'terminalgrafica@gmail.com o en el local. Una sola vez, sin insistir.'
       : null,
   ].filter((l) => l !== null).join('\\n'),
 } }];
@@ -940,7 +1001,13 @@ return [{ json: {
     (d.hechos || []).map((h) => '- ' + h.producto + ': ' + h.texto
       // El total lo calculo el CODIGO, no el compositor. Sin mostrarlo aca el
       // auditor ve un numero grande que no esta en la lista y lo tumba.
-      + (h.totalTexto ? ' | TOTAL AUTORIZADO: ' + h.totalTexto : '')).join('\\n') || '(ninguno)',
+      + (h.totalTexto ? ' | TOTAL AUTORIZADO: ' + h.totalTexto : '')
+      // OFERTA MARCADA EXPLICITA. Sin esto el auditor ve un precio que no encaja
+      // con la cantidad pedida y lo lee como ruido — fue lo que paso el 29 con la
+      // promo de inmobiliarias.
+      + (h.ofertaBajoMinimo ? ' | OFERTA POR CANTIDAD: NO LA BORRES (arranca en '
+        + h.minUnidades + ' unidades; el cliente pidio menos, pero tiene derecho a saberlo)' : '')
+    ).join('\\n') || '(ninguno)',
     (d.hechos || []).some((h) => h.totalTexto)
       ? 'Los TOTALES los calculo el codigo (precio x cantidad), no el compositor: son validos.'
       : '',
@@ -1013,6 +1080,7 @@ const corregidoRaw = String(out.mensajeCorregido || '').trim();
 let correccionAplicada = false;
 let correccionRechazada = false;
 let montosDeLaCorreccion = [];
+let ofertasBorradas = [];
 
 if (corregidoRaw && corregidoRaw !== String(d.borrador || '').trim()) {
   // MISMA regex que usa Prompt Verificador sobre el borrador: si divergen, el
@@ -1023,12 +1091,37 @@ if (corregidoRaw && corregidoRaw !== String(d.borrador || '').trim()) {
   const autorizados = new Set((d.montosAutorizados || []).map(Number));
   montosDeLaCorreccion = enCorreccion.filter((n) => !autorizados.has(n));
 
+  // ═══ GUARD DE OFERTA BORRADA (Martin, 2026-07-29) ═══
+  //
+  // El verificador borro la promo de inmobiliarias ($15.000 llevando 6) de un
+  // mensaje que la traia bien, clasificandola como "informacion innecesaria". El
+  // cliente se fue con el precio del suelto y sin saber que existia un precio
+  // mejor. El prompt ahora se lo prohibe explicito, pero un prompt no alcanza:
+  // no fallo por no saber la regla, fallo JUZGANDO relevancia — y con la regla
+  // escrita puede volver a decidir que en ese caso no aplica. El verificador es
+  // el ultimo eslabon: nadie lo audita despues de esto.
+  //
+  // SE COMPARA EL MONTO, NO EL TEXTO. Buscar la frase literal romperia en cuanto
+  // reformule, y reformular es justo lo que se le autorizo. Un monto es un
+  // numero: o esta o no esta. Misma tecnica que el guard de plata de arriba.
+  //
+  // DEGRADACION DISTINTA a la del monto inventado: aca NO se rechaza el turno.
+  // El borrador original tenia la oferta y era correcto, asi que sale ese. Tirar
+  // el turno a mail seria castigar al cliente por un error del auditor.
+  const montosOferta = (d.hechos || [])
+    .filter((h) => h && h.ofertaBajoMinimo && Number.isFinite(Number(h.monto)))
+    .map((h) => Number(h.monto));
+  ofertasBorradas = montosOferta.filter((n) => !enCorreccion.includes(n));
+
   if (montosDeLaCorreccion.length) {
     // el verificador invento un numero al corregir: se tira la correccion Y se
     // rechaza el turno. No se cae a la original en silencio — que el auditor
     // haya tipeado plata es una senal que hay que ver en el log.
     correccionRechazada = true;
     montoInventado = true;
+  } else if (ofertasBorradas.length) {
+    // borro una oferta: se descarta la correccion y sale el borrador original.
+    correccionRechazada = true;
   } else {
     correccionAplicada = true;
   }
@@ -1128,7 +1221,8 @@ return [{ json: {
     + (motivoNoReintento ? ' no-reintenta=' + motivoNoReintento : '')
     + (intento > 1 && aprobado ? ' RESCATADO-POR-REINTENTO' : '')
     + (correccionAplicada ? ' CORREGIDO-POR-VERIFICADOR(' + String(out.queCorregi || '?').slice(0, 120) + ')' : '')
-    + (correccionRechazada ? ' CORRECCION-CON-PLATA-INVENTADA(' + montosDeLaCorreccion.join(',') + ')' : '')
+    + (montosDeLaCorreccion.length ? ' CORRECCION-CON-PLATA-INVENTADA(' + montosDeLaCorreccion.join(',') + ')' : '')
+    + (ofertasBorradas.length ? ' CORRECCION-BORRO-OFERTA(' + ofertasBorradas.join(',') + ')' : '')
     + (d.feedbackPrevio ? ' feedback1=' + String(d.feedbackPrevio).slice(0, 160) : '')
     + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),
   // columnas que Log Turno espera y que la cadena de agentes no producia
@@ -1155,6 +1249,9 @@ return [{ json: {
     correccionAplicada,
     // el verificador tipeo un monto que el calculo no produjo: vigilar
     correccionRechazada,
+    // el verificador borro una oferta por cantidad al corregir. Si aparece
+    // seguido, el parrafo del prompt no esta alcanzando.
+    ofertasBorradas: ofertasBorradas.length,
   },
 } }];
 `.trim(), 2400, 0);
@@ -1339,11 +1436,109 @@ const C = [
   ['Prompt Reintento', 'Agente Compositor', 'main', 0],
 
   // salidas
-  ['Enviar Mensaje', 'Log Turno', 'main', 0],
+  // EL ENVIO SE CHEQUEA ANTES DE LOGUEAR (2026-07-29). Antes esto iba derecho a
+  // Log Turno, asi que un 503 de Chatwoot se registraba como respuesta entregada.
+  ['Enviar Mensaje', 'Chequear Envio', 'main', 0],
+  ['Chequear Envio', '¿Se Entregó?', 'main', 0],
+  ['¿Se Entregó?', 'Log Turno', 'main', 0],
+  // no llego: se etiqueta la conversacion Y se loguea igual (con accion
+  // 'envio_fallido'), porque el turno existio y el dato sirve para diagnosticar.
+  ['¿Se Entregó?', 'Label Envío Fallido', 'main', 1],
+  ['Label Envío Fallido', 'Log Turno', 'main', 0],
   ['Label Escalación', 'Mensaje Escalación', 'main', 0],
   ['Mensaje Escalación', 'Log Escalación', 'main', 0],
   ['Mensaje Cap Email', 'Label Cap', 'main', 0],
 ];
+
+// ───────────────────────────────────────────────────────────────────────────
+// PUENTE 8 · ¿el mensaje LLEGO? (Martin, 2026-07-29: el 503 de Chatwoot)
+// ───────────────────────────────────────────────────────────────────────────
+codeNode('Chequear Envio', `
+// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.
+//
+// Caso real (2026-07-29): Chatwoot devolvio "Service temporarily unavailable" y
+// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el
+// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje
+// en \`final\`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo
+// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.
+//
+// Un log que miente es peor que el error que oculta: es lo que usas para saber
+// si el bot esta funcionando.
+//
+// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su \`id\`
+// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,
+// porque con onError el nodo puede emitir un item de error sin status alguno.
+const env = $('Leer Verificador').first().json;
+const r = $input.first().json || {};
+
+// el id puede venir en la raiz o anidado segun como responda Chatwoot
+const idMensaje = r.id || (r.data && r.data.id) || null;
+const huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');
+const entregado = !!idMensaje && !huboError;
+
+// que fue lo que fallo, para poder verlo en el log sin abrir la ejecucion
+const detalle = entregado ? null : String(
+  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message
+  || 'Chatwoot no devolvio id de mensaje'
+).slice(0, 300);
+
+return [{ json: {
+  ...env,
+  entregado,
+  idMensajeChatwoot: idMensaje || null,
+  // Log Turno lee estos dos: si no se entrego, \`final\` NO se escribe como
+  // respuesta enviada — se marca el fallo. Asi una consulta por turnos
+  // contestados no cuenta los que se perdieron.
+  accion: entregado ? env.accion : 'envio_fallido',
+  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),
+  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },
+} }];
+`.trim(), 3500, 240);
+
+// ¿se entrego? Si no, ademas de loguearlo se etiqueta la conversacion para que
+// Martin la vea en su cola: un mensaje perdido necesita accion humana, y hoy la
+// unica forma de enterarse era revisar WhatsApp a mano.
+add({
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, version: 2 },
+      combinator: 'and',
+      conditions: [{
+        leftValue: '={{ $json.entregado }}',
+        rightValue: true,
+        operator: { type: 'boolean', operation: 'true', singleValue: true },
+      }],
+    },
+    options: {},
+  },
+  type: 'n8n-nodes-base.if',
+  typeVersion: 2.2,
+  position: pos(3700, 240),
+  name: '¿Se Entregó?',
+});
+
+add({
+  parameters: {
+    method: 'POST',
+    url: "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+    authentication: 'genericCredentialType',
+    genericAuthType: 'httpHeaderAuth',
+    sendBody: true,
+    specifyBody: 'json',
+    jsonBody: "={{ ({ labels: ['envio-fallido'] }) }}",
+    options: {},
+  },
+  type: 'n8n-nodes-base.httpRequest',
+  typeVersion: 4.2,
+  position: pos(3900, 380),
+  name: 'Label Envío Fallido',
+  // la credencial se toma del nodo de envio heredado: si se hardcodeara el id,
+  // un cambio de credencial en v9 dejaria este nodo apuntando a la vieja.
+  credentials: {
+    httpHeaderAuth: (wf.nodes.find((n) => n.name === 'Enviar Mensaje') || {}).credentials.httpHeaderAuth,
+  },
+  onError: 'continueRegularOutput',
+});
 
 // Nodos chicos que faltaban del cableado
 add({
@@ -1391,7 +1586,14 @@ const REESCRIBIR = [
   ['Extraer Palabras', 'Parsear Respuesta', 'Leer Selector'],
   // Log Turno cuelga SIEMPRE de la rama aprobada, asi que Leer Verificador
   // corrio con seguridad.
-  ['Log Turno', 'Aplicar Compositor', 'Leer Verificador'],
+  //
+  // 2026-07-29: se re-apunta a `Chequear Envio` y NO a `Leer Verificador`. Los
+  // dos corren siempre en esta rama, pero solo Chequear Envio sabe si Chatwoot
+  // acepto el mensaje: leyendo del verificador, el INSERT escribia
+  // accion='respuesta_verificada' incluso cuando el envio se habia perdido en un
+  // 503. Chequear Envio reenvia el sobre entero del verificador con `accion` y
+  // `notas` ya corregidos, asi que el contrato de columnas no cambia.
+  ['Log Turno', 'Aplicar Compositor', 'Chequear Envio'],
   // Log Escalacion NO: a `Label Escalación` se llega desde TRES lugares y solo
   // uno paso por el verificador (¿Info Resuelta?=false y ¿Hay Algo Que Decir?=
   // false no lo ejecutan). $('Leer Verificador') en esos casos vuelve a tirar

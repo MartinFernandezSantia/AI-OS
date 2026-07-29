@@ -623,6 +623,87 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+console.log('\n10. EL ENVIO SE VERIFICA ANTES DE LOGUEAR (503 de Chatwoot, 2026-07-29)');
+{
+  const envio = wf.nodes.find((n) => n.name === 'Enviar Mensaje');
+  if (!envio) E('no existe "Enviar Mensaje"');
+  else {
+    // sin reintento, un 503 transitorio pierde el mensaje para siempre
+    if (envio.retryOnFail === true && Number(envio.maxTries) >= 3) {
+      OK('Enviar Mensaje reintenta (>=3 intentos)');
+    } else E('Enviar Mensaje no reintenta: un 503 de Chatwoot pierde el mensaje');
+    // sin alwaysOutputData el fallo no deja item y Chequear Envio no puede leerlo
+    if (envio.alwaysOutputData === true) OK('emite item aun fallando (para poder chequearlo)');
+    else E('Enviar Mensaje sin alwaysOutputData: el chequeo de entrega se queda sin dato');
+    // el onError se CONSERVA a proposito: sin el, el flujo se corta y no se loguea nada
+    if (envio.onError === 'continueRegularOutput') OK('conserva onError (si no, no se loguea el fallo)');
+    else E('Enviar Mensaje sin onError: un fallo corta el flujo y no deja rastro');
+  }
+
+  const cheq = wf.nodes.find((n) => n.name === 'Chequear Envio');
+  if (!cheq) E('no existe "Chequear Envio"');
+  else {
+    const js = cheq.parameters.jsCode || '';
+    if (/envio_fallido/.test(js)) OK('marca accion=envio_fallido cuando no se entrego');
+    else E('Chequear Envio no marca el fallo: el log sigue diciendo que se contesto');
+    if (/idMensaje|\.id\b/.test(js)) OK('la entrega se decide por el id que devuelve Chatwoot');
+    else E('Chequear Envio no lee el id del mensaje creado');
+  }
+
+  // EL ORDEN IMPORTA: Enviar -> Chequear -> Log. Si Log colgara de Enviar
+  // directo, volveria a registrar como entregado lo que se perdio.
+  const sal = (n) => ((wf.connections[n] || {}).main || []).flat().map((c) => c.node);
+  if (sal('Enviar Mensaje').includes('Chequear Envio')) OK('Enviar Mensaje -> Chequear Envio');
+  else E('Enviar Mensaje no pasa por Chequear Envio');
+  if (!sal('Enviar Mensaje').includes('Log Turno')) OK('Log Turno YA NO cuelga directo del envio');
+  else E('Log Turno cuelga directo de Enviar Mensaje: registraria un 503 como entrega');
+  if (sal('¿Se Entregó?').includes('Log Turno')) OK('las dos ramas de ¿Se Entregó? loguean');
+  else E('¿Se Entregó? no llega a Log Turno');
+  if (sal('¿Se Entregó?').includes('Label Envío Fallido')) OK('un envio perdido se etiqueta para revision');
+  else E('un envio perdido no se etiqueta: nadie se entera');
+
+  // Log Turno tiene que leer el sobre CORREGIDO, no el del verificador
+  const logT = wf.nodes.find((n) => n.name === 'Log Turno');
+  const mapeo = JSON.stringify((logT.parameters.columns || {}).value || {});
+  if (/Chequear Envio/.test(mapeo)) OK('Log Turno lee el sobre de Chequear Envio');
+  else E('Log Turno lee otro nodo: el accion=envio_fallido no llegaria al INSERT');
+}
+
+console.log('\n11. LA OFERTA POR CANTIDAD NO SE PIERDE (promo inmobiliarias, 2026-07-29)');
+{
+  const calc = wf.nodes.find((n) => n.name === 'Calcular Montos');
+  const js = calc.parameters.jsCode || '';
+  // el `continue` viejo tiraba la promo entera cuando el cliente pedia menos
+  if (/ofertaBajoMinimo/.test(js)) OK('la oferta bajo minimo se emite marcada');
+  else E('no existe ofertaBajoMinimo: la promo se sigue descartando');
+  if (/bajo_minimo/.test(js)) OK('bajo el minimo no se calcula total');
+  else E('falta el motivoSinTotal bajo_minimo: podria multiplicar y sub-cotizar');
+  // el minimo tiene que ir DENTRO de `texto`, que el compositor copia literal
+  if (/texto:[\s\S]{0,400}llevando '\s*\+\s*c\.minUnidades/.test(js)) {
+    OK('el minimo viaja pegado al monto (no como caveat borrable)');
+  } else E('el minimo no esta dentro de `texto`: el numero puede viajar solo');
+
+  // el flag del aviso de canal se lee de Decidir, NO del sobre heredado
+  if (/\$\('Decidir'\)[\s\S]{0,80}avisoDado/.test(js)) {
+    OK('avisoDado se lee de Decidir (7 nodos de distancia, se diluia)');
+  } else E('avisoDado sale del sobre: se pierde en la cadena y repite el mail');
+
+  const lv = wf.nodes.find((n) => n.name === 'Leer Verificador');
+  const jsv = lv.parameters.jsCode || '';
+  if (/ofertasBorradas/.test(jsv)) OK('hay guard contra el borrado de ofertas');
+  else E('el verificador puede borrar una oferta sin que nadie lo note');
+  // compara MONTOS, no texto: si comparara la frase, romperia al reformular
+  if (/montosOferta[\s\S]{0,200}enCorreccion\.includes/.test(jsv)) {
+    OK('el guard compara montos, no la redaccion');
+  } else E('el guard no compara montos: reformular la oferta lo rompe');
+
+  const sysVer = wf.nodes.find((n) => n.name === 'Agente Verificador')
+    .parameters.options.systemMessage;
+  if (/NUNCA BORRES UNA OFERTA POR CANTIDAD/.test(sysVer)) OK('el prompt se lo prohibe explicito');
+  else E('el prompt del verificador no prohibe borrar ofertas');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 console.log('\n' + '='.repeat(60));
 console.log(err ? 'FALLA: ' + err + ' error(es), ' + ok + ' ok' : 'TODO OK: ' + ok + ' invariantes verificados');
 process.exit(err ? 1 : 0);
