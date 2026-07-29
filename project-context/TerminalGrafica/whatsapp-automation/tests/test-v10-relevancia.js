@@ -225,6 +225,84 @@ check('un monto NO autorizado tumba el OK del LLM',
   conInventado.aprobado === false && conInventado.falla === 'precio_inventado',
   'aprobado=' + conInventado.aprobado + ' falla=' + conInventado.falla);
 
+// ── UNIDAD DE COBRO: `unidad_venta` manda sobre `unidad` ────────────────
+//
+// Incidente del 2026-07-29 (loop de reintento): "cuanto sale anillar 120 hojas"
+// -> "$2.400 por hoja". Un anillado se cobra POR TRABAJO. Si el cliente
+// multiplica por 120 se lleva $288.000 de una cotizacion de $2.400 (120x).
+//
+// La columna `unidad` dice "Hoja" en 142 de 165 variantes del catalogo real,
+// pero solo 48 se cobran por hoja de verdad: unidad(48) hoja(40) pack(26)
+// trabajo(18) m2 metro. El dato bueno vive en atributos.unidad_venta.
+//
+// POR QUE NINGUN TEST LO PESCO: ninguna fixture traia `atributos`. El harness
+// mockeaba filas donde `unidad` y `unidad_venta` no podian discrepar — el bug
+// quedaba afuera POR CONSTRUCCION. Estas filas son las reales del export
+// (db/export-actualizado-catalogo.json, producto Anillado).
+console.log('\n=== Unidad de cobro (unidad_venta vs unidad) ===');
+const FILAS_ANILLADO = [
+  { producto_id: 'an1', nombre_canonico: 'Anillado plástico a4/oficio', score: '4.1',
+    variante_id: 'av1', variante: '.', precio_lista: '2400', unidad: 'Hoja',
+    mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
+    tiene_reglas: false, nicho: null, rangos_cantidad: null,
+    atributos: { tamano: ['a4', 'oficio'], material: 'plastico', multiplica: true, unidad_venta: 'trabajo' } },
+  { producto_id: 'an2', nombre_canonico: 'Anillado Metálico a4/a3', score: '4.1',
+    variante_id: 'av2', variante: 'Hasta 3/4', precio_lista: '3200', unidad: 'Hoja',
+    mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
+    tiene_reglas: false, nicho: null, rangos_cantidad: null,
+    atributos: { tamano: ['a4', 'a3'], material: 'metalico', multiplica: true, unidad_venta: 'trabajo' } },
+];
+const SOBRE_ANILLADO = {
+  userMessage: 'cuanto sale anillar 120 hojas?',
+  conversation: [{ role: 'user', content: 'cuanto sale anillar 120 hojas?' }],
+  conversationId: 380, accountId: 1,
+  seleccion: { terminos: ['Anillado plástico'], productos: [], cantidad: 120 },
+};
+const armAn = correr('Armar Candidatos', FILAS_ANILLADO, { 'Leer Selector': SOBRE_ANILLADO });
+check('el candidato NO se lista como "por Hoja"',
+  !/por Hoja/i.test(armAn.promptAgente), armAn.promptAgente.split('\n')[3]);
+check('el candidato se lista "por trabajo"',
+  /por trabajo/.test(armAn.promptAgente), armAn.promptAgente.split('\n')[3]);
+
+const anillado = correr('Calcular Montos',
+  { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } }, { 'Armar Candidatos': armAn });
+const ha = anillado.hechos[0];
+check('el hecho dice "por trabajo", NO "por Hoja"',
+  ha && /por trabajo/.test(ha.texto) && !/por Hoja/i.test(ha.texto), ha && ha.texto);
+check('marca esPorTrabajo para que el compositor lo sepa', ha && ha.esPorTrabajo === true);
+check('NO agrega "(por 120 unidades)" a un precio por trabajo',
+  ha && !/120 unidades/.test(ha.texto), ha && ha.texto);
+check('el monto sigue siendo el de la fila ($2.400)', ha && ha.monto === 2400);
+check('el prompt le avisa al compositor que NO se multiplica',
+  /trabajo COMPLETO/.test(anillado.promptAgente) && /no multiplique/.test(anillado.promptAgente));
+
+// el verificador tiene que ver "se cobra: trabajo", no "unidad: Hoja" —
+// esa contradiccion es la que lo hizo rechazar dos veces seguidas
+const pvAn = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+  ...anillado,
+  borrador: 'El anillado plástico a4/oficio sale $2.400 por trabajo.',
+  conversation: SOBRE_ANILLADO.conversation,
+  seleccion: SOBRE_ANILLADO.seleccion,
+} });
+check('el verificador ve "se cobra: trabajo"', /se cobra: trabajo/.test(pvAn.promptAgente));
+check('el verificador NO ve "unidad: Hoja" (la columna que miente)',
+  !/unidad: Hoja/i.test(pvAn.promptAgente));
+check('el prompt le dice al auditor que no juzgue la unidad por su cuenta',
+  /LA UNIDAD DE COBRO/.test(pvAn.promptAgente));
+check('el guard no marca el monto como inventado',
+  (pvAn.numerosNoAutorizados || []).length === 0, JSON.stringify(pvAn.numerosNoAutorizados));
+
+// FALLBACK: sin unidad_venta se sigue usando `unidad` (no se rompe lo que andaba)
+const sinUV = correr('Armar Candidatos', [{ ...FILAS_ANILLADO[0], atributos: {} }],
+  { 'Leer Selector': SOBRE_ANILLADO });
+check('sin unidad_venta se cae a la columna `unidad`',
+  /por Hoja/i.test(sinUV.promptAgente), sinUV.promptAgente.split('\n')[3]);
+
+// las impresiones (unidad_venta: hoja) tienen que seguir diciendo por pagina
+const impr = correr('Calcular Montos', { output: { elegidos: [{ idx: 2, confianza: 0.9 }] } }, ctx);
+check('no rompe las impresiones: sigue diciendo "por pagina"',
+  /por pagina/.test(impr.hechos[0].texto), impr.hechos[0].texto);
+
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
 process.exit(fallos ? 1 : 0);

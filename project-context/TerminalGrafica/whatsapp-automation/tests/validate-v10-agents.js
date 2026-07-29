@@ -352,6 +352,44 @@ const sinEntrada = wf.nodes.filter((n) =>
 if (sinEntrada.length) console.log('  aviso  nodos sin entrada: ' + sinEntrada.map((n) => n.name).join(', '));
 
 // ───────────────────────────────────────────────────────────────────────────
+console.log('\n8b. UNIDAD DE COBRO — unidad_venta manda sobre la columna `unidad`');
+//
+// `unidad` dice "Hoja" en 142 de 165 variantes del catalogo real, pero solo 48
+// se cobran por hoja: el resto es unidad/pack/trabajo/m2/metro y el dato bueno
+// esta en atributos.unidad_venta. Decir "por hoja" en un anillado (que se cobra
+// por trabajo) es un 120x si el cliente multiplica por sus 120 hojas.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const arm = N('Armar Candidatos');
+  const calc2 = N('Calcular Montos');
+  const pv = N('Prompt Verificador');
+  const busca = N('Buscar Candidatos');
+
+  // el dato tiene que VENIR del SQL, no alcanza con leerlo en JS
+  if (busca && !/v\.atributos/.test(busca.parameters.query || '')) {
+    E('Buscar Candidatos no trae v.atributos: unidad_venta nunca llegaria al pipeline');
+  } else OK('el SQL trae v.atributos (donde vive unidad_venta)');
+
+  if (arm) {
+    const js = arm.parameters.jsCode;
+    if (!/unidad_venta/.test(js)) E('Armar Candidatos no lee unidad_venta: diria "por Hoja" en todo');
+    else OK('Armar Candidatos lee unidad_venta');
+  }
+  if (calc2) {
+    const js = calc2.parameters.jsCode;
+    if (!/cobro/.test(js)) E('Calcular Montos no usa `cobro`: el texto del hecho saldria de la columna que miente');
+    else OK('Calcular Montos arma el texto desde `cobro` (unidad_venta)');
+    if (!/esPorTrabajo/.test(js)) E('Calcular Montos no marca esPorTrabajo: el compositor no sabe que ese monto NO se multiplica');
+    else OK('marca esPorTrabajo (el monto es el trabajo completo)');
+  }
+  if (pv) {
+    const js = pv.parameters.jsCode;
+    if (!/se cobra/.test(js)) E('Prompt Verificador no le muestra al auditor como se cobra');
+    else OK('el verificador ve "se cobra: <unidad_venta>"');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
 //
 // Es el unico ciclo del grafo. Un ciclo mal acotado no se cae: gira contra la

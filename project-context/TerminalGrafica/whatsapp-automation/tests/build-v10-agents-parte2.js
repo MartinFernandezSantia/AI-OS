@@ -162,11 +162,46 @@ const fmt = (n) => (n == null || !Number.isFinite(Number(n)))
   ? null
   : '$' + new Intl.NumberFormat('es-AR').format(Number(n));
 
+// COMO SE COBRA: \`unidad_venta\` MANDA sobre \`unidad\`.
+//
+// Bug del 2026-07-29 (loop de reintento): "cuanto sale anillar 120 hojas" ->
+// el bot dijo "$2.400 por hoja". Un anillado se cobra POR TRABAJO: los $2.400
+// son el anillado entero. Si el cliente multiplica por 120 se lleva $288.000
+// de una cotizacion de $2.400 (120x).
+//
+// La columna \`unidad\` del catalogo dice "Hoja" en 142 de 165 variantes, pero
+// solo 48 se cobran de verdad por hoja. El dato bueno vive en
+// atributos.unidad_venta: unidad(48) · hoja(40) · pack(26) · trabajo(18) ·
+// m2 · metro. \`unidad\` es basura heredada de la carga; no se corrige en la
+// base (es de TG) — se ignora cuando unidad_venta dice otra cosa.
+//
+// Esto NO lo pesco ningun test: el harness mockea filas donde las dos columnas
+// coincidian. Lo encontro el verificador en produccion, rechazando dos veces
+// seguidas — tenia razon las dos.
+const COBRO = {
+  trabajo: 'por trabajo',
+  pack: null,       // el texto del pack lo arma porPack, que ya trae la cantidad
+  unidad: 'por unidad',
+  hoja: 'por hoja',
+  pagina: 'por pagina',
+  m2: 'por m2',
+  metro: 'por metro',
+};
+const comoSeCobra = (r) => {
+  const uv = String(((r.atributos || {}).unidad_venta) || '').toLowerCase().trim();
+  if (uv && Object.prototype.hasOwnProperty.call(COBRO, uv)) return { clave: uv, texto: COBRO[uv] };
+  // sin unidad_venta se cae a \`unidad\`, que es lo que habia antes
+  const u = String(r.unidad || '').trim();
+  return { clave: null, texto: u ? 'por ' + u : null };
+};
+
 const lista = filas.map((r, i) => ({
   idx: i + 1,
   producto: r.nombre_canonico,
   variante: (r.variante && String(r.variante).trim()) || 'única',
   unidad: r.unidad || null,
+  unidadVenta: ((r.atributos || {}).unidad_venta) || null,
+  cobro: comoSeCobra(r),
   precioLista: r.precio_lista,
   precioTexto: fmt(r.precio_lista),
   soloDescuentos: !!r.solo_descuentos,
@@ -192,7 +227,7 @@ const texto = lista.map((c) => [
   '[' + c.idx + ']',
   c.producto,
   '| variante: ' + c.variante,
-  c.precioTexto ? '| precio: ' + c.precioTexto + (c.unidad ? ' por ' + c.unidad : '') : '| precio: no publicado',
+  c.precioTexto ? '| precio: ' + c.precioTexto + (c.cobro.texto ? ' ' + c.cobro.texto : '') : '| precio: no publicado',
   c.porPagina ? '| se cobra por pagina' : '',
   c.porPack ? '| pack de ' + c.porPack : '',
   c.soloDescuentos ? '| solo con descuento' : '',
@@ -334,10 +369,21 @@ for (const c of confiables) {
     continue;
   }
 
+  // COMO SE COBRA. El orden importa: por_pagina y por_pack son flags explicitos
+  // del producto y ganan. Despues manda \`cobro\` (que sale de unidad_venta), y
+  // recien al final la columna \`unidad\` — que miente en 94 de 165 variantes
+  // (ver el comentario largo en Armar Candidatos). Decir "por hoja" en algo que
+  // se cobra por trabajo es un 120x si el cliente multiplica.
   const unidad = c.porPagina ? 'por pagina'
     : c.porPack ? ('el pack de ' + c.porPack)
+    : (c.cobro && c.cobro.texto) ? c.cobro.texto
     : c.unidad ? ('por ' + c.unidad)
     : null;
+
+  // Un precio POR TRABAJO no se multiplica por la cantidad. Si el cliente dijo
+  // "120 hojas" y esto se cobra por trabajo, el monto ES el total: hay que
+  // decirlo, porque si no el cliente multiplica solo.
+  const esPorTrabajo = c.cobro && c.cobro.clave === 'trabajo';
 
   // ESCALERA POR CANTIDAD. \`precio_lista\` es el precio del PRIMER tramo (1-10),
   // no el que le corresponde al pedido. Para "200 paginas doble faz" el tramo
@@ -375,7 +421,10 @@ for (const c of confiables) {
     continue;
   }
 
-  const porTramo = tramo
+  // "(por 120 unidades)" solo tiene sentido si el precio ES por unidad. En un
+  // precio por trabajo diria "$2.400 por trabajo (por 120 unidades)", que es
+  // justo la lectura que hay que evitar.
+  const porTramo = (tramo && !esPorTrabajo)
     ? ' (por ' + tramo.cantidad + ' unidades)'
     : '';
 
@@ -384,6 +433,9 @@ for (const c of confiables) {
     texto: fmt(monto) + (unidad ? ' ' + unidad : '') + porTramo,
     monto,
     tramo,
+    // se propaga para que el compositor sepa que ese numero NO se multiplica
+    esPorTrabajo,
+    comoSeCobra: (c.cobro && c.cobro.clave) || null,
     // el piso de la escalera, para que el compositor pueda decir "desde"
     desde: Array.isArray(c.rangos) && c.rangos.length
       ? Math.min(...c.rangos.map((x) => Number(x.value)).filter(Number.isFinite))
@@ -442,6 +494,21 @@ return [{ json: {
     caveats.length ? '' : null,
     caveats.length ? 'ACLARACIONES QUE TENES QUE DECIR:' : null,
     caveats.length ? caveats.map((c) => '- ' + c.producto + ': ' + c.nota).join('\\n') : null,
+    // PRECIO POR TRABAJO CON CANTIDAD A LA VISTA. Sin decirlo, el cliente que
+    // pregunto "anillar 120 hojas" lee "$2.400" y multiplica por 120 (120x).
+    hechos.some((h) => h.esPorTrabajo) && (d.seleccion || {}).cantidad ? '' : null,
+    hechos.some((h) => h.esPorTrabajo) && (d.seleccion || {}).cantidad
+      ? 'IMPORTANTE: los montos marcados "por trabajo" son el precio del trabajo COMPLETO,'
+      : null,
+    hechos.some((h) => h.esPorTrabajo) && (d.seleccion || {}).cantidad
+      ? 'no por cada una de las ' + (d.seleccion || {}).cantidad + ' unidades. Decilo explicito para que el'
+      : null,
+    hechos.some((h) => h.esPorTrabajo) && (d.seleccion || {}).cantidad
+      ? 'cliente no multiplique por su cuenta.'
+      : null,
+    '',
+    'Cada hecho dice COMO se cobra (por trabajo, por unidad, por hoja, por m2...).',
+    'Respetalo tal cual: cambiar la unidad cambia el precio aunque el numero sea el mismo.',
     '',
     'Si el cliente pidio un TOTAL por cantidad: no lo calcules, decile que se lo',
     'confirmamos por mail (hay recargos que dependen del trabajo).',
@@ -543,7 +610,15 @@ const crudas = (d.filasCrudas || []).map((r, i) => [
   // para que el auditor no lo lea como el unico valor valido.
   '| precio base (tramo 1): ' + r.precio_lista,
   escalera(r),
-  '| unidad: ' + (r.unidad || '-'),
+  // COMO SE COBRA, no la columna \`unidad\`.
+  //
+  // Bug del 2026-07-29 (loop de reintento): el anillado tiene unidad="Hoja"
+  // pero unidad_venta="trabajo". Mostrandole "unidad: Hoja" al auditor, este
+  // rechazo "por hoja" (sabe que un anillado no se cobra asi), el compositor
+  // lo saco, y entonces rechazo por sacarlo citando "los hechos dicen por
+  // Hoja". Dos veredictos opuestos, los dos correctos para la evidencia que
+  // le daba. La contradiccion estaba en el dato, no en el LLM.
+  '| se cobra: ' + (((r.atributos || {}).unidad_venta) || ('(sin dato, columna unidad dice ' + (r.unidad || '-') + ')')),
   '| solo_descuentos: ' + !!r.solo_descuentos,
   '| score: ' + r.score,
 ].filter(Boolean).join(' ')).join('\\n');
@@ -572,6 +647,12 @@ return [{ json: {
     'TRAMO que corresponde a esa cantidad — NO el "precio base (tramo 1)".',
     'Que un monto no coincida con el precio base NO significa que este inventado:',
     'buscalo en la escalera de esa fila antes de rechazar.',
+    '',
+    'LA UNIDAD DE COBRO sale del campo "se cobra" de cada fila (por trabajo, por',
+    'unidad, por hoja, por m2...). Ese es el dato bueno. Los hechos autorizados ya',
+    'lo respetan. NO juzgues la unidad por el nombre del producto ni por lo que te',
+    'parezca razonable: si "se cobra: trabajo", el mensaje tiene que decir que es',
+    'por el trabajo completo, y eso es CORRECTO aunque suene raro.',
     '',
     noAutorizados.length
       ? 'ALERTA AUTOMATICA: el mensaje contiene montos que NO estan autorizados: ' + noAutorizados.join(', ')
