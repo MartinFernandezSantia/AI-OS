@@ -21,3 +21,6 @@ tmp/
 
 # Supabase CLI ephemeral state (supabase link droppings)
 **/supabase/.temp/
+
+# volcados temporales de ejecuciones n8n para debug
+project-context/TerminalGrafica/whatsapp-automation/n8n/flows/.tmp/

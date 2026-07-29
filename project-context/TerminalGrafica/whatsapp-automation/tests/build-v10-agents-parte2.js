@@ -173,14 +173,22 @@ const lista = filas.map((r, i) => ({
   porPagina: !!r.por_pagina,
   porPack: r.por_pack || null,
   tieneReglas: !!r.tiene_reglas,
-  mostrable: r.mostrable !== false,
+  // OJO CON \`mostrable\`: en la vista de v9 es \`(not tiene_reglas)\`, o sea
+  // "el precio es un numero limpio, sin escalera por cantidad". NO es un flag
+  // de visibilidad. Filtrar por el fue el bug del 2026-07-29: las impresiones
+  // tienen rangos por cantidad -> tiene_reglas=true -> mostrable=false, asi
+  // que los 29 candidatos correctos se filtraron y al agente le llego
+  // "(la busqueda no devolvio nada)". El agente contesto bien sobre una lista
+  // vacia; el que mentia era este nodo.
+  precioLimpio: r.mostrable === true,
+  rangos: Array.isArray(r.rangos_cantidad) ? r.rangos_cantidad : null,
   nicho: r.nicho || null,
   score: r.score,
 }));
 
-const visibles = lista.filter((c) => c.mostrable);
-
-const texto = visibles.map((c) => [
+// TODOS los candidatos van al agente. La visibilidad real ya la resolvio el SQL
+// (bot.taxonomia filtra los ocultos antes de llegar aca).
+const texto = lista.map((c) => [
   '[' + c.idx + ']',
   c.producto,
   '| variante: ' + c.variante,
@@ -273,7 +281,10 @@ let idxInvalidos = 0;
 const elegidos = [];
 for (const e of elegidosRaw) {
   const c = porIdx.get(Number(e.idx));
-  if (!c || !c.mostrable) { idxInvalidos++; continue; }
+  // NO se filtra por \`mostrable\`: es \`(not tiene_reglas)\`, no un flag de
+  // visibilidad (ver el comentario en Armar Candidatos). Solo se descarta un
+  // idx que NO EXISTE en la lista cerrada.
+  if (!c) { idxInvalidos++; continue; }
   // confianza ausente != confianza cero. Un agente que elige un producto y no
   // llena el campo esta diciendo "este es", no "no estoy seguro". Antes
   // \`Number(undefined) || 0\` daba 0 y el umbral lo descartaba: el turno moria
@@ -314,7 +325,11 @@ for (const c of confiables) {
     caveats.push({ producto: base, nota: 'el precio de lista no se publica; se cotiza con descuento por mail' });
     continue;
   }
-  if (!Number.isFinite(Number(c.precioLista)) || Number(c.precioLista) <= 0) {
+  // precio_lista == 0 NO significa "sin precio": hay variantes cuyo precio vive
+  // solo en la escalera por cantidad (idx 5/6/7 del caso real: precio_lista 0
+  // con rangos de $480 a $150). Solo es "sin precio" si tampoco hay rangos.
+  const tieneRangos = Array.isArray(c.rangos) && c.rangos.some((x) => Number(x.value) > 0);
+  if ((!Number.isFinite(Number(c.precioLista)) || Number(c.precioLista) <= 0) && !tieneRangos) {
     caveats.push({ producto: base, nota: 'no tiene precio cargado en el catalogo' });
     continue;
   }
@@ -324,12 +339,57 @@ for (const c of confiables) {
     : c.unidad ? ('por ' + c.unidad)
     : null;
 
+  // ESCALERA POR CANTIDAD. \`precio_lista\` es el precio del PRIMER tramo (1-10),
+  // no el que le corresponde al pedido. Para "200 paginas doble faz" el tramo
+  // 51-250 vale $88 y precio_lista dice $150: informar precio_lista seria un
+  // 1,7x — la misma clase de error que los confident-wrong del 27.
+  //
+  // El tramo se elige ACA, con la cantidad que el Selector ya extrajo, y de la
+  // fila SQL. El LLM no ve las reglas ni elige el tramo.
+  const cantidad = Number((d.seleccion || {}).cantidad);
+  let monto = Number(c.precioLista);
+  let tramo = null;
+  if (Array.isArray(c.rangos) && c.rangos.length) {
+    if (Number.isFinite(cantidad) && cantidad > 0) {
+      const r = c.rangos.find((x) => {
+        const min = Number(x.minQty) || 1;
+        const max = x.maxQty == null ? Infinity : Number(x.maxQty);
+        return cantidad >= min && cantidad <= max;
+      });
+      if (r && Number.isFinite(Number(r.value))) {
+        monto = Number(r.value);
+        tramo = { desde: r.minQty, hasta: r.maxQty, cantidad };
+      }
+    }
+  }
+
+  // Si precio_lista era 0 y la cantidad no cayo en ningun tramo (o no se dijo
+  // cantidad), el monto seguiria en 0. En ese caso se informa el PISO de la
+  // escalera como "desde", que es un dato cierto, en vez de un $0 falso.
+  if (!(monto > 0) && tieneRangos) {
+    const piso = Math.min(...c.rangos.map((x) => Number(x.value)).filter((v) => Number.isFinite(v) && v > 0));
+    if (Number.isFinite(piso)) { monto = piso; tramo = null; }
+  }
+  if (!(monto > 0)) {
+    caveats.push({ producto: base, nota: 'el precio depende de la cantidad; lo confirmamos por mail' });
+    continue;
+  }
+
+  const porTramo = tramo
+    ? ' (por ' + tramo.cantidad + ' unidades)'
+    : '';
+
   hechos.push({
     producto: base,
-    texto: fmt(c.precioLista) + (unidad ? ' ' + unidad : ''),
-    monto: Number(c.precioLista),
+    texto: fmt(monto) + (unidad ? ' ' + unidad : '') + porTramo,
+    monto,
+    tramo,
+    // el piso de la escalera, para que el compositor pueda decir "desde"
+    desde: Array.isArray(c.rangos) && c.rangos.length
+      ? Math.min(...c.rangos.map((x) => Number(x.value)).filter(Number.isFinite))
+      : null,
     confianza: c.confianza,
-    // NO se calcula el total aunque haya cantidad: hay recargo UV y precio_lista
+    // NO se calcula el TOTAL aunque haya cantidad: hay recargo UV y el unitario
     // es el BASE (decision v9.2, 2026-07-28). El total lo confirma un humano.
     tieneReglas: !!c.tieneReglas,
   });

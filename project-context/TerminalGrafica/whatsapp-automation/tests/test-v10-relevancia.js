@@ -17,24 +17,45 @@ const DIR = path.join(__dirname, '..', 'n8n', 'flows');
 const wf = JSON.parse(fs.readFileSync(path.join(DIR, process.env.WF || 'faq-bot-v10-live.json'), 'utf8'));
 const nodo = (n) => wf.nodes.find((x) => x.name === n);
 
-// Filas como las devuelve Buscar Candidatos para el caso real: el producto tiene
-// 4 variantes (simple/doble faz x bn/color) y el cliente pidió doble faz.
+// FILAS REALES de la ejecución del 2026-07-29 (recortadas a 5 de las 29).
+// Ojo `mostrable: false` en TODAS: en la vista es `(not tiene_reglas)`, o sea
+// "precio limpio sin escalera", NO un flag de visibilidad. Filtrar por él dejaba
+// al agente con "(la busqueda no devolvio nada)".
 const FILAS = [
-  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: 3.2,
-    variante_id: 'v1', variante: 'simple faz bn', precio_lista: 70, unidad: 'hoja',
-    mostrable: true, solo_descuentos: false, por_pagina: true, por_pack: null, tiene_reglas: true, nicho: null },
-  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: 3.2,
-    variante_id: 'v2', variante: 'doble faz bn', precio_lista: 120, unidad: 'hoja',
-    mostrable: true, solo_descuentos: false, por_pagina: true, por_pack: null, tiene_reglas: true, nicho: null },
-  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: 3.2,
-    variante_id: 'v3', variante: 'simple faz color', precio_lista: 400, unidad: 'hoja',
-    mostrable: true, solo_descuentos: false, por_pagina: true, por_pack: null, tiene_reglas: true, nicho: null },
+  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: '5.28',
+    variante_id: 'v1', variante: 'simple faz b/n', precio_lista: '100', unidad: 'Hoja',
+    mostrable: false, solo_descuentos: false, por_pagina: true, por_pack: false,
+    tiene_reglas: true, nicho: null,
+    rangos_cantidad: [{ value: 100, minQty: 1, maxQty: 10 }, { value: 70, minQty: 11, maxQty: 1000 }, { value: 65, minQty: 1001, maxQty: null }] },
+  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: '5.28',
+    variante_id: 'v2', variante: 'doble faz b/n', precio_lista: '150', unidad: 'Hoja',
+    mostrable: false, solo_descuentos: false, por_pagina: true, por_pack: false,
+    tiene_reglas: true, nicho: null,
+    rangos_cantidad: [{ value: 150, minQty: 1, maxQty: 10 }, { value: 96, minQty: 11, maxQty: 50 },
+      { value: 88, minQty: 51, maxQty: 250 }, { value: 86, minQty: 251, maxQty: 500 }, { value: 84, minQty: 501, maxQty: null }] },
+  { producto_id: 'p1', nombre_canonico: 'Impresiones papel obra 75 gr', score: '5.28',
+    variante_id: 'v3', variante: 'simple faz color', precio_lista: '400', unidad: 'Hoja',
+    mostrable: false, solo_descuentos: false, por_pagina: true, por_pack: false,
+    tiene_reglas: true, nicho: null,
+    rangos_cantidad: [{ value: 400, minQty: 1, maxQty: 70 }, { value: 150, minQty: 71, maxQty: 150 }, { value: 80, minQty: 151, maxQty: 500 }] },
+  // precio_lista 0 PERO con escalera: no es "sin precio"
+  { producto_id: 'p2', nombre_canonico: 'Impresiones a4 papel obra 106 gr', score: '5.28',
+    variante_id: 'v4', variante: 'doble faz b/n', precio_lista: '0', unidad: 'Hoja',
+    mostrable: false, solo_descuentos: false, por_pagina: true, por_pack: false,
+    tiene_reglas: true, nicho: null,
+    rangos_cantidad: [{ value: 230, minQty: 1, maxQty: 10 }, { value: 176, minQty: 11, maxQty: 100 }, { value: 178, minQty: 101, maxQty: 500 }] },
+  // solo_descuentos: va a caveat, nunca a precio
+  { producto_id: 'p3', nombre_canonico: 'Impresiones láser color papel obra 80 gr', score: '5.28',
+    variante_id: 'v5', variante: 'A4', precio_lista: '750', unidad: 'Hoja',
+    mostrable: false, solo_descuentos: true, por_pagina: false, por_pack: false,
+    tiene_reglas: true, nicho: null, rangos_cantidad: null },
 ];
 
 const SOBRE = {
   userMessage: 'cuánto sale imprimir 200 páginas doble faz en obra 75?',
   conversation: [{ role: 'user', content: 'cuánto sale imprimir 200 páginas doble faz en obra 75?' }],
-  conversationId: 1, accountId: 1,
+  conversationId: 377, accountId: 1,
+  seleccion: { terminos: ['Impresiones papel obra 75 gr'], productos: [], cantidad: 200 },
 };
 
 // Ejecuta el jsCode de un nodo con $() y $input mockeados.
@@ -62,11 +83,16 @@ const check = (nombre, cond, detalle) => {
 // ── Armar Candidatos: la lista cerrada ──────────────────────────────────
 const armados = correr('Armar Candidatos', FILAS, { 'Leer Selector': SOBRE });
 console.log('=== Armar Candidatos ===');
-check('arma un candidato por variante', armados.candidatos.length === 3,
+check('arma un candidato por variante', armados.candidatos.length === 5,
   'candidatos=' + armados.candidatos.length);
-check('preserva las filas crudas para el verificador', armados.filasCrudas.length === 3);
-check('el prompt lista las 3 opciones con precio',
-  (armados.promptAgente.match(/\[\d\]/g) || []).length === 3);
+check('preserva las filas crudas para el verificador', armados.filasCrudas.length === 5);
+// EL BUG DEL 2026-07-29: con mostrable=false en todas, el prompt decia
+// "(la busqueda no devolvio nada)" y el agente contestaba bien sobre nada.
+check('NO filtra por `mostrable` (es not tiene_reglas, no visibilidad)',
+  (armados.promptAgente.match(/\[\d+\]/g) || []).length === 5,
+  'opciones en el prompt: ' + (armados.promptAgente.match(/\[\d+\]/g) || []).length);
+check('el prompt NO dice "no devolvio nada"',
+  !/no devolvio nada/.test(armados.promptAgente));
 
 // ── Calcular Montos: los escenarios que mataban el turno ────────────────
 console.log('\n=== Calcular Montos — escenarios de salida del agente ===');
@@ -113,17 +139,39 @@ const ilegible = correr('Calcular Montos', { output: { cualquierCosa: true } }, 
 check('guarda la salida cruda cuando no la puede interpretar',
   typeof ilegible.crudoAgente === 'string' && ilegible.crudoAgente.length > 0);
 
-// ── El monto es deterministico ─────────────────────────────────────────
+// ── El monto es deterministico y respeta la escalera ───────────────────
 console.log('\n=== Invariante de plata ===');
 const conMonto = correr('Calcular Montos', { output: { elegidos: [{ idx: 2, confianza: 0.9 }] } }, ctx);
-check('el hecho trae el precio de la fila SQL (120)',
-  conMonto.hechos[0].monto === 120, JSON.stringify(conMonto.hechos[0]));
-check('el texto dice "por pagina" (por_pagina=true)',
-  /por pagina/.test(conMonto.hechos[0].texto), conMonto.hechos[0].texto);
-check('NO multiplica por la cantidad (200) — precio_lista es el BASE',
-  !/24\.000|24000/.test(JSON.stringify(conMonto.hechos)));
+const h0 = conMonto.hechos[0];
+// EL CASO REAL: 200 paginas doble faz. precio_lista dice 150 (tramo 1-10) pero
+// el tramo 51-250 vale 88. Informar 150 seria un 1,7x.
+check('elige el TRAMO por cantidad (200 -> $88), no precio_lista ($150)',
+  h0 && h0.monto === 88, JSON.stringify(h0));
+check('el texto dice "por pagina"', h0 && /por pagina/.test(h0.texto), h0 && h0.texto);
+check('NO multiplica por la cantidad (no dice 17.600 ni 24.000)',
+  !/17\.?600|24\.?000/.test(JSON.stringify(conMonto.hechos)));
 check('montosAutorizados = los montos de los hechos',
-  JSON.stringify(conMonto.montosAutorizados) === '[120]');
+  JSON.stringify(conMonto.montosAutorizados) === '[88]', JSON.stringify(conMonto.montosAutorizados));
+
+// precio_lista 0 con escalera != sin precio
+const cero = correr('Calcular Montos', { output: { elegidos: [{ idx: 4, confianza: 0.9 }] } }, ctx);
+check('precio_lista 0 CON escalera da precio (no caveat)',
+  cero.hechos.length === 1 && cero.hechos[0].monto === 178,
+  'hechos=' + JSON.stringify(cero.hechos) + ' caveats=' + JSON.stringify(cero.caveats));
+
+// solo_descuentos nunca sale como precio
+const desc = correr('Calcular Montos', { output: { elegidos: [{ idx: 5, confianza: 0.9 }] } }, ctx);
+check('solo_descuentos va a caveat, no a precio',
+  desc.hechos.length === 0 && desc.caveats.length === 1,
+  'hechos=' + desc.hechos.length + ' caveats=' + desc.caveats.length);
+check('un caveat solo tambien deja hablar (no escala)', desc.hayAlgoQueDecir === true);
+
+// varias variantes para comparar
+const varias = correr('Calcular Montos',
+  { output: { elegidos: [{ idx: 1, confianza: 0.8 }, { idx: 2, confianza: 0.9 }] } }, ctx);
+check('con 2 variantes emite 2 hechos con su tramo',
+  varias.hechos.length === 2 && varias.hechos[0].monto === 70 && varias.hechos[1].monto === 88,
+  JSON.stringify(varias.hechos.map((h) => h.monto)));
 
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
