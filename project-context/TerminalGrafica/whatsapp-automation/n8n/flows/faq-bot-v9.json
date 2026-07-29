@@ -2152,6 +2152,39 @@
         3648,
         1080
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "gate-opciones",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "opciones",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "v94-gate-accion",
+      "name": "¿Menú o Precio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3308,
+        1700
+      ]
     }
   ],
   "connections": {
@@ -2940,12 +2973,7 @@
       "main": [
         [
           {
-            "node": "Get Precio",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Armar Menu Opciones",
+            "node": "¿Menú o Precio?",
             "type": "main",
             "index": 0
           }
@@ -3015,6 +3043,24 @@
         [
           {
             "node": "Silencio Repetición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Menú o Precio?": {
+      "main": [
+        [
+          {
+            "node": "Armar Menu Opciones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Precio",
             "type": "main",
             "index": 0
           }

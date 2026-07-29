@@ -2518,9 +2518,10 @@ return [{
   if (wf.nodes.length !== antes - 1) throw new Error('BUILD [15a]: no se borro "Get Opciones"');
   paso('15a · fuera "Get Opciones" (le faltaba rangos_cantidad, que es lo que hacia falta)');
 
-  // Ahora el renderer del menu cuelga de Aplicar Filtro, no de Get Opciones.
-  wf.connections['Aplicar Filtro'].main[0].push({ node: 'Armar Menu Opciones', type: 'main', index: 0 });
-  paso('15a · "Armar Menu Opciones" cuelga de Aplicar Filtro');
+  // Ahora el renderer del menu cuelga de Aplicar Filtro, no de Get Opciones — pero
+  // detras de una compuerta, NO en el mismo indice de salida (ver bloque 16: hacer
+  // `.push()` aca fue el bug de los dos mensajes por turno).
+  paso('15a · "Armar Menu Opciones" pasa a colgar de Aplicar Filtro (via la compuerta del 16)');
 
   // 15b · el puente de tokens tiene que saber leer la accion 'opciones'
   // `Extraer Palabras` leia solo `parsear.precio.producto`. En la accion 'opciones'
@@ -2602,6 +2603,67 @@ return [{
     + "    if (productos.some((p) => p.porPagina) && (pidePags || sinDatos)) preguntas.push('cuántas páginas tiene tu documento y cuántas copias querés');\n"
     + "    else if (productos.some((p) => p.vars.some((v) => v.qr === 1)) && (pideCant || sinDatos)) preguntas.push('cuántas necesitás');",
     '15e · el cierre del menú respeta `faltan`');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 16 · LA COMPUERTA POR ACCION (v9.4) — el bug de los DOS mensajes
+// ───────────────────────────────────────────────────────────────────────────
+// El bloque 15 metia los dos renderers en el MISMO indice de salida de `Aplicar
+// Filtro`. En n8n eso no es una alternativa: es fan-out incondicional. Corrian los
+// dos, los dos llegaban a `Normalizar Envio`, y el tail entero (compositor + Enviar
+// Mensaje + Log Turno) se ejecutaba DOS VECES por turno. Medido en WhatsApp real
+// 2026-07-29: el cliente recibio los rangos de precio y despues el menu, del mismo
+// mensaje. No era intermitente — los dos renderers dibujan sobre la accion
+// equivocada porque ambos leen `filasPrecio`, que esta poblado en las dos ramas.
+//
+// Daño colateral invisible en el chat: DOS filas en `bot.decisiones` por turno. De
+// ahi sale `borradoresPrevios`, asi que el anti-loop (umbral >= 2) saltaba a la
+// PRIMERA repeticion en vez de a la segunda, y la telemetria de confident-wrong
+// quedo contada doble.
+//
+// Compartir el camino de DATOS era correcto; lo que faltaba era volver a partir el
+// de CONTROL al final. La llave es `$json.action`, que ya viaja por spread desde
+// `Parsear Respuesta` (6 saltos rio arriba) y sobrevive los DOS returns de `Aplicar
+// Filtro`. No se computa nada nuevo rio abajo: es leer un campo que el productor ya
+// escribio rio arriba — lo contrario del ciclo logico del 28.
+{
+  const af = wf.connections['Aplicar Filtro'].main[0];
+  if (af.length !== 1 || af[0].node !== 'Get Precio') {
+    throw new Error('BUILD [16]: esperaba que Aplicar Filtro saliera solo a "Get Precio", sale a: ' + af.map((x) => x.node).join(', '));
+  }
+
+  const ref = node('Aplicar Filtro');
+  wf.nodes.push({
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 3 },
+        conditions: [{
+          id: 'gate-opciones',
+          leftValue: '={{ $json.action }}',
+          rightValue: 'opciones',
+          operator: { type: 'string', operation: 'equals' },
+        }],
+        combinator: 'and',
+      },
+      options: {},
+    },
+    id: 'v94-gate-accion',
+    name: '¿Menú o Precio?',
+    type: 'n8n-nodes-base.if',
+    typeVersion: 2.2,
+    position: [ref.position[0] + 180, ref.position[1]],
+  });
+
+  // El IF es un router puro: pasa el item sin tocarlo, asi que `hermanoPide` (que
+  // `Aplicar Filtro` calcula justamente para que `Get Precio` lo lea rio abajo)
+  // sobrevive intacto. Es la costura exacta donde el bug del 28 podria haber
+  // reentrado.
+  wf.connections['Aplicar Filtro'] = { main: [[{ node: '¿Menú o Precio?', type: 'main', index: 0 }]] };
+  wf.connections['¿Menú o Precio?'] = { main: [
+    [{ node: 'Armar Menu Opciones', type: 'main', index: 0 }],  // true  -> action 'opciones'
+    [{ node: 'Get Precio', type: 'main', index: 0 }],            // false -> precio y el resto
+  ] };
+  paso('16 · compuerta `¿Menú o Precio?` — un renderer por turno (fin del mensaje doble)');
 }
 
 // ───────────────────────────────────────────────────────────────────────────

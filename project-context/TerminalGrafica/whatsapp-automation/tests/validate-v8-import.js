@@ -32,14 +32,18 @@ const conVerif = v8.nodes.some((n) => n.name === 'Aplicar Verificador');
 // de lo que ya trae Buscar Candidatos — sin rangos_cantidad, que es justo la escalera
 // de precio que el menu necesitaba. La rama opciones entra ahora por Extraer Palabras.
 const sinGetOpciones = !v8.nodes.some((n) => n.name === 'Get Opciones');
+// v9.4: la compuerta `¿Menú o Precio?` — un IF que rutea por `action` entre Aplicar
+// Filtro y los dos renderers. Sin ella los dos corrían siempre (2 mensajes por turno).
+const conCompuerta = v8.nodes.some((n) => n.name === '¿Menú o Precio?');
 const nEsperados = v7.nodes.length - SIN_HANDOFF.length + 1
   + (esV9 ? NUEVOS_V83.length : 0) + (conVerif ? NUEVOS_V9.length : 0)
-  - (sinGetOpciones ? 1 : 0);
+  - (sinGetOpciones ? 1 : 0) + (conCompuerta ? 1 : 0);
 if (nEsperados !== v8.nodes.length) {
   E('cambio la cantidad de nodos: esperaba ' + nEsperados + ' y hay ' + v8.nodes.length
     + ' (68 - 4 de handoff + 1 de Log Silencio' + (esV9 ? ' + ' + NUEVOS_V83.length + ' de v8.3' : '')
     + (conVerif ? ' + ' + NUEVOS_V9.length + ' del verificador' : '')
-    + (sinGetOpciones ? ' - 1 de Get Opciones (v9.3)' : '') + ')');
+    + (sinGetOpciones ? ' - 1 de Get Opciones (v9.3)' : '')
+    + (conCompuerta ? ' + 1 de la compuerta (v9.4)' : '') + ')');
 }
 if (esV9) NUEVOS_V83.forEach((n) => { if (!v8.nodes.some((x) => x.name === n)) E('falta el nodo de v8.3 "' + n + '"'); });
 SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });
@@ -123,7 +127,11 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   // v9.2 (2026-07-28) — el menú dice precios: `Get Opciones` suma `v.atributos`
   // (de ahí sale la unidad de venta) y `v.solo_descuentos` al select. Sin la
   // unidad, un precio por m² se imprimiría igual que uno por unidad.
-  'Get Opciones']);
+  'Get Opciones',
+  // v9.4 (2026-07-29) — la compuerta que rutea por `action` entre Aplicar Filtro y
+  // los dos renderers. Es un nodo NUEVO: sin ella los dos corrían en paralelo y el
+  // cliente recibía dos mensajes por turno (y bot.decisiones dos filas).
+  '¿Menú o Precio?']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
@@ -399,6 +407,66 @@ else if (conVerif) console.log('  ok  todos los nodos LLM corren ' + MODELO);
 else console.log('  ok  (rollback: el modelo no se valida, v8 queda congelado)');
 if (!/normalize\('NFC'\)/.test(b['Decidir'].parameters.jsCode)) E('el mensaje del cliente no se normaliza a NFC');
 else console.log('  ok  mensaje del cliente en NFC');
+
+// ── FAN-OUT QUE DUPLICA MENSAJES (v9.4) ─────────────────────────────────────
+// El bug de v9.3 fue UNA linea: un `.push()` sobre `Aplicar Filtro.main[0]` en vez
+// de un reemplazo. En n8n, dos destinos en el MISMO indice de salida no son
+// alternativas: corren los DOS. Ni el harness (que corre nodos sueltos con mocks)
+// ni este validador (que miraba nodos, no caminos) podian verlo — el bug no vive en
+// ningun nodo, vive ENTRE dos.
+//
+// El invariante es de negocio, no de topologia: UN turno, UN mensaje. Se chequea
+// buscando nodos que NO son routers y tienen mas de un destino en un mismo indice
+// de salida, y viendo si mas de uno de esos caminos llega a un emisor (o al log:
+// dos filas por turno rompen `borradoresPrevios` y con el el umbral del anti-loop).
+if (conVerif) {
+  const emisores = v8.nodes
+    .filter((n) => n.type === 'n8n-nodes-base.httpRequest'
+                && /\/messages$/.test(String((n.parameters || {}).url || '')))
+    .map((n) => n.name);
+  const logs = v8.nodes
+    .filter((n) => n.type === 'n8n-nodes-base.postgres'
+                && String(((n.parameters || {}).table || {}).value || '') === 'decisiones')
+    .map((n) => n.name);
+
+  // Solo Switch/IF reparten entre alternativas. Cualquier otro nodo con 2 destinos
+  // en un indice los dispara a los dos: esa es exactamente la firma del bug.
+  const REPARTIDORES = new Set(['n8n-nodes-base.switch', 'n8n-nodes-base.if']);
+  const tipoDe = {};
+  v8.nodes.forEach((n) => { tipoDe[n.name] = n.type; });
+
+  const fanouts = [];
+  Object.entries(v8.connections).forEach(([src, v]) => {
+    ((v || {}).main || []).forEach((rama, i) => {
+      if ((rama || []).length > 1 && !REPARTIDORES.has(tipoDe[src])) {
+        fanouts.push({ src, i, dest: rama.map((x) => x.node) });
+      }
+    });
+  });
+
+  const alcanza = (desde, meta, visto) => {
+    visto = visto || new Set();
+    if (desde === meta) return true;
+    if (visto.has(desde)) return false;
+    visto.add(desde);
+    return (((v8.connections[desde] || {}).main) || [])
+      .some((r) => (r || []).some((x) => alcanza(x.node, meta, visto)));
+  };
+
+  let dobles = 0;
+  fanouts.forEach((f) => {
+    emisores.concat(logs).forEach((destino) => {
+      const vivas = f.dest.filter((d) => alcanza(d, destino));
+      if (vivas.length > 1) {
+        dobles++;
+        E('FAN-OUT QUE DUPLICA: "' + f.src + '" main[' + f.i + '] dispara ' + vivas.length
+          + ' ramas que llegan a "' + destino + '" (' + vivas.join(' + ') + '). En n8n corren TODAS.'
+          + ' Si son alternativas, meté un IF/Switch y ponelas en índices distintos.');
+      }
+    });
+  });
+  if (!dobles) console.log('  ok  ningún fan-out duplica mensajes ni filas de log');
+}
 
 console.log('\n=== ' + err + ' errores ===');
 process.exit(err ? 1 : 0);
