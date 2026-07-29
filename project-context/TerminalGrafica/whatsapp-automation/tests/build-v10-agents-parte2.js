@@ -195,6 +195,26 @@ const comoSeCobra = (r) => {
   return { clave: null, texto: u ? 'por ' + u : null };
 };
 
+// CUANTAS UNIDADES TRAE EL PACK.
+//
+// \`por_pack\` es un BOOLEANO (true/false), no la cantidad — pero se venia usando
+// como si trajera el numero: 'el pack de ' + c.porPack daba "el pack de true".
+// La cantidad real vive en atributos.pack_unidades (100 / 500 / 1000 / 2000).
+// Misma clase de bug que \`unidad\`: el nombre del campo sugiere un dato que el
+// campo no tiene.
+const packDe = (r) => {
+  const n = Number(((r.atributos || {}).pack_unidades));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+// LOS OTROS PACKS QUE EXISTEN. \`pack_tiers\` lista todos los tamanios de pack de
+// ese producto ([100, 500, 1000]). El candidato es UNO solo, asi que sin esto el
+// cliente que pregunta por tarjetas ve un solo pack y no sabe que hay otros.
+const packsDisponibles = (r) => {
+  const t = ((r.atributos || {}).pack_tiers);
+  return Array.isArray(t) && t.length > 1 ? t.map(Number).filter(Number.isFinite) : null;
+};
+
 const lista = filas.map((r, i) => ({
   idx: i + 1,
   producto: r.nombre_canonico,
@@ -206,7 +226,16 @@ const lista = filas.map((r, i) => ({
   precioTexto: fmt(r.precio_lista),
   soloDescuentos: !!r.solo_descuentos,
   porPagina: !!r.por_pagina,
-  porPack: r.por_pack || null,
+  // \`por_pack\` es el FLAG (booleano); \`packDe\` es la CANTIDAD (de pack_unidades)
+  esPack: !!r.por_pack,
+  porPack: packDe(r),
+  packsDisponibles: packsDisponibles(r),
+  // PEDIDO MINIMO. El precio SOLO vale a partir de esta cantidad. Hoy es un
+  // producto (promo inmobiliarias: $15.000 el cartel llevando 6; suelto sale
+  // $19.500). Ya estaba diagnosticado en v9 (preguntas-tg.md, promo
+  // inmobiliarias): sin el minimo, "3 carteles" cotiza $45.000 contra $58.500
+  // reales. v10 lo habia perdido.
+  minUnidades: Number(((r.atributos || {}).min_unidades)) || null,
   tieneReglas: !!r.tiene_reglas,
   // OJO CON \`mostrable\`: en la vista de v9 es \`(not tiene_reglas)\`, o sea
   // "el precio es un numero limpio, sin escalera por cantidad". NO es un flag
@@ -229,7 +258,9 @@ const texto = lista.map((c) => [
   '| variante: ' + c.variante,
   c.precioTexto ? '| precio: ' + c.precioTexto + (c.cobro.texto ? ' ' + c.cobro.texto : '') : '| precio: no publicado',
   c.porPagina ? '| se cobra por pagina' : '',
-  c.porPack ? '| pack de ' + c.porPack : '',
+  c.porPack ? '| el precio es por un pack de ' + c.porPack + ' unidades' : (c.esPack ? '| se vende por pack' : ''),
+  c.packsDisponibles ? '| tambien hay packs de ' + c.packsDisponibles.join(', ') : '',
+  c.minUnidades ? '| ESTE PRECIO EXIGE LLEVAR AL MENOS ' + c.minUnidades : '',
   c.soloDescuentos ? '| solo con descuento' : '',
 ].filter(Boolean).join(' ')).join('\\n');
 
@@ -369,13 +400,36 @@ for (const c of confiables) {
     continue;
   }
 
+  // PEDIDO MINIMO: por debajo del minimo ESTE PRECIO NO VALE.
+  //
+  // La promo inmobiliarias son $15.000 el cartel LLEVANDO 6; el cartel suelto
+  // sale $19.500 (otra fila). Emitir el hecho igual seria cotizar 1,3x por
+  // debajo — ya diagnosticado en v9 (preguntas-tg.md): "3 carteles" daba
+  // $45.000 contra $58.500 reales.
+  //
+  // Va a caveat con el minimo explicito: el cliente tiene que poder decidir si
+  // le sirve llevar mas. No se cotiza el suelto por nuestra cuenta — es otra
+  // fila del catalogo y el precio no esta autorizado aca.
+  const cantPedida = Number((d.seleccion || {}).cantidad);
+  if (c.minUnidades && Number.isFinite(cantPedida) && cantPedida > 0 && cantPedida < c.minUnidades) {
+    caveats.push({
+      producto: base,
+      nota: 'ese precio es llevando ' + c.minUnidades + ' o mas; por ' + cantPedida
+        + ' el precio es otro y lo confirmamos por mail',
+    });
+    continue;
+  }
+
   // COMO SE COBRA. El orden importa: por_pagina y por_pack son flags explicitos
   // del producto y ganan. Despues manda \`cobro\` (que sale de unidad_venta), y
   // recien al final la columna \`unidad\` — que miente en 94 de 165 variantes
   // (ver el comentario largo en Armar Candidatos). Decir "por hoja" en algo que
   // se cobra por trabajo es un 120x si el cliente multiplica.
   const unidad = c.porPagina ? 'por pagina'
-    : c.porPack ? ('el pack de ' + c.porPack)
+    // \`porPack\` ahora es la CANTIDAD (pack_unidades), no el booleano: antes esto
+    // decia "el pack de true" porque leia \`por_pack\`, que es un flag.
+    : c.porPack ? ('el pack de ' + c.porPack + ' unidades')
+    : c.esPack ? 'el pack'
     : (c.cobro && c.cobro.texto) ? c.cobro.texto
     : c.unidad ? ('por ' + c.unidad)
     : null;
@@ -445,6 +499,28 @@ for (const c of confiables) {
     // es el BASE (decision v9.2, 2026-07-28). El total lo confirma un humano.
     tieneReglas: !!c.tieneReglas,
   });
+
+  // OTROS TAMANIOS DE PACK. El candidato es UN pack ("100 Tarjetas"), pero
+  // pack_tiers dice que existen [100, 500, 1000]. Sin esto el cliente que pide
+  // 500 tarjetas ve el precio del pack de 100 y no se entera de que hay uno que
+  // le sirve mejor. Va como caveat (texto), no como monto: los precios de los
+  // otros packs son OTRAS filas del catalogo y no estan autorizados aca.
+  // El minimo se dice SIEMPRE que exista, aunque el cliente pida de sobra: es
+  // una condicion del precio, no una objecion. Si no, el cliente que pide 10 no
+  // se entera de que por 5 le cambia.
+  if (c.minUnidades) {
+    caveats.push({ producto: base, nota: 'ese precio es llevando ' + c.minUnidades + ' o mas' });
+  }
+
+  if (c.packsDisponibles && c.porPack) {
+    const otros = c.packsDisponibles.filter((n) => n !== c.porPack);
+    if (otros.length) {
+      caveats.push({
+        producto: base,
+        nota: 'tambien se hace en packs de ' + otros.join(', ') + ' (otro precio, se consulta aparte)',
+      });
+    }
+  }
 }
 
 // Los montos autorizados: el verificador chequea contra ESTA lista.
@@ -619,6 +695,11 @@ const crudas = (d.filasCrudas || []).map((r, i) => [
   // Hoja". Dos veredictos opuestos, los dos correctos para la evidencia que
   // le daba. La contradiccion estaba en el dato, no en el LLM.
   '| se cobra: ' + (((r.atributos || {}).unidad_venta) || ('(sin dato, columna unidad dice ' + (r.unidad || '-') + ')')),
+  // el pack: \`por_pack\` es un booleano, la cantidad esta en pack_unidades
+  ((r.atributos || {}).pack_unidades) ? '| pack de ' + (r.atributos.pack_unidades) + ' unidades' : '',
+  // el minimo condiciona el precio: sin esto el auditor no puede detectar que se
+  // cotizo por debajo del pedido minimo
+  ((r.atributos || {}).min_unidades) ? '| MINIMO ' + (r.atributos.min_unidades) + ' unidades' : '',
   '| solo_descuentos: ' + !!r.solo_descuentos,
   '| score: ' + r.score,
 ].filter(Boolean).join(' ')).join('\\n');

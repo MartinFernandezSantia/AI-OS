@@ -303,6 +303,107 @@ const impr = correr('Calcular Montos', { output: { elegidos: [{ idx: 2, confianz
 check('no rompe las impresiones: sigue diciendo "por pagina"',
   /por pagina/.test(impr.hechos[0].texto), impr.hechos[0].texto);
 
+// ── PACKS: `por_pack` es un FLAG, la cantidad esta en pack_unidades ─────
+//
+// Encontrado auditando el catalogo (2026-07-29), misma familia que unidad_venta:
+// el nombre del campo sugiere un dato que el campo no tiene. `por_pack` es
+// booleano y se usaba como si trajera el numero -> "el pack de true".
+// La cantidad real vive en atributos.pack_unidades.
+console.log('\n=== Packs (por_pack booleano vs pack_unidades) ===');
+const FILAS_PACK = [
+  { producto_id: 'tp1', nombre_canonico: '100 Tarjetas Color/Negro', score: '4.8',
+    variante_id: 'tv1', variante: '.', precio_lista: '15000', unidad: 'Hoja',
+    mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: true,
+    tiene_reglas: false, nicho: null, rangos_cantidad: null,
+    atributos: { unidad_venta: 'pack', pack_unidades: 100, pack_tiers: [100, 500, 1000] } },
+];
+const SOBRE_PACK = {
+  userMessage: 'cuanto salen 500 tarjetas?',
+  conversation: [{ role: 'user', content: 'cuanto salen 500 tarjetas?' }],
+  conversationId: 381, accountId: 1,
+  seleccion: { terminos: ['Tarjetas'], productos: [], cantidad: 500 },
+};
+const armPk = correr('Armar Candidatos', FILAS_PACK, { 'Leer Selector': SOBRE_PACK });
+check('el candidato NO dice "pack de true"', !/pack de true/i.test(armPk.promptAgente),
+  armPk.promptAgente.split('\n')[3]);
+check('el candidato dice la cantidad real del pack (100)',
+  /pack de 100 unidades/.test(armPk.promptAgente), armPk.promptAgente.split('\n')[3]);
+check('el candidato avisa que hay otros packs (500, 1000)',
+  /tambien hay packs de 100, 500, 1000/.test(armPk.promptAgente));
+
+const pack = correr('Calcular Montos',
+  { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } }, { 'Armar Candidatos': armPk });
+const hp = pack.hechos[0];
+check('el hecho NO dice "el pack de true"', hp && !/true/i.test(hp.texto), hp && hp.texto);
+check('el hecho dice "el pack de 100 unidades"',
+  hp && /el pack de 100 unidades/.test(hp.texto), hp && hp.texto);
+check('el monto es el de la fila ($15.000)', hp && hp.monto === 15000);
+// el cliente pidio 500 y el candidato es el pack de 100: tiene que enterarse
+check('avisa por caveat que hay packs de 500 y 1000',
+  pack.caveats.some((c) => /500, 1000/.test(c.nota)), JSON.stringify(pack.caveats));
+
+const pvPk = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+  ...pack, borrador: 'El pack de 100 tarjetas sale $15.000.',
+  conversation: SOBRE_PACK.conversation, seleccion: SOBRE_PACK.seleccion,
+} });
+check('el verificador ve el tamanio del pack', /pack de 100 unidades/.test(pvPk.promptAgente));
+
+// pack sin pack_unidades: no debe inventar un numero
+const packSinN = correr('Armar Candidatos',
+  [{ ...FILAS_PACK[0], atributos: { unidad_venta: 'pack' } }], { 'Leer Selector': SOBRE_PACK });
+check('pack sin pack_unidades dice "por pack" sin numero',
+  !/pack de (true|null|undefined|NaN)/i.test(packSinN.promptAgente),
+  packSinN.promptAgente.split('\n')[3]);
+
+// ── PEDIDO MINIMO: por debajo del minimo el precio NO vale ──────────────
+//
+// Promo inmobiliarias: $15.000 el cartel LLEVANDO 6. El suelto sale $19.500
+// (otra fila). Ya estaba diagnosticado en v9 (preguntas-tg.md): sin el minimo,
+// "3 carteles" cotizaba $45.000 contra $58.500 reales. v10 lo habia perdido.
+console.log('\n=== Pedido minimo (min_unidades) ===');
+const FILA_MIN = {
+  producto_id: 'pm1', nombre_canonico: 'Promoción para inmobiliarias (cartel de 1 × 0,65 m, llevando 6)',
+  score: '4.2', variante_id: 'pv1', variante: '.', precio_lista: '15000', unidad: 'unidad',
+  mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
+  tiene_reglas: false, nicho: 'inmobiliarias', rangos_cantidad: null,
+  atributos: { unidad_venta: 'unidad', min_unidades: 6, nicho: 'inmobiliarias' },
+};
+const sobreMin = (cant) => ({
+  userMessage: 'necesito ' + cant + ' carteles para la inmobiliaria',
+  conversation: [{ role: 'user', content: 'necesito ' + cant + ' carteles para la inmobiliaria' }],
+  conversationId: 382, accountId: 1,
+  seleccion: { terminos: ['cartel inmobiliaria'], productos: [], cantidad: cant },
+});
+
+// pide 3, el minimo es 6 -> NO puede cotizar $15.000
+const bajo = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(3) }) });
+check('bajo el minimo NO emite el precio como hecho', bajo.hechos.length === 0,
+  JSON.stringify(bajo.hechos));
+check('bajo el minimo avisa por caveat con el numero',
+  bajo.caveats.some((c) => /llevando 6 o mas/.test(c.nota)), JSON.stringify(bajo.caveats));
+check('bajo el minimo NO escala: hay algo que decir', bajo.hayAlgoQueDecir === true);
+check('$15.000 NO queda autorizado bajo el minimo',
+  !(bajo.montosAutorizados || []).includes(15000), JSON.stringify(bajo.montosAutorizados));
+
+// pide 10, arriba del minimo -> cotiza, pero el minimo se dice igual
+const alto = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(10) }) });
+check('arriba del minimo SI cotiza', alto.hechos.length === 1 && alto.hechos[0].monto === 15000,
+  JSON.stringify(alto.hechos));
+check('arriba del minimo igual aclara el minimo',
+  alto.caveats.some((c) => /llevando 6 o mas/.test(c.nota)), JSON.stringify(alto.caveats));
+
+const armMin = correr('Armar Candidatos', [FILA_MIN], { 'Leer Selector': sobreMin(3) });
+check('el candidato le muestra el minimo al agente',
+  /LLEVAR AL MENOS 6/.test(armMin.promptAgente), armMin.promptAgente.split('\n')[3]);
+
+const pvMin = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+  ...bajo, borrador: 'Ese precio es llevando 6 o más.',
+  conversation: sobreMin(3).conversation, seleccion: sobreMin(3).seleccion,
+} });
+check('el verificador ve el minimo en la fila cruda', /MINIMO 6 unidades/.test(pvMin.promptAgente));
+
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
 process.exit(fallos ? 1 : 0);

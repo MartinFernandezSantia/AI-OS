@@ -387,6 +387,30 @@ console.log('\n8b. UNIDAD DE COBRO — unidad_venta manda sobre la columna `unid
     if (!/se cobra/.test(js)) E('Prompt Verificador no le muestra al auditor como se cobra');
     else OK('el verificador ve "se cobra: <unidad_venta>"');
   }
+
+  // PACKS: `por_pack` es un BOOLEANO; la cantidad esta en pack_unidades.
+  // Leerlo como numero daba "el pack de true" en el mensaje al cliente.
+  if (arm) {
+    const js = arm.parameters.jsCode;
+    if (!/pack_unidades/.test(js)) E('Armar Candidatos no lee pack_unidades: por_pack es booleano, diria "pack de true"');
+    else OK('Armar Candidatos saca el tamanio del pack de pack_unidades');
+    if (!/pack_tiers/.test(js)) E('Armar Candidatos no lee pack_tiers: el cliente no se entera de los otros packs');
+    else OK('Armar Candidatos expone los otros tamanios de pack');
+  }
+
+  // PEDIDO MINIMO: por debajo del minimo el precio no vale (promo inmobiliarias:
+  // $15.000 llevando 6, suelto $19.500). Ya diagnosticado en v9, perdido en v10.
+  if (arm && !/min_unidades/.test(arm.parameters.jsCode)) {
+    E('Armar Candidatos no lee min_unidades: cotizaria por debajo del pedido minimo');
+  } else if (arm) OK('Armar Candidatos lee min_unidades');
+  if (calc2) {
+    const js = calc2.parameters.jsCode;
+    if (!/minUnidades/.test(js)) E('Calcular Montos no aplica el pedido minimo: emitiria un precio que no vale');
+    else OK('Calcular Montos bloquea el hecho bajo el pedido minimo');
+  }
+  if (pv && !/MINIMO/.test(pv.parameters.jsCode)) {
+    E('Prompt Verificador no muestra el minimo: el auditor no puede detectar una cotizacion bajo minimo');
+  } else if (pv) OK('el verificador ve el pedido minimo');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
