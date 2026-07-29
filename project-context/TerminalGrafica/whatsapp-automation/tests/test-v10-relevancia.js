@@ -48,7 +48,10 @@ const FILAS = [
   { producto_id: 'p3', nombre_canonico: 'Impresiones láser color papel obra 80 gr', score: '5.28',
     variante_id: 'v5', variante: 'A4', precio_lista: '750', unidad: 'Hoja',
     mostrable: false, solo_descuentos: true, por_pagina: false, por_pack: false,
-    tiene_reglas: true, nicho: null, rangos_cantidad: null },
+    tiene_reglas: true, nicho: null, rangos_cantidad: null,
+    // con unidad_venta: sin esto la fila cae en el caveat de "no consta como se
+    // cobra" y el test mediria ese guard en vez del de solo_descuentos.
+    atributos: { unidad_venta: 'hoja', multiplica: true } },
 ];
 
 const SOBRE = {
@@ -159,11 +162,14 @@ check('precio_lista 0 CON escalera da precio (no caveat)',
   cero.hechos.length === 1 && cero.hechos[0].monto === 178,
   'hechos=' + JSON.stringify(cero.hechos) + ' caveats=' + JSON.stringify(cero.caveats));
 
-// solo_descuentos nunca sale como precio
+// solo_descuentos SI sale como precio + caveat (corregido 2026-07-29: era
+// telemetria, no una orden de silencio — ver la seccion del final).
 const desc = correr('Calcular Montos', { output: { elegidos: [{ idx: 5, confianza: 0.9 }] } }, ctx);
-check('solo_descuentos va a caveat, no a precio',
-  desc.hechos.length === 0 && desc.caveats.length === 1,
+check('solo_descuentos emite el precio Y el caveat',
+  desc.hechos.length === 1 && desc.caveats.length >= 1,
   'hechos=' + desc.hechos.length + ' caveats=' + desc.caveats.length);
+check('el caveat avisa que puede haber un precio mejor',
+  desc.caveats.some((c) => /precio mejor/.test(c.nota)), JSON.stringify(desc.caveats));
 check('un caveat solo tambien deja hablar (no escala)', desc.hayAlgoQueDecir === true);
 
 // varias variantes para comparar
@@ -695,6 +701,97 @@ console.log('\n=== Prompt del compositor: cotiza sin calcular ===');
   check('se le permite dar totales', /COTIZAS TOTALES/.test(sysComp));
   check('pero tiene prohibido calcularlos', /NUNCA/.test(sysComp) && /lo multiplicas vos/.test(sysComp));
   check('sigue prohibido tomar pedidos', /NUNCA TOMAS UN PEDIDO/.test(sysComp));
+}
+
+// ── solo_descuentos ES TELEMETRIA, NO SILENCIO ─────────────────────────
+//
+// Bug del 2026-07-29 ("papel kraft a4" -> "los precios de lista no se
+// publican"). El flag toca 54 variantes en 21 productos (folletos, laser color,
+// plastificados, tarjetas) y TODAS tienen precio cargado. La spec original
+// (db/precio-freshness.sql) dice "telemetria... precio_lista es TECHO" y
+// "resto (discount/supercharge) -> numero de lista + caveat neutro".
+console.log('\n=== solo_descuentos: se dice el precio + caveat ===');
+{
+  const FILA_KRAFT = {
+    producto_id: 'kr1', nombre_canonico: 'Papel Kraft 130 Gr', score: '5.0',
+    variante_id: 'kv1', variante: 'A4', precio_lista: '800', unidad: 'Hoja',
+    mostrable: true, solo_descuentos: true, por_pagina: false, por_pack: false,
+    tiene_reglas: false, nicho: null, rangos_cantidad: null,
+    atributos: { unidad_venta: 'hoja', multiplica: true },
+  };
+  const SOBRE_KRAFT = {
+    userMessage: 'papel kraft a4', conversation: [{ role: 'user', content: 'papel kraft a4' }],
+    conversationId: 387, accountId: 1, avisoDado: false,
+    seleccion: { terminos: ['papel kraft'], productos: [], cantidad: null },
+  };
+  const armK = correr('Armar Candidatos', [FILA_KRAFT], { 'Leer Selector': SOBRE_KRAFT });
+  const kraft = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': armK });
+
+  check('el precio SE DICE (antes moria en caveat)', kraft.hechos.length === 1,
+    JSON.stringify(kraft.hechos));
+  check('el monto es $800', kraft.hechos[0] && kraft.hechos[0].monto === 800);
+  check('$800 queda autorizado', (kraft.montosAutorizados || []).includes(800));
+  check('avisa que puede haber un precio mejor',
+    kraft.caveats.some((c) => /precio mejor/.test(c.nota)), JSON.stringify(kraft.caveats));
+  check('el caveat NO dice que no se publica',
+    !kraft.caveats.some((c) => /no se publica/.test(c.nota)), JSON.stringify(kraft.caveats));
+  check('el prompt del compositor trae el precio',
+    /\$800/.test(kraft.promptAgente), kraft.promptAgente.slice(0, 200));
+
+  // el candidato no puede decir "solo con descuento": el agente lo leia como
+  // "no se puede cotizar"
+  check('el candidato NO dice "solo con descuento"',
+    !/solo con descuento/.test(armK.promptAgente), armK.promptAgente.split('\n')[3]);
+  check('el candidato dice que el precio es el TECHO',
+    /TECHO/.test(armK.promptAgente), armK.promptAgente.split('\n')[3]);
+
+  // el verificador tiene que saber que decirlo es correcto
+  const pvK = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+    ...kraft, borrador: 'El papel kraft A4 sale $800 la hoja.',
+    conversation: SOBRE_KRAFT.conversation, seleccion: SOBRE_KRAFT.seleccion,
+  } });
+  check('el verificador ve "hay descuentos posibles"',
+    /hay descuentos posibles/.test(pvK.promptAgente));
+  check('el verificador NO ve "solo_descuentos: true" crudo',
+    !/solo_descuentos: true/.test(pvK.promptAgente));
+  check('el prompt le dice que decir el precio es correcto',
+    /NO rechaces un mensaje por decir el precio/.test(pvK.promptAgente));
+  check('el guard no marca $800 como inventado',
+    (pvK.numerosNoAutorizados || []).length === 0, JSON.stringify(pvK.numerosNoAutorizados));
+
+  // NO se calcula el descuento (decision de Martin): solo se avisa
+  check('NO intenta calcular el descuento',
+    !kraft.caveats.some((c) => /\d+\s*%/.test(c.nota)), JSON.stringify(kraft.caveats));
+}
+
+// ── Flags que se ignoran A PROPOSITO (que nadie los "arregle") ─────────
+console.log('\n=== Flags de precio ignorados por decision ===');
+{
+  const FILA_OVERRIDE = {
+    producto_id: 'op1', nombre_canonico: 'OPP Brillo', score: '4.5',
+    variante_id: 'ov1', variante: '.', precio_lista: '2400', unidad: 'Hoja',
+    mostrable: true, solo_descuentos: false, por_pagina: false, por_pack: false,
+    tiene_reglas: false, tiene_override: true, nicho: null, rangos_cantidad: null,
+    atributos: { unidad_venta: 'hoja', multiplica: true },
+  };
+  const sobreOv = {
+    userMessage: 'cuanto sale opp brillo', conversation: [], conversationId: 388, accountId: 1,
+    seleccion: { terminos: ['opp brillo'], productos: [], cantidad: null },
+  };
+  const ovr = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_OVERRIDE], { 'Leer Selector': sobreOv }) });
+  // decision de Martin: se dice el precio de lista SIN considerar el override
+  check('tiene_override NO silencia el precio (se dice la lista)',
+    ovr.hechos.length === 1 && ovr.hechos[0].monto === 2400, JSON.stringify(ovr.hechos));
+
+  // precio viejo: la regla de frescura se elimino, el precio se dice igual
+  const FILA_VIEJA = { ...FILA_OVERRIDE, tiene_override: false,
+    precio_actualizado: '2025-01-01T00:00:00+00:00' };
+  const vieja = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_VIEJA], { 'Leer Selector': sobreOv }) });
+  check('un precio viejo se dice igual (regla de frescura eliminada)',
+    vieja.hechos.length === 1 && vieja.hechos[0].monto === 2400, JSON.stringify(vieja.hechos));
 }
 
 console.log('\n' + '='.repeat(58));

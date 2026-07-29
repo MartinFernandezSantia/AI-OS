@@ -280,7 +280,9 @@ const texto = lista.map((c) => [
   c.porPack ? '| el precio es por un pack de ' + c.porPack + ' unidades' : (c.esPack ? '| se vende por pack' : ''),
   c.packsDisponibles ? '| tambien hay packs de ' + c.packsDisponibles.join(', ') : '',
   c.minUnidades ? '| ESTE PRECIO EXIGE LLEVAR AL MENOS ' + c.minUnidades : '',
-  c.soloDescuentos ? '| solo con descuento' : '',
+  // NO dice "solo con descuento": el agente lo leia como "no se puede cotizar".
+  // El precio SI se dice; el flag solo marca que puede haber una mejora.
+  c.soloDescuentos ? '| el precio de lista es el TECHO (hay descuentos posibles)' : '',
 ].filter(Boolean).join(' ')).join('\\n');
 
 return [{ json: {
@@ -401,14 +403,57 @@ const descartadosPorConfianza = elegidos.length - confiables.length;
 const fmt = (n) => '$' + new Intl.NumberFormat('es-AR').format(Number(n));
 
 // Construccion de hechos. Un hecho = un enunciado que el compositor puede decir.
+// ═══ FLAGS DE PRECIO QUE SE IGNORAN A PROPOSITO (Martin, 2026-07-29) ═══
+//
+// db/precio-freshness.sql definio 4 reglas ademas de la escalera. Auditadas
+// contra el catalogo real, Martin decidio:
+//
+//  · tiene_override → la spec decia "nunca mostrar numero (el empleado pisa el
+//    precio)". SE IGNORA: se dice el precio de lista sin considerar el override.
+//    Son 2 variantes (OPP Brillo $2.400, OPP Mate/Holografico/Kraft $2.500).
+//
+//  · precio_actualizado (frescura ≤30 dias) → REGLA ELIMINADA. Un precio viejo
+//    igual se dice. Hoy no hay ninguno con mas de 30 dias.
+//
+//  · n_reglas_cantidad > 1 → la spec decia "ambiguo -> sin numero". SE IGNORA:
+//    caso muy particular, hoy CERO variantes lo tienen.
+//
+// Esto queda escrito para que nadie los "arregle" mas adelante creyendo que
+// faltan: la decision es no implementarlos.
 const hechos = [];
 const caveats = [];
 for (const c of confiables) {
   const base = c.producto + (c.variante && c.variante !== 'única' ? ' (' + c.variante + ')' : '');
 
+  // solo_descuentos ES TELEMETRIA, NO UNA ORDEN DE SILENCIO.
+  //
+  // Bug encontrado el 2026-07-29 ("papel kraft a4" -> "los precios de lista no
+  // se publican"): este bloque cortaba el loop y mataba el precio. Toca 54
+  // variantes en 21 productos — todos los folletos, todas las impresiones laser
+  // color, los plastificados y las tarjetas. Las 54 TIENEN precio cargado
+  // (ninguna en $0), asi que el bot tenia el dato y no lo decia.
+  //
+  // La definicion original esta en db/precio-freshness.sql (Increment B,
+  // 2026-07-21) y dice textual:
+  //   "solo_descuentos queda para telemetria (discount = signo negativo
+  //    garantizado, precio_lista es TECHO)"
+  // y en la tabla de clasificacion:
+  //   "resto (discount/supercharge) -> numero de lista + caveat neutro"
+  //
+  // O sea: el precio se DICE. El flag solo marca que sobre ese producto hay
+  // reglas de descuento, y como el descuento resta, precio_lista es el techo —
+  // el cliente nunca paga mas que eso. Decirlo es seguro; callarlo manda a mail
+  // a un cliente que ya tenia su respuesta.
+  //
+  // NO se calcula el descuento (decision de Martin 2026-07-29): el bot informa
+  // el numero de lista y avisa que puede haber una mejora, sin intentar el
+  // calculo. Los descuentos del kraft (por cantidad y por dorso) los cierra TG.
   if (c.soloDescuentos) {
-    caveats.push({ producto: base, nota: 'el precio de lista no se publica; se cotiza con descuento por mail' });
-    continue;
+    caveats.push({
+      producto: base,
+      nota: 'ese es el precio de lista; segun la cantidad puede haber un precio mejor, se consulta por mail',
+    });
+    // SIN continue: el precio sigue su curso normal y se emite como hecho.
   }
   // precio_lista == 0 NO significa "sin precio": hay variantes cuyo precio vive
   // solo en la escalera por cantidad (idx 5/6/7 del caso real: precio_lista 0
@@ -875,7 +920,9 @@ const crudas = (d.filasCrudas || []).map((r, i) => [
   // el minimo condiciona el precio: sin esto el auditor no puede detectar que se
   // cotizo por debajo del pedido minimo
   ((r.atributos || {}).min_unidades) ? '| MINIMO ' + (r.atributos.min_unidades) + ' unidades' : '',
-  '| solo_descuentos: ' + !!r.solo_descuentos,
+  // Etiquetado para el auditor: sin esto lee "solo_descuentos: true" y concluye
+  // que el precio no se podia decir — que es justo el bug que se arreglo.
+  r.solo_descuentos ? '| hay descuentos posibles (el precio de lista es el TECHO, decirlo es correcto)' : '',
   '| score: ' + r.score,
 ].filter(Boolean).join(' ')).join('\\n');
 
@@ -909,6 +956,11 @@ return [{ json: {
     'TRAMO que corresponde a esa cantidad — NO el "precio base (tramo 1)".',
     'Que un monto no coincida con el precio base NO significa que este inventado:',
     'buscalo en la escalera de esa fila antes de rechazar.',
+    '',
+    'SI UNA FILA DICE "hay descuentos posibles": el precio de lista IGUAL se dice.',
+    'Ese flag marca que el monto es el TECHO (los descuentos restan), no que sea',
+    'secreto. NO rechaces un mensaje por decir el precio de un producto con',
+    'descuentos, y NO exijas que lo derive a mail.',
     '',
     'LA UNIDAD DE COBRO sale del campo "se cobra" de cada fila (por trabajo, por',
     'unidad, por hoja, por m2...). Ese es el dato bueno. Los hechos autorizados ya',

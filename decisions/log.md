@@ -584,3 +584,13 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** total siempre con aclaración de "estimado" (el cliente igual se enoja si sube, y la aclaración se vuelve ruido) · total siempre sin aclarar (TG queda dando la mala noticia al encargar) · preguntarle antes a TG a qué productos aplica el recargo (el catálogo ya lo dice con `tecnologia: uv`, no hacía falta bloquear).
 
 **Owner:** Martin.
+
+## 2026-07-29 — `solo_descuentos` es telemetría, no una orden de silencio
+
+**Decision:** el bot dice el precio de lista de las variantes con `solo_descuentos: true`, agregando un caveat neutro ("ese es el precio de lista; según la cantidad puede haber un precio mejor, se consulta por mail"). NO calcula el descuento. Además: `tiene_override` se ignora (se dice el precio de lista sin considerar el override), la regla de frescura de precio (`precio_actualizado` ≤30 días) se elimina, y `n_reglas_cantidad > 1` se ignora.
+
+**Why:** v10 leía `solo_descuentos` como "no publicar el precio" y mandaba a mail. Toca 54 variantes en 21 productos — todos los folletos, todas las impresiones láser color, los plastificados y las tarjetas — y las 54 tienen precio cargado, ninguna en $0. La definición original está en `db/precio-freshness.sql` (Increment B, 2026-07-21) y dice textual: *"solo_descuentos queda para telemetría (discount = signo negativo garantizado, precio_lista es TECHO)"*, con la regla de render *"resto (discount/supercharge) → número de lista + caveat neutro"*. Como el descuento resta, `precio_lista` es el techo: el cliente nunca paga más que ese número, así que decirlo es seguro y callarlo manda a mail a alguien que ya tenía su respuesta. Los descuentos del kraft (por cantidad y por dorso) los cierra TG, el bot no los calcula. Los otros tres flags se descartan por decisión explícita: el override afecta a 2 variantes y el precio de lista sigue siendo informativo; la frescura penalizaba precios válidos; y `n_reglas_cantidad > 1` hoy tiene cero casos.
+
+**Alternatives considered:** dejarlo como estaba y no cotizar esos 21 productos (pierde la mayor parte del catálogo cotizable) · calcular el descuento (Martin lo descartó: el bot no debe calcular descuentos ni recargos) · preguntarle a TG antes de tocar nada (la spec original ya respondía la pregunta).
+
+**Owner:** Martin.
