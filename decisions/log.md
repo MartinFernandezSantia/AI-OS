@@ -18,6 +18,36 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-07-28 — El bot no elige variante por defecto: muestra todas con su precio
+
+**Decision:** cuando el cliente no especifica cuál variante quiere, el bot lista TODAS con su precio en un solo mensaje, en vez de elegir una. Se elimina el desempate "la más barata" de `elegirVariante`. Excepciones: si el cliente ancló la variante, se cotiza esa; si el producto cotiza por escalera de cantidad, se conserva la reducción (el menú perdería la tabla de rangos).
+
+**Why:** "la más barata" era la causa raíz de un incidente que arrastró tres rondas — sin ancla, las 4 variantes del cartel empataban y ganaba la hoja A3 a $10.500 contra el 1x0,65 real de $19.500 (1,86× de sub-cotización). Su justificación en el código ("si erramos, erramos por abajo, y la puerta abierta ofrece el resto") es falsa: errar por abajo ES sub-cotizar, que es exactamente el daño que el proyecto viene persiguiendo. Con precios en el menú, el mensaje ES la respuesta y no una pregunta: un mensaje en vez de dos, lo cual además importa porque Meta cobra por mensaje desde oct-2026. Cambiaría de idea si la medición muestra que los menús con precio no reciben respuesta del cliente (>20% sin contestar en el turno siguiente): ahí el formato sería peor que un número.
+
+**Alternatives considered:** curar `default_variante` producto por producto (descartado: le inventa un ganador a un empate que el negocio dice que no tiene) · recordar la variante entre turnos (refutado dos veces por contraste: el turno anterior del incidente cotizó otro producto, y forzar la variante vieja crea estado pegajoso — "y el a3?" quedaría pisado).
+
+**Owner:** Martin.
+
+## 2026-07-28 — El cruce de montos se mide, no se bloquea
+
+**Decision:** cuando un mensaje lleva 2 o más precios, el compositor puede reordenarlos y dejar cada monto pegado a la condición equivocada. Eso NO se bloquea: se registra como `cruce_montos:N` en `bot.decisiones.notas` para medir su frecuencia real.
+
+**Why:** Martin: "no quiero seguir limitando funcionalidades". El gate del compositor ya se había aflojado el 27 con datos (31% de las reescrituras legítimas rebotaba), y la medición que justificó ese aflojamiento se hizo sobre mensajes de UN monto, donde reordenar es paráfrasis. Con varios montos el reorden deja de ser estilo, pero el riesgo está demostrado en simulación, no en producción — y decidir sobre un riesgo simulado es lo que ya tumbó tres propuestas esta misma sesión. Se mide primero. Cambiaría de idea con un solo caso real: el daño máximo medido es 4,57× (cotizar un cartel de 2x1 a $10.500 en vez de $48.000).
+
+**Alternatives considered:** devolverle poder de rechazo al gate sólo para mensajes con 2+ montos (queda disponible si la medición lo justifica) · que los mensajes con varios montos no pasen por el LLM y salgan determinísticos (elimina la clase de ataque, pero el mensaje suena a lista y Martin quiere que el compositor los redacte).
+
+**Owner:** Martin.
+
+## 2026-07-28 — El precio de la promo se dice aunque el cliente no llegue al mínimo
+
+**Decision:** cuando el cliente pide menos del mínimo de una promo (pidió 3, la promo arranca en 6), el mensaje lleva el precio del producto normal Y el unitario de la promo, con el mínimo pegado en la misma oración. Revierte la política anterior, que lo prohibía explícitamente (test CP6d: "no filtra el monto de la promo").
+
+**Why:** la política vieja razonaba que decir el precio promocional es "ofrecer un precio al que el cliente no tiene derecho". En la práctica producía lo contrario de lo buscado: el cliente se quedaba sin NINGÚN número y con una repregunta por la cantidad que acababa de decir. El mínimo pegado al monto es lo que hace legítimo al número — separarlos sí sería ofrecer algo que no corresponde. NO se da el total de N unidades: hay recargo por impresión UV y el precio guardado es el base, así que multiplicar sub-cotizaría.
+
+**Alternatives considered:** mencionar que la promo existe sin decir el precio (es lo que hacía; dejaba al cliente sin información accionable) · dar también el total de 6 unidades para mostrar el salto (más vendedor pero más pesado, y el total no se puede calcular con reglas de precio activas).
+
+**Owner:** Martin.
+
 ## 2026-07-28 — Bot TG: consejo adversarial pre-import — 9 bugs, 2 de ellos rompían el fix entero
 
 **Decision:** Antes de re-importar, cuatro revisores adversariales (instruidos a REFUTAR, no a confirmar) sobre `faq-bot-v9.json` — el archivo que se importa, no el build. Encontraron 9 bugs reproducibles; todos corregidos y con test que los caza (verificado por mutación: se revierte cada fix y se confirma que el harness lo detecta).
