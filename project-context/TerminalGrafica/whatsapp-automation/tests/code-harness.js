@@ -1936,6 +1936,93 @@ async function main() {
       r[0].json.hermanoPide && r[0].json.hermanoPide.variante === '4aa42c6d-2d01-4fb3-bcaa-b559e4d6871d'
         ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.hermanoPide));
 
+    // ── GP1-GP7 · v9.4: LOS GUARDS DE PODA ──────────────────────────────────
+    // Incidente 2026-07-29 con el JSON REAL de la ejecución como fixture (está
+    // commiteado en n8n/flows/.tmp/aplicar-filtro-out.json). No lo invento: los
+    // fixtures que escribo yo son justo los que mienten, y este caso ya nos costó
+    // 6,4× una vez. El dato real es el oráculo.
+    const REAL = (() => {
+      try {
+        const p = require('path').join(__dirname, '..', 'n8n', 'flows', '.tmp', 'aplicar-filtro-out.json');
+        const j = JSON.parse(require('fs').readFileSync(p, 'utf8'));
+        return Array.isArray(j) ? j[0] : j;
+      } catch (e) { return null; }
+    })();
+
+    if (!REAL) {
+      console.log('GP1-GP7 SIN FIXTURE REAL: falta n8n/flows/.tmp/aplicar-filtro-out.json — FAIL');
+    } else {
+      // El LLM Filtro eligió el índice 4 ('Impresiones a3 tonner negro', score 6.73)
+      // y descartó el 0 ('Impresiones papel obra 75 gr', score 9.69, el más alto),
+      // que es EXACTAMENTE el nombre que el LLM 1 había pedido.
+      const iA3 = REAL.candidatos.findIndex((c) => /a3 tonner/i.test(c.nombre_canonico));
+      const sobreReal = { ...REAL, filtrados: undefined, filtroMotivo: undefined,
+        filasPrecio: undefined, hermanoPide: undefined, obsFiltro: undefined };
+      r = await aplicarFiltro(sobreReal, JSON.stringify({ elegidos: [iA3], motivo: 'única opción blanco y negro disponible' }));
+      const nombres = r[0].json.filtrados.map((c) => c.nombre_canonico);
+
+      // GP1: el producto pedido vuelve al conjunto. SIN el guard, `filtrados` queda
+      //      en 1 (el a3) y el bot cotiza $54.000 contra $8.400 reales.
+      //      El oráculo exige la MARCA del rescate, no solo que obra 75 esté: el
+      //      guard de unidad también lo reinyecta, así que "está en la lista" pasaba
+      //      en verde con el rescate apagado (lo detectó la mutación).
+      console.log('GP1 el pedido descartado se rescata:',
+        nombres.some((n) => /obra 75/i.test(n)) && (r[0].json.obsFiltro || []).includes('rescate_poda')
+          ? 'OK' : 'FAIL ' + JSON.stringify(nombres) + ' ' + JSON.stringify(r[0].json.obsFiltro));
+
+      // GP2: y va PRIMERO — el orden importa porque ARP agrupa por idx y el primero
+      //      es el que gana los desempates río abajo. Mismo cuidado que GP1.
+      console.log('GP2 el pedido queda primero:',
+        /obra 75/i.test(nombres[0] || '') && (r[0].json.obsFiltro || []).includes('rescate_poda')
+          ? 'OK' : 'FAIL ' + JSON.stringify(nombres));
+
+      // GP3: los dos guards dejan rastro, y ACUMULAN. `filtroMotivo` es un string
+      //      único y lo pisa el último que dispare, así que la traza que vale es
+      //      `obsFiltro`: en este caso los dos fallan a la vez (producto equivocado
+      //      Y unidad cruzada) y las dos marcas tienen que estar para poder contarlas
+      //      por separado en la auditoría.
+      console.log('GP3 los dos guards dejan rastro:',
+        (r[0].json.obsFiltro || []).includes('rescate_poda')
+        && (r[0].json.obsFiltro || []).some((o) => /unidad_cruzada/.test(o))
+        && /rescate|unidad/.test(r[0].json.filtroMotivo || '')
+          ? 'OK' : 'FAIL ' + r[0].json.filtroMotivo + ' ' + JSON.stringify(r[0].json.obsFiltro));
+
+      // GP4: NO dispara cuando el filtro eligió bien. Este es el falso positivo que
+      //      importa: si disparara siempre, el guard no discrimina nada (mismo
+      //      diagnóstico que `hayCompetencia` el 28).
+      const iObra = REAL.candidatos.findIndex((c) => /obra 75/i.test(c.nombre_canonico));
+      r = await aplicarFiltro(sobreReal, JSON.stringify({ elegidos: [iObra], motivo: 'el que pidió' }));
+      console.log('GP4 no dispara si el filtro acertó:',
+        !/rescate/.test(r[0].json.filtroMotivo || '') && !(r[0].json.obsFiltro || []).includes('rescate_poda')
+          ? 'OK' : 'FAIL ' + r[0].json.filtroMotivo);
+
+      // GP5: el cliente afina y el bot cambia de producto LEGÍTIMAMENTE. El guard
+      //      compara dentro de UN turno: si el LLM 1 pide el a3, resolver el a3 está
+      //      bien y no se rescata nada. (Era la duda de Martin sobre falsos positivos.)
+      const sobreOtroPedido = { ...sobreReal, precio: { ...REAL.precio, producto: 'Impresiones a3 tonner negro' } };
+      r = await aplicarFiltro(sobreOtroPedido, JSON.stringify({ elegidos: [iA3], motivo: 'lo pidió' }));
+      console.log('GP5 cambio de producto legítimo no dispara:',
+        !/rescate/.test(r[0].json.filtroMotivo || '') ? 'OK' : 'FAIL ' + r[0].json.filtroMotivo);
+
+      // GP6: LA UNIDAD CRUZADA. obra 75 vende por `hoja`, el a3 por `pagina`. Eso
+      //      decide si 120 páginas se dividen por 2: factor 2 ENCIMA del producto
+      //      equivocado, y ninguna otra regla lo ve (los dígitos coinciden).
+      //      OJO CON EL ORÁCULO: la 1ª versión aceptaba `filtrados.length > 1`, que el
+      //      guard de PODA ya produce — o sea pasaba en verde con el guard de unidad
+      //      apagado (lo detectó la mutación). Se asserta la observación específica,
+      //      que es lo único que distingue un guard del otro.
+      r = await aplicarFiltro(sobreReal, JSON.stringify({ elegidos: [iA3], motivo: 'bn' }));
+      console.log('GP6 detecta la unidad cruzada:',
+        (r[0].json.obsFiltro || []).some((o) => /unidad_cruzada:hoja>pagina/.test(o))
+          ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.obsFiltro));
+
+      // GP7: el guard es fail-open. Un sobre sin `precio` (acción opciones) no puede
+      //      romper el turno.
+      r = await aplicarFiltro({ ...sobreReal, precio: null }, JSON.stringify({ elegidos: [iA3], motivo: 'x' }));
+      console.log('GP7 sin pedido el guard no rompe:',
+        Array.isArray(r[0].json.filtrados) && r[0].json.filtrados.length === 1 ? 'OK' : 'FAIL');
+    }
+
     // T14: índices fuera de rango se descartan sin romper (el modelo alucina un [7]
     // sobre una lista de 3).
     r = await aplicarFiltro(tres, JSON.stringify({ elegidos: [0, 7, -1, 'dos'], motivo: '' }));

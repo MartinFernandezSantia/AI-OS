@@ -316,7 +316,7 @@ flags as (
 -- UNA variante. El lateral emitia una fila por (variante, eje) y el jsonb_object_agg
 -- externo recibia la misma clave N veces: ante clave repetida se queda con UNA fila,
 -- arbitraria, y NO une nada. El jsonb_agg(distinct) interno era decorativo.
--- Resultado: `ejes_variantes` no describia el producto sino una variante al azar, y
+-- Resultado: ejes_variantes no describia el producto sino una variante al azar, y
 -- cada eje podia venir de una variante distinta (un Frankenstein que no existe en el
 -- catalogo). 9 productos del catalogo real emitian una linea de prompt enganosa.
 -- Medido 2026-07-29: 'Impresiones papel obra 75 gr' (4 variantes: simple/doble faz x
@@ -2677,6 +2677,99 @@ return [{
     [{ node: 'Get Precio', type: 'main', index: 0 }],            // false -> precio y el resto
   ] };
   paso('16 · compuerta `¿Menú o Precio?` — un renderer por turno (fin del mensaje doble)');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 17 · GUARDS DE PODA (v9.4) — el filtro no puede contradecir al pedido
+// ───────────────────────────────────────────────────────────────────────────
+// El bloque 16 arregla el SQL que le miente al filtro. Estos guards son la red por
+// si vuelve a mentir: comparan lo que el LLM 1 PIDIO contra lo que el path RESOLVIO.
+// Los dos strings salen de la misma columna (`bot.taxonomia.nombre_canonico`), asi
+// que es igualdad de strings, no un juicio.
+//
+// Por que estos SI bloquean cuando el gate del compositor dejo de hacerlo el 28: ese
+// gate juzgaba ESTILO con un oraculo ruidoso (31% de falsos positivos medidos). Estos
+// verifican una CONTRADICCION INTERNA del propio objeto. Es la misma familia que
+// `token_residual`, la unica regla que quedo bloqueando: no juzga al modelo, verifica
+// que la mecanica funciono.
+{
+  const GUARDS = "\n"
+    + "// ── GUARD DE PODA (v9.4) ───────────────────────────────────────────────────\n"
+    + "// El LLM 1 copia el nombre del catalogo y el SQL busca sobre esa misma columna.\n"
+    + "// Entonces: si el nombre que pidio ESTABA entre los candidatos y el filtro lo\n"
+    + "// TIRO, la poda contradice al pedido. No es ambiguedad — es el filtro decidiendo\n"
+    + "// contra el dato explicito. Incidente 2026-07-29: 'Impresiones papel obra 75 gr'\n"
+    + "// (candidato 0, score 9.69, el mas alto) descartado a favor de 'Impresiones a3\n"
+    + "// tonner negro' (idx 4, score 6.73) -> $54.000 contra $8.400 reales (6,4x).\n"
+    + "const FOLD_G = { '\\u00e1': 'a', '\\u00e9': 'e', '\\u00ed': 'i', '\\u00f3': 'o', '\\u00fa': 'u', '\\u00fc': 'u', '\\u00f1': 'n' };\n"
+    + "const normG = (s) => String(s || '').toLowerCase()\n"
+    + "  .replace(/[\\u00e1\\u00e9\\u00ed\\u00f3\\u00fa\\u00fc\\u00f1]/g, (c) => FOLD_G[c])\n"
+    + "  .replace(/[\\u00d7]/g, 'x')\n"
+    + "  .replace(/\\s+/g, ' ').trim();\n"
+    + "const obsFiltro = [];\n"
+    + "try {\n"
+    + "  const ped = normG(sobre.precio && sobre.precio.producto);\n"
+    + "  if (ped) {\n"
+    + "    const cPed = candidatos.find((c) => normG(c.nombre_canonico) === ped);\n"
+    + "    const enFiltr = filtrados.some((c) => normG(c.nombre_canonico) === ped);\n"
+    + "    // RESCATE, no rechazo: se le devuelve al conjunto el producto que el cliente\n"
+    + "    // nombro. Coherente con el invariante del nodo ('de mas antes que nada') y con\n"
+    + "    // el fail-safe de arriba, que ante un filtro ilegible devuelve la lista entera.\n"
+    + "    // No puede empeorar el resultado: agrega un producto que el cliente pidio, y el\n"
+    + "    // menu de v9.2 ya sabe mostrar varios con su precio.\n"
+    + "    if (cPed && !enFiltr) {\n"
+    + "      filtrados = [cPed].concat(filtrados.filter((c) => c !== cPed));\n"
+    + "      filtroMotivo = 'rescate: el filtro descarto el producto pedido';\n"
+    + "      obsFiltro.push('rescate_poda');\n"
+    + "    }\n"
+    + "    // ── GUARD DE UNIDAD ────────────────────────────────────────────────────\n"
+    + "    // `unidad_venta` decide si 120 paginas se dividen por 2 (hoja) o no (pagina),\n"
+    + "    // si se multiplica por m2 o por metro. Resolver a un producto con OTRA unidad\n"
+    + "    // no es un error de nombre: es un error de ARITMETICA, y el pipeline de plata\n"
+    + "    // lo propaga sin verlo (los digitos coinciden, los tokens coinciden, el hedge\n"
+    + "    // esta). En el mismo incidente: hoja -> pagina, factor 2 ENCIMA del 6,4x.\n"
+    + "    // Solo actua si resolvio a UN producto: con menu, el cliente elige.\n"
+    + "    const unidadDe = (c) => { const a = objAtr(c && c.atributos); return a.unidad_venta ? String(a.unidad_venta) : null; };\n"
+    + "    // Se mide contra lo que el filtro DEJO, no contra `filtrados` ya rescatado:\n"
+    + "    // si el rescate corrio, la lista tiene 2 y este guard no veria nada. Son dos\n"
+    + "    // fallas distintas y cada una tiene que dejar su propia marca.\n"
+    + "    const soloFiltro = elegidos && elegidos.length === 1 ? [candidatos[elegidos[0]]] : filtrados;\n"
+    + "    if (soloFiltro.length === 1 && soloFiltro[0] && cPed && soloFiltro[0] !== cPed) {\n"
+    + "      const uPed = unidadDe(cPed), uRes = unidadDe(soloFiltro[0]);\n"
+    + "      // Ambas tienen que existir: 6 productos del catalogo no declaran unidad.\n"
+    + "      if (uPed && uRes && uPed !== uRes) {\n"
+    + "        // No va a mail (contradice 'WhatsApp informa TODO', decision 2026-07-22) ni\n"
+    + "        // al Aclarador (una 3a llamada LLM sobre el mismo dato malo). Rompe la\n"
+    + "        // univocidad para que salga el menu con las dos opciones y sus precios.\n"
+    + "        if (!filtrados.includes(cPed)) filtrados = [cPed].concat(filtrados);\n"
+    + "        filtroMotivo = 'unidad cruzada (' + uPed + '->' + uRes + ')';\n"
+    + "        obsFiltro.push('unidad_cruzada:' + uPed + '>' + uRes);\n"
+    + "      }\n"
+    + "    }\n"
+    + "  }\n"
+    + "} catch (e) { /* fail-open: el guard nunca puede romper el turno */ }\n"
+    + "// OBSERVA, no bloquea: el score es lexico y ruidoso (en este mismo incidente\n"
+    + "// 'laser color papel obra 80' matcheo el token 'blanco'). Un umbral sobre una\n"
+    + "// senal ruidosa es la receta del 31% de falsos positivos del 28. Se mide primero.\n"
+    + "try {\n"
+    + "  const scoreDe = (c) => Number(c && c.score) || 0;\n"
+    + "  const maxEleg = Math.max.apply(null, [0].concat(filtrados.map(scoreDe)));\n"
+    + "  const maxTir = Math.max.apply(null, [0].concat(candidatos.filter((c) => filtrados.indexOf(c) < 0).map(scoreDe)));\n"
+    + "  if (maxEleg > 0 && maxTir > maxEleg * 1.3) obsFiltro.push('habria_score_invertido:' + (maxTir / maxEleg).toFixed(2));\n"
+    + "} catch (e) {}\n";
+
+  // El guard va antes del return final, donde `filtrados` y `filtroMotivo` ya estan
+  // calculados. En ARP seria tarde: su linea `p.producto = nombreFiltro` PISA el
+  // pedido del LLM 1 con lo que resolvio el filtro, y ahi la evidencia ya no existe.
+  sub('Aplicar Filtro',
+    "const filasB = aplanar(filtrados);",
+    GUARDS + "\nconst filasB = aplanar(filtrados);",
+    '17a · guards de poda y unidad en Aplicar Filtro');
+
+  sub('Aplicar Filtro',
+    "  json: { ...sobre, filtrados, filtroMotivo, filtroDescarto: candidatos.length - filtrados.length,",
+    "  json: { ...sobre, filtrados, filtroMotivo, obsFiltro, filtroDescarto: candidatos.length - filtrados.length,",
+    '17b · las observaciones del filtro viajan en el sobre');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
