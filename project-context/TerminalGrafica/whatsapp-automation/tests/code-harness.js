@@ -1117,10 +1117,46 @@ async function main() {
   console.log('C3 compone y estampa:', r[0].json.final === 'Dale, el A4 te sale $800,00. Si querés lo cerramos por terminalgrafica@gmail.com.'
     && r[0].json.compositor === 'ok' ? 'OK' : 'FAIL ' + r[0].json.final);
 
-  // C4: EL CASO QUE MOTIVO TODO — un menu se vuelve prosa, sin numeros.
+  // C4: EL CASO QUE MOTIVO TODO — un menu de NOMBRES se vuelve prosa, sin numeros.
+  // v9.4: sigue valiendo. La regla nueva separa enumerar NOMBRES (prosa, esto) de
+  // enumerar MONTOS (lista, C4b): son dos cosas distintas y el prompt las distingue.
   const prMenu = (await prompt({ origen: 'menu', reply: 'Tenemos estas opciones:\n- Papel Kraft 130 Gr\n- Papel Kraft 300 Gr\nDecime cuál te sirve y te paso el precio.' }))[0].json;
   r = await aplicar(prMenu, JSON.stringify({ mensaje: 'El kraft lo tenemos en dos gramajes, 130 y 300. ¿Cuál te sirve?' }));
-  console.log('C4 menu -> prosa:', r[0].json.compositor === 'ok' && !r[0].json.final.includes('- ') && r[0].json.final.includes('130 y 300') ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
+  console.log('C4 menu de nombres -> prosa:', r[0].json.compositor === 'ok' && !r[0].json.final.includes('- ') && r[0].json.final.includes('130 y 300') ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
+
+  // ── C4b-C4d · v9.4: LA ESCALERA DE PRECIOS NO SE CUENTA EN PROSA ──────────
+  // Queja de Martin (2026-07-29): los 5 tramos salieron en prosa corrida y el
+  // cliente no puede compararlos. El renderer los emite con viñeta; el compositor
+  // los aplastaba porque la excepción del prompt llegaba cuarta, era condicional, y
+  // la primera línea de la sección decía "sin markdown" — o sea la contradecía.
+  const escalera = 'Obra 75 simple faz, precio de lista por hoja según cantidad:\n'
+    + '- 1 a 10: $150,00 por hoja\n- 11 a 50: $96,00 por hoja\n- 51 a 250: $88,00 por hoja';
+  const prEsc = (await prompt({ origen: 'precio', reply: escalera }))[0].json;
+
+  // C4b: el prompt le PIDE la lista. Es lo único verificable sin llamar al modelo:
+  // el harness no ejercita al LLM, así que el oráculo es la instrucción, no la
+  // salida. (Que la obedezca se mide en WhatsApp, no acá.)
+  const sisEsc = (prEsc.compositorMessages || []).map((m) => m.content).join('\n');
+  console.log('C4b el prompt pide la lista de precios:',
+    /varios precios en lista/.test(sisEsc)
+    && /va un monto por renglón/.test(sisEsc)
+    && !/sin negritas, sin markdown/.test(sisEsc)
+      ? 'OK' : 'FAIL');
+
+  // C4c: y la regla vive en la sección DURA, que es donde el compositor obedece.
+  const idxDura = sisEsc.indexOf('## Lo que NO podés hacer nunca');
+  console.log('C4c la regla está entre las prohibiciones:',
+    idxDura > 0 && sisEsc.indexOf('va un monto por renglón') > idxDura ? 'OK' : 'FAIL');
+
+  // C4d: si el compositor RESPETA las viñetas, los montos se re-estampan igual.
+  // El gate no mira layout (decisión del 28), así que una lista no lo hace rebotar.
+  r = await aplicar(prEsc, JSON.stringify({ mensaje: 'Te paso los precios de lista, bajan según cuánto lleves:\n\n'
+    + '- 1 a 10: [[P1]] por hoja\n- 11 a 50: [[P2]] por hoja\n- 51 a 250: [[P3]] por hoja\n\nDecime cuántas necesitás.' }));
+  console.log('C4d la lista con montos pasa el gate:',
+    r[0].json.compositor === 'ok'
+    && /- 1 a 10: \$150,00 por hoja/.test(r[0].json.final)
+    && (r[0].json.final.match(/^- /gm) || []).length === 3
+      ? 'OK' : 'FAIL ' + r[0].json.compositor + ' | ' + r[0].json.final);
 
   // C5: el compositor escribe un $ propio -> RECHAZO, se manda el borrador.
   r = await aplicar(pr, JSON.stringify({ mensaje: 'El A4 sale [[P1]], o sea $800 redondeando. [[MAIL]]' }));

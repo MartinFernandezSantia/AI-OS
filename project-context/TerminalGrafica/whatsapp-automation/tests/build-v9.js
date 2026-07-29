@@ -2797,52 +2797,83 @@ return [{
 // WhatsApp soporta viñetas nativas con "- " desde 2024 (Android/iOS/Web/Mac). No
 // soporta tablas ni alineacion por espacios (la fuente es proporcional).
 {
+  // OJO: estos `sub` inyectan CODIGO JS dentro del nodo, no texto. El salto de linea
+  // entre elementos del array tiene que ser un salto REAL en el string que se
+  // inyecta ("\n" en el literal de este archivo), no "\\n": con la barra escapada
+  // se escribe la secuencia literal en el codigo del nodo y el JS deja de compilar.
+  // Pasó en el primer intento y ningun test lo vio, porque el harness no ejercita
+  // este nodo. La verificacion real es compilarlo (ver el guard 18e mas abajo).
+  const L = "\n  ";
+
   // 18a · la exclusion de markdown deja de tapar la excepcion
   sub('Armar Prompt Compositor',
     "'- Español argentino rioplatense, voseo, cálido y directo. Texto plano: sin emoji, sin negritas, sin markdown.',",
-    "'- Español argentino rioplatense, voseo, cálido y directo. Texto plano: sin emoji, sin negritas, sin títulos.',\\n"
-    + "  '  Las viñetas con guion SÍ: WhatsApp las renderiza y son lo único que hace legible una lista de precios.',",
+    "'- Español argentino rioplatense, voseo, cálido y directo. Texto plano: sin emoji, sin negritas, sin títulos.',"
+    + L + "'  Las viñetas con guion SÍ: WhatsApp las renderiza y son lo único que hace legible una lista de precios.',",
     '18a · "sin markdown" ya no contradice a las viñetas');
 
-  // 18b · la compresion declara su propio limite
+  // 18b · la compresion declara su propio limite. La aclaracion va DESPUES del
+  // ejemplo del kraft, que es la linea siguiente en el array.
   sub('Armar Prompt Compositor',
     "'- Corto. Dos o tres oraciones. Si el borrador es una lista, contala en una frase natural:',",
-    "'- Corto. Dos o tres oraciones. Si el borrador enumera PRODUCTOS u OPCIONES, contalas en una frase natural:',\\n"
-    + "  '  Eso vale para NOMBRES. Una lista de MONTOS no se cuenta en prosa: ver la sección de abajo.',",
-    '18b · la compresión aclara que no aplica a los montos');
+    "'- Corto. Dos o tres oraciones. Si el borrador enumera PRODUCTOS u OPCIONES, contalas en una frase natural:',",
+    '18b · la compresión habla de productos y opciones, no de montos');
+
+  sub('Armar Prompt Compositor',
+    "'- NO numeres opciones y no pidas que te contesten con un número. El cliente responde con palabras.',",
+    "'  Eso vale para NOMBRES. Una lista de MONTOS no se cuenta en prosa: ver la sección de abajo.',"
+    + L + "'- NO numeres opciones y no pidas que te contesten con un número. El cliente responde con palabras.',",
+    '18b · la aclaración de los montos va después del ejemplo');
 
   // 18c · la excepcion sale de la nota al pie y pasa a ser su propia seccion
   sub('Armar Prompt Compositor',
     "'- Si el borrador trae una tabla de precios por cantidad, la dejás como tabla: ahí la lista se lee mejor que la prosa.',",
-    "'',\\n"
-    + "  '## Cuando el borrador trae varios precios en lista',\\n"
-    + "  '- Si el borrador tiene DOS O MÁS renglones que arrancan con guion y cada uno lleva un monto,',\\n"
-    + "  '  esos renglones van TAL CUAL: mismo guion, mismo salto de línea, mismo orden, uno por línea.',\\n"
-    + "  '  No los juntes en una oración, no los separes con comas y no los pases a prosa.',\\n"
-    + "  '  Cinco precios seguidos en un párrafo no se leen: el cliente los tiene que poder comparar de un vistazo.',\\n"
-    + "  '- Lo tuyo ahí es lo de arriba y lo de abajo: una frase corta que presente la lista y otra que cierre.',\\n"
-    + "  '  Escribilas con tus palabras, sin repetir el encabezado del borrador palabra por palabra.',\\n"
-    + "  '- Dejá un renglón en blanco antes y después de la lista: separa la lista de la prosa y se lee mucho mejor.',\\n"
-    + "  '- Ejemplo. Borrador:',\\n"
-    + "  '    Obra 75 simple faz, precio de lista por hoja según cantidad:',\\n"
-    + "  '    - 1 a 10: [[P1]] por hoja',\\n"
-    + "  '    - 11 a 50: [[P2]] por hoja',\\n"
-    + "  '  Vos decís:',\\n"
-    + "  '    Te paso los precios de lista, que van bajando según cuánto lleves:',\\n"
-    + "  '',\\n"
-    + "  '    - 1 a 10: [[P1]] por hoja',\\n"
-    + "  '    - 11 a 50: [[P2]] por hoja',\\n"
-    + "  '',\\n"
-    + "  '    Decime cuántas necesitás y te paso el total.',\\n"
-    + "  '',",
+    "'',"
+    + L + "'## Cuando el borrador trae varios precios en lista',"
+    + L + "'- Si el borrador tiene DOS O MÁS renglones que arrancan con guion y cada uno lleva un monto,',"
+    + L + "'  esos renglones van TAL CUAL: mismo guion, mismo salto de línea, mismo orden, uno por línea.',"
+    + L + "'  No los juntes en una oración, no los separes con comas y no los pases a prosa.',"
+    + L + "'  Cinco precios seguidos en un párrafo no se leen: el cliente los tiene que poder comparar de un vistazo.',"
+    + L + "'- Lo tuyo ahí es lo de arriba y lo de abajo: una frase corta que presente la lista y otra que cierre.',"
+    + L + "'  Escribilas con tus palabras, sin repetir el encabezado del borrador palabra por palabra.',"
+    + L + "'- Dejá un renglón en blanco antes y después de la lista: se lee mucho mejor.',"
+    + L + "'- Ejemplo. Si el borrador dice:',"
+    + L + "'    Obra 75 simple faz, precio de lista por hoja según cantidad:',"
+    + L + "'    - 1 a 10: [[P1]] por hoja',"
+    + L + "'    - 11 a 50: [[P2]] por hoja',"
+    + L + "'  vos decís:',"
+    + L + "'    Te paso los precios de lista, que van bajando según cuánto lleves:',"
+    + L + "'    (renglón en blanco)',"
+    + L + "'    - 1 a 10: [[P1]] por hoja',"
+    + L + "'    - 11 a 50: [[P2]] por hoja',"
+    + L + "'    (renglón en blanco)',"
+    + L + "'    Decime cuántas necesitás y te paso el total.',",
     '18c · sección propia para la escalera de precios');
 
   // 18d · y la prohibicion dura, que es donde el compositor obedece
   sub('Armar Prompt Compositor',
     "'- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',",
-    "'- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',\\n"
-    + "  '- Pasar a prosa una lista de precios: si el borrador puso un monto por renglón, va un monto por renglón.',",
+    "'- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',"
+    + L + "'- Pasar a prosa una lista de precios: si el borrador puso un monto por renglón, va un monto por renglón.',",
     '18d · prohibición dura de aplastar la lista de precios');
+
+  // 18e · GUARD DE COMPILACION. El bug de arriba (los `\\n` literales) rompio el
+  // nodo entero y ningun test lo vio. Cualquier nodo Code que el build toque tiene
+  // que seguir siendo JS valido: se compila aca mismo, en el build, que es donde
+  // falla barato.
+  {
+    const rotos = [];
+    for (const nd of wf.nodes) {
+      const js = nd.parameters && nd.parameters.jsCode;
+      if (typeof js !== 'string') continue;
+      // async: n8n permite `await` de nivel superior en un Code node (Verificar HMAC
+      // lo usa para crypto.subtle). Compilar sin async lo marcaria como roto.
+      try { new (require('vm').Script)('(async function(){' + js + '})');
+      } catch (e) { rotos.push(nd.name + ': ' + e.message); }
+    }
+    if (rotos.length) throw new Error('BUILD [18e]: nodos Code que no compilan -> ' + rotos.join(' | '));
+    paso('18e · los ' + wf.nodes.filter((n) => n.parameters && typeof n.parameters.jsCode === 'string').length + ' nodos Code compilan');
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
