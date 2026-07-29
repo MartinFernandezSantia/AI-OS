@@ -1,10 +1,11 @@
-# Handoff — Bot WhatsApp Terminal Gráfica (`faq-bot-v8`)
+# Handoff — Bot WhatsApp Terminal Gráfica (`faq-bot-v9`)
 
 > **Qué es este archivo:** el estado vivo y el próximo paso. Todo lo que ya está cerrado vive en
 > los planes de `plans/` y en el log histórico de la memoria `chatwoot-whatsapp-impl-status`; acá
 > sólo queda lo que todavía decide algo. Si una sesión termina y esto no cambió, el archivo miente.
-> **Última actualización: 2026-07-27, noche** (v8.3 CONSTRUIDO en `faq-bot-v9.json`, 71 nodos.
-> Lo próximo es correr la **suite 7** en WhatsApp real y decidir qué optimizar con lo medido).
+> **Última actualización: 2026-07-28, noche** (v9.2 CONSTRUIDO y APLICADO en `faq-bot-v9.json`,
+> 76 nodos. **El menú con precios YA ANDA en WhatsApp real** — Martin lo verificó. Lo próximo es
+> que él siga probando y que la sesión que viene **evalúe esos tests con `bot.decisiones` poblado**).
 
 **Reglas de trabajo que no cambian:**
 rol A (informador acotado, no configurador) · mundo cerrado (lo no listado no existe para el bot)
@@ -24,92 +25,119 @@ mirar. El plan largo se commitea igual en `plans/`; el deck es cómo se presenta
 
 ## 1. Estado ahora — lo único que hay que leer para arrancar
 
-**v8.3 está construido en `faq-bot-v9.json` (71 nodos). Lo próximo es correrlo.** El plan
-([`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md)) pasó su pasada adversarial de 2
-lentes ([`v8-3-pasada-adversarial.md`](./v8-3-pasada-adversarial.md)) y el lote entero está aplicado,
-con los 3 prerrequisitos que estaban escritos en el repo y nunca se habían aplicado.
+**La sesión del 28 cerró el incidente que arrastraba tres rondas.** El bot pasó de contestar
+*"¿Cuántos necesitás?"* a alguien que acababa de decir 3, a esto (WhatsApp real, verificado por
+Martin el 28 a la noche):
+
+```
+Para la impresion exterior montada sobre plastico corrugado tenemos estas opciones:
+1 x 0.65 mt: $19.500,00      1 x 1 mt: $30.000,00
+2 x 1 mt: $48.000,00         a3: $10.500,00
+Promocion inmobiliarias 1 x 0.65 mt (llevando 6): $15.000,00
+Son precios de lista. Decime cual te sirve.
+```
+
+Las cuatro medidas con su precio, la promo con su condición pegada, el hedge al pie, y el
+compositor redactándolo natural (sin recitar el paréntesis del nombre curado).
 
 | pieza | estado |
 |---|---|
-| `n8n/flows/faq-bot-v9.json` | ⚠️ **re-importar: 71 nodos.** Búsqueda por palabra + filtro + los fixes 0a/0b/0c |
-| [`tests/suite-7-v9-busqueda.md`](../tests/suite-7-v9-busqueda.md) | ⚠️ **el próximo paso.** WhatsApp real; §0 primero (valida el fix del log) |
-| Migración SQL | ✅ **ninguna.** v9 no toca la base |
-| Curación de nombres (`db/curacion-2026-07-27.sql`) | ✅ aplicada por Martin |
+| `n8n/flows/faq-bot-v9.json` | ✅ **76 nodos, re-importado y andando** |
+| `db/enum-accion-2026-07-28.sql` | ✅ aplicado (PASO 1) — sin esto `bot.decisiones` no escribía |
+| `db/curacion-2026-07-28b.sql` | ✅ aplicado — el vínculo promo→hermano |
+| **Seguir probando en WhatsApp** | ⚠️ **el próximo paso, lo hace Martin** |
+| **Evaluar los tests con la tabla poblada** | ⚠️ **la sesión que viene.** Ver §2 |
 | Error workflow (`tg-bot-error`) | ⚠️ Martin lo dejó para después, a propósito |
-| La conversación de prueba vieja | 🔴 muda por un handoff previo (`assignee_id`). Ya no puede volver a pasar: la ruta se eliminó |
 
-### Lo que trae v9
+### Lo que entró el 28 — siete commits
 
-**El pipeline nuevo** — `Switch[precio] → Extraer Palabras → Buscar Candidatos → ¿Filtrar? →
-Llamar LLM Filtro → Aplicar Filtro → Get Precio`. El LLM deja de elegir un nombre exacto y pasa a
-tirar palabras; Postgres busca ponderando por rareza (IDF: `kraft` pesa 3,5× más que `papel`); un
-2º LLM filtra con la conversación delante. `Get Precio` **no se tocó**: sigue resolviendo por clave
-natural, sólo que ahora el nombre que recibe existe por construcción.
+| # | qué | por qué importa |
+|---|---|---|
+| `1dd3040` | `Log Turno` escribía `null` en `accion` | el INSERT rebotaba **en silencio** → cero filas de la rama normal → sin memoria entre turnos. **Todo el trabajo del 27 leía de una fila que nunca se escribió** |
+| `3e9fe17` | `hayCompetencia` contaba filas, no productos | un producto con 4 variantes daba `nCandidatos=4`: el guard del 27 llevaba desde entonces **encendido de punta a punta** |
+| `e3f405b` | curación: el hermano de la promo | `producto_base`/`variante_base` como DATO, no heurística |
+| `6969e9b` | `packDe()` adivinaba el pack del nombre | `'35X50 CM'` → pack de 35: la **cantidad elegía la medida**. 7 productos afectados, hasta 2,69× |
+| `592e111` | el compositor ve los hechos | antes recibía sólo prosa y componía a ciegas |
+| `ee95c53` + `e7c372d` | `bajo_minimo` dice los dos precios | y el fix del **ciclo lógico** que yo mismo introduje (ver §2b) |
+| `612511f` + `1d04a52` | el enum de `accion` | el código escribía 10 valores que la base no acepta |
+| `981dfc8` | **el menú dice precios + se va "la más barata"** | el cierre del incidente |
 
-**Tres prerrequisitos que estaban escritos y nunca aplicados:**
-- **0a — el log.** `Log Turno` colgaba de `Enviar Mensaje` (HTTP a Chatwoot), así que su `$json` era
-  la respuesta del API: `borrador`/`final`/`senales` se escribían **null siempre**. No era sólo
-  telemetría — `borradoresPrevios` sale de ahí y **los dos anti-loops nunca contaron nada**.
-- **0b — NFC** en los slots del LLM. v8.3 no heredaba el bug: lo **agravaba**.
-- **0c — timeout 20 s** en los nodos LLM (era el default de 300 s).
+### El cambio de diseño que cierra el incidente (v9.2)
 
-**Guards de negocio que bajaron de prompt a SQL** (una regla comercial no se le delega a un modelo):
-`oculto`, nicho (medicina / promo inmobiliarias) y `solo_descuentos`.
+**Decisión de Martin, 2026-07-28:** *"No hay uno por defecto, muestra todas las variantes."*
 
-**`hayCompetencia` se mide antes de la elección**, sobre el candidato-set pre-filtro. Era el hallazgo
-más caro de la pasada: con el producto elegido de una lista, `Get Precio` resuelve exacto y la puerta
-quedaba apagada justo cuando más hace falta — la causa raíz del 27 movida un nodo adelante.
+Eso deroga el desempate `la más barata`, que era la causa raíz: sin ancla, las 4 variantes del
+cartel empataban y ganaba la A3 ($10.500) contra el 1x0,65 real ($19.500) — **1,86× abajo**. Su
+justificación en el código (*"si erramos, erramos por abajo"*) era falsa: **errar por abajo ES
+sub-cotizar**, el daño exacto que el proyecto viene persiguiendo desde el 27.
 
-**Y la decisión de Martin que cambió el diseño** (`decisions/log.md`, 2026-07-27): **el bot nunca
-repregunta para desambiguar, muestra todas las opciones de una.** La puerta abierta y la repregunta
-cuestan el mismo mensaje saliente, así que el plan se equivocaba al justificar la puerta con
-"informa gratis"; corregido el empate, gana listar, porque ahorra los turnos. Cae la política 1 del
-plan (no se invierte: se elimina) y el cupo pasa de 4 a 8.
+Las dos piezas van juntas y no se pueden separar:
+- sacar el desempate **sin** el menú con precios ⇒ menús mudos (peor que antes: antes salía UN
+  número, aunque fuera el equivocado);
+- el menú con precios **sin** sacar el desempate ⇒ el menú casi nunca aparece.
+
+**Lo que NO muestra monto, a propósito:** escalera de cantidad → `"según cantidad"` (el precio
+depende de cuánto lleve; un número suelto sería mentira) · override → nada (el motor de precios
+manda) · precio 0 → nada (`$0,00` es una promesa de gratis).
+
+**Y sigue resolviendo a UNA cuando corresponde:** *"cartel de 2x1"* cotiza ese y no muestra menú.
+El menú es para el empate, no para todo. Excepción explícita: si alguna hermana cotiza por
+cantidad se conserva la reducción, o el menú perdería la tabla de rangos.
+
+**El compositor ve los hechos** (bloque 11): además del texto ya redactado, ahora recibe qué
+producto es, qué definió el cliente y qué quedó pendiente — más la regla *"si el cliente ya lo
+definió, NO se lo vuelvas a preguntar, aunque el borrador lo pregunte"*. El límite no se movió:
+la plata sigue tokenizada y el LLM sigue sin tipear un monto (test `CX6` lo blinda).
 
 **Build reproducible:** `node tests/build-v9.js` regenera v9 desde v8; `--check` verifica sincronía.
 El JSON no se edita a mano.
 
-**Verde hoy:** harness **221/221** en v9 (19 tests nuevos para los 3 nodos Code) y **202/202** en v8
-— los 4 goldens de conducta cambiada son version-aware, así el rollback sigue verde. Gemelo en sync,
-validador 0 errores.
+**Verde hoy:** harness **354/354**, validador **0 errores**, `--check` al día.
 
-**Rollback:** re-importar `faq-bot-v8.json`. No hay nada que revertir en la base.
+**Rollback:** re-importar `faq-bot-v8.json`. ⚠️ **Ojo:** el enum de la base ya está ensanchado, lo
+cual es compatible hacia atrás; pero v8 escribe `pregunto_opciones` / `cotizador_answer`, que
+**siguen sin existir** en el enum. Un rollback a v8 vuelve a romper el log en silencio.
 
 ---
 
-## 2. La ronda del 27 — el titular
+## 2. Para la sesión que viene — evaluar los tests de Martin
 
-**El mensaje 1 fue el único de la tanda A que salió limpio** ($8.800, "(100 hojas)", "por hoja").
-De ahí en adelante: **6 incidentes de plata, 7 de resolución, 7 de voz**, y **cuatro cotizaciones
-con número equivocado dicho con confianza** (1,42× · 1,25× · 1,76× · hasta 100× en las rifas).
+Martin sigue probando en WhatsApp real. **Lo primero de la próxima sesión es mirar lo que quedó
+registrado**, no proponer nada nuevo. Las consultas están en §5b.
 
-**Los cuatro salen del mismo defecto:** la compuerta del guard de ancla se deriva del **rowcount
-del SQL**, que es *posterior* a la elección del LLM. Cuanto más confiado el LLM, más limpio el
-resultado, más callado el guard. Detalle completo en `v8-2-ronda-completa.md` §1.
+### 2a. Qué mirar, en orden
 
-**Aplicado (5 commits, harness 186/186, validador 0 errores):** la unidad de la tabla de rangos y
-la escalera-que-es-total · la unidad en el precio único sin total · la unidad propia de los extras
-· la 2ª pasada que ya no nombra lo que el guard de nicho bloqueó · los candidatos del Aclarador
-filtrados por nicho · fuera "no lo tenemos en catálogo" · el menú colapsa la opción única · el
-aviso de canal cruzado contra `bot.decisiones` · **fuera la ruta handoff a un humano** ·
-`Log Silencio` con el origen del noop.
+1. **¿El log escribe?** Hasta el 28 la rama normal escribía **cero filas**. Si `bot.decisiones`
+   tiene filas de hoy con `accion` distinto de `handoff`, la costura quedó cerrada.
+2. **¿El compositor está reescribiendo o degradando?** `notas` trae el veredicto:
+   `(compositor:ok)` = reescribió · `(compositor:ilegible)` = el LLM no contestó y salió el
+   borrador crudo · `(compositor:off)` = kill switch o nada que componer.
+3. **¿Aparece `cruce_montos`?** Es la observación nueva del bloque 12f. **Martin decidió NO
+   bloquear** (*"no quiero seguir limitando funcionalidades"*), así que la única defensa es
+   medirlo. Si sale > 0, hay que mostrarle el caso concreto antes de proponer nada.
+4. **¿El firewall registra?** Nunca lo hizo — su INSERT fallaba doblemente mudo (`exception when
+   others then null` del lado SQL, enum del lado de la columna). Con el ALTER aplicado debería
+   empezar. Si sigue en cero, hay otra causa.
 
-**El contraste tumbó las dos propuestas de arquitectura** (el guard de hermanos y la recuperación
-por familia). Y la opción C que sobrevivía la tumbó Martin, con razón: si el LLM se equivoca, el
-cliente no recibe nada. **La dirección elegida es la suya** — el LLM tira palabras clave, Postgres
-busca, un segundo LLM filtra con la conversación delante. Cada paso degrada hacia "de más", nunca
-hacia "nada". Plan medido en [`v8-3-busqueda-por-palabra.md`](./v8-3-busqueda-por-palabra.md).
+### 2b. Dos errores míos del 28, para no repetirlos
 
-**Después de la ronda se hicieron dos cosas más el mismo día:** la **curación de nombres**
-(`db/curacion-2026-07-27.md`, aplicada) que hace encontrables los 6 papeles láser, y el **gate del
-compositor aflojado** — tres lentes midieron que el 31% de las frases naturales rebotaba y que el
-85% de los rechazos en precios salía de `hedge`. Ninguna regla se sacó; cuatro pasaron a medir
-contenido en vez de forma (commit `42c7359`).
+**El ciclo lógico.** Cableé `Aplicar Filtro → Get Precio → Armar Respuesta Precio` y puse el
+cálculo del pedido (`hermanoPide`) **en ARP**, que corre después. Le pedí a un nodo un dato que
+todavía no existía: `Get Precio` mandaba dos uuid vacíos, 0 filas, y el texto degradaba **siempre**.
+Martin lo vio en producción antes que yo en los tests. **Lección: cuando un nodo nuevo consume algo,
+verificar que el productor esté río arriba en el grafo, no sólo que exista.**
 
-**La lección del harness, que ahora tiene nombre:** la firma es `armar(precioObj, rows, dec)`, o
-sea **el resultado del SQL es un input escrito por el autor del test**. Todo caso pregunta "dada
-una resolución correcta, ¿la aritmética aguanta?". La clase entera *"la resolución fue mala"* queda
-afuera por construcción — y el caso S6 llegaba a assertear el bug de 1,76× como conducta correcta.
+**Los fixtures que mienten, otra vez.** Los tests `CP6e-i` mockean `$('Get Precio').all()`
+inyectando la fila del hermano, así que verificaban el texto **suponiendo que el dato llegó**.
+Pasaban en verde con el ciclo puesto. Los tests `T13c-f` ahora ejercitan `Aplicar Filtro` de
+verdad. **Regla que ya está en la memoria [[tests-fixtures-mienten]] y volvió a morder: un fixture
+no miente sólo por su forma, también por lo que no ejercita.**
+
+**Y un bug del generador que costó una hora:** `sub()` usaba `String.replace`, donde `$&`, `$'` y
+`` $` `` del texto de reemplazo son **patrones de sustitución**. El helper nuevo contiene
+`'$' + new Intl.NumberFormat`, o sea `$'` — y eso reinyectaba todo el código posterior al ancla:
+el nodo pasaba de 8.147 a 17.333 caracteres con el bucle duplicado. Ahora es `split/join`, y el
+guard de ancla ambigua tiene un modo `DBG_ANCLA=1` que imprime las dos ocurrencias con contexto.
 
 ---
 
@@ -137,15 +165,36 @@ afuera por construcción — y el caso S6 llegaba a assertear el bug de 1,76× c
 identificarlas. **No bloquea**: una fila sin atributos se comporta exactamente como v7. Pero cada
 una es un guard que no corre.
 
-**c. Que la capa determinística emita hechos estructurados** en vez de un borrador tokenizado. Hoy
-el compositor está atado a cómo redacta el código: el pipeline es prosa→prosa. Es el próximo
-escalón de la voz, y el que haría innecesarias varias reglas del gate.
+**c. ~~Que la capa determinística emita hechos estructurados~~** ✅ **hecho el 28** (bloque 11,
+commit `592e111`). El compositor recibe `hechos` por lista blanca. Lo que **queda**: el pipeline
+sigue siendo prosa→prosa para el *contenido* — los hechos son contexto, no reemplazan al borrador.
 
-**d. v8 pasó por su primera pasada adversarial el 07-27** (2 lentes, sobre la decisión de
-arquitectura). Lo que **sigue sin contrastar**: el compositor, la salida del menú, y la **opción C**
-misma cuando la medición diga que vale la pena construirla.
+**d. El cruce de montos, sin cerrar por decisión de Martin.** Con 2+ montos en un mensaje el
+compositor puede reordenar y dejar cada uno pegado a la condición cambiada — un contraste lo
+**reprodujo ejecutando los nodos reales**: la promo saliendo más cara que el suelto, con verdicto
+`ok` y `obs` vacío. Martin decidió **medir antes que limitar**. Hoy se registra como
+`cruce_montos:N`. Si la medición da > 0, la decisión vuelve a su mesa. ⚠️ Ojo: el chequeo compara
+**secuencias de valores deduplicadas**, así que si dos montos son iguales el cruce es invisible
+incluso para la observación.
 
-**e. Sin cerrar de antes:** la cuantización de packs · el guard de variante no anclada.
+**e. La reatribución NO está cubierta y no la cubre nadie.** Si el compositor conserva el ORDEN de
+los tokens pero le cambia el producto al que cada uno pertenece (*"el de 300 sale [[P1]]"* cuando
+`[[P1]]` es el precio del 130), ninguna regla lo ve: el gate cuenta bolsas globales y **nunca ata
+un número a la entidad que lo porta**. El test `X4d` fija el hueco a propósito, para que se note si
+algún día se cierra. No lo introdujo v9.2 — la regla vieja también lo dejaba pasar.
+
+**f. El paréntesis del nombre curado.** El LLM 1 copia el nombre exacto del catálogo (y hace bien:
+su salida la usa el código para buscar). Pero `Promoción para inmobiliarias (cartel de 1 × 0,65 m,
+llevando 6)` es ruido de mostrador. En el aviso de cambio de producto ya se saca por código; en el
+menú no. Fix chico e independiente. **Nota: en la ronda del 28 el compositor lo limpió solo** — vale
+medir si hace falta el fix determinístico.
+
+**g. Sin cerrar de antes:** la cuantización de packs · el guard de variante no anclada · las 6
+variantes de E0 que no resolvieron (b).
+
+**h. Deuda del enum:** `firewall_tier2_' || p_reason` es de **cardinalidad abierta** — cualquier
+razón nueva del lado del código vuelve a rebotar contra el enum. Un enum es la estructura
+equivocada para eso. Queda anotado, no resuelto.
 
 ---
 
@@ -170,6 +219,38 @@ asíncrono como **cambio de alcance** respecto de lo vendido · el SLA de reclam
 ---
 
 ## 5. Operación — lo que se olvida y cuesta una sesión
+
+### 5b. Las consultas para evaluar la ronda *(arrancar la próxima sesión por acá)*
+
+**Claude no ve las ejecuciones.** Si necesita algo de una corrida, **se lo pide a Martin** — no lo
+deduce. En la sesión del 28 se afirmaron dos veces cosas de ejecuciones no vistas (que el LLM había
+fallado, y que el menú nunca se mandaba) y las dos veces el dato de Martin lo desmintió.
+
+```sql
+-- 1. ¿El log escribe? Hasta el 28 la rama normal daba CERO filas.
+select accion, count(*) from bot.decisiones
+ where created_at > now() - interval '1 day' group by 1 order by 2 desc;
+
+-- 2. ¿El compositor reescribe o degrada?
+select case when notas like '%compositor:ok%'       then 'reescrito'
+            when notas like '%compositor:ilegible%' then 'el LLM no contestó'
+            when notas like '%compositor:off%'      then 'saltado'
+            else 'sin dato' end as que_paso, count(*)
+from bot.decisiones where created_at > now() - interval '1 day' group by 1;
+
+-- 3. EL CRUCE DE MONTOS — la decisión de Martin del 28 depende de este número.
+select count(*) from bot.decisiones where notas like '%cruce_montos%';
+
+-- 4. ¿El firewall registra? Nunca lo hizo (INSERT doblemente mudo).
+select accion, count(*) from bot.decisiones
+ where accion::text like 'firewall%' group by 1;
+
+-- 5. El detalle de una conversación puntual, para diagnosticar un mensaje raro.
+select mensaje_cliente, accion, estado, borrador, final, notas
+from bot.decisiones where conversation_id = <id> order by created_at desc limit 5;
+```
+
+### 5a. Lo demás
 
 - **Purgar el cache del catálogo:** `GET /webhook/refrescar-catalogo`, isla de 3 nodos sin
   conexión al flujo principal, dentro del propio workflow. **Sólo la URL de producción persiste**

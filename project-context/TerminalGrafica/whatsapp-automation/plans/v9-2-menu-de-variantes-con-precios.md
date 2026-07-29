@@ -1,11 +1,31 @@
 # v9.2 — El menú de variantes dice precios, y "la más barata" se va
 
-> **Estado:** plan aprobado en sus decisiones de negocio, **sin construir**.
+> **Estado:** ✅ **CONSTRUIDO Y APLICADO** — commit `981dfc8` (bloque 14 de `build-v9.js`),
+> verificado por Martin en WhatsApp real el 2026-07-28 a la noche. Harness 354/354.
 > **Fecha:** 2026-07-28.
 > **Origen:** incidente real del 28 (cartel de inmobiliarias, turno 4).
-> **Contrastes que ya pasó:** 3 pasadas adversariales Opus (plata, resolución, menú).
+> **Contrastes que pasó:** 3 pasadas adversariales Opus (plata, resolución, menú).
 > Las dos primeras **refutaron** los fixes anteriores; la tercera refutó la primera
-> versión de éste y dejó el residuo que acá se construye.
+> versión de éste y dejó el residuo que se construyó.
+>
+> **Lo que salió en producción:**
+> ```
+> Para la impresion exterior montada sobre plastico corrugado tenemos estas opciones:
+> 1 x 0.65 mt: $19.500,00   ·   1 x 1 mt: $30.000,00
+> 2 x 1 mt: $48.000,00      ·   a3: $10.500,00
+> Promocion inmobiliarias 1 x 0.65 mt (llevando 6): $15.000,00
+> Son precios de lista. Decime cual te sirve.
+> ```
+>
+> **Diferencias con lo planificado, todas por hallazgos de la construcción:**
+> - el separador es ` → ` y no `: ` — el `:` colisionaba con el header de grupo (test `A51`);
+> - `Get Opciones` necesitó `v.atributos` para la unidad de venta (no estaba en el plan);
+> - el menú de **rescate** de ARP también hubo que tocarlo (§5a lo vuelve frecuente);
+> - la excepción de escalera se resolvió **dentro de `elegirVariante`**, como sugirió la
+>   lente de resolución, y no en una capa aparte;
+> - **§6 era falso**: MD4/EV4 NO se pusieron rojos (el menú también contiene `$10.500`).
+>   Los que sí cambiaron fueron `M1`, `V8-17` y `PK4`. El oráculo por presencia de un
+>   monto no distingue "cotizó la A3" de "listó la A3 entre otras tres".
 
 ---
 
