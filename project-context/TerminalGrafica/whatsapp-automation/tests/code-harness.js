@@ -398,7 +398,71 @@ async function main() {
   r = await menu({ productos: ['Impresiones papel obra 75 gr'], faltan: [] },
     ['simple faz b/n', 'simple faz color', 'doble faz b/n', 'doble faz color'].map((v) => vRow('Impresiones papel obra 75 gr', v)),
     decidir({ userMessage: 'cuanto salen las impresiones?' }));
-  console.log('M1 menu sin numeros:', r[0].json.reply.includes('- simple faz b/n') && r[0].json.reply.includes('- doble faz color') && !/^\d+\. /m.test(r[0].json.reply) && r[0].json.reply.includes('cuál te sirve') && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+  // v9.2: el menú ahora dice el precio de cada línea. Estas variantes son de
+  // ESCALERA (qr=1 en el fixture), así que dicen "según cantidad" en vez de un
+  // monto — un número suelto ahí sería mentira, el precio depende de cuánto lleve.
+  // Y el cierre deja de pedir "cuál te sirve" por separado: con precios el menú ES
+  // la respuesta. Lo que sí queda es la pregunta de cantidad, que sigue faltando.
+  console.log('M1 menu sin numeros:', r[0].json.reply.includes('- simple faz b/n → según cantidad') && r[0].json.reply.includes('- doble faz color → según cantidad') && !/^\d+\. /m.test(r[0].json.reply) && r[0].json.reply.includes('cuántas necesitás') && !r[0].json.reply.includes('*') ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // ── MP1-MP5 · v9.2: EL MENÚ DICE PRECIOS ────────────────────────────────
+  // El incidente que cierra (producción 2026-07-28): "cuanto me cuesta?" devolvía
+  // un menú de 4 medidas SIN un solo precio, y el turno siguiente el LLM contestó
+  // "el sistema no los tiene" — razonando bien sobre lo que había visto. El SQL
+  // los traía; este renderer los descartaba al armar `vars`.
+  const vPrecio = (prod, vari, precio, atr, extra) => ({ producto_id: 'p-' + prod, nombre_canonico: prod,
+    variante: vari, precio_lista: precio, por_pagina: false, n_reglas_cantidad: 0,
+    tiene_override: false, atributos: atr || {}, ...(extra || {}) });
+
+  // MP1: precio limpio -> el monto sale, con su unidad.
+  r = await menu({ productos: ['Cartelería'], faltan: [] },
+    [vPrecio('Cartelería', '1 x 0.65 mt', 19500, { unidad_venta: 'unidad' }),
+     vPrecio('Cartelería', '2 x 1 mt', 48000, { unidad_venta: 'unidad' })],
+    decidir({ userMessage: 'cuanto sale un cartel?' }));
+  console.log('MP1 el menú dice los precios:',
+    /- 1 x 0\.65 mt → \$19\.500,00/.test(r[0].json.reply) && /- 2 x 1 mt → \$48\.000,00/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // MP2: la unidad que CAMBIA el sentido del monto se dice ('c/u' y 'por trabajo'
+  //      no: son el default implícito y suenan a formulario). Sin esto, un precio
+  //      por m² se lee como precio por unidad — la mentira de unidad de v8.2.
+  r = await menu({ productos: ['Pvc'], faltan: [] },
+    [vPrecio('Pvc', '60X90 CM', 35000, { unidad_venta: 'unidad' }),
+     vPrecio('Pvc', 'm2', 46000, { unidad_venta: 'm2' })],
+    decidir({ userMessage: 'precio pvc' }));
+  console.log('MP2 la unidad va pegada al monto:',
+    /- m2 → \$46\.000,00 por m²/.test(r[0].json.reply) && /- 60X90 CM → \$35\.000,00$/m.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // MP3: ESCALERA -> "según cantidad", nunca un monto. El precio existe pero
+  //      depende de cuánto lleve; un número suelto ahí sería mentira.
+  r = await menu({ productos: ['Rifas'], faltan: [] },
+    [vPrecio('Rifas', '10x7cm', 0, {}, { n_reglas_cantidad: 1 }),
+     vPrecio('Rifas', '15x7cm', 0, {}, { n_reglas_cantidad: 1 })],
+    decidir({ userMessage: 'precio rifas' }));
+  console.log('MP3 escalera dice "según cantidad":',
+    /- 10x7cm → según cantidad/.test(r[0].json.reply) && !/\$/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // MP4: override -> sin monto. El motor de precios manda y acá no lo replicamos.
+  //      Y precio 0 sin escalera tampoco: '$0,00' es una promesa de gratis.
+  r = await menu({ productos: ['X'], faltan: [] },
+    [vPrecio('X', 'con override', 5000, {}, { tiene_override: true }),
+     vPrecio('X', 'sin precio', 0, {})],
+    decidir({ userMessage: 'precio x' }));
+  console.log('MP4 override y precio 0 no muestran monto:',
+    !/\$/.test(r[0].json.reply) && !/según cantidad/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // MP5: con precios el cierre deja de preguntar lo que el menú ya contesta, pero
+  //      el hedge QUEDA — son precios de lista, no presupuestos cerrados.
+  r = await menu({ productos: ['Cartelería'], faltan: [] },
+    [vPrecio('Cartelería', 'a', 100, { unidad_venta: 'unidad' }),
+     vPrecio('Cartelería', 'b', 200, { unidad_venta: 'unidad' })],
+    decidir({ userMessage: 'precio' }));
+  console.log('MP5 el cierre dice que son de lista:',
+    /Son precios de lista/.test(r[0].json.reply) && !/te paso el precio/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
 
   // M2: 2 productos -> dos niveles (header por producto) para el que tiene varias
   // variantes. v8.2: el de UNA sola variante ya no abre grupo — sale como una linea
@@ -834,8 +898,12 @@ async function main() {
   // leía el $json de la respuesta de Chatwoot -> el anti-loop nunca contaba nada
   // en producción, por más que el harness lo diera OK con un mock.
   // Lo que se repite es lo que el bot manda: en v8.3 la lista, antes la pregunta.
+  // v9.2: el borrador que se repite ahora LLEVA LOS PRECIOS. El anti-loop compara
+  // el texto exacto, así que si el fixture se queda con el formato viejo deja de
+  // matchear y el guard no cuenta nada — el mismo modo de falla silenciosa que el
+  // fix 0a vino a cerrar, pero del lado del test.
   const repetido = V83
-    ? 'Tenemos estas opciones:\nPapel Kraft 130 Gr:\n  - A4\nPapel Kraft 300 Gr:\n  - A4\nDecime cuál te sirve y te paso el precio.'
+    ? 'Tenemos estas opciones:\nPapel Kraft 130 Gr:\n  - A4 → $800,00 por hoja\nPapel Kraft 300 Gr:\n  - A4 → $1.000,00 por hoja\nSon precios de lista. Decime cuál te sirve.'
     : '¿De qué gramaje lo necesitás?';
   r = await armar({ producto: 'papel kraft', variante: 'a4', template: null, forzarPlantilla: true, mas: [] },
     [kraft130, kraft300], decidir({ userMessage: 'papel kraft a4', borradoresPrevios: [repetido, repetido] }));
@@ -2033,9 +2101,65 @@ async function main() {
   // test pasaría sin probar nada. Y la aserción NO puede ser "no sale la A3": sin
   // ancla el desempate cae en `la más barata`, que es la A3 por otro camino (el que
   // v9.2 §5a todavía no cierra). Lo que PK4 prueba es que la CANTIDAD no manda.
+  // v9.2: con "la más barata" fuera, esto ya no cotiza NINGUNA medida al azar —
+  // muestra las cuatro con su precio y el cliente elige. Lo que PK4 sigue
+  // probando es que la CANTIDAD no manda: con el bug de packDe puesto, "500" se
+  // leía como tier y la respuesta era un precio único (el de 100X70). Ahora la
+  // aserción es que salga el menú COMPLETO, que es la conducta correcta.
   r = await armarF(pPvc, PVC, decidir({ userMessage: 'necesito 500' }), candPvc);
   console.log('PK4 la cantidad sola no elige la medida (pvc):',
-    !/\$42\.000,00/.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
+    /\$20\.000,00/.test(r[0].json.reply) && /\$35\.000,00/.test(r[0].json.reply)
+    && /\$42\.000,00/.test(r[0].json.reply) && /\$13\.000,00/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // ── EV20-EV23 · v9.2: SE VA "LA MÁS BARATA" ───────────────────────────────
+  // Era la causa del incidente del cartel: sin ancla, las 4 variantes empataban y
+  // ganaba la A3 ($10.500) contra el 1x0,65 real ($19.500) — 1,86× abajo. Su
+  // justificación en el código ("si erramos, erramos por abajo") era falsa: errar
+  // por abajo ES sub-cotizar. Ahora el empate se muestra como empate.
+  const vC42 = (nombre, precio, medida, extra) => ({ ...base, idx: 1, producto_id: 'cart',
+    nombre_canonico: 'Impresión exterior / montado sobre plástico corrugado', variante: nombre,
+    precio_lista: precio, unidad: 'Hoja', mostrable: true, tiene_reglas: false,
+    atributos: { unidad_venta: 'unidad', multiplica: true, medida }, ...(extra || {}) });
+  const C42 = [vC42('a3', 10500, { alto: 42, ancho: 29.7, unidad: 'cm' }),
+    vC42('1 x 0.65 mt', 19500, { alto: 100, ancho: 65, unidad: 'cm' }),
+    vC42('1 x 1 mt', 30000, { alto: 100, ancho: 100, unidad: 'cm' }),
+    vC42('2 x 1 mt', 48000, { alto: 200, ancho: 100, unidad: 'cm' })];
+  const pC42 = { producto: 'Impresión exterior / montado sobre plástico corrugado', variante: '', template: '', forzarPlantilla: true, mas: [] };
+  const candC42 = [{ producto_id: 'cart', nombre_canonico: 'Impresión exterior / montado sobre plástico corrugado', por_nombre: true, es_default: false }];
+
+  // EV5: sin ancla -> las CUATRO, no la más barata.
+  r = await armarF(pC42, C42, decidir({ userMessage: 'cuanto sale un cartel' }), candC42);
+  console.log('EV20 sin ancla salen todas las medidas:',
+    /\$10\.500,00/.test(r[0].json.reply) && /\$19\.500,00/.test(r[0].json.reply)
+    && /\$30\.000,00/.test(r[0].json.reply) && /\$48\.000,00/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // EV6: y con ancla sigue resolviendo a UNA. El menú es para el empate, no el
+  //      default — si el cliente dijo la medida, no se le repregunta.
+  r = await armarF(pC42, C42, decidir({ userMessage: 'cartel de 2 x 1 metro' }), candC42);
+  console.log('EV21 con medida explícita cotiza una sola:',
+    /\$48\.000,00/.test(r[0].json.reply) && !/\$10\.500,00/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL ' + r[0].json.reply);
+
+  // EV7: EXCEPCIÓN ESCALERA. Si alguna hermana cotiza por cantidad, se conserva la
+  //      reducción: el menú perdería la tabla de rangos, que es la respuesta
+  //      correcta, y saldrían dos líneas que no dicen nada.
+  const C42QR = [vC42('a3', 10500, { alto: 42, ancho: 29.7, unidad: 'cm' }, { n_reglas_cantidad: 1, rangos_cantidad: [{ value: 9000, minQty: 1, maxQty: 10 }] }),
+    vC42('1 x 0.65 mt', 19500, { alto: 100, ancho: 65, unidad: 'cm' })];
+  r = await armarF(pC42, C42QR, decidir({ userMessage: 'cuanto sale un cartel' }), candC42);
+  console.log('EV22 con escalera NO se abre el menú:',
+    r[0].json.estado !== 'fallback: ambiguo' ? 'OK' : 'FAIL ' + r[0].json.estado + ' | ' + r[0].json.reply);
+
+  // EV8: el guard de nicho sigue vivo sobre el menú — una promo de rubro no se
+  //      lista si el cliente no nombró el rubro.
+  r = await armarF(pC42, C42.concat([{ ...vC42('promo', 15000, null), producto_id: 'promo',
+    nombre_canonico: 'Promoción Inmobiliarias', idx: 1,
+    atributos: { unidad_venta: 'unidad', nicho: 'inmobiliarias', min_unidades: 6 } }]),
+    decidir({ userMessage: 'cuanto sale un cartel' }),
+    candC42.concat([{ producto_id: 'promo', nombre_canonico: 'Promoción Inmobiliarias', por_nombre: true, es_default: false }]));
+  console.log('EV23 el nicho no aparece sin mencionarlo:',
+    !/Inmobiliarias/i.test(r[0].json.reply) ? 'OK' : 'FAIL ' + r[0].json.reply);
 
   // DIÁMETRO: anillado metálico, el único producto con {diametro, unidad:'pulg'}.
   const vAn = (nombre, precio, d) => ({ ...base, idx: 1, producto_id: 'an',

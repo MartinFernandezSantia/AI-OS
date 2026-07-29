@@ -44,8 +44,23 @@ const sub = (nombre, de, a, etiqueta) => {
   const code = n.parameters.jsCode;
   const veces = code.split(de).length - 1;
   if (veces === 0) throw new Error('BUILD [' + etiqueta + ']: el ancla no aparece en "' + nombre + '"');
-  if (veces > 1) throw new Error('BUILD [' + etiqueta + ']: el ancla aparece ' + veces + ' veces en "' + nombre + '" (ambiguo)');
-  n.parameters.jsCode = code.replace(de, a);
+  if (veces > 1) {
+    if (process.env.DBG_ANCLA) {
+      let p = 0;
+      code.split(de).slice(0, -1).forEach((seg, k) => {
+        p += seg.length;
+        console.error('--- ocurrencia ' + (k + 1) + ' ---\n' + JSON.stringify(code.slice(Math.max(0, p - 200), p + 80)));
+        p += de.length;
+      });
+    }
+    throw new Error('BUILD [' + etiqueta + ']: el ancla aparece ' + veces + ' veces en "' + nombre + '" (ambiguo)');
+  }
+  // split/join y NO replace: en `replace` los `$&`, `$'` y `$\`` del texto de
+  // reemplazo son patrones de sustitución, no literales. Un helper que contenga
+  // `$'` (comilla simple tras un peso — p.ej. "'$' + new Intl.NumberFormat")
+  // reinyecta TODO el código que sigue al ancla y duplica el nodo entero.
+  // Costó una tarde encontrarlo: el nodo pasaba de 8.147 a 17.333 caracteres.
+  n.parameters.jsCode = code.split(de).join(a);
   paso(etiqueta);
 };
 
@@ -2248,6 +2263,213 @@ return [{
     const v = lg.parameters.columns && lg.parameters.columns.value;
     if (!v || v.accion !== 'noop') throw new Error('BUILD [13d]: Log Silencio dejo de escribir noop');
     paso('13d · `noop` intacto (va al enum por ALTER, no se mapea)');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 14. EL MENÚ DICE PRECIOS, Y SE VA "LA MÁS BARATA" — plan v9.2, decisión de
+  //     Martin ("No hay uno por defecto, muestra todas las variantes").
+  //
+  // EL INCIDENTE que lo cierra (producción, 2026-07-28):
+  //   T1 "necesito carteles inmobiliarios, cuanto me cuesta?"
+  //      -> el LLM emitió `opciones` (correcto) y salió un menú de 4 medidas SIN
+  //         un solo precio. El SQL los traía; el renderer los tiraba.
+  //   T2 "me podes decir que me sale cada uno?"
+  //      -> el LLM emitió `answer` con el motivo "el sistema no los tiene". Razonó
+  //         bien: había visto volver un menú mudo. `answer` ni consulta la base.
+  // Con precios en T1, el T2 no existe. Un mensaje en vez de dos — y desde
+  // oct-2026 WhatsApp cobra por mensaje, así que además sale más barato.
+  //
+  // LAS DOS PIEZAS VAN JUNTAS, a propósito:
+  //  · sacar "la más barata" SIN el menú con precios = menús mudos por todos lados
+  //    (peor que hoy: hoy al menos sale UN número, aunque sea el equivocado);
+  //  · el menú con precios SIN sacar "la más barata" = el menú casi nunca aparece,
+  //    porque cada producto ya viene colapsado a una variante.
+  //
+  // ALCANCE MEDIDO sobre el catálogo real (82 productos visibles):
+  //   35 tienen >1 variante · 30 de esos 35 tienen precio limpio (86%)
+  //   5 tienen escalera -> esas líneas dicen "según cantidad", sin monto
+  //   el menú más largo son 6 líneas (los dos PVC). No hay listas gigantes.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 14a. El SQL del menú trae la unidad ───────────────────────────────────
+  // Sin `unidad_venta` un precio por m² se imprime igual que uno por unidad, y eso
+  // es la "mentira de unidad" que el proyecto ya cazó antes (el 'c/u' colgado).
+  // `atributos` es el efectivo (la vista mergea producto||variante).
+  {
+    const go = node('Get Opciones');
+    const q = go.parameters.query;
+    const VIEJO = 'select pr.producto_id, pr.nombre_canonico, v.variante, v.por_pagina,\n       v.n_reglas_cantidad, v.tiene_override, v.precio_lista';
+    if (!q.includes(VIEJO)) throw new Error('BUILD [14a]: el select de Get Opciones no es el esperado');
+    go.parameters.query = q.replace(VIEJO, VIEJO + ',\n       v.atributos, v.solo_descuentos');
+    paso('14a · Get Opciones trae atributos (la unidad de venta) y solo_descuentos');
+  }
+
+  // ── 14b. El renderer del menú dice el precio ──────────────────────────────
+  // Determinístico, en el Code node: el LLM sigue sin tipear un monto. Los montos
+  // salen literales y el compositor los tokeniza río abajo (así funciona el resto
+  // del workflow: emitir [[P1]] desde acá sería un error).
+  {
+    const nombre = 'Armar Menu Opciones';
+    // El helper: fmt + la unidad, con la misma tabla que usa ARP.
+    sub(nombre,
+      "const op = parsear.opciones || {};",
+      "// v9.2: el menu DICE los precios. Antes el SQL los traia y este nodo los tiraba\n"
+      + "// al armar `vars` — el cliente recibia una lista de medidas y tenia que volver a\n"
+      + "// preguntar. Determinístico a proposito: el LLM no tipea montos, los tokeniza el\n"
+      + "// compositor rio abajo.\n"
+      + "const fmt = (n) => '$' + new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n));\n"
+      + "// Misma tabla que ARP. `unidad` y `trabajo` quedan mudas: son el default\n"
+      + "// implicito y decirlas suena a formulario.\n"
+      + "const U_FRASE = { hoja: 'por hoja', pagina: 'por página', unidad: 'c/u', m2: 'por m²',\n"
+      + "  metro: 'por metro', trabajo: 'por trabajo', pack: 'por pack', millar: 'por millar' };\n"
+      + "const U_EXPLICITA = { hoja: 1, pagina: 1, m2: 1, metro: 1, millar: 1, pack: 1 };\n"
+      + "const atrDeF = (x) => { let a = x; if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = null; } }\n"
+      + "  return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; };\n"
+      + "// El monto de UNA linea del menu. Devuelve '' cuando no hay un numero honesto\n"
+      + "// que decir, y entonces la linea sale como antes (solo el nombre).\n"
+      + "//  · escalera de cantidad (n_reglas_cantidad>=1) -> 'según cantidad': el precio\n"
+      + "//    existe pero depende de cuanto lleve; un monto suelto ahi seria mentira.\n"
+      + "//  · override -> el motor de precios manda y aca no lo replicamos.\n"
+      + "//  · precio 0 o ausente -> nada. '$0,00' es una promesa de gratis.\n"
+      + "const montoLinea = (fila) => {\n"
+      + "  if (!fila) return '';\n"
+      + "  if (fila.tiene_override) return '';\n"
+      + "  if ((Number(fila.n_reglas_cantidad) || 0) >= 1) return 'según cantidad';\n"
+      + "  const pl = Number(fila.precio_lista);\n"
+      + "  if (!(pl > 0)) return '';\n"
+      + "  const u = atrDeF(fila.atributos).unidad_venta;\n"
+      + "  return fmt(pl) + (U_EXPLICITA[u] ? ' ' + U_FRASE[u] : '');\n"
+      + "};\n"
+      + "const op = parsear.opciones || {};",
+      '14b · el renderer del menú sabe formatear un precio');
+
+    // La fila cruda viaja dentro de `vars` para poder formatear al imprimir.
+    sub(nombre,
+      "  const v = String(r.variante || '').trim();",
+      "  const v = String(r.variante || '').trim();\n"
+      + "  // v9.2: el monto de esta variante viaja con ella. Antes se descartaba\n"
+      + "  // `precio_lista` al armar `vars` y el menu quedaba mudo por construccion.\n"
+      + "  const montoV = montoLinea(r);",
+      '14b · el monto se calcula por variante');
+    sub(nombre,
+      "nombre: legible ? v : '', qr:",
+      "nombre: legible ? v : '', monto: montoV, qr:",
+      '14b · la variante lleva su monto');
+
+    // Las tres líneas que imprimen una variante.
+    sub(nombre,
+      "    for (const v of productos[0].vars) { n++; lineas.push('- ' + (v.nombre || fam[0].resto)); }",
+      "    for (const v of productos[0].vars) { n++; lineas.push('- ' + (v.nombre || fam[0].resto) + (v.monto ? ' \u2192 ' + v.monto : '')); }",
+      '14b · precio en el menú de packs');
+    sub(nombre,
+      "      if (mono) { n++; lineas.push('- ' + etMono); continue; }",
+      "      if (mono) { n++; lineas.push('- ' + etMono + (p.vars[0].monto ? ' \u2192 ' + p.vars[0].monto : '')); continue; }",
+      '14b · precio en la línea mono');
+    sub(nombre,
+      "      for (const v of p.vars) { n++; lineas.push((productos.length > 1 ? '  ' : '') + '- ' + (v.nombre || p.nombre)); }",
+      "      for (const v of p.vars) { n++; lineas.push((productos.length > 1 ? '  ' : '') + '- ' + (v.nombre || p.nombre) + (v.monto ? ' \u2192 ' + v.monto : '')); }",
+      '14b · precio en la línea de variante');
+
+    // El cierre: con precios el menú ES la respuesta, no una pregunta. Pero el
+    // hedge tiene que quedar — son precios de lista, no presupuestos cerrados.
+    sub(nombre,
+      "    reply = 'Tenemos estas opciones:\\n' + lineas.join('\\n') + '\\nDecime cuál te sirve y de qué pack, y te paso el precio.';",
+      "    const hayMontoP = productos[0].vars.some((v) => v.monto);\n"
+      + "    reply = 'Tenemos estas opciones:\\n' + lineas.join('\\n') + '\\n'\n"
+      + "      + (hayMontoP ? 'Son precios de lista. Decime cuál te sirve y de qué pack.'\n"
+      + "                   : 'Decime cuál te sirve y de qué pack, y te paso el precio.');",
+      '14b · cierre del menú de packs');
+    sub(nombre,
+      "    reply = 'Tenemos estas opciones:\\n' + lineas.join('\\n') + '\\nPara cotizarte, ' + preguntas.join(' y ') + '.';",
+      "    // Con montos el menu ES la respuesta: el cierre deja de pedir lo que ya se\n"
+      + "    // dijo. Sin montos, el texto de siempre.\n"
+      + "    const hayMonto = productos.some((p) => p.vars.some((v) => v.monto));\n"
+      + "    const cierre = hayMonto\n"
+      + "      ? ('Son precios de lista' + (preguntas.length > 1 ? '. Para cotizarte, ' + preguntas.slice(1).join(' y ') + '.' : '. Decime cuál te sirve.'))\n"
+      + "      : ('Para cotizarte, ' + preguntas.join(' y ') + '.');\n"
+      + "    reply = 'Tenemos estas opciones:\\n' + lineas.join('\\n') + '\\n' + cierre;",
+      '14b · cierre del menú general');
+
+    // La rama de UNA sola opción también tiene el precio a mano.
+    sub(nombre,
+      "  else preg = '¿te paso el precio de lista?';",
+      "  else if (p1.vars[0].monto) preg = 'sale ' + p1.vars[0].monto + ', precio de lista.';\n"
+      + "  else preg = '¿te paso el precio de lista?';",
+      '14b · la opción única dice su precio en vez de preguntarlo');
+  }
+
+  // ── 14c. Se va "la más barata" ────────────────────────────────────────────
+  // Era la causa del incidente del cartel: sin ancla, las 4 variantes empataban y
+  // ganaba la A3 ($10.500) contra el 1x0,65 real ($19.500) — 1,86x abajo. Su
+  // justificación en el código ("si erramos, erramos por abajo") es falsa: errar
+  // por abajo es sub-cotizar, el daño exacto que el proyecto viene persiguiendo.
+  // Ahora el empate se muestra COMO empate, que es lo que Martin decidió.
+  // Las salidas legítimas (finalista único, default curado) no se tocan.
+  // Solo la 1a pasada: el gemelo consume filas de `Get Precio 2`, donde el SQL ya
+  // eligió la variante (su `desdeFiltro` es false y `elegirVariante` no corre).
+  {
+    const nombre = 'Armar Respuesta Precio';
+    sub(nombre,
+      "  const conPrecio = finalistas.filter((p) => Number(p.v.precio_lista) > 0);\n  const pool = conPrecio.length ? conPrecio : finalistas;\n  return [pool.reduce((a, b) => (Number(a.v.precio_lista) <= Number(b.v.precio_lista) ? a : b)).v];",
+      "  // v9.2 (2026-07-28): NO se elige la mas barata. Un empate se muestra como\n"
+      + "  // empate — decision de Martin: \"no hay uno por defecto, muestra todas\".\n"
+      + "  // Devolver varias filas hace que `evaluar` marque 'fallback: ambiguo', que es\n"
+      + "  // la puerta al menu de rescate; con 14b ese menu ahora dice precios.\n"
+      + "  // EXCEPCION — ESCALERA: si alguna hermana cotiza por cantidad, el menu perderia\n"
+      + "  // la tabla de rangos (que es la respuesta correcta) y saldrian dos lineas que\n"
+      + "  // no dicen nada. Ahi se conserva la reduccion, y como ultimo criterio el precio.\n"
+      + "  const hayEscalera = finalistas.some((p) => (Number(p.v.n_reglas_cantidad) || 0) >= 1 || p.v.tiene_override);\n"
+      + "  if (hayEscalera) {\n"
+      + "    const conPrecio0 = finalistas.filter((p) => Number(p.v.precio_lista) > 0);\n"
+      + "    const pool0 = conPrecio0.length ? conPrecio0 : finalistas;\n"
+      + "    return [pool0.reduce((a, b) => (Number(a.v.precio_lista) <= Number(b.v.precio_lista) ? a : b)).v];\n"
+      + "  }\n"
+      + "  return finalistas.map((p) => p.v);",
+      '14c · ' + nombre + ': se va "la más barata", el empate se muestra');
+  }
+
+  // ── 14d. El menú de rescate de ARP también dice precios ───────────────────
+  // Es el otro renderer, el que se alcanza desde 'fallback: ambiguo' — o sea el
+  // que 14c acaba de volver frecuente. Si no lo tocamos, sacar "la más barata"
+  // cambia un precio equivocado por una lista muda: peor que antes.
+  for (const nombre of ['Armar Respuesta Precio', 'Armar Respuesta Precio 2']) {
+    // `vars` pasa de strings a objetos {nombre, row} para poder formatear.
+    sub(nombre,
+      "      g.vars.push(nombreVar(r0.variante, r0.nombre_canonico) || '');",
+      "      // v9.2: la fila viaja con el nombre para poder decir su precio.\n"
+      + "      g.vars.push({ nombre: nombreVar(r0.variante, r0.nombre_canonico) || '', row: r0 });",
+      '14d · ' + nombre + ': el rescate guarda la fila de cada variante');
+
+    sub(nombre,
+      "      const soloNombre = g.vars.length === 1 && !g.vars[0];\n"
+      + "      if (grupos.length > 1 && !soloNombre) lineas.push(g.nombre + ':');\n"
+      + "      for (const v0 of g.vars) { n0++; lineas.push((grupos.length > 1 && !soloNombre ? '  ' : '') + '- ' + (v0 || g.nombre)); }",
+      "      const soloNombre = g.vars.length === 1 && !g.vars[0].nombre;\n"
+      + "      if (grupos.length > 1 && !soloNombre) lineas.push(g.nombre + ':');\n"
+      + "      for (const v0 of g.vars) {\n"
+      + "        n0++;\n"
+      + "        // v9.2: mismo criterio que el otro renderer — escalera y override no\n"
+      + "        // llevan monto, y un precio 0 tampoco (seria una promesa de gratis).\n"
+      + "        const rr = v0.row || {};\n"
+      + "        let mm = '';\n"
+      + "        if (!rr.tiene_override) {\n"
+      + "          if ((Number(rr.n_reglas_cantidad) || 0) >= 1) mm = 'según cantidad';\n"
+      + "          else if (Number(rr.precio_lista) > 0) {\n"
+      + "            const uu = atrDe(rr).unidad_venta;\n"
+      + "            mm = fmt(rr.precio_lista) + (UNIDAD_EXPLICITA[uu] ? ' ' + UNIDAD_FRASE[uu] : '');\n"
+      + "          }\n"
+      + "        }\n"
+      + "        lineas.push((grupos.length > 1 && !soloNombre ? '  ' : '') + '- ' + (v0.nombre || g.nombre) + (mm ? ' \u2192 ' + mm : ''));\n"
+      + "      }",
+      '14d · ' + nombre + ': el rescate imprime el precio de cada línea');
+
+    sub(nombre,
+      "    reply = encab0 + '\\n' + lineas.join('\\n') + '\\nDecime cuál te sirve y te paso el precio.';",
+      "    // Con montos el menu ES la respuesta. El hedge queda: son precios de lista.\n"
+      + "    const hayM = lineas.some((l) => /\\$|según cantidad/.test(l));\n"
+      + "    reply = encab0 + '\\n' + lineas.join('\\n') + '\\n'\n"
+      + "      + (hayM ? 'Son precios de lista. Decime cuál te sirve.' : 'Decime cuál te sirve y te paso el precio.');",
+      '14d · ' + nombre + ': cierre del menú de rescate');
   }
 }
 

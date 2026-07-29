@@ -113,7 +113,11 @@ const esperados = new Set(['Get Precio', 'Get Precio 2', 'Armar Respuesta Precio
   // las 2 credenciales de OpenRouter a los ids nuevos. 'OpenRouter Chat Model' (el
   // guard Tier-2) es el único que no aparecía ya en esta lista: cambia por las dos
   // cosas a la vez (su modelo vive en parameters.model, no en un jsonBody).
-  'OpenRouter Chat Model']);
+  'OpenRouter Chat Model',
+  // v9.2 (2026-07-28) — el menú dice precios: `Get Opciones` suma `v.atributos`
+  // (de ahí sale la unidad de venta) y `v.solo_descuentos` al select. Sin la
+  // unidad, un precio por m² se imprimiría igual que uno por unidad.
+  'Get Opciones']);
 const borrados = new Set(['Pre-Envío Precio', 'Enviar Precio', 'Log Precio', 'Enviar Menu', 'Enviar Respuesta', 'Log Menu', 'Log Respuesta']);
 const byName = (wf) => Object.fromEntries(wf.nodes.map((n) => [n.name, n]));
 const a = byName(v7), b = byName(v8);
