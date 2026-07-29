@@ -28,12 +28,18 @@ const NUEVOS_V9 = ['Armar Prompt Verificador', '¿Verificar Silencio?',
   'Llamar LLM Verificador', 'Aplicar Verificador', '¿Rescatar Turno?'];
 const esV9 = v8.nodes.some((n) => n.name === 'Aplicar Filtro');
 const conVerif = v8.nodes.some((n) => n.name === 'Aplicar Verificador');
+// v9.3: "Get Opciones" se borro. Era un join por igualdad que devolvia un subconjunto
+// de lo que ya trae Buscar Candidatos — sin rangos_cantidad, que es justo la escalera
+// de precio que el menu necesitaba. La rama opciones entra ahora por Extraer Palabras.
+const sinGetOpciones = !v8.nodes.some((n) => n.name === 'Get Opciones');
 const nEsperados = v7.nodes.length - SIN_HANDOFF.length + 1
-  + (esV9 ? NUEVOS_V83.length : 0) + (conVerif ? NUEVOS_V9.length : 0);
+  + (esV9 ? NUEVOS_V83.length : 0) + (conVerif ? NUEVOS_V9.length : 0)
+  - (sinGetOpciones ? 1 : 0);
 if (nEsperados !== v8.nodes.length) {
   E('cambio la cantidad de nodos: esperaba ' + nEsperados + ' y hay ' + v8.nodes.length
     + ' (68 - 4 de handoff + 1 de Log Silencio' + (esV9 ? ' + ' + NUEVOS_V83.length + ' de v8.3' : '')
-    + (conVerif ? ' + ' + NUEVOS_V9.length + ' del verificador' : '') + ')');
+    + (conVerif ? ' + ' + NUEVOS_V9.length + ' del verificador' : '')
+    + (sinGetOpciones ? ' - 1 de Get Opciones (v9.3)' : '') + ')');
 }
 if (esV9) NUEVOS_V83.forEach((n) => { if (!v8.nodes.some((x) => x.name === n)) E('falta el nodo de v8.3 "' + n + '"'); });
 SIN_HANDOFF.forEach((n) => { if (v8.nodes.some((x) => x.name === n)) E('volvio el nodo de handoff "' + n + '"'); });

@@ -13,7 +13,7 @@ const path = require('path');
 const WF = path.join(__dirname, '..', 'n8n', 'flows', process.env.WF || 'faq-bot-v8.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const jsOf = (name) => wf.nodes.find((n) => n.name === name).parameters.jsCode;
-const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2'), 'normalizar.js': jsOf('Normalizar Envío'), 'prompt-comp.js': jsOf('Armar Prompt Compositor'), 'aplicar-comp.js': jsOf('Aplicar Compositor') };
+const CODES = { 'parsear.js': jsOf('Parsear Respuesta'), 'armar.js': jsOf('Armar Respuesta Precio'), 'menu.js': jsOf('Armar Menu Opciones'), 'extraer.js': jsOf('Extraer Palabras'), 'mensajes.js': jsOf('Armar Mensajes LLM'), 'prompt-acl.js': jsOf('Armar Prompt Aclarador'), 'aplicar-acl.js': jsOf('Aplicar Aclarador'), 'armar2.js': jsOf('Armar Respuesta Precio 2'), 'normalizar.js': jsOf('Normalizar Envío'), 'prompt-comp.js': jsOf('Armar Prompt Compositor'), 'aplicar-comp.js': jsOf('Aplicar Compositor') };
 // v8.3: los 3 nodos Code del pipeline de búsqueda por palabra. Opcionales a
 // propósito — el harness tiene que seguir corriendo contra v8 y v7 (rollback), y
 // ahí estos nodos no existen. `jsOf` tira si el nodo falta, así que se busca suave.
@@ -463,6 +463,101 @@ async function main() {
   console.log('MP5 el cierre dice que son de lista:',
     /Son precios de lista/.test(r[0].json.reply) && !/te paso el precio/.test(r[0].json.reply)
       ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // ── UN1-UN7 · v9.3: UN SOLO CAMINO DE DATOS ─────────────────────────────
+  // Incidente (WhatsApp real 2026-07-29). Cliente: "cuánto sale imprimir 200 páginas
+  // doble faz en obra 75" -> menú mudo que pide páginas y copias. Cliente: "120
+  // paginas, 1 copia" -> EL MISMO menú, otra vez pidiendo páginas y copias.
+  // El LLM había emitido {action:'opciones', faltan:['opcion']} — pidió SOLO la
+  // variante. Dos bugs distintos, uno por turno:
+  //   T1: la rama opciones colgaba de Get Opciones, que NO traía rangos_cantidad.
+  //   T2: la rama opciones no emitía `pendiente`, así que era amnésica entre turnos.
+  //
+  // OJO CON EL FIXTURE (memoria tests-fixtures-mienten): el helper `menu` de arriba
+  // mockea $('Aplicar Filtro') como inexistente, así que el nodo cae al fallback de
+  // $input y los tests viejos siguen verdes SIN ejercitar el camino nuevo. Este
+  // helper inyecta las filas por el origen REAL — si el bloque 15c se revierte, los
+  // tests de abajo se ponen rojos.
+  const menuFiltro = (opcionesObj, filasPrecio, dec) => runNodeCode('menu.js', {
+    $: (name) => ({ first: () => ({ json:
+      name === 'Decidir' ? dec
+      : name === 'Aplicar Filtro' ? { filasPrecio }
+      : name === 'Armar Mensajes LLM' ? { borradoresPrevios: dec.borradoresPrevios || [] }
+      : { opciones: opcionesObj, conversationId: 9, accountId: 1, userMessage: dec.userMessage } }) }),
+    // $input VACÍO a propósito: si el nodo no lee de Aplicar Filtro, no ve nada.
+    $input: { all: () => [], first: () => ({ json: {} }) },
+  });
+  // Las 4 variantes REALES de obra 75 (db/export-actualizado-catalogo.json).
+  const OBRA75 = ['doble faz b/n', 'doble faz color', 'simple faz b/n', 'simple faz color']
+    .map((v) => ({ producto_id: 'p-obra75', nombre_canonico: 'Impresiones papel obra 75 gr',
+      variante: v, por_pagina: true, n_reglas_cantidad: 1, tiene_override: false,
+      precio_lista: 150, atributos: { unidad_venta: 'hoja' } }));
+
+  // UN1: el nodo lee las filas por el origen nuevo (Aplicar Filtro), no por $input.
+  //      Sin el bloque 15c, $input vacío -> "¿Me decís qué producto querés cotizar?".
+  r = await menuFiltro({ productos: ['Impresiones papel obra 75 gr'], faltan: ['opcion'] },
+    OBRA75, decidir({ userMessage: '120 paginas, 1 copia' }));
+  console.log('UN1 el menú lee de Aplicar Filtro:',
+    /doble faz b\/n/.test(r[0].json.reply) && !/qué producto querés cotizar/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // UN2: EL BUG DEL TURNO 2. Con faltan:['opcion'] el LLM pidió SOLO la variante;
+  //      el cierre NO puede volver a pedir páginas y copias (el cliente las acaba de
+  //      escribir). El oráculo asserta la AUSENCIA, que es lo que distingue —
+  //      preguntar por la presencia del menú no separaba los dos mundos.
+  console.log('UN2 no re-pregunta lo ya dicho:',
+    !/cuántas páginas tiene tu documento/.test(r[0].json.reply)
+      && /cuál te sirve/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // UN3: MEMORIA ENTRE TURNOS. Sin `senales.pendiente` el turno siguiente no sabe
+  //      que ya se preguntó algo y repite el menú palabra por palabra. La cañería
+  //      (Normalizar Envío -> Armar Mensajes LLM -> pendNote) ya existía de la rama
+  //      precio; este nodo nunca llenaba el campo.
+  console.log('UN3 la rama opciones emite pendiente:',
+    r[0].json.senales && r[0].json.senales.pendiente
+      && r[0].json.senales.pendiente.tipo === 'opcion'
+      && r[0].json.senales.pendiente.producto === 'Impresiones papel obra 75 gr'
+      ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.senales));
+
+  // UN4: el tipo de pendiente sigue al eje que falta, no es una constante.
+  r = await menuFiltro({ productos: ['Impresiones papel obra 75 gr'], faltan: ['paginas', 'copias'] },
+    OBRA75, decidir({ userMessage: 'quiero imprimir' }));
+  console.log('UN4 pendiente sigue al eje que falta:',
+    r[0].json.senales.pendiente.tipo === 'paginas'
+      && /cuántas páginas tiene tu documento/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL ' + r[0].json.senales.pendiente.tipo + '\n' + r[0].json.reply);
+
+  // UN5: sin `faltan` (el LLM no declaró nada) el cierre pregunta igual — la
+  //      degradación es hacia preguntar de más, no hacia quedarse mudo.
+  r = await menuFiltro({ productos: ['Impresiones papel obra 75 gr'], faltan: [] },
+    OBRA75, decidir({ userMessage: 'hola, imprimen?' }));
+  console.log('UN5 sin faltan degrada a preguntar:',
+    /cuántas páginas tiene tu documento/.test(r[0].json.reply)
+      ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // UN6: las filas del camino nuevo traen rangos_cantidad — el dato que Get Opciones
+  //      NO traía y por el que el menú salía mudo. Acá sólo se verifica que llega
+  //      entero al renderer; qué decir con él es una decisión aparte (hoy: "según
+  //      cantidad", que es lo único honesto sin saber la variante ni las hojas).
+  const conRangos = OBRA75.map((v) => ({ ...v, rangos_cantidad: [{ value: 150, minQty: 1, maxQty: 10 }, { value: 88, minQty: 51, maxQty: 250 }] }));
+  r = await menuFiltro({ productos: ['Impresiones papel obra 75 gr'], faltan: ['opcion'] },
+    conRangos, decidir({ userMessage: '200 paginas doble faz' }));
+  console.log('UN6 la escalera llega al renderer:',
+    /según cantidad/.test(r[0].json.reply) ? 'OK' : 'FAIL\n' + r[0].json.reply);
+
+  // UN7: EL PUENTE DE TOKENS. `Extraer Palabras` leía sólo parsear.precio.producto;
+  //      en la acción 'opciones' ese campo viene null y los nombres viajan en
+  //      opciones.productos. Sin el bloque 15b los tokens saldrían únicamente del
+  //      mensaje del cliente y se perdería el nombre que el LLM copió del catálogo.
+  const extraer = (parsearJson, dec) => runNodeCode('extraer.js', {
+    $: (name) => ({ first: () => ({ json: name === 'Decidir' ? dec : parsearJson }) }),
+  });
+  r = await extraer({ precio: null, opciones: { productos: ['Impresiones papel obra 75 gr'], faltan: ['opcion'] } },
+    decidir({ userMessage: '120 paginas, 1 copia' }));
+  console.log('UN7 los nombres de opciones entran a los tokens:',
+    /obra/.test(r[0].json.palabras) && /impresiones/.test(r[0].json.palabras)
+      ? 'OK' : 'FAIL ' + JSON.stringify(r[0].json.palabras));
 
   // M2: 2 productos -> dos niveles (header por producto) para el que tiene varias
   // variantes. v8.2: el de UNA sola variante ya no abre grupo — sale como una linea

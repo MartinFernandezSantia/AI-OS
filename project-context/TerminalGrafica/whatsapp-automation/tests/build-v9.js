@@ -2474,6 +2474,137 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 15 · UN SOLO CAMINO DE DATOS (v9.3)
+// ───────────────────────────────────────────────────────────────────────────
+// Habia DOS busquedas sobre los mismos datos. `Buscar Candidatos` (rama precio) trae
+// una fila por variante con rangos_cantidad, variante_id, por_pack, unidad, color y
+// ejes_variantes; `Get Opciones` (rama opciones) hacia un join por igualdad y traia
+// un subconjunto: le faltaba JUSTO rangos_cantidad, que es la escalera de precio.
+//
+// Consecuencia medida (WhatsApp real, 2026-07-29): "200 paginas doble faz en obra
+// 75" -> action 'opciones' (correcto, el catalogo marca ** y el prompt lo ordena) ->
+// las 4 variantes tienen n_reglas_cantidad=1 -> las 4 lineas salen 'segun cantidad'
+// -> hayMonto=false -> el cierre pide paginas y copias. El cliente contesta "120
+// paginas, 1 copia" y recibe EL MISMO menu, porque la rama opciones no emitia
+// `pendiente` y el turno 2 no sabia que el turno 1 habia preguntado algo.
+//
+// Dos bugs, uno por turno, y ninguno se arregla en el renderer: el dato de la
+// escalera nunca llegaba, y la memoria entre turnos no existia de este lado.
+//
+// El fix es de cableado, no de logica: `Switch Accion [opciones]` deja de ir a
+// `Get Opciones` y entra por `Extraer Palabras`, el mismo puente que ya usa precio.
+// No se pierde precision: el nombre exacto que el LLM copia del catalogo tokeniza a
+// los terminos mas raros y gana el ranking IDF; `Armar Prompt Filtro` ya cortocircuita
+// con un solo producto, asi que no se paga una llamada LLM extra.
+// Se gana ademas el guard de nicho del SQL (curado, 2 nichos) en vez del que
+// `Armar Menu Opciones` reimplementaba a mano en JS con uno solo hardcodeado.
+{
+  // 15a · el ruteo
+  const conn = wf.connections['Switch Acción'].main;
+  const OUT_OPCIONES = 4;
+  const destino = (conn[OUT_OPCIONES] || [])[0];
+  if (!destino || destino.node !== 'Get Opciones') {
+    throw new Error('BUILD [15a]: Switch Acción[' + OUT_OPCIONES + '] no apunta a "Get Opciones" (apunta a "' + (destino && destino.node) + '")');
+  }
+  conn[OUT_OPCIONES] = [{ node: 'Extraer Palabras', type: 'main', index: 0 }];
+  paso('15a · Switch Acción[opciones] entra por Extraer Palabras (un solo camino de datos)');
+
+  // `Get Opciones` queda sin entrada y sin salida: se borra junto con su guard
+  // duplicado. Es un subconjunto empobrecido de Buscar Candidatos — toda consulta que
+  // podia responder, la otra tambien, con mas columnas.
+  const antes = wf.nodes.length;
+  wf.nodes = wf.nodes.filter((n) => n.name !== 'Get Opciones');
+  delete wf.connections['Get Opciones'];
+  if (wf.nodes.length !== antes - 1) throw new Error('BUILD [15a]: no se borro "Get Opciones"');
+  paso('15a · fuera "Get Opciones" (le faltaba rangos_cantidad, que es lo que hacia falta)');
+
+  // Ahora el renderer del menu cuelga de Aplicar Filtro, no de Get Opciones.
+  wf.connections['Aplicar Filtro'].main[0].push({ node: 'Armar Menu Opciones', type: 'main', index: 0 });
+  paso('15a · "Armar Menu Opciones" cuelga de Aplicar Filtro');
+
+  // 15b · el puente de tokens tiene que saber leer la accion 'opciones'
+  // `Extraer Palabras` leia solo `parsear.precio.producto`. En la accion 'opciones'
+  // ese campo viene null y los nombres viajan en `parsear.opciones.productos`: sin
+  // esto los tokens saldrian unicamente del mensaje del cliente y se perderia el
+  // nombre que el LLM eligio del catalogo, que es su mejor aporte.
+  sub('Extraer Palabras',
+    "const p = parsear.precio || {};",
+    "const p = parsear.precio || {};\n"
+    + "// v9.3: la accion 'opciones' no llena `precio` — sus nombres (hasta 4, ya\n"
+    + "// copiados del catalogo por el LLM) viven en `opciones.productos`. Se los suma\n"
+    + "// como pista igual que al `producto` de la rama precio.\n"
+    + "const nombresOpciones = ((parsear.opciones || {}).productos || []).filter(Boolean);",
+    '15b · Extraer Palabras lee opciones.productos');
+
+  sub('Extraer Palabras',
+    "const delLlm = tokenizar((p.producto || '') + ' ' + (p.variante || ''));",
+    "const delLlm = tokenizar((p.producto || '') + ' ' + (p.variante || '') + ' ' + nombresOpciones.join(' '));",
+    '15b · los nombres de opciones entran a los tokens del LLM');
+
+  // Con varios productos pedidos el cupo de 8 puede quedar corto: 4 nombres x sus
+  // variantes. El cupo cuenta PRODUCTOS, asi que 8 sigue alcanzando para los 4
+  // nombres que el contrato permite; se deja explicito para que se vea que se penso.
+  paso('15b · cupo 8 productos alcanza los 4 nombres del contrato de opciones');
+
+  // 15c · el renderer lee el contrato nuevo
+  // Antes: filas de Get Opciones por $input, con `nombre_canonico` y `variante`.
+  // Ahora: las filas ricas de Aplicar Filtro, mismo origen que usa ARP.
+  sub('Armar Menu Opciones',
+    "const rows = $input.all().map((i) => i.json).filter((r) => r && r.producto_id);",
+    "// v9.3: las filas vienen del mismo camino que la rama precio (Aplicar Filtro ->\n"
+    + "// Buscar Candidatos), asi que traen rangos_cantidad, variante_id y los flags de\n"
+    + "// plata. Fallback a $input para no depender del orden de ejecucion.\n"
+    + "let rows = [];\n"
+    + "try {\n"
+    + "  const ff = $('Aplicar Filtro').first().json.filasPrecio;\n"
+    + "  if (Array.isArray(ff)) rows = ff.filter((r) => r && r.producto_id);\n"
+    + "} catch (e) { rows = []; }\n"
+    + "if (!rows.length) rows = $input.all().map((i) => i.json).filter((r) => r && r.producto_id);",
+    '15c · el menú lee las filas ricas de Aplicar Filtro');
+
+  // 15d · MEMORIA ENTRE TURNOS — el bug del turno 2.
+  // `Normalizar Envío` ya sabe leer `j.senales.pendiente` y `Armar Mensajes LLM` ya lo
+  // convierte en la nota que el LLM 1 lee al turno siguiente. Toda la cañeria existe
+  // desde la rama precio; este nodo simplemente nunca llenaba el campo, asi que el
+  // turno 2 repetia el turno 1 palabra por palabra.
+  sub('Armar Menu Opciones',
+    "return [{ json: { reply, notas, antiLoop, conversationId: parsear.conversationId, accountId: parsear.accountId, userMessage: parsear.userMessage }, pairedItem: { item: 0 } }];",
+    "// v9.3: la rama opciones deja de ser amnesica. Sin esto el turno siguiente no\n"
+    + "// sabe que ya se pregunto algo y vuelve a emitir el mismo menu (medido en\n"
+    + "// WhatsApp real 2026-07-29: dos menus identicos seguidos).\n"
+    + "const senales = {};\n"
+    + "if (productos.length) {\n"
+    + "  senales.producto_nombre = productos[0].nombre;\n"
+    + "  // el eje que falta define de que es la pregunta abierta: si el LLM pidio\n"
+    + "  // 'opcion' es la variante; si pidio datos, la cantidad.\n"
+    + "  const tipo = faltan.includes('opcion') ? 'opcion'\n"
+    + "    : (faltan.includes('paginas') || faltan.includes('copias')) ? 'paginas'\n"
+    + "    : faltan.includes('cantidad') ? 'cantidad' : 'opcion';\n"
+    + "  senales.pendiente = { tipo, producto: productos[0].nombre };\n"
+    + "  if (faltan.length) senales.sin_anclar = faltan.slice();\n"
+    + "}\n"
+    + "return [{ json: { reply, notas, antiLoop, senales, conversationId: parsear.conversationId, accountId: parsear.accountId, userMessage: parsear.userMessage }, pairedItem: { item: 0 } }];",
+    '15d · la rama opciones emite `pendiente` (memoria entre turnos)');
+
+  // 15e · no re-preguntar lo que el cliente ya dijo.
+  // El cierre pedia paginas y copias por `porPagina`, sin mirar `faltan`. Con
+  // faltan:["opcion"] el LLM pidio SOLO la variante y el nodo preguntaba las tres
+  // cosas — incluidas las dos que el cliente acababa de escribir.
+  sub('Armar Menu Opciones',
+    "    if (productos.some((p) => p.porPagina)) preguntas.push('cuántas páginas tiene tu documento y cuántas copias querés');\n"
+    + "    else if (productos.some((p) => p.vars.some((v) => v.qr === 1))) preguntas.push('cuántas necesitás');",
+    "    // v9.3: `faltan` manda. Antes se preguntaba por `porPagina` a secas y el bot\n"
+    + "    // re-pedia lo que el cliente ya habia contestado (regla sagrada del nodo,\n"
+    + "    // que la rama soloDatos ya respetaba y esta no).\n"
+    + "    const pidePags = faltan.includes('paginas') || faltan.includes('copias');\n"
+    + "    const pideCant = faltan.includes('cantidad');\n"
+    + "    const sinDatos = !faltan.length;\n"
+    + "    if (productos.some((p) => p.porPagina) && (pidePags || sinDatos)) preguntas.push('cuántas páginas tiene tu documento y cuántas copias querés');\n"
+    + "    else if (productos.some((p) => p.vars.some((v) => v.qr === 1)) && (pideCant || sinDatos)) preguntas.push('cuántas necesitás');",
+    '15e · el cierre del menú respeta `faltan`');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de
