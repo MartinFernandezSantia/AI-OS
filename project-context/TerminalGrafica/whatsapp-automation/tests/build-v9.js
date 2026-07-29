@@ -2773,6 +2773,79 @@ return [{
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 18 · LAS LISTAS DE PRECIOS NO SE CUENTAN EN PROSA (v9.4)
+// ───────────────────────────────────────────────────────────────────────────
+// Queja de Martin (2026-07-29): "cuando muestra opciones o rangos no usa listas con
+// lo cual aumenta la carga cognitiva del cliente". El renderer emite los tramos con
+// viñeta; el compositor los devolvia en prosa corrida:
+//   "1 a 10: $150,00 por hoja, 11 a 50: $96,00 por hoja, 51 a 250: $88,00 por hoja..."
+//
+// No es el modelo: la excepcion existia y estaba escrita para perder. Llegaba CUARTA,
+// era la unica condicional contra tres imperativas, una de las anteriores ("dos o
+// tres oraciones") una tabla de 5 tramos la viola por construccion, y la primera de
+// la seccion dice "sin markdown" — que es exactamente lo que es una viñeta. Ademas
+// vivia en "Como escribis" (estilo) y no en "Lo que NO podes hacer nunca", que es
+// donde el compositor obedece de verdad.
+//
+// La distincion correcta no es "lista vs no lista": es ENUMERAR OPCIONES (prosa: "el
+// kraft lo tenemos en 130 y en 300") contra ESCALERA DE PRECIOS (lista: cinco pares
+// numero->monto que ninguna prosa castellana sostiene). Se pide envolviendo la lista
+// en voz: la frase de arriba y la de abajo las escribe el compositor, los montos van
+// literales en el medio. Asi sigue sonando a persona y los numeros se comparan de un
+// vistazo.
+//
+// WhatsApp soporta viñetas nativas con "- " desde 2024 (Android/iOS/Web/Mac). No
+// soporta tablas ni alineacion por espacios (la fuente es proporcional).
+{
+  // 18a · la exclusion de markdown deja de tapar la excepcion
+  sub('Armar Prompt Compositor',
+    "'- Español argentino rioplatense, voseo, cálido y directo. Texto plano: sin emoji, sin negritas, sin markdown.',",
+    "'- Español argentino rioplatense, voseo, cálido y directo. Texto plano: sin emoji, sin negritas, sin títulos.',\\n"
+    + "  '  Las viñetas con guion SÍ: WhatsApp las renderiza y son lo único que hace legible una lista de precios.',",
+    '18a · "sin markdown" ya no contradice a las viñetas');
+
+  // 18b · la compresion declara su propio limite
+  sub('Armar Prompt Compositor',
+    "'- Corto. Dos o tres oraciones. Si el borrador es una lista, contala en una frase natural:',",
+    "'- Corto. Dos o tres oraciones. Si el borrador enumera PRODUCTOS u OPCIONES, contalas en una frase natural:',\\n"
+    + "  '  Eso vale para NOMBRES. Una lista de MONTOS no se cuenta en prosa: ver la sección de abajo.',",
+    '18b · la compresión aclara que no aplica a los montos');
+
+  // 18c · la excepcion sale de la nota al pie y pasa a ser su propia seccion
+  sub('Armar Prompt Compositor',
+    "'- Si el borrador trae una tabla de precios por cantidad, la dejás como tabla: ahí la lista se lee mejor que la prosa.',",
+    "'',\\n"
+    + "  '## Cuando el borrador trae varios precios en lista',\\n"
+    + "  '- Si el borrador tiene DOS O MÁS renglones que arrancan con guion y cada uno lleva un monto,',\\n"
+    + "  '  esos renglones van TAL CUAL: mismo guion, mismo salto de línea, mismo orden, uno por línea.',\\n"
+    + "  '  No los juntes en una oración, no los separes con comas y no los pases a prosa.',\\n"
+    + "  '  Cinco precios seguidos en un párrafo no se leen: el cliente los tiene que poder comparar de un vistazo.',\\n"
+    + "  '- Lo tuyo ahí es lo de arriba y lo de abajo: una frase corta que presente la lista y otra que cierre.',\\n"
+    + "  '  Escribilas con tus palabras, sin repetir el encabezado del borrador palabra por palabra.',\\n"
+    + "  '- Dejá un renglón en blanco antes y después de la lista: separa la lista de la prosa y se lee mucho mejor.',\\n"
+    + "  '- Ejemplo. Borrador:',\\n"
+    + "  '    Obra 75 simple faz, precio de lista por hoja según cantidad:',\\n"
+    + "  '    - 1 a 10: [[P1]] por hoja',\\n"
+    + "  '    - 11 a 50: [[P2]] por hoja',\\n"
+    + "  '  Vos decís:',\\n"
+    + "  '    Te paso los precios de lista, que van bajando según cuánto lleves:',\\n"
+    + "  '',\\n"
+    + "  '    - 1 a 10: [[P1]] por hoja',\\n"
+    + "  '    - 11 a 50: [[P2]] por hoja',\\n"
+    + "  '',\\n"
+    + "  '    Decime cuántas necesitás y te paso el total.',\\n"
+    + "  '',",
+    '18c · sección propia para la escalera de precios');
+
+  // 18d · y la prohibicion dura, que es donde el compositor obedece
+  sub('Armar Prompt Compositor',
+    "'- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',",
+    "'- Agregar una pregunta que el borrador no tenía: preguntar por algo es afirmar que existe.',\\n"
+    + "  '- Pasar a prosa una lista de precios: si el borrador puso un monto por renglón, va un monto por renglón.',",
+    '18d · prohibición dura de aplastar la lista de precios');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // SALIDA
 // ───────────────────────────────────────────────────────────────────────────
 // El target se aplica AL FINAL, sobre el workflow ya construido: asi los pasos de
