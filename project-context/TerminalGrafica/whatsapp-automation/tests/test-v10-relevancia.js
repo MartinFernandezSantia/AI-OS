@@ -173,6 +173,58 @@ check('con 2 variantes emite 2 hechos con su tramo',
   varias.hechos.length === 2 && varias.hechos[0].monto === 70 && varias.hechos[1].monto === 88,
   JSON.stringify(varias.hechos.map((h) => h.monto)));
 
+// ── EL VERIFICADOR: que vea la escalera y no vete al codigo ────────────
+// 2do rechazo real del 2026-07-29: el verificador tumbó $88 y $120 diciendo que
+// "no figuran en la base cruda". Tenía razón con lo que le mostrábamos: el
+// prompt traía sólo precio_lista (150) y NO la escalera de donde sale el 88.
+console.log('\n=== Verificador: evidencia completa ===');
+const sobreVerif = {
+  ...conMonto,
+  borrador: 'Las impresiones doble faz en obra 75 te salen $88 por página.',
+  conversation: SOBRE.conversation,
+  seleccion: SOBRE.seleccion,
+};
+const pv = correr('Prompt Verificador', {}, { 'Leer Compositor': sobreVerif });
+
+check('las filas crudas muestran la escalera por cantidad',
+  /escalera por cantidad/.test(pv.promptAgente),
+  pv.promptAgente.split('\n').filter((l) => /fila 1/.test(l))[0]);
+check('el $88 del hecho aparece en la evidencia cruda',
+  /88/.test(pv.promptAgente.split('RESULTADO CRUDO')[1] || ''));
+check('precio_lista se nombra como "tramo 1", no como "el precio"',
+  /precio base \(tramo 1\)/.test(pv.promptAgente));
+check('el prompt explica de donde sale el monto',
+  /COMO SE CALCULARON LOS HECHOS/.test(pv.promptAgente));
+check('el chequeo automatico se declara deterministico',
+  /DETERMINISTICO/.test(pv.promptAgente) && /NO lo contradigas/.test(pv.promptAgente));
+check('el guard no detecta montos no autorizados (el mensaje es correcto)',
+  (pv.numerosNoAutorizados || []).length === 0, JSON.stringify(pv.numerosNoAutorizados));
+
+console.log('\n=== Verificador: el codigo manda sobre la plata ===');
+const veredictos = [
+  ['LLM rechaza por precio_inventado con chequeo OK -> SE IGNORA',
+    { output: { aprobado: false, falla: 'precio_inventado', motivo: 'no figuran en la base' } }, true, true],
+  ['LLM rechaza por producto_equivocado -> se respeta',
+    { output: { aprobado: false, falla: 'producto_equivocado', motivo: 'no es lo que pidio' } }, false, false],
+  ['LLM rechaza por no_contesta -> se respeta',
+    { output: { aprobado: false, falla: 'no_contesta', motivo: 'no responde' } }, false, false],
+  ['LLM aprueba -> pasa',
+    { output: { aprobado: true, falla: 'ninguna', motivo: 'ok' } }, true, false],
+];
+for (const [nombre, raw, deberiaAprobar, esperaVeto] of veredictos) {
+  const r = correr('Leer Verificador', raw, { 'Prompt Verificador': pv });
+  check(nombre, r.aprobado === deberiaAprobar && r.vetoInvalido === esperaVeto,
+    'aprobado=' + r.aprobado + ' veto=' + r.vetoInvalido + ' falla=' + r.falla);
+}
+
+// y el guard sigue mandando para RECHAZAR
+const conInventado = correr('Leer Verificador',
+  { output: { aprobado: true, falla: 'ninguna' } },
+  { 'Prompt Verificador': { ...pv, numerosNoAutorizados: [999] } });
+check('un monto NO autorizado tumba el OK del LLM',
+  conInventado.aprobado === false && conInventado.falla === 'precio_inventado',
+  'aprobado=' + conInventado.aprobado + ' falla=' + conInventado.falla);
+
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
 process.exit(fallos ? 1 : 0);

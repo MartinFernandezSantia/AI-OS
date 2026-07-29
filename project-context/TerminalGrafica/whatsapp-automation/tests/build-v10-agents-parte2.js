@@ -501,16 +501,35 @@ const enTexto = (String(d.borrador || '').match(/\\$\\s?[\\d.]+/g) || [])
 const autorizados = new Set((d.montosAutorizados || []).map(Number));
 const noAutorizados = enTexto.filter((n) => !autorizados.has(n));
 
+// LAS FILAS CRUDAS TIENEN QUE MOSTRAR LA ESCALERA.
+//
+// Bug del 2026-07-29 (2do rechazo): se mostraba solo \`precio_lista\` y el
+// verificador leia "hechos dicen \$88" contra "la base dice 150" -> concluia
+// PRECIO INVENTADO, correctamente para la informacion que le estabamos dando.
+// El \$88 sale de \`rangos_cantidad\` (tramo 51-250), que no aparecia en el
+// prompt. Mostrar la mitad de la evidencia es peor que no mostrarla: el
+// auditor rechaza lo que esta bien.
+const escalera = (r) => {
+  const rs = Array.isArray(r.rangos_cantidad) ? r.rangos_cantidad : null;
+  if (!rs || !rs.length) return '';
+  return ' | escalera por cantidad: ' + rs.map((x) => {
+    const hasta = x.maxQty == null ? '+' : '-' + x.maxQty;
+    return (x.minQty || 1) + hasta + ': \$' + x.value;
+  }).join(', ');
+};
+
 const crudas = (d.filasCrudas || []).map((r, i) => [
   '  fila ' + (i + 1) + ':',
   r.nombre_canonico,
   '| variante: ' + (r.variante || 'única'),
-  '| precio_lista: ' + r.precio_lista,
+  // \`precio_lista\` es el precio del PRIMER tramo, no "el precio". Se nombra asi
+  // para que el auditor no lo lea como el unico valor valido.
+  '| precio base (tramo 1): ' + r.precio_lista,
+  escalera(r),
   '| unidad: ' + (r.unidad || '-'),
-  '| mostrable: ' + (r.mostrable !== false),
   '| solo_descuentos: ' + !!r.solo_descuentos,
   '| score: ' + r.score,
-].join(' ')).join('\\n');
+].filter(Boolean).join(' ')).join('\\n');
 
 return [{ json: {
   ...d,
@@ -528,9 +547,21 @@ return [{ json: {
     'RESULTADO CRUDO COMPLETO DE LA BASE (' + (d.filasCrudas || []).length + ' filas, incluidas las descartadas):',
     crudas || '(sin filas)',
     '',
+    'COMO SE CALCULARON LOS HECHOS (leelo antes de juzgar un monto):',
+    (d.seleccion || {}).cantidad
+      ? 'El cliente pidio ' + (d.seleccion || {}).cantidad + ' unidades.'
+      : 'El cliente no dijo una cantidad concreta.',
+    'Cuando un producto tiene ESCALERA POR CANTIDAD, el monto autorizado es el del',
+    'TRAMO que corresponde a esa cantidad — NO el "precio base (tramo 1)".',
+    'Que un monto no coincida con el precio base NO significa que este inventado:',
+    'buscalo en la escalera de esa fila antes de rechazar.',
+    '',
     noAutorizados.length
       ? 'ALERTA AUTOMATICA: el mensaje contiene montos que NO estan autorizados: ' + noAutorizados.join(', ')
-      : 'Chequeo automatico de montos: OK.',
+      : 'CHEQUEO AUTOMATICO DE MONTOS: OK — todos los montos del mensaje estan en la\\n'
+        + 'lista de hechos autorizados. Este chequeo es DETERMINISTICO (lo hace el codigo\\n'
+        + 'comparando numero por numero), asi que NO lo contradigas: si dice OK, ningun\\n'
+        + 'monto fue inventado.',
   ].join('\\n'),
 } }];
 `.trim(), 2000, 0);
@@ -549,9 +580,33 @@ try {
 // puede habilitar un numero que el calculo no produjo.
 const montoInventado = (d.numerosNoAutorizados || []).length > 0;
 const aprobadoLLM = out.aprobado === true;
-const aprobado = aprobadoLLM && !montoInventado;
+let fallaLLM = String(out.falla || '');
 
-const falla = montoInventado ? 'precio_inventado' : String(out.falla || (aprobado ? 'ninguna' : 'otra'));
+// EL CHEQUEO DE MONTOS ES DETERMINISTICO Y MANDA EN LAS DOS DIRECCIONES.
+//
+// Ya mandaba para RECHAZAR (un monto no autorizado tumba un OK del LLM). Faltaba
+// la direccion inversa: si el codigo comparo numero por numero y NINGUNO esta
+// fuera de la lista, el LLM NO puede alegar 'precio_inventado' — no es una
+// opinion, es un hecho ya verificado.
+//
+// Bug del 2026-07-29 (2do rechazo): el verificador rechazo \$88 y \$120 diciendo
+// que no estaban "en la base cruda", porque el prompt le mostraba solo
+// precio_lista y no la escalera de donde salen. El chequeo automatico decia OK
+// y el LLM lo contradijo igual. Se arreglo el prompt (ahora ve la escalera) y
+// se agrega este piso: el veredicto del codigo sobre PLATA no se discute.
+let vetoInvalido = false;
+if (!montoInventado && /precio_inventado/.test(fallaLLM)) {
+  vetoInvalido = true;
+  fallaLLM = '';  // el rechazo por plata se descarta: el codigo ya dijo que no hubo
+}
+
+// El rechazo sobrevive solo si NO era por plata (producto equivocado, no
+// contesta, dato inventado son juicios legitimos del LLM sobre el texto).
+const rechazoLLM = !aprobadoLLM && !vetoInvalido;
+const aprobado = !montoInventado && !rechazoLLM;
+
+const falla = montoInventado ? 'precio_inventado'
+  : (aprobado ? 'ninguna' : (fallaLLM || 'otra'));
 
 // El sobre que sale de aca es el que leen Log Turno y Log Escalacion, asi que
 // tiene que traer TODAS las columnas que esos dos mapean. Si falta una, el
@@ -568,6 +623,10 @@ return [{ json: {
   aprobado,
   aprobadoLLM,
   montoInventado,
+  // el LLM quiso rechazar por plata cuando el codigo ya habia dicho que no
+  // habia monto inventado. Se registra para vigilar si pasa seguido: seria
+  // sintoma de que el prompt del verificador sigue mostrando mal la evidencia.
+  vetoInvalido,
   falla,
   motivoVerificador: String(out.motivo || ''),
   // Log Escalacion mapea \`.motivo\`: se emite con ese nombre tambien.
@@ -575,7 +634,8 @@ return [{ json: {
   queFalta: String(out.queFalta || ''),
   final: aprobado ? d.borrador : '',
   accion: aprobado ? 'respuesta_verificada' : 'handoff',
-  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0),
+  notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0)
+    + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),
   // columnas que Log Turno espera y que la cadena de agentes no producia
   productoResuelto,
   filasSql: Number(d.nFilas) || 0,
@@ -589,6 +649,7 @@ return [{ json: {
     dudaNicho: !!d.dudaNicho,
     montoInventado,
     aprobadoLLM,
+    vetoInvalido,
     falla,
   },
 } }];
