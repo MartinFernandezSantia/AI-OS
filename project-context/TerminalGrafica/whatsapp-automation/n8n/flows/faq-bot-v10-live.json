@@ -1,5 +1,5 @@
 {
-  "name": "faq-bot-v10-agents",
+  "name": "faq-bot-v10-agents (live)",
   "nodes": [
     {
       "parameters": {
@@ -142,7 +142,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -160,8 +160,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -182,7 +182,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -200,8 +200,8 @@
       "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       }
     },
@@ -372,7 +372,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -390,8 +390,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -399,7 +399,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -417,8 +417,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -565,7 +565,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -583,8 +583,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -592,7 +592,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -610,8 +610,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -643,7 +643,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -818,7 +818,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -836,8 +836,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -894,7 +894,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -912,8 +912,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -970,7 +970,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -988,8 +988,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -997,7 +997,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:8787/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -1015,8 +1015,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FALTA_CRED_TEST",
-          "name": "Chatwoot API Token (test)"
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
         }
       },
       "onError": "continueRegularOutput"
@@ -1104,7 +1104,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1185,7 +1185,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1266,7 +1266,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1322,7 +1322,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },
@@ -1378,7 +1378,7 @@
       "credentials": {
         "openRouterApi": {
           "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter (test)"
+          "name": "OpenRouter"
         }
       }
     },

@@ -600,14 +600,33 @@ paso('validado: conexiones, agentes con modelo+parser, tools solo-SELECT');
 // aplicarTarget valida 12 URLs de Chatwoot; este flujo tiene menos nodos que
 // hablan con Chatwoot, asi que se hace el remapeo de host a mano con la misma
 // tabla, y las credenciales via el mismo modulo.
+// DOS TARGETS:
+//
+//   --target mock  (default) → pega al mock de Chatwoot en localhost. Para correr
+//                              suites sin tocar WhatsApp ni gastar mensajes pagos.
+//   --target live            → MISMAS PUNTAS QUE EL BOT PRINCIPAL: el Chatwoot real,
+//                              la credencial real. Es lo que hay que usar para
+//                              conectarlo por WhatsApp y probarlo a mano.
+//
+// En los DOS casos el path del webhook es propio (`chatwoot-v10`), NUNCA el de
+// prod: los dos workflows conviven en la misma instancia de n8n y compartir path
+// haria que un mensaje real caiga en el experimento (o que n8n rechace el
+// duplicado). Para probarlo por WhatsApp se apunta un webhook de Chatwoot a esa
+// URL, sin tocar el del bot que esta andando.
 const { TARGETS } = require('./target');
-const cfgTest = TARGETS.test;
+const argTarget = process.argv.indexOf('--target');
+const TARGET = argTarget !== -1 ? process.argv[argTarget + 1] : 'mock';
+if (!['mock', 'live'].includes(TARGET)) throw new Error('BUILD: --target debe ser mock|live');
+
 const HOST_PROD = 'https://chatwoot.silvercoastwebagency.com';
+const cfg = TARGET === 'live' ? TARGETS.prod : TARGETS.test;
+
 let urls = 0;
 for (const n of wf.nodes) {
   const u = n.parameters && n.parameters.url;
   if (typeof u === 'string' && u.includes(HOST_PROD)) {
-    n.parameters.url = u.split(HOST_PROD).join(cfgTest.chatwootHost);
+    // en live el host ya es el correcto: no se reescribe nada
+    if (TARGET !== 'live') n.parameters.url = u.split(HOST_PROD).join(cfg.chatwootHost);
     urls++;
   }
 }
@@ -618,12 +637,13 @@ for (const n of wf.nodes) {
   if (!n.credentials) continue;
   for (const [tipo, cred] of Object.entries(n.credentials)) {
     const visible = porNombreProd[cred.name] || cred.name;
-    const destino = cfgTest.credenciales[visible];
+    const destino = cfg.credenciales[visible];
     if (!destino) continue;
     n.credentials[tipo] = { id: destino.id, name: destino.name };
     creds++;
   }
 }
+// El path SIEMPRE es propio, en los dos targets. Ver el comentario de arriba.
 for (const n of wf.nodes) {
   if (n.type !== 'n8n-nodes-base.webhook') continue;
   const p = n.parameters.path;
@@ -631,8 +651,9 @@ for (const n of wf.nodes) {
   else if (p === TARGETS.prod.refreshPath) n.parameters.path = 'refrescar-catalogo-v10';
   if (n.webhookId) n.webhookId = n.webhookId.replace(/.$/, 'a');
 }
-wf.name = 'faq-bot-v10-agents';
-paso('target test: host ' + cfgTest.chatwootHost + ' (' + urls + ' urls), ' + creds + ' credenciales');
+wf.name = TARGET === 'live' ? 'faq-bot-v10-agents (live)' : 'faq-bot-v10-agents';
+paso('target ' + TARGET + ': host ' + (TARGET === 'live' ? HOST_PROD : cfg.chatwootHost)
+  + ' (' + urls + ' urls), ' + creds + ' credenciales, webhook /chatwoot-v10');
 
 const json = JSON.stringify(wf, null, 2);
 
