@@ -249,6 +249,10 @@ const lista = filas.map((r, i) => ({
   // inmobiliarias): sin el minimo, "3 carteles" cotiza $45.000 contra $58.500
   // reales. v10 lo habia perdido.
   minUnidades: Number(((r.atributos || {}).min_unidades)) || null,
+  // \`multiplica\` y \`tecnologia\` deciden si se puede dar un TOTAL (ver Calcular
+  // Montos). Viajan crudos porque la regla los combina con la unidad de cobro.
+  atributos: r.atributos || null,
+  atributosProducto: r.atributos_producto || null,
   tieneReglas: !!r.tiene_reglas,
   // OJO CON \`mostrable\`: en la vista de v9 es \`(not tiene_reglas)\`, o sea
   // "el precio es un numero limpio, sin escalera por cantidad". NO es un flag
@@ -550,8 +554,57 @@ for (const c of confiables) {
     : escalon ? ' (precio por ' + escalon + ' unidades)'
     : '';
 
+  // ═══ TOTAL (decision de Martin 2026-07-29) ═══
+  //
+  // Reemplaza la politica del 2026-07-28 ("NO se da el total: hay recargo UV y
+  // el precio guardado es el base, multiplicar sub-cotizaria"). Se cotiza cerrado
+  // SOLO donde no hay recargo posible; donde puede haberlo, sigue yendo el
+  // unitario y el total se confirma por mail.
+  //
+  // TRES condiciones, y las tres tienen que darse:
+  //
+  //  1. NO es un producto UV. Son 2 en el catalogo (tecnologia='uv'): 'Vinilo,
+  //     Lona Brillo/Mate Uv' e 'Impresión Uv Holografico / Glitter'. Ahi el
+  //     precio guardado es el BASE y el recargo lo pone el taller.
+  //
+  //  2. El catalogo dice que se multiplica (atributos.multiplica). Los packs
+  //     traen multiplica:false — el precio ES el pack, multiplicarlo por las
+  //     unidades del pack seria cobrarlo N veces.
+  //
+  //  3. LA CANTIDAD Y LA UNIDAD DE COBRO SON LA MISMA COSA. Esta es la que
+  //     importa y no la resuelve ningun flag: 'anillar 120 hojas' tiene
+  //     cantidad=120 y unidad_venta='trabajo' con multiplica=true — pero el
+  //     ese true significa "3 anillados salen 3x", NO "x120 hojas". Multiplicar
+  //     ahi es el mismo 120x que ya nos mordio, ahora del lado del total.
+  //     Solo se multiplica cuando el cliente conto EN LA MISMA UNIDAD en que
+  //     se cobra: hojas/paginas con precio por hoja, unidades con precio por
+  //     unidad. Ante cualquier otra combinacion, no hay total.
+  const uvPosible = String(((c.atributosProducto || {}).tecnologia)
+    || ((c.atributos || {}).tecnologia) || '').toLowerCase() === 'uv';
+  const multiplicable = ((c.atributos || {}).multiplica) === true;
+  const claveCobro = (c.cobro && c.cobro.clave) || null;
+  // que unidad conto el cliente, deducido de como se cobra el producto
+  const cantidadEsLaUnidad = c.porPagina
+    ? (claveCobro === 'hoja' || claveCobro === 'pagina' || claveCobro === null)
+    : (claveCobro === 'hoja' || claveCobro === 'pagina' || claveCobro === 'unidad');
+
+  let total = null;
+  let motivoSinTotal = null;
+  if (Number.isFinite(cantidad) && cantidad > 0) {
+    if (uvPosible) motivoSinTotal = 'uv';
+    else if (!multiplicable) motivoSinTotal = 'no_multiplica';
+    else if (!cantidadEsLaUnidad) motivoSinTotal = 'unidad_distinta';
+    else if (escalon) motivoSinTotal = 'cantidad_intermedia';  // el precio ya es de otra cantidad
+    else total = monto * cantidad;
+  }
+
   hechos.push({
     producto: base,
+    // el total va como campo aparte: el compositor NO lo calcula, lo copia.
+    total,
+    totalTexto: total ? fmt(total) + ' por ' + cantidad + ' unidades' : null,
+    cantidadPedida: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : null,
+    motivoSinTotal,
     texto: fmt(monto) + (unidad ? ' ' + unidad : '') + porTramo,
     monto,
     tramo,
@@ -594,7 +647,12 @@ for (const c of confiables) {
 }
 
 // Los montos autorizados: el verificador chequea contra ESTA lista.
-const montosAutorizados = hechos.map((h) => h.monto);
+// Los TOTALES tambien van: el cliente los va a leer, asi que tienen que pasar
+// el mismo guard que los unitarios. Sin esto el compositor escribe un total
+// legitimo y el chequeo lo marca como inventado.
+const montosAutorizados = hechos
+  .flatMap((h) => [h.monto, h.total])
+  .filter((n) => Number.isFinite(n) && n > 0);
 
 const hayAlgoQueDecir = hechos.length > 0 || caveats.length > 0;
 
@@ -635,8 +693,23 @@ return [{ json: {
     '',
     'HECHOS AUTORIZADOS (copiá los montos EXACTO, no calcules nada):',
     hechos.length
-      ? hechos.map((h) => '- ' + h.producto + ': ' + h.texto).join('\\n')
+      ? hechos.map((h) => '- ' + h.producto + ': ' + h.texto
+          // El TOTAL ya viene calculado. El compositor lo COPIA, no lo saca:
+          // multiplicar es justo lo que no puede hacer.
+          + (h.totalTexto ? '\\n    TOTAL YA CALCULADO: ' + h.totalTexto : '')).join('\\n')
       : '(ninguno)',
+    // POR QUE NO HAY TOTAL, cuando el cliente dio una cantidad. Sin esto el
+    // compositor improvisa una razon (fue el bug de "hay recargos" del 29).
+    hechos.some((h) => h.motivoSinTotal) ? '' : null,
+    hechos.some((h) => h.motivoSinTotal) ? 'SOBRE EL TOTAL DE ESTOS:' : null,
+    hechos.filter((h) => h.motivoSinTotal).map((h) => {
+      const m = h.motivoSinTotal;
+      return '- ' + h.producto + ': '
+        + (m === 'uv' ? 'lleva impresion UV y el precio final depende del trabajo; deci que el total se confirma por mail.'
+        : m === 'no_multiplica' ? 'el precio ya es por el pack completo, no se multiplica.'
+        : m === 'unidad_distinta' ? 'la cantidad que dijo el cliente NO son unidades de este producto; deci el precio unitario y que el total se confirma por mail.'
+        : 'el precio corresponde a otra cantidad; deci el total se confirma por mail.');
+    }).join('\\n') || null,
     caveats.length ? '' : null,
     caveats.length ? 'ACLARACIONES QUE TENES QUE DECIR:' : null,
     caveats.length ? caveats.map((c) => '- ' + c.producto + ': ' + c.nota).join('\\n') : null,
@@ -661,8 +734,30 @@ return [{ json: {
     // causa que nadie le dio — la razon del recargo es interna, no es un hecho
     // autorizado. Visto en la ronda del 2026-07-29: "ya que depende de otros
     // factores del trabajo" aparecio en 5 mensajes distintos.
-    'Si el cliente pidio un TOTAL por cantidad: no lo calcules, decile que se lo',
-    'confirmamos por mail. SIN explicar por que — no des razones que no esten aca.',
+    'Si un hecho NO trae "TOTAL YA CALCULADO" y el cliente pidio una cantidad:',
+    'NO lo multiplices vos. Deci el precio unitario y, si arriba hay una razon en',
+    '"SOBRE EL TOTAL", usa esa. Nunca inventes otra.',
+    '',
+    // AVISO DE CANAL: UNA sola vez por conversacion, en el primer mensaje que
+    // lleva precio (decision de Martin 2026-07-29). Repetirlo en cada turno es
+    // ruido pago; no decirlo nunca deja al cliente sin saber como encargar.
+    // avisoDado lo calcula el nodo Decidir buscando el mail del negocio en los
+    // salientes del bot: si ya aparecio, no se repite.
+    hechos.length && !d.avisoDado
+      ? 'CERRA CON EL CANAL (es la primera vez que le pasas un precio): una linea corta'
+      : null,
+    hechos.length && !d.avisoDado
+      ? 'diciendo que por acá informamos y que el pedido se hace por mail a'
+      : null,
+    hechos.length && !d.avisoDado
+      ? 'terminalgrafica@gmail.com o en el local. Una sola vez, sin insistir.'
+      : null,
+    hechos.length && d.avisoDado
+      ? 'NO repitas que el canal es informativo ni el mail: ya se lo dijiste antes'
+      : null,
+    hechos.length && d.avisoDado
+      ? 'en esta conversacion. Repetirlo en cada mensaje es molesto.'
+      : null,
   ].filter((l) => l !== null).join('\\n'),
 } }];
 `.trim(), 1200, 0);
@@ -795,7 +890,13 @@ return [{ json: {
     dialogo,
     '',
     'HECHOS AUTORIZADOS (los unicos montos que se pueden decir):',
-    (d.hechos || []).map((h) => '- ' + h.producto + ': ' + h.texto).join('\\n') || '(ninguno)',
+    (d.hechos || []).map((h) => '- ' + h.producto + ': ' + h.texto
+      // El total lo calculo el CODIGO, no el compositor. Sin mostrarlo aca el
+      // auditor ve un numero grande que no esta en la lista y lo tumba.
+      + (h.totalTexto ? ' | TOTAL AUTORIZADO: ' + h.totalTexto : '')).join('\\n') || '(ninguno)',
+    (d.hechos || []).some((h) => h.totalTexto)
+      ? 'Los TOTALES los calculo el codigo (precio x cantidad), no el compositor: son validos.'
+      : '',
     '',
     'RESULTADO CRUDO COMPLETO DE LA BASE (' + (d.filasCrudas || []).length + ' filas, incluidas las descartadas):',
     crudas || '(sin filas)',

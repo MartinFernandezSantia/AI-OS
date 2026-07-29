@@ -574,3 +574,13 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** Folder inside each project added to that project's `.gitignore`.
 
 **Owner:** Martin.
+
+## 2026-07-29 — El bot cotiza totales donde no hay recargo posible
+
+**Decision:** el bot da el total (precio × cantidad) cuando se cumplen TRES condiciones: el producto no es UV, el catálogo dice `multiplica: true`, y la cantidad que dijo el cliente está EN LA MISMA UNIDAD en que se cobra. Si falta alguna, va el unitario y el total se confirma por mail, diciendo la razón real. El total lo calcula el código; el compositor lo copia y tiene prohibido multiplicar por su cuenta. Además: el aviso de "este canal informa, el pedido va por mail" se dice UNA sola vez por conversación, en el primer mensaje que lleva precio. Revierte la política del 2026-07-28 ("NO se da el total de N unidades").
+
+**Why:** la política vieja era correcta en su razón (el precio guardado es el BASE y hay recargo UV, así que multiplicar sub-cotiza) pero demasiado ancha en su alcance: aplicaba a los 88 productos cuando el recargo UV solo toca DOS (`tecnologia: uv`). El cliente que pregunta "cuánto sale imprimir 200 hojas" quiere un número, y mandarlo a mail por un recargo que no existe en su producto es perder la venta por una precaución mal dirigida. La tercera condición es la que no resuelve ningún flag del catálogo: "anillar 120 hojas" tiene `cantidad: 120` y `multiplica: true`, pero ese `true` significa "3 anillados salen 3×", no "×120 hojas" — multiplicar ahí sería el mismo 120x que ya costó una ronda entera de debugging. Repetir el aviso de canal en cada turno es ruido en un canal donde cada mensaje se paga (Meta cobra service messages desde oct-2026).
+
+**Alternatives considered:** total siempre con aclaración de "estimado" (el cliente igual se enoja si sube, y la aclaración se vuelve ruido) · total siempre sin aclarar (TG queda dando la mala noticia al encargar) · preguntarle antes a TG a qué productos aplica el recargo (el catálogo ya lo dice con `tecnologia: uv`, no hacía falta bloquear).
+
+**Owner:** Martin.

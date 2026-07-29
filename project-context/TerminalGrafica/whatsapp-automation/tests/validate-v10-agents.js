@@ -34,9 +34,14 @@ else {
   else OK('Calcular Montos deriva los montos de precio_lista (SQL)');
   if (!/montosAutorizados/.test(js)) E('Calcular Montos no emite montosAutorizados');
   else OK('emite montosAutorizados para el chequeo posterior');
-  // El total NO se calcula: precio_lista es el BASE y hay recargo UV (v9.2).
-  if (/cantidad\s*\*|\*\s*cantidad/.test(js)) E('Calcular Montos multiplica por cantidad: precio_lista es el BASE, no el total (v9.2)');
-  else OK('no calcula totales por cantidad (precio_lista es base, hay recargo UV)');
+  // EL TOTAL YA NO ESTA PROHIBIDO — pero sigue siendo del CODIGO, nunca del LLM.
+  //
+  // v9.2 (2026-07-28) prohibia multiplicar: precio_lista es el BASE y hay recargo
+  // UV, asi que un total sub-cotizaba. Martin lo reemplazo el 2026-07-29: se
+  // cotiza cerrado SOLO donde no hay recargo posible (ver seccion 8e, que
+  // verifica las tres condiciones). Lo que NO cambio: quien multiplica.
+  if (!/monto \* cantidad/.test(js)) E('Calcular Montos ya no calcula el total (deberia: decision 2026-07-29)');
+  else OK('el total lo produce el codigo (no el LLM), con sus tres guards');
 }
 
 // El compositor tiene que recibir la orden explicita de no calcular.
@@ -46,8 +51,10 @@ else {
   const sys = comp.parameters.options.systemMessage || '';
   if (!/copias EXACTO|copiá los montos EXACTO|EXACTO/i.test(sys)) E('el compositor no tiene la regla de copiar montos exacto');
   else OK('el compositor tiene prohibido calcular montos');
-  if (!/NUNCA lo calculas|no calculas/i.test(sys)) E('el compositor no tiene prohibido calcular totales');
-  else OK('el compositor deriva los totales a mail');
+  // Desde el 2026-07-29 el compositor SI puede decir totales — los que le llegan
+  // ya calculados. Lo que sigue prohibido es que los saque el.
+  if (!/lo multiplicas vos/i.test(sys)) E('el compositor no tiene prohibido multiplicar por su cuenta');
+  else OK('el compositor copia los totales, no los calcula');
 }
 
 // El guard deterministico posterior: numeros del texto vs autorizados.
@@ -423,6 +430,53 @@ console.log('\n8b. UNIDAD DE COBRO — unidad_venta manda sobre la columna `unid
   if (pv && !/MINIMO/.test(pv.parameters.jsCode)) {
     E('Prompt Verificador no muestra el minimo: el auditor no puede detectar una cotizacion bajo minimo');
   } else if (pv) OK('el verificador ve el pedido minimo');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n8e. TOTALES — el codigo multiplica, el LLM copia');
+//
+// Decision de Martin (2026-07-29): se cotiza cerrado SOLO donde no hay recargo
+// posible. Reemplaza la politica del 28 ("no se da el total"). El riesgo nuevo
+// es multiplicar donde no corresponde — anillado tiene multiplica:true pero
+// significa "3 anillados salen 3x", no "x120 hojas".
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const calc3 = N('Calcular Montos');
+  const pv3 = N('Prompt Verificador');
+  const comp3 = N('Agente Compositor');
+  if (calc3) {
+    const js = calc3.parameters.jsCode;
+    if (!/const total =|total = monto \* cantidad/.test(js)) E('Calcular Montos no calcula el total');
+    else OK('el total lo calcula el codigo, no el LLM');
+    // las tres condiciones: sin alguna, se cotiza de menos o se cobra de mas
+    if (!/uvPosible/.test(js)) E('no excluye los productos UV: el precio guardado es el BASE, el total sub-cotizaria');
+    else OK('excluye UV del total (precio base + recargo del taller)');
+    if (!/multiplicable/.test(js)) E('no mira `multiplica`: multiplicaria un pack por sus propias unidades');
+    else OK('respeta el flag multiplica (los packs no se multiplican)');
+    if (!/cantidadEsLaUnidad/.test(js)) {
+      E('no verifica que la cantidad este en la unidad de cobro: "anillar 120 hojas" x $2.400 = 120x');
+    } else OK('solo multiplica si la cantidad esta en la unidad de cobro');
+    if (!/motivoSinTotal/.test(js)) E('no registra por que no hay total: el compositor improvisaria la razon');
+    else OK('registra por que no hay total (evita razones inventadas)');
+    // el total tiene que estar autorizado o el guard lo marca inventado
+    if (!/h\.total\]/.test(js) && !/flatMap/.test(js)) {
+      E('los totales no entran en montosAutorizados: el guard los marcaria como precio inventado');
+    } else OK('los totales entran en montosAutorizados');
+  }
+  if (pv3 && !/TOTAL AUTORIZADO/.test(pv3.parameters.jsCode)) {
+    E('el verificador no ve los totales: rechazaria un total legitimo');
+  } else if (pv3) OK('el verificador ve los totales como autorizados');
+  if (comp3) {
+    const sys = comp3.parameters.options.systemMessage;
+    if (!/COTIZAS TOTALES/.test(sys)) E('el compositor no sabe que puede dar totales');
+    else OK('el compositor sabe que puede cotizar totales');
+    if (!/lo multiplicas vos/.test(sys)) E('el compositor no tiene prohibido calcular el total por su cuenta');
+    else OK('el compositor tiene prohibido calcular totales');
+  }
+  // AVISO DE CANAL: una vez por conversacion (no en cada turno: es mensaje pago)
+  if (calc3 && !/avisoDado/.test(calc3.parameters.jsCode)) {
+    E('no se controla el aviso de canal: lo repetiria en cada mensaje');
+  } else if (calc3) OK('el aviso de canal va una sola vez por conversacion');
 }
 
 // ───────────────────────────────────────────────────────────────────────────

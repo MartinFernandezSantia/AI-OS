@@ -585,6 +585,118 @@ console.log('\n=== Canales: fuera el telefono ===');
   check('la escalacion sigue ofreciendo el local', /Rodríguez Peña 3865/.test(txt));
 }
 
+// ── TOTALES (decision de Martin 2026-07-29) ────────────────────────────
+//
+// Reemplaza la politica del 2026-07-28 ("no se da el total: multiplicar
+// sub-cotizaria por el recargo UV"). Ahora se cotiza cerrado donde NO hay
+// recargo posible. Tres condiciones: no es UV, multiplica=true, y la cantidad
+// que dijo el cliente esta EN LA MISMA UNIDAD en que se cobra.
+console.log('\n=== Totales: solo donde no hay recargo posible ===');
+{
+  const conCantidad = (cant) => ({
+    userMessage: 'quiero ' + cant + ' hojas doble faz',
+    conversation: [{ role: 'user', content: 'quiero ' + cant + ' hojas doble faz' }],
+    conversationId: 385, accountId: 1, avisoDado: false,
+    seleccion: { terminos: ['obra 75'], productos: [], cantidad: cant },
+  });
+  // impresiones: por hoja, multiplica, sin UV -> SI hay total
+  const FILA_IMPR = { ...FILAS[1], atributos: { unidad_venta: 'hoja', multiplica: true } };
+  const impr = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR], { 'Leer Selector': conCantidad(200) }) });
+  const hi = impr.hechos[0];
+  check('200 hojas x $88 -> total $17.600', hi && hi.total === 17600, JSON.stringify(hi));
+  check('el total viaja como texto listo para copiar',
+    hi && /17\.600 por 200 unidades/.test(hi.totalTexto || ''), hi && hi.totalTexto);
+  check('el total esta AUTORIZADO (si no, el guard lo marca inventado)',
+    (impr.montosAutorizados || []).includes(17600), JSON.stringify(impr.montosAutorizados));
+  check('el unitario sigue autorizado', (impr.montosAutorizados || []).includes(88));
+  check('el prompt le da el total ya calculado',
+    /TOTAL YA CALCULADO/.test(impr.promptAgente));
+
+  // ANILLADO: unidad_venta=trabajo con multiplica=true. El `true` significa
+  // "3 anillados salen 3x", NO "x120 hojas". Es el 120x del lado del total.
+  const anill = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILAS_ANILLADO[0]],
+      { 'Leer Selector': { ...SOBRE_ANILLADO, seleccion: { ...SOBRE_ANILLADO.seleccion, cantidad: 120 } } }) });
+  const ha2 = anill.hechos[0];
+  check('anillar 120 hojas NO da total (la cantidad no son anillados)',
+    ha2 && ha2.total === null, JSON.stringify(ha2));
+  check('NO aparece $288.000 en ningun lado',
+    !/288\.000|288000/.test(JSON.stringify(anill)), 'el 120x volvio');
+  check('dice POR QUE no hay total', ha2 && ha2.motivoSinTotal === 'unidad_distinta',
+    ha2 && ha2.motivoSinTotal);
+  check('el prompt le explica la razon al compositor',
+    /SOBRE EL TOTAL/.test(anill.promptAgente) && /NO son unidades de este producto/.test(anill.promptAgente));
+
+  // PACK: multiplica=false. El precio ES el pack, multiplicarlo lo cobraria N veces.
+  const pk = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos',
+      [{ ...FILAS_PACK[0], atributos: { ...FILAS_PACK[0].atributos, multiplica: false } }],
+      { 'Leer Selector': { ...SOBRE_PACK, seleccion: { ...SOBRE_PACK.seleccion, cantidad: 100 } } }) });
+  check('un pack NO se multiplica por sus unidades', pk.hechos[0] && pk.hechos[0].total === null,
+    JSON.stringify(pk.hechos[0]));
+  check('dice que el precio ya es por el pack', pk.hechos[0] && pk.hechos[0].motivoSinTotal === 'no_multiplica');
+
+  // UV: el precio guardado es el BASE, el recargo lo pone el taller.
+  const FILA_UV = { ...FILAS[1], nombre_canonico: 'Vinilo, Lona Brillo/Mate Uv',
+    precio_lista: '26000', rangos_cantidad: null, por_pagina: false,
+    atributos: { unidad_venta: 'm2', multiplica: true, tecnologia: 'uv' } };
+  const uv = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_UV], { 'Leer Selector': conCantidad(5) }) });
+  check('UV NO se totaliza (el precio es el BASE)', uv.hechos[0] && uv.hechos[0].total === null,
+    JSON.stringify(uv.hechos[0]));
+  check('dice que es por el UV', uv.hechos[0] && uv.hechos[0].motivoSinTotal === 'uv');
+
+  // sin cantidad no hay total que dar
+  const sinCant = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR],
+      { 'Leer Selector': { ...conCantidad(200), seleccion: { terminos: [], productos: [], cantidad: null } } }) });
+  check('sin cantidad no hay total', sinCant.hechos[0] && sinCant.hechos[0].total === null);
+  check('sin cantidad tampoco hay motivo (no aplica)',
+    sinCant.hechos[0] && sinCant.hechos[0].motivoSinTotal === null);
+
+  // el verificador tiene que ver el total, si no lo tumba como inventado
+  const pvTot = correr('Prompt Verificador', {}, { 'Leer Compositor': {
+    ...impr, borrador: 'Son $88 por página, $17.600 por las 200.',
+    conversation: conCantidad(200).conversation, seleccion: conCantidad(200).seleccion,
+  } });
+  check('el verificador ve el TOTAL AUTORIZADO', /TOTAL AUTORIZADO/.test(pvTot.promptAgente));
+  check('el verificador sabe que lo calculo el codigo',
+    /los calculo el codigo/.test(pvTot.promptAgente));
+  check('el guard NO marca el total como inventado',
+    (pvTot.numerosNoAutorizados || []).length === 0, JSON.stringify(pvTot.numerosNoAutorizados));
+}
+
+// ── AVISO DE CANAL: una vez por conversacion ───────────────────────────
+console.log('\n=== Aviso de canal (una sola vez) ===');
+{
+  const FILA_IMPR = { ...FILAS[1], atributos: { unidad_venta: 'hoja', multiplica: true } };
+  const conAviso = (avisoDado) => correr('Calcular Montos',
+    { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos', [FILA_IMPR], { 'Leer Selector': {
+      userMessage: 'cuanto sale?', conversation: [], conversationId: 386, accountId: 1,
+      avisoDado, seleccion: { terminos: ['obra'], productos: [], cantidad: 200 },
+    } }) });
+
+  const primera = conAviso(false);
+  check('la 1a vez le pide cerrar con el canal', /CERRA CON EL CANAL/.test(primera.promptAgente));
+  check('nombra el mail', /terminalgrafica@gmail\.com/.test(primera.promptAgente));
+
+  const repetida = conAviso(true);
+  check('la 2a vez le prohibe repetirlo', /NO repitas que el canal es informativo/.test(repetida.promptAgente));
+  check('la 2a vez NO le pide cerrar con el canal', !/CERRA CON EL CANAL/.test(repetida.promptAgente));
+}
+
+// ── El compositor cotiza, pero no calcula ──────────────────────────────
+console.log('\n=== Prompt del compositor: cotiza sin calcular ===');
+{
+  const sysComp = wf.nodes.find((n) => n.name === 'Agente Compositor')
+    .parameters.options.systemMessage;
+  check('se le permite dar totales', /COTIZAS TOTALES/.test(sysComp));
+  check('pero tiene prohibido calcularlos', /NUNCA/.test(sysComp) && /lo multiplicas vos/.test(sysComp));
+  check('sigue prohibido tomar pedidos', /NUNCA TOMAS UN PEDIDO/.test(sysComp));
+}
+
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
 process.exit(fallos ? 1 : 0);
