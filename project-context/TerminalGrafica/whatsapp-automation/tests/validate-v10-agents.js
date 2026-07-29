@@ -426,6 +426,56 @@ console.log('\n8b. UNIDAD DE COBRO — unidad_venta manda sobre la columna `unid
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+console.log('\n8c. CORRECCION DEL VERIFICADOR — reescribe prosa, nunca plata');
+//
+// El verificador puede devolver el mensaje corregido (decision de Martin
+// 2026-07-29). Eso lo convierte en el UNICO que escribe sin que nadie lo audite
+// despues, asi que su correccion tiene que pasar por el mismo chequeo
+// deterministico de montos que el borrador del compositor.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const leerV = N('Leer Verificador');
+  const ag = N('Agente Verificador');
+  if (leerV) {
+    const js = leerV.parameters.jsCode;
+    if (!/mensajeCorregido/.test(js)) E('Leer Verificador no lee mensajeCorregido');
+    else OK('Leer Verificador acepta la correccion del auditor');
+    // EL GUARD: sin esto el verificador puede tipear un monto sin control.
+    if (!/montosDeLaCorreccion/.test(js)) {
+      E('la correccion NO pasa por el guard de montos: el verificador podria inventar plata sin auditor');
+    } else OK('la correccion pasa por el guard deterministico de montos');
+    if (!/correccionRechazada/.test(js)) E('no se registra cuando la correccion trae plata inventada');
+    else OK('una correccion con plata inventada queda registrada');
+  }
+  if (ag) {
+    const sys = ag.parameters.options.systemMessage;
+    if (!/mensajeCorregido/.test(sys)) E('el prompt del verificador no le explica como corregir');
+    else OK('el prompt explica cuando corregir y cuando rechazar');
+    if (!/No agregues ni cambies un solo/.test(sys)) E('el prompt no le prohibe tocar los montos al corregir');
+    else OK('el prompt le prohibe tocar montos al corregir');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n8d. CANALES Y PROMESAS — lo que el bot no puede ofrecer');
+// ───────────────────────────────────────────────────────────────────────────
+{
+  // El telefono: al local NO se contesta, ofrecerlo manda a un canal muerto.
+  const conTel = wf.nodes.filter((n) => /476-0019|\(0223\)/.test(JSON.stringify(n.parameters || {})));
+  if (conTel.length) E('se ofrece un telefono (al local no se contesta): ' + conTel.map((n) => n.name).join(', '));
+  else OK('ningun nodo ofrece el telefono');
+
+  const comp = N('Agente Compositor');
+  if (comp) {
+    const sys = comp.parameters.options.systemMessage;
+    if (!/NUNCA TOMAS UN PEDIDO/.test(sys)) E('el compositor no tiene prohibido tomar pedidos (este canal informa)');
+    else OK('el compositor tiene prohibido ofrecer/tomar pedidos');
+    if (!/NO PIDAS ARCHIVOS/.test(sys)) E('el compositor no tiene prohibido pedir archivos (no los podemos recibir)');
+    else OK('el compositor tiene prohibido pedir archivos');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
 //
 // Es el unico ciclo del grafo. Un ciclo mal acotado no se cae: gira contra la

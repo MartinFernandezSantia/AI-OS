@@ -439,10 +439,23 @@ for (const c of confiables) {
   // del producto y ganan. Despues manda \`cobro\`, que sale de unidad_venta.
   // NO hay fallback a la columna \`unidad\`: miente en 94 de 165 variantes, y en
   // las 6 donde seria el unico dato tambien miente (ver Armar Candidatos).
+  // COLISION PACK + ESCALERA (rifas, 2026-07-29 en WhatsApp real).
+  //
+  // 'Talonarios Rifas 100 numeros' declara pack_unidades=100 (sale del NOMBRE)
+  // y ADEMAS tiene escalera por cantidad, donde minQty es la cantidad de RIFAS
+  // (100/250/500/1000/5000/10000). Pidiendo 500, el codigo elegia bien el tramo
+  // ($10.000) pero seguia diciendo "el pack de 100 unidades" — dos cantidades
+  // distintas en la misma frase, y la que el cliente lee es la equivocada.
+  //
+  // Cuando hay escalera, la cantidad que manda es la del TRAMO, no pack_unidades:
+  // el pack fijo describe la unidad minima de venta, la escalera describe lo que
+  // el cliente efectivamente pidio. Si se resolvio un tramo, el pack se calla.
+  const tramoPisaPack = Array.isArray(c.rangos) && c.rangos.length > 0;
+
   const unidad = c.porPagina ? 'por pagina'
     // \`porPack\` ahora es la CANTIDAD (pack_unidades), no el booleano: antes esto
     // decia "el pack de true" porque leia \`por_pack\`, que es un flag.
-    : c.porPack ? ('el pack de ' + c.porPack + ' unidades')
+    : (c.porPack && !tramoPisaPack) ? ('el pack de ' + c.porPack + ' unidades')
     : c.esPack ? 'el pack'
     : (c.cobro && c.cobro.texto) ? c.cobro.texto
     : null;
@@ -493,9 +506,29 @@ for (const c of confiables) {
     }
   }
 
-  // Si precio_lista era 0 y la cantidad no cayo en ningun tramo (o no se dijo
-  // cantidad), el monto seguiria en 0. En ese caso se informa el PISO de la
-  // escalera como "desde", que es un dato cierto, en vez de un $0 falso.
+  // ESCALERAS DE PUNTOS, NO DE RANGOS.
+  //
+  // Las rifas traen tramos {minQty:500, maxQty:501}: ventanas de UNA unidad, o
+  // sea puntos de una lista de precios (100, 250, 500, 1000...), no rangos
+  // continuos. Pidiendo 600 no cae en ninguno -> monto quedaba en 0 -> se
+  // informaba el PISO ($6.000, el de 100 rifas) como si fuera el precio de 600.
+  //
+  // Cuando la cantidad cae ENTRE dos puntos, no se inventa: se dice el precio
+  // del punto inmediatamente inferior aclarando a cuantas unidades corresponde,
+  // y el cliente pregunta por el suyo. Un precio de otra cantidad presentado sin
+  // aclaracion es la misma clase de error que el 120x del anillado.
+  let escalon = null;
+  if (!(monto > 0) && tieneRangos && Number.isFinite(cantidad) && cantidad > 0) {
+    const puntos = c.rangos
+      .map((x) => ({ q: Number(x.minQty) || 0, v: Number(x.value) }))
+      .filter((x) => x.q > 0 && Number.isFinite(x.v) && x.v > 0)
+      .sort((a, b) => a.q - b.q);
+    const inferior = puntos.filter((x) => x.q <= cantidad).pop();
+    if (inferior) { monto = inferior.v; escalon = inferior.q; }
+  }
+
+  // Si aun asi no hay monto (no se dijo cantidad, o pidio menos que el escalon
+  // mas chico), se informa el PISO como "desde", que es un dato cierto.
   if (!(monto > 0) && tieneRangos) {
     const piso = Math.min(...c.rangos.map((x) => Number(x.value)).filter((v) => Number.isFinite(v) && v > 0));
     if (Number.isFinite(piso)) { monto = piso; tramo = null; }
@@ -508,8 +541,13 @@ for (const c of confiables) {
   // "(por 120 unidades)" solo tiene sentido si el precio ES por unidad. En un
   // precio por trabajo diria "$2.400 por trabajo (por 120 unidades)", que es
   // justo la lectura que hay que evitar.
-  const porTramo = (tramo && !esPorTrabajo)
-    ? ' (por ' + tramo.cantidad + ' unidades)'
+  // La cantidad que se nombra sale del TRAMO (lo que el cliente pidio y cayo
+  // exacto) o del ESCALON (el punto inferior de la lista, cuando pidio una
+  // cantidad intermedia). En el segundo caso hay que decir que el precio es
+  // POR ESA cantidad, no por la que pidio.
+  const porTramo = esPorTrabajo ? ''
+    : tramo ? ' (por ' + tramo.cantidad + ' unidades)'
+    : escalon ? ' (precio por ' + escalon + ' unidades)'
     : '';
 
   hechos.push({
@@ -520,6 +558,8 @@ for (const c of confiables) {
     // se propaga para que el compositor sepa que ese numero NO se multiplica
     esPorTrabajo,
     comoSeCobra: (c.cobro && c.cobro.clave) || null,
+    // el punto de la escalera que se uso cuando la cantidad cayo entre dos
+    escalon,
     // el piso de la escalera, para que el compositor pueda decir "desde"
     desde: Array.isArray(c.rangos) && c.rangos.length
       ? Math.min(...c.rangos.map((x) => Number(x.value)).filter(Number.isFinite))
@@ -616,8 +656,13 @@ return [{ json: {
     'Cada hecho dice COMO se cobra (por trabajo, por unidad, por hoja, por m2...).',
     'Respetalo tal cual: cambiar la unidad cambia el precio aunque el numero sea el mismo.',
     '',
+    // ANTES ESTA LINEA DECIA "(hay recargos que dependen del trabajo)".
+    // El compositor la copiaba al mensaje real y le explicaba al cliente una
+    // causa que nadie le dio — la razon del recargo es interna, no es un hecho
+    // autorizado. Visto en la ronda del 2026-07-29: "ya que depende de otros
+    // factores del trabajo" aparecio en 5 mensajes distintos.
     'Si el cliente pidio un TOTAL por cantidad: no lo calcules, decile que se lo',
-    'confirmamos por mail (hay recargos que dependen del trabajo).',
+    'confirmamos por mail. SIN explicar por que — no des razones que no esten aca.',
   ].filter((l) => l !== null).join('\\n'),
 } }];
 `.trim(), 1200, 0);
@@ -792,9 +837,49 @@ try {
 // El guard deterministico MANDA sobre el agente: si hay un monto no autorizado
 // en el texto, se rechaza aunque el verificador haya dicho que si. Un LLM no
 // puede habilitar un numero que el calculo no produjo.
-const montoInventado = (d.numerosNoAutorizados || []).length > 0;
+let montoInventado = (d.numerosNoAutorizados || []).length > 0;
 const aprobadoLLM = out.aprobado === true;
 let fallaLLM = String(out.falla || '');
+
+// ═══ CORRECCION DEL VERIFICADOR (decision de Martin 2026-07-29) ═══
+//
+// El verificador puede devolver el mensaje ya arreglado en vez de solo rechazar.
+// Sirve para lo que se cura sacando texto: ofrecer tomar un pedido, pedir un
+// archivo, explicar por que falta un dato.
+//
+// EL PROBLEMA QUE ESTO ABRE, Y COMO SE TAPA: el verificador pasa a ser el unico
+// que escribe SIN que nadie lo audite despues (es el ultimo eslabon). Si pudiera
+// tipear un monto, seria justo el agujero que v8/v9 costo cerrar.
+//
+// Por eso su correccion pasa por EL MISMO chequeo determinístico que el borrador
+// del compositor: se extraen los numeros del texto corregido y se comparan contra
+// los montos autorizados. Si mete uno que no esta, la correccion se DESCARTA entera
+// (no se envia ni la corregida ni la original: se rechaza el turno). El
+// verificador reescribe la prosa, nunca la plata.
+const corregidoRaw = String(out.mensajeCorregido || '').trim();
+let correccionAplicada = false;
+let correccionRechazada = false;
+let montosDeLaCorreccion = [];
+
+if (corregidoRaw && corregidoRaw !== String(d.borrador || '').trim()) {
+  // MISMA regex que usa Prompt Verificador sobre el borrador: si divergen, el
+  // guard mide una cosa distinta de la que audita.
+  const enCorreccion = (corregidoRaw.match(/\\$\\s?[\\d.]+/g) || [])
+    .map((s) => Number(s.replace(/[^\\d]/g, '')))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const autorizados = new Set((d.montosAutorizados || []).map(Number));
+  montosDeLaCorreccion = enCorreccion.filter((n) => !autorizados.has(n));
+
+  if (montosDeLaCorreccion.length) {
+    // el verificador invento un numero al corregir: se tira la correccion Y se
+    // rechaza el turno. No se cae a la original en silencio — que el auditor
+    // haya tipeado plata es una senal que hay que ver en el log.
+    correccionRechazada = true;
+    montoInventado = true;
+  } else {
+    correccionAplicada = true;
+  }
+}
 
 // EL CHEQUEO DE MONTOS ES DETERMINISTICO Y MANDA EN LAS DOS DIRECCIONES.
 //
@@ -876,13 +961,21 @@ return [{ json: {
   // Log Escalacion mapea \`.motivo\`: se emite con ese nombre tambien.
   motivo: String(out.motivo || '') || ('v10 falla=' + falla),
   queFalta: String(out.queFalta || ''),
-  final: aprobado ? d.borrador : '',
+  // lo que sale al cliente: la correccion del verificador si la hubo y paso el
+  // guard de plata, si no el borrador del compositor.
+  final: aprobado ? (correccionAplicada ? corregidoRaw : d.borrador) : '',
+  correccionAplicada,
+  correccionRechazada,
+  mensajeCorregido: correccionAplicada ? corregidoRaw : '',
+  queCorregi: String(out.queCorregi || ''),
   accion: aprobado ? 'respuesta_verificada' : 'handoff',
   notas: 'v10-agents falla=' + falla + ' idxInv=' + (d.idxInvalidos || 0)
     + ' intento=' + intento
     + (puedeReintentar ? ' REINTENTA' : '')
     + (motivoNoReintento ? ' no-reintenta=' + motivoNoReintento : '')
     + (intento > 1 && aprobado ? ' RESCATADO-POR-REINTENTO' : '')
+    + (correccionAplicada ? ' CORREGIDO-POR-VERIFICADOR(' + String(out.queCorregi || '?').slice(0, 120) + ')' : '')
+    + (correccionRechazada ? ' CORRECCION-CON-PLATA-INVENTADA(' + montosDeLaCorreccion.join(',') + ')' : '')
     + (d.feedbackPrevio ? ' feedback1=' + String(d.feedbackPrevio).slice(0, 160) : '')
     + (vetoInvalido ? ' VETO-INVALIDO(el LLM alego precio_inventado con chequeo OK)' : ''),
   // columnas que Log Turno espera y que la cadena de agentes no producia
@@ -905,6 +998,10 @@ return [{ json: {
     motivoNoReintento,
     // el reintento salvo un turno que antes moria en mail
     rescatadoPorReintento: intento > 1 && aprobado,
+    // el verificador edito el mensaje en vez de rechazarlo
+    correccionAplicada,
+    // el verificador tipeo un monto que el calculo no produjo: vigilar
+    correccionRechazada,
   },
 } }];
 `.trim(), 2400, 0);
@@ -1184,6 +1281,34 @@ for (const [nodo, viejo, nuevo] of REESCRIBIR) {
     " try { const i = $('Leer Intención').first().json; if (i && i.intencion === 'info') return 'v10 info_sin_dato'; } catch (e) {}" +
     " return 'v10 escalacion'; })() }}";
   paso('refs · Log Escalación.notas: cascada tolerante (3 ramas posibles)');
+}
+
+// FUERA EL TELEFONO. Decision de Martin (2026-07-29, tras la ronda en WhatsApp
+// real): al telefono del local NO se contesta. Ofrecerlo manda al cliente a un
+// canal muerto, que es peor que no dar alternativa. Los canales validos son el
+// mail y el local.
+//
+// El texto viene heredado de v9 y vive en un nodo HTTP, no en un prompt: se
+// reemplaza aca para que el build sea la fuente de verdad. El guard de abajo
+// verifica que no quede ningun telefono en NINGUN nodo (un prompt de agente
+// tambien podria nombrarlo).
+{
+  const TEL = /,? (o )?llamanos al \(0223\) 476-0019\.?/g;
+  let tocados = 0;
+  for (const n of wf.nodes) {
+    const antes = JSON.stringify(n.parameters || {});
+    const despues = antes.split('. También podés pasar').join('. También podés pasar')
+      .replace(TEL, '');
+    if (antes !== despues) { n.parameters = JSON.parse(despues); tocados++; }
+  }
+  if (!tocados) throw new Error('BUILD [tel]: no se encontro el telefono para sacar (ya se aplico?)');
+  paso('tel · fuera el (0223) 476-0019 de ' + tocados + ' nodo(s): al telefono no se contesta');
+
+  // GUARD: ni el telefono ni ningun otro numero de contacto pueden volver.
+  const conTel = wf.nodes.filter((n) => /476-0019|\(0223\)/.test(JSON.stringify(n.parameters || {})));
+  if (conTel.length) {
+    throw new Error('BUILD [tel]: quedo un telefono en: ' + conTel.map((n) => n.name).join(', '));
+  }
 }
 
 // GUARD: ninguna expresion puede referenciar un nodo que no existe.

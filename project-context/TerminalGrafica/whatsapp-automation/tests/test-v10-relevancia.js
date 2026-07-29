@@ -465,6 +465,126 @@ check('un pack sin cantidad SI cotiza (el flag alcanza para la unidad)',
   veg.hechos.length === 1 && /el pack/.test(veg.hechos[0].texto),
   JSON.stringify(veg.hechos));
 
+// ── EL VERIFICADOR CORRIGE (decision de Martin 2026-07-29) ─────────────
+//
+// Puede devolver el mensaje ya arreglado en vez de solo rechazar. Lo delicado:
+// pasa a ser el unico que escribe sin que nadie lo audite despues. Por eso su
+// correccion pasa por EL MISMO guard de plata que el borrador del compositor.
+console.log('\n=== Verificador: correccion con guard de plata ===');
+{
+  const base = { ...pv, borrador: 'Sale $88 por página. ¿Querés que avancemos con el pedido?' };
+  const corr = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna', motivo: 'saque la oferta de tomar pedido',
+    mensajeCorregido: 'Sale $88 por página. Para encargarlo escribinos a terminalgrafica@gmail.com.',
+    queCorregi: 'saque el ofrecimiento de tomar el pedido',
+  } }, { 'Prompt Verificador': base });
+  check('la correccion sin montos nuevos se aplica', corr.correccionAplicada === true);
+  check('`final` es el mensaje corregido', /terminalgrafica@gmail\.com/.test(corr.final), corr.final);
+  check('`final` YA NO ofrece avanzar', !/avancemos/.test(corr.final), corr.final);
+  check('queda registrado en notas', /CORREGIDO-POR-VERIFICADOR/.test(corr.notas));
+
+  // EL CASO PELIGROSO: el auditor tipea un monto que el calculo no produjo.
+  const conPlata = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna', motivo: 'ajuste',
+    mensajeCorregido: 'Sale $95 por página, mejor precio.',
+  } }, { 'Prompt Verificador': base });
+  check('un monto inventado EN LA CORRECCION tumba el turno', conPlata.aprobado === false,
+    'aprobado=' + conPlata.aprobado);
+  check('NO se envia la correccion con plata inventada', !/95/.test(conPlata.final || ''),
+    conPlata.final);
+  check('NO se cae en silencio al borrador original', conPlata.final === '', conPlata.final);
+  check('se marca correccionRechazada para auditarlo', conPlata.correccionRechazada === true);
+  check('la falla queda como precio_inventado', conPlata.falla === 'precio_inventado');
+  check('queda el rastro con el monto que invento', /CORRECCION-CON-PLATA-INVENTADA\(95\)/.test(conPlata.notas),
+    conPlata.notas);
+
+  // sin correccion, todo sigue como antes
+  const sinCorr = correr('Leer Verificador',
+    { output: { aprobado: true, falla: 'ninguna', motivo: 'ok' } }, { 'Prompt Verificador': base });
+  check('sin correccion sale el borrador original', sinCorr.final === base.borrador);
+  check('sin correccion no marca nada', sinCorr.correccionAplicada === false);
+
+  // una correccion identica al original no cuenta como correccion
+  const igual = correr('Leer Verificador', { output: {
+    aprobado: true, falla: 'ninguna', motivo: 'ok', mensajeCorregido: base.borrador,
+  } }, { 'Prompt Verificador': base });
+  check('una correccion identica al original no se cuenta', igual.correccionAplicada === false);
+}
+
+// ── RIFAS: pack_unidades vs escalera de puntos ─────────────────────────
+//
+// Caso real (WhatsApp, 2026-07-29): "precio para 500 rifas" -> el bot dijo
+// "$10.000 el pack de 100 unidades". El monto era CORRECTO (tramo minQty:500)
+// pero la cantidad no: pack_unidades=100 sale del NOMBRE del producto
+// ('Talonarios Rifas 100 numeros') y la escalera habla de rifas.
+// Ademas los tramos son {minQty:500, maxQty:501} — puntos, no rangos: pidiendo
+// 600 no caia en ninguno y se informaba el piso ($6.000, el de 100) como precio.
+console.log('\n=== Rifas: pack fijo + escalera de puntos ===');
+const FILA_RIFAS = {
+  producto_id: 'rf1', nombre_canonico: 'Talonarios Rifas 100 numeros', score: '5.1',
+  variante_id: 'rv1', variante: 'Escala de rifas 10x7cm', precio_lista: '0', unidad: 'Hoja',
+  mostrable: false, solo_descuentos: false, por_pagina: false, por_pack: true,
+  tiene_reglas: true, nicho: null,
+  atributos: { unidad_venta: 'pack', pack_unidades: 100, multiplica: false },
+  rangos_cantidad: [
+    { value: 6000, minQty: 100, maxQty: 101 }, { value: 8000, minQty: 250, maxQty: 251 },
+    { value: 10000, minQty: 500, maxQty: 501 }, { value: 14000, minQty: 1000, maxQty: 1001 },
+  ],
+};
+const sobreRifas = (cant) => ({
+  userMessage: 'Cual es el precio para ' + cant + ' rifas?',
+  conversation: [{ role: 'user', content: 'Cual es el precio para ' + cant + ' rifas?' }],
+  conversationId: 384, accountId: 1,
+  seleccion: { terminos: ['rifas'], productos: [], cantidad: cant },
+});
+const rifas = (cant) => correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': correr('Armar Candidatos', [FILA_RIFAS], { 'Leer Selector': sobreRifas(cant) }) });
+
+const r500 = rifas(500);
+check('500 rifas -> $10.000 (tramo correcto)', r500.hechos[0] && r500.hechos[0].monto === 10000,
+  JSON.stringify(r500.hechos));
+check('NO dice "el pack de 100" cuando el tramo manda',
+  r500.hechos[0] && !/pack de 100/.test(r500.hechos[0].texto), r500.hechos[0] && r500.hechos[0].texto);
+check('dice la cantidad del tramo (500)',
+  r500.hechos[0] && /500 unidades/.test(r500.hechos[0].texto), r500.hechos[0] && r500.hechos[0].texto);
+
+// 600 cae ENTRE dos puntos: antes daba el piso ($6.000) sin aclarar nada
+const r600 = rifas(600);
+check('600 rifas NO informa el piso ($6.000) como si fuera su precio',
+  r600.hechos[0] && r600.hechos[0].monto !== 6000, JSON.stringify(r600.hechos));
+check('600 rifas usa el escalon inferior ($10.000 de 500)',
+  r600.hechos[0] && r600.hechos[0].monto === 10000, JSON.stringify(r600.hechos));
+check('600 rifas ACLARA que el precio es por 500',
+  r600.hechos[0] && /precio por 500 unidades/.test(r600.hechos[0].texto),
+  r600.hechos[0] && r600.hechos[0].texto);
+
+// ── El compositor no ofrece pedidos, no pide archivos, no da razones ───
+console.log('\n=== Prompt del compositor: prohibiciones ===');
+{
+  const sysComp = wf.nodes.find((n) => n.name === 'Agente Compositor')
+    .parameters.options.systemMessage;
+  check('tiene prohibido tomar pedidos', /NUNCA TOMAS UN PEDIDO/.test(sysComp));
+  check('tiene prohibido pedir archivos', /NO PIDAS ARCHIVOS/.test(sysComp));
+  check('tiene prohibido inventar la causa de un dato faltante',
+    /NO INVENTES POR QUE FALTA UN DATO/.test(sysComp));
+  // el prompt de Calcular Montos ya no le sugiere la frase de los recargos
+  const jsCalc = nodo('Calcular Montos').parameters.jsCode;
+  check('el prompt ya NO sugiere "hay recargos que dependen del trabajo"',
+    !/hay recargos que dependen del trabajo'/.test(jsCalc));
+}
+
+// ── El telefono no se ofrece: al local no se contesta ──────────────────
+console.log('\n=== Canales: fuera el telefono ===');
+{
+  const conTel = wf.nodes.filter((n) => /476-0019|\(0223\)/.test(JSON.stringify(n.parameters || {})));
+  check('ningun nodo ofrece el telefono', conTel.length === 0,
+    conTel.map((n) => n.name).join(', '));
+  const esc = wf.nodes.find((n) => n.name === 'Mensaje Escalación');
+  const txt = JSON.stringify(esc.parameters);
+  check('la escalacion sigue ofreciendo el mail', /terminalgrafica@gmail\.com/.test(txt));
+  check('la escalacion sigue ofreciendo el local', /Rodríguez Peña 3865/.test(txt));
+}
+
 console.log('\n' + '='.repeat(58));
 console.log(fallos ? 'FALLA: ' + fallos + ' de ' + (ok + fallos) : 'TODO OK: ' + ok + ' casos');
 process.exit(fallos ? 1 : 0);
