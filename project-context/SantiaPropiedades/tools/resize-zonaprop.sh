@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Reescala fotos para ZonaProp (limite 6000x6000 px).
+# Reescala fotos para ZonaProp. El lado mas largo va a MAX y el otro se
+# calcula solo, asi que la proporcion nunca se toca (una 4:3 sigue 4:3).
 # Solo toca las que se pasan; las que ya entran quedan intactas.
 #
-#   ./resize-zonaprop.sh <carpeta>            -> escribe en <carpeta>/zonaprop/
-#   ./resize-zonaprop.sh <carpeta> <salida>   -> escribe donde le digas
+#   ./resize-zonaprop.sh <carpeta>                  -> <carpeta>/zonaprop/, MAX por defecto
+#   ./resize-zonaprop.sh <carpeta> <salida>         -> salida a eleccion
+#   MAX=1920 ./resize-zonaprop.sh <carpeta>         -> otra medida (4:3 -> 1920x1440)
 #
 # Requiere ffmpeg. No modifica los originales.
 
 set -euo pipefail
 
-MAX=6000          # lado maximo que acepta ZonaProp
-CALIDAD=2         # escala JPEG de ffmpeg: 2 = alta (1 es la mejor, 31 la peor)
+MAX="${MAX:-6000}"          # lado maximo; 6000 es el tope de ZonaProp
+CALIDAD="${CALIDAD:-2}"     # escala JPEG de ffmpeg: 2 = alta (1 la mejor, 31 la peor)
 
 ENTRADA="${1:-}"
 if [[ -z "$ENTRADA" || ! -d "$ENTRADA" ]]; then

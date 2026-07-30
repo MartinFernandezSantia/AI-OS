@@ -1,0 +1,738 @@
+<title>Redimensionar fotos para ZonaProp</title>
+<style>
+  :root {
+    --tinta: #221C18;
+    --tinta-suave: #6B5D52;
+    --papel: #F7F3EE;
+    --papel-hondo: #EDE6DC;
+    --terracota: #B4552F;
+    --terracota-clara: #C9714D;
+    --verde: #4A6B4A;
+    --borde: #DDD3C7;
+    --sombra: rgba(34, 28, 24, 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --tinta: #F0EAE2;
+      --tinta-suave: #A79888;
+      --papel: #1A1613;
+      --papel-hondo: #241E1A;
+      --terracota: #D97B52;
+      --terracota-clara: #E89670;
+      --verde: #7FA87F;
+      --borde: #3A322C;
+      --sombra: rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --tinta: #F0EAE2;
+    --tinta-suave: #A79888;
+    --papel: #1A1613;
+    --papel-hondo: #241E1A;
+    --terracota: #D97B52;
+    --terracota-clara: #E89670;
+    --verde: #7FA87F;
+    --borde: #3A322C;
+    --sombra: rgba(0, 0, 0, 0.3);
+  }
+
+  :root[data-theme="light"] {
+    --tinta: #221C18;
+    --tinta-suave: #6B5D52;
+    --papel: #F7F3EE;
+    --papel-hondo: #EDE6DC;
+    --terracota: #B4552F;
+    --terracota-clara: #C9714D;
+    --verde: #4A6B4A;
+    --borde: #DDD3C7;
+    --sombra: rgba(34, 28, 24, 0.08);
+  }
+
+  body {
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  .envoltorio {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  header { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .antetitulo {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--terracota);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 2.25rem;
+    font-weight: 400;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .bajada {
+    color: var(--tinta-suave);
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  /* ---- zona de drop ---- */
+  .zona {
+    border: 2px dashed var(--borde);
+    border-radius: 4px;
+    background: var(--papel-hondo);
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .zona:hover, .zona:focus-visible { border-color: var(--terracota); }
+  .zona.encima {
+    border-color: var(--terracota);
+    background: color-mix(in srgb, var(--terracota) 8%, var(--papel-hondo));
+  }
+  .zona:focus-visible { outline: 2px solid var(--terracota); outline-offset: 3px; }
+
+  .zona-titulo { font-size: 1.125rem; font-weight: 600; }
+  .zona-nota { color: var(--tinta-suave); font-size: 0.875rem; }
+
+  /* ---- controles ---- */
+  .controles {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.5rem;
+    background: var(--papel-hondo);
+    border: 1px solid var(--borde);
+    border-radius: 4px;
+  }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+
+  legend, .etiqueta {
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--tinta-suave);
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .medidas { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  .medida {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--borde);
+    border-radius: 3px;
+    background: var(--papel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .medida:hover { border-color: var(--terracota-clara); }
+  .medida input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .medida:has(input:checked) {
+    border-color: var(--terracota);
+    background: color-mix(in srgb, var(--terracota) 10%, var(--papel));
+  }
+  .medida:has(input:focus-visible) { outline: 2px solid var(--terracota); outline-offset: 2px; }
+  .medida-num {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.9rem;
+  }
+  .medida-nota { font-size: 0.75rem; color: var(--tinta-suave); }
+
+  .fila-personalizada { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  input[type="number"] {
+    width: 6.5rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--borde);
+    border-radius: 3px;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+  }
+  input[type="number"]:focus-visible { outline: 2px solid var(--terracota); outline-offset: 1px; }
+
+  input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--terracota); }
+  .valor-calidad {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    min-width: 3.5rem;
+  }
+
+  /* ---- botones ---- */
+  .acciones { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+
+  button {
+    font: inherit;
+    font-weight: 600;
+    padding: 0.7rem 1.4rem;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  button:focus-visible { outline: 2px solid var(--terracota); outline-offset: 2px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .primario { background: var(--terracota); color: #FFF; }
+  .primario:hover:not(:disabled) { background: var(--terracota-clara); }
+
+  .secundario { background: transparent; color: var(--tinta); border-color: var(--borde); }
+  .secundario:hover:not(:disabled) { border-color: var(--terracota); color: var(--terracota); }
+
+  /* ---- lista ---- */
+  .lista-envoltorio { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .lista-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .resumen { font-size: 0.875rem; color: var(--tinta-suave); font-variant-numeric: tabular-nums; }
+
+  .tabla-scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th {
+    text-align: left;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tinta-suave);
+    font-weight: 600;
+    padding: 0.5rem 0.75rem 0.5rem 0;
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+  }
+  td {
+    padding: 0.6rem 0.75rem 0.6rem 0;
+    border-bottom: 1px solid var(--borde);
+    vertical-align: middle;
+  }
+  td:last-child, th:last-child { padding-right: 0; text-align: right; }
+
+  .nombre {
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dims {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .flecha { color: var(--tinta-suave); }
+  .peso { color: var(--tinta-suave); font-variant-numeric: tabular-nums; font-size: 0.8rem; white-space: nowrap; }
+
+  .pastilla {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .pastilla-lista { background: color-mix(in srgb, var(--verde) 18%, transparent); color: var(--verde); }
+  .pastilla-intacta { background: color-mix(in srgb, var(--tinta-suave) 15%, transparent); color: var(--tinta-suave); }
+  .pastilla-error { background: color-mix(in srgb, var(--terracota) 18%, transparent); color: var(--terracota); }
+  .pastilla-espera { background: color-mix(in srgb, var(--tinta-suave) 12%, transparent); color: var(--tinta-suave); }
+
+  .bajar-una {
+    background: none;
+    border: 0;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--terracota);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .bajar-una:hover { color: var(--terracota-clara); }
+
+  .vacio { color: var(--tinta-suave); font-style: italic; padding: 2rem 0; text-align: center; }
+
+  .barra { height: 3px; background: var(--papel-hondo); border-radius: 2px; overflow: hidden; }
+  .barra-relleno { height: 100%; background: var(--terracota); width: 0; transition: width 0.2s; }
+
+  .pie {
+    font-size: 0.8rem;
+    color: var(--tinta-suave);
+    border-top: 1px solid var(--borde);
+    padding-top: 1.25rem;
+    max-width: 60ch;
+  }
+
+  .oculto { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="envoltorio">
+
+  <header>
+    <div class="antetitulo">Santía Propiedades</div>
+    <h1>Redimensionar fotos</h1>
+    <p class="bajada">
+      Las fotos del celular salen en 8192×6144 y ZonaProp no acepta más de 6000 px por lado.
+      Arrastrá las que quieras achicar, elegí la medida y descargalas. Todo pasa en tu navegador:
+      las fotos no salen de tu computadora.
+    </p>
+  </header>
+
+  <div class="zona" id="zona" tabindex="0" role="button" aria-label="Elegir fotos para redimensionar">
+    <div class="zona-titulo">Arrastrá las fotos acá</div>
+    <div class="zona-nota">o hacé click para elegirlas · JPG, PNG y WebP</div>
+  </div>
+  <input type="file" id="entrada" accept="image/*" multiple class="oculto">
+
+  <div class="controles">
+    <fieldset>
+      <legend>Lado más largo</legend>
+      <div class="medidas" id="medidas">
+        <label class="medida">
+          <input type="radio" name="medida" value="6000">
+          <span class="medida-num">6000</span>
+          <span class="medida-nota">tope de ZonaProp</span>
+        </label>
+        <label class="medida">
+          <input type="radio" name="medida" value="1920" checked>
+          <span class="medida-num">1920</span>
+          <span class="medida-nota">4:3 → 1920×1440</span>
+        </label>
+        <label class="medida">
+          <input type="radio" name="medida" value="1280">
+          <span class="medida-num">1280</span>
+          <span class="medida-nota">liviana</span>
+        </label>
+        <label class="medida">
+          <input type="radio" name="medida" value="personalizada">
+          <span class="medida-num">Otra</span>
+        </label>
+      </div>
+      <div class="fila-personalizada" id="fila-personalizada" hidden>
+        <input type="number" id="medida-personalizada" value="2400" min="200" max="12000" step="10"
+               aria-label="Lado más largo personalizado en píxeles">
+        <span class="medida-nota">píxeles</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Calidad JPEG</legend>
+      <div class="fila-personalizada">
+        <input type="range" id="calidad" min="60" max="100" step="1" value="92"
+               aria-label="Calidad JPEG">
+        <span class="valor-calidad" id="valor-calidad">92%</span>
+      </div>
+      <span class="medida-nota">
+        92% es indistinguible del original y pesa mucho menos. Abajo de 80 empiezan a verse artefactos.
+      </span>
+    </fieldset>
+
+    <div class="acciones">
+      <button class="primario" id="btn-procesar" disabled>Redimensionar</button>
+      <button class="secundario" id="btn-zip" disabled>Descargar todas</button>
+      <button class="secundario" id="btn-limpiar" disabled>Limpiar</button>
+    </div>
+
+    <div class="barra" id="barra" hidden><div class="barra-relleno" id="barra-relleno"></div></div>
+  </div>
+
+  <div class="lista-envoltorio">
+    <div class="lista-cabecera">
+      <div class="antetitulo">Fotos</div>
+      <div class="resumen" id="resumen"></div>
+    </div>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Archivo</th>
+            <th>Original</th>
+            <th>Resultado</th>
+            <th>Peso</th>
+            <th>Estado</th>
+            <th><span class="oculto">Descargar</span></th>
+          </tr>
+        </thead>
+        <tbody id="cuerpo">
+          <tr><td colspan="6" class="vacio">Todavía no cargaste ninguna foto.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="pie">
+    La proporción nunca se toca: el lado más largo va a la medida elegida y el otro se calcula solo,
+    así que una foto 4:3 sigue siendo 4:3. Las que ya entran en la medida se dejan como están, sin
+    recomprimir. Los originales no se modifican.
+  </p>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var zona = document.getElementById("zona");
+  var entrada = document.getElementById("entrada");
+  var cuerpo = document.getElementById("cuerpo");
+  var resumen = document.getElementById("resumen");
+  var btnProcesar = document.getElementById("btn-procesar");
+  var btnZip = document.getElementById("btn-zip");
+  var btnLimpiar = document.getElementById("btn-limpiar");
+  var barra = document.getElementById("barra");
+  var barraRelleno = document.getElementById("barra-relleno");
+  var filaPersonalizada = document.getElementById("fila-personalizada");
+  var medidaPersonalizada = document.getElementById("medida-personalizada");
+  var calidad = document.getElementById("calidad");
+  var valorCalidad = document.getElementById("valor-calidad");
+
+  var fotos = [];
+
+  function ladoMaximo() {
+    var elegida = document.querySelector('input[name="medida"]:checked').value;
+    if (elegida === "personalizada") {
+      var n = parseInt(medidaPersonalizada.value, 10);
+      return (isNaN(n) || n < 200) ? 1920 : n;
+    }
+    return parseInt(elegida, 10);
+  }
+
+  function pesoLegible(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " kB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function nombreJpg(nombre) {
+    return nombre.replace(/\.[^.]+$/, "") + ".jpg";
+  }
+
+  function dibujar() {
+    if (fotos.length === 0) {
+      cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Todavía no cargaste ninguna foto.</td></tr>';
+      resumen.textContent = "";
+      btnProcesar.disabled = true;
+      btnZip.disabled = true;
+      btnLimpiar.disabled = true;
+      return;
+    }
+
+    cuerpo.innerHTML = "";
+    fotos.forEach(function (foto, i) {
+      var tr = document.createElement("tr");
+
+      var tdNombre = document.createElement("td");
+      tdNombre.className = "nombre";
+      tdNombre.title = foto.nombre;
+      tdNombre.textContent = foto.nombre;
+      tr.appendChild(tdNombre);
+
+      var tdOrig = document.createElement("td");
+      tdOrig.className = "dims";
+      tdOrig.textContent = foto.ancho ? foto.ancho + "×" + foto.alto : "—";
+      tr.appendChild(tdOrig);
+
+      var tdNueva = document.createElement("td");
+      tdNueva.className = "dims";
+      if (foto.nuevoAncho) {
+        tdNueva.innerHTML = '<span class="flecha">→</span> ' + foto.nuevoAncho + "×" + foto.nuevoAlto;
+      } else {
+        tdNueva.textContent = "—";
+      }
+      tr.appendChild(tdNueva);
+
+      var tdPeso = document.createElement("td");
+      tdPeso.className = "peso";
+      if (foto.pesoNuevo) {
+        tdPeso.textContent = pesoLegible(foto.pesoOriginal) + " → " + pesoLegible(foto.pesoNuevo);
+      } else {
+        tdPeso.textContent = pesoLegible(foto.pesoOriginal);
+      }
+      tr.appendChild(tdPeso);
+
+      var tdEstado = document.createElement("td");
+      var pastilla = document.createElement("span");
+      pastilla.className = "pastilla pastilla-" + foto.estado;
+      pastilla.textContent = {
+        espera: "En espera",
+        lista: "Lista",
+        intacta: "Ya entraba",
+        error: "Error"
+      }[foto.estado] || foto.estado;
+      tdEstado.appendChild(pastilla);
+      tr.appendChild(tdEstado);
+
+      var tdBajar = document.createElement("td");
+      if (foto.blob) {
+        var b = document.createElement("button");
+        b.className = "bajar-una";
+        b.textContent = "Descargar";
+        b.addEventListener("click", function () { bajarUna(i); });
+        tdBajar.appendChild(b);
+      }
+      tr.appendChild(tdBajar);
+
+      cuerpo.appendChild(tr);
+    });
+
+    var listas = fotos.filter(function (f) { return f.blob; }).length;
+    resumen.textContent = fotos.length + " foto" + (fotos.length === 1 ? "" : "s") +
+      (listas ? " · " + listas + " lista" + (listas === 1 ? "" : "s") : "");
+
+    btnProcesar.disabled = false;
+    btnZip.disabled = listas === 0;
+    btnLimpiar.disabled = false;
+  }
+
+  function agregar(archivos) {
+    var imagenes = Array.prototype.filter.call(archivos, function (f) {
+      return f.type.indexOf("image/") === 0;
+    });
+
+    imagenes.forEach(function (archivo) {
+      var foto = {
+        archivo: archivo,
+        nombre: archivo.name,
+        pesoOriginal: archivo.size,
+        ancho: 0, alto: 0,
+        nuevoAncho: 0, nuevoAlto: 0,
+        pesoNuevo: 0,
+        blob: null,
+        estado: "espera"
+      };
+      fotos.push(foto);
+
+      // Leemos las dimensiones enseguida, así la tabla dice algo útil antes de procesar.
+      var url = URL.createObjectURL(archivo);
+      var img = new Image();
+      img.onload = function () {
+        foto.ancho = img.naturalWidth;
+        foto.alto = img.naturalHeight;
+        URL.revokeObjectURL(url);
+        dibujar();
+      };
+      img.onerror = function () {
+        foto.estado = "error";
+        URL.revokeObjectURL(url);
+        dibujar();
+      };
+      img.src = url;
+    });
+
+    dibujar();
+  }
+
+  function procesarUna(foto, max, q) {
+    return new Promise(function (resolve) {
+      if (foto.estado === "error") { resolve(); return; }
+
+      var url = URL.createObjectURL(foto.archivo);
+      var img = new Image();
+
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        foto.ancho = w; foto.alto = h;
+
+        // Ya entra: la dejamos intacta en vez de recomprimirla al pedo.
+        if (w <= max && h <= max) {
+          foto.nuevoAncho = w;
+          foto.nuevoAlto = h;
+          foto.blob = foto.archivo;
+          foto.nombreSalida = foto.nombre;
+          foto.pesoNuevo = foto.pesoOriginal;
+          foto.estado = "intacta";
+          URL.revokeObjectURL(url);
+          resolve();
+          return;
+        }
+
+        var escala = max / Math.max(w, h);
+        var nw = Math.round(w * escala);
+        var nh = Math.round(h * escala);
+
+        var lienzo = document.createElement("canvas");
+        lienzo.width = nw;
+        lienzo.height = nh;
+        var ctx = lienzo.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, nw, nh);
+
+        lienzo.toBlob(function (blob) {
+          if (blob) {
+            foto.nuevoAncho = nw;
+            foto.nuevoAlto = nh;
+            foto.blob = blob;
+            foto.nombreSalida = nombreJpg(foto.nombre);
+            foto.pesoNuevo = blob.size;
+            foto.estado = "lista";
+          } else {
+            foto.estado = "error";
+          }
+          URL.revokeObjectURL(url);
+          resolve();
+        }, "image/jpeg", q);
+      };
+
+      img.onerror = function () {
+        foto.estado = "error";
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+
+      img.src = url;
+    });
+  }
+
+  function procesarTodas() {
+    var max = ladoMaximo();
+    var q = parseInt(calidad.value, 10) / 100;
+
+    btnProcesar.disabled = true;
+    barra.hidden = false;
+    barraRelleno.style.width = "0";
+
+    var hechas = 0;
+    var cadena = Promise.resolve();
+
+    fotos.forEach(function (foto) {
+      cadena = cadena.then(function () {
+        return procesarUna(foto, max, q).then(function () {
+          hechas++;
+          barraRelleno.style.width = (hechas / fotos.length * 100) + "%";
+          dibujar();
+        });
+      });
+    });
+
+    cadena.then(function () {
+      barra.hidden = true;
+      btnProcesar.disabled = false;
+      dibujar();
+    });
+  }
+
+  function bajar(blob, nombre) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function bajarUna(i) {
+    var foto = fotos[i];
+    if (foto.blob) bajar(foto.blob, foto.nombreSalida || foto.nombre);
+  }
+
+  // Descarga una por una, espaciadas: el navegador bloquea las ráfagas.
+  function bajarTodas() {
+    var listas = fotos.filter(function (f) { return f.blob; });
+    if (listas.length === 0) return;
+
+    btnZip.disabled = true;
+    var i = 0;
+    function siguiente() {
+      if (i >= listas.length) {
+        btnZip.disabled = false;
+        return;
+      }
+      bajar(listas[i].blob, listas[i].nombreSalida || listas[i].nombre);
+      i++;
+      setTimeout(siguiente, 350);
+    }
+    siguiente();
+  }
+
+  // ---- eventos ----
+  zona.addEventListener("click", function () { entrada.click(); });
+  zona.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); entrada.click(); }
+  });
+
+  ["dragenter", "dragover"].forEach(function (ev) {
+    zona.addEventListener(ev, function (e) {
+      e.preventDefault();
+      zona.classList.add("encima");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    zona.addEventListener(ev, function (e) {
+      e.preventDefault();
+      if (ev === "dragleave" && zona.contains(e.relatedTarget)) return;
+      zona.classList.remove("encima");
+    });
+  });
+  zona.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files) agregar(e.dataTransfer.files);
+  });
+
+  entrada.addEventListener("change", function () {
+    if (entrada.files) agregar(entrada.files);
+    entrada.value = "";
+  });
+
+  document.getElementById("medidas").addEventListener("change", function () {
+    var esPersonalizada = document.querySelector('input[name="medida"]:checked').value === "personalizada";
+    filaPersonalizada.hidden = !esPersonalizada;
+    if (esPersonalizada) medidaPersonalizada.focus();
+  });
+
+  calidad.addEventListener("input", function () {
+    valorCalidad.textContent = calidad.value + "%";
+  });
+
+  btnProcesar.addEventListener("click", procesarTodas);
+  btnZip.addEventListener("click", bajarTodas);
+  btnLimpiar.addEventListener("click", function () {
+    fotos = [];
+    dibujar();
+  });
+
+  dibujar();
+})();
+</script>
