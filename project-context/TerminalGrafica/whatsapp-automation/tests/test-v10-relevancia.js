@@ -650,6 +650,54 @@ check('600 rifas ACLARA que el precio es por 500',
   r600.hechos[0] && /precio por 500 unidades/.test(r600.hechos[0].texto),
   r600.hechos[0] && r600.hechos[0].texto);
 
+// ── LA LISTA DE PRECIOS ENTERA (ronda real 2026-07-29) ─────────────────
+//
+// Dos fallas con la misma causa: "600 rifas" decia solo $10.000 y se callaba
+// que 1000 salen $14.000; y pidiendo "100 y 1000" en el mismo mensaje solo se
+// resolvia UNA cantidad (hay un solo seleccion.cantidad).
+console.log('\n=== Rifas: la lista de precios completa ===');
+check('el hecho trae la lista entera', r600.hechos[0].listaPrecios !== null
+  && r600.hechos[0].listaPrecios.length === 4, JSON.stringify(r600.hechos[0].listaPrecios));
+check('la lista trae cantidad y monto formateado',
+  ((r600.hechos[0].listaPrecios || [])[0] || {}).texto === '100: $6.000',
+  JSON.stringify((r600.hechos[0].listaPrecios || [])[0]));
+check('el prompt la muestra completa',
+  /100: \$6\.000 · 250: \$8\.000 · 500: \$10\.000 · 1000: \$14\.000/.test(r600.promptAgente));
+check('le dice que son cantidades fijas',
+  /CANTIDADES FIJAS/.test(r600.promptAgente));
+check('le dice que conteste TODAS las cantidades que pidio',
+  /Si pidio VARIAS cantidades, contestá todas/.test(r600.promptAgente));
+// sin esto el guard lee la tabla como plata inventada y tumba el mensaje
+check('TODOS los montos de la lista quedan autorizados',
+  [6000, 8000, 10000, 14000].every((n) => r600.montosAutorizados.includes(n)),
+  JSON.stringify(r600.montosAutorizados));
+
+// CONTRACARA: un rango CONTINUO no es una lista de precios. Mostrar
+// "51-250: $88" es ruido — cualquier cantidad del rango paga lo mismo.
+const FILA_CONT = {
+  producto_id: 'ic1', nombre_canonico: 'Impresiones papel obra 75 gr', score: '4.0',
+  variante_id: 'icv1', variante: 'doble faz bn', precio_lista: '150', unidad: 'Hoja',
+  mostrable: false, solo_descuentos: false, por_pagina: true, por_pack: false,
+  tiene_reglas: true, nicho: null,
+  atributos: { unidad_venta: 'hoja', multiplica: true },
+  rangos_cantidad: [
+    { value: 150, minQty: 1, maxQty: 50 }, { value: 88, minQty: 51, maxQty: 250 },
+    { value: 70, minQty: 251, maxQty: null },
+  ],
+};
+const cont = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+  { 'Armar Candidatos': correr('Armar Candidatos', [FILA_CONT], { 'Leer Selector': {
+    userMessage: 'imprimir 200 hojas doble faz', conversation: [],
+    conversationId: 385, accountId: 1,
+    seleccion: { terminos: ['obra'], productos: [], cantidad: 200 },
+  } }) });
+check('un rango continuo NO es lista de precios', cont.hechos[0].listaPrecios === null,
+  JSON.stringify(cont.hechos[0].listaPrecios));
+check('el rango continuo sigue dando su total limpio', cont.hechos[0].total === 17600,
+  JSON.stringify(cont.hechos[0].total));
+check('y el prompt no se ensucia con la tabla',
+  !/CANTIDADES FIJAS/.test(cont.promptAgente));
+
 // ── El compositor no ofrece pedidos, no pide archivos, no da razones ───
 console.log('\n=== Prompt del compositor: prohibiciones ===');
 {

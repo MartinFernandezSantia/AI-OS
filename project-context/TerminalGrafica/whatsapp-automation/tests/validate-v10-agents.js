@@ -701,6 +701,23 @@ console.log('\n11. LA OFERTA POR CANTIDAD NO SE PIERDE (promo inmobiliarias, 202
     .parameters.options.systemMessage;
   if (/NUNCA BORRES UNA OFERTA POR CANTIDAD/.test(sysVer)) OK('el prompt se lo prohibe explicito');
   else E('el prompt del verificador no prohibe borrar ofertas');
+
+  // ── LA LISTA DE PRECIOS (rifas, 2026-07-29) ──────────────────────────
+  // "600 rifas" decia solo $10.000 y se callaba que 1000 salen $14.000;
+  // "100 y 1000" en un mensaje resolvia una sola cantidad.
+  if (/esListaDePrecios/.test(js)) OK('distingue lista de precios de rango continuo');
+  else E('no distingue lista de precios: las rifas muestran un solo punto');
+  // el ANCHO es lo que separa los dos casos: ventanas de 1 = puntos sueltos
+  if (/ancho\s*<=\s*2/.test(js)) OK('lo decide por el ancho de la ventana, no por el producto');
+  else E('la deteccion no mira el ancho: hardcodear el producto no escala');
+  if (/listaPrecios/.test(js)) OK('la lista viaja en el hecho');
+  else E('la lista no llega al compositor');
+  // sin esto el guard lee la tabla como plata inventada
+  if (/montosAutorizados[\s\S]{0,200}listaPrecios/.test(js)) {
+    OK('los montos de la lista quedan autorizados');
+  } else E('los montos de la lista no se autorizan: el guard tumbaria el mensaje');
+  if (/CANTIDADES FIJAS/.test(js)) OK('le explica al compositor que son cantidades fijas');
+  else E('el compositor no sabe que la lista son las opciones reales');
 }
 
 // ───────────────────────────────────────────────────────────────────────────

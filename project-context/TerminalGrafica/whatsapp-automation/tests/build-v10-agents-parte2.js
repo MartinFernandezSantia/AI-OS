@@ -585,12 +585,30 @@ for (const c of confiables) {
   // del punto inmediatamente inferior aclarando a cuantas unidades corresponde,
   // y el cliente pregunta por el suyo. Un precio de otra cantidad presentado sin
   // aclaracion es la misma clase de error que el 120x del anillado.
-  let escalon = null;
-  if (!(monto > 0) && tieneRangos && Number.isFinite(cantidad) && cantidad > 0) {
-    const puntos = c.rangos
-      .map((x) => ({ q: Number(x.minQty) || 0, v: Number(x.value) }))
+  const puntos = tieneRangos
+    ? c.rangos
+      .map((x) => ({ q: Number(x.minQty) || 0, v: Number(x.value),
+        ancho: (x.maxQty == null ? Infinity : Number(x.maxQty)) - (Number(x.minQty) || 0) }))
       .filter((x) => x.q > 0 && Number.isFinite(x.v) && x.v > 0)
-      .sort((a, b) => a.q - b.q);
+      .sort((a, b) => a.q - b.q)
+    : [];
+
+  // ¿ES UNA LISTA DE PRECIOS O UNA ESCALERA CONTINUA?
+  //
+  // Se decide por el ANCHO de las ventanas, no por el producto. Las rifas traen
+  // {minQty:500, maxQty:501}: ancho 1, o sea puntos sueltos de una lista (100,
+  // 250, 500, 1000, 5000, 10000). Las impresiones traen {minQty:51, maxQty:250}:
+  // ancho 199, un rango continuo de verdad.
+  //
+  // La diferencia importa para lo que se le muestra al cliente. En un rango
+  // continuo, decir "51-250: $88" es ruido: cualquier cantidad del rango paga lo
+  // mismo y el cliente ya sabe cuanto pidio. En una lista de precios, los otros
+  // puntos son la informacion mas util que hay — son las opciones entre las que
+  // tiene que elegir.
+  const esListaDePrecios = puntos.length > 1 && puntos.every((x) => x.ancho <= 2);
+
+  let escalon = null;
+  if (!(monto > 0) && puntos.length && Number.isFinite(cantidad) && cantidad > 0) {
     const inferior = puntos.filter((x) => x.q <= cantidad).pop();
     if (inferior) { monto = inferior.v; escalon = inferior.q; }
   }
@@ -694,6 +712,23 @@ for (const c of confiables) {
     comoSeCobra: (c.cobro && c.cobro.clave) || null,
     // el punto de la escalera que se uso cuando la cantidad cayo entre dos
     escalon,
+    // ═══ LA LISTA DE PRECIOS ENTERA (rifas, 2026-07-29) ═══
+    //
+    // Dos fallas de la ronda real, la misma causa:
+    //  · "600 rifas" cayo entre 500 y 1000 -> se decia solo $10.000 (el punto de
+    //    500) y el cliente no se enteraba de que 1000 salian $14.000.
+    //  · pidio 100 Y 1000 en el mismo mensaje -> solo se resolvia UNA cantidad
+    //    (hay un solo \`seleccion.cantidad\`), asi que la segunda se perdia.
+    //
+    // Los dos se arreglan igual: cuando la escalera es una LISTA DE PRECIOS (no
+    // un rango continuo), viaja completa. Ya esta en la fila SQL, no cuesta una
+    // consulta mas, y responde las dos preguntas de una.
+    //
+    // Los montos los formatea el CODIGO. El compositor copia, nunca tipea plata:
+    // es la regla que sostiene todo el diseño desde v8.
+    listaPrecios: esListaDePrecios
+      ? puntos.map((x) => ({ cantidad: x.q, monto: x.v, texto: x.q + ': ' + fmt(x.v) }))
+      : null,
     // el piso de la escalera, para que el compositor pueda decir "desde"
     desde: Array.isArray(c.rangos) && c.rangos.length
       ? Math.min(...c.rangos.map((x) => Number(x.value)).filter(Number.isFinite))
@@ -729,8 +764,11 @@ for (const c of confiables) {
 // Los TOTALES tambien van: el cliente los va a leer, asi que tienen que pasar
 // el mismo guard que los unitarios. Sin esto el compositor escribe un total
 // legitimo y el chequeo lo marca como inventado.
+// Los de la LISTA DE PRECIOS tambien: si el compositor muestra la tabla de las
+// rifas (100: $6.000 ... 10000: $32.000) y esos montos no estan autorizados, el
+// guard los lee como plata inventada y tumba un mensaje correcto.
 const montosAutorizados = hechos
-  .flatMap((h) => [h.monto, h.total])
+  .flatMap((h) => [h.monto, h.total, ...((h.listaPrecios || []).map((p) => p.monto))])
   .filter((n) => Number.isFinite(n) && n > 0);
 
 const hayAlgoQueDecir = hechos.length > 0 || caveats.length > 0;
@@ -775,8 +813,35 @@ return [{ json: {
       ? hechos.map((h) => '- ' + h.producto + ': ' + h.texto
           // El TOTAL ya viene calculado. El compositor lo COPIA, no lo saca:
           // multiplicar es justo lo que no puede hacer.
-          + (h.totalTexto ? '\\n    TOTAL YA CALCULADO: ' + h.totalTexto : '')).join('\\n')
+          + (h.totalTexto ? '\\n    TOTAL YA CALCULADO: ' + h.totalTexto : '')
+          // LA LISTA DE PRECIOS ENTERA. Son todas las cantidades que existen para
+          // ese producto, con su precio ya formateado. El cliente que pidio 600
+          // rifas ve que 500 salen $10.000 y 1000 salen $14.000, y decide.
+          + (h.listaPrecios
+            ? '\\n    LISTA DE PRECIOS POR CANTIDAD (mostrala completa, son las opciones que hay):'
+              + '\\n      ' + h.listaPrecios.map((p) => p.texto).join(' · ')
+            : '')).join('\\n')
       : '(ninguno)',
+    // COMO USAR LA LISTA. Sin esto el compositor la trata como referencia interna
+    // y dice un solo precio — que es lo que paso con "600 rifas" (dijo $10.000 y
+    // se callo los otros cinco puntos) y con "100 y 1000" en el mismo mensaje
+    // (resolvio una sola cantidad porque hay un solo \`seleccion.cantidad\`).
+    hechos.some((h) => h.listaPrecios) ? '' : null,
+    hechos.some((h) => h.listaPrecios)
+      ? 'ESE PRODUCTO SE VENDE POR CANTIDADES FIJAS, no a cualquier numero. Mostra'
+      : null,
+    hechos.some((h) => h.listaPrecios)
+      ? 'la lista completa: son las opciones reales entre las que el cliente elige.'
+      : null,
+    hechos.some((h) => h.listaPrecios)
+      ? 'Si pidio una cantidad que no esta en la lista, deci las dos mas cercanas'
+      : null,
+    hechos.some((h) => h.listaPrecios)
+      ? 'en vez de forzar la que pidio. Si pidio VARIAS cantidades, contestá todas:'
+      : null,
+    hechos.some((h) => h.listaPrecios)
+      ? 'estan todas en la lista y no hace falta pedirle que repregunte.'
+      : null,
     // POR QUE NO HAY TOTAL, cuando el cliente dio una cantidad. Sin esto el
     // compositor improvisa una razon (fue el bug de "hay recargos" del 29).
     hechos.some((h) => h.motivoSinTotal) ? '' : null,
