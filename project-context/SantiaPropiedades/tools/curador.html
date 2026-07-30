@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Curador de Propiedades — Santia Propiedades</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f232c; --line:#2a2f3a;
+    --txt:#e6e8ec; --mut:#9aa3b2; --accent:#e2574c; --accent2:#3b82f6;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  header .prop{font-size:13px;color:var(--accent);font-weight:600}
+  header .spacer{flex:1}
+  .count{font-size:12px;color:var(--mut);white-space:nowrap}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:7px 12px;border-radius:8px}
+  button:hover:not(:disabled){border-color:var(--accent2)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.ghost{background:transparent}
+  .layout{display:flex;height:calc(100vh - 53px)}
+  /* left list */
+  .list{width:250px;min-width:250px;overflow-y:auto;border-right:1px solid var(--line);background:var(--panel)}
+  .grouphead{position:sticky;top:0;z-index:1;background:var(--panel2);padding:5px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);border-bottom:1px solid var(--line);font-weight:600}
+  .thumb{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .thumb:hover{background:var(--panel2)}
+  .thumb.active{background:var(--panel2);box-shadow:inset 3px 0 0 var(--accent)}
+  .thumb.out{opacity:.4}
+  .thumb .tw{position:relative;width:46px;height:46px;flex:none}
+  .thumb img,.thumb video{width:46px;height:46px;object-fit:cover;border-radius:6px;background:#000;display:block}
+  .thumb .vbadge{position:absolute;bottom:1px;right:1px;font-size:9px;background:rgba(0,0,0,.7);border-radius:3px;padding:0 2px;line-height:1.3}
+  .thumb .meta{min-width:0;flex:1}
+  .thumb .nm{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thumb .tg{font-size:11px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thumb .ord{font-size:10px;color:var(--mut);font-variant-numeric:tabular-nums;flex:none}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;background:#555}
+  .dot.done{background:var(--ok)}
+  .dot.out{background:var(--bad)}
+  /* center stage */
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden;position:relative}
+  .stage img,.stage video{max-width:100%;max-height:100%;object-fit:contain}
+  .stage .hint{color:var(--mut);font-size:14px;text-align:center;padding:30px;line-height:1.7;max-width:560px}
+  .stage .fname{position:absolute;bottom:10px;left:10px;right:10px;font-size:11px;color:#cbd5e1;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:6px;backdrop-filter:blur(3px);pointer-events:none}
+  .stage .stamp{position:absolute;top:10px;left:10px;font-size:12px;font-weight:600;padding:4px 9px;border-radius:6px;backdrop-filter:blur(3px)}
+  .stamp.in{background:rgba(34,197,94,.85);color:#fff}
+  .stamp.out{background:rgba(239,68,68,.85);color:#fff}
+  /* right panel */
+  .panel{width:340px;min-width:340px;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
+  .field{margin-bottom:16px}
+  .field h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 7px;display:flex;align-items:center;gap:6px}
+  .field h3 .k{font-weight:400;text-transform:none;letter-spacing:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:var(--panel2);user-select:none;cursor:pointer}
+  .chip:hover{border-color:var(--accent2)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .chip .n{opacity:.6;font-size:10px;margin-left:3px;font-variant-numeric:tabular-nums}
+  .chip.add{border-style:dashed;color:var(--mut)}
+  .toggle{display:flex;gap:8px}
+  .toggle button{flex:1;font-weight:600}
+  .toggle button.on.yes{background:var(--ok);border-color:var(--ok);color:#06240f}
+  .toggle button.on.no{background:var(--bad);border-color:var(--bad);color:#fff}
+  .nav{display:flex;gap:8px;margin-top:10px}
+  .nav button{flex:1}
+  .ordbox{display:flex;align-items:center;gap:8px}
+  .ordbox input{width:70px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 9px;font:inherit;text-align:center}
+  .ordbox .of{font-size:12px;color:var(--mut)}
+  .pickbox{margin:auto;text-align:center}
+  .pickbox p{color:var(--mut);font-size:13px;margin:10px 0 0;line-height:1.7}
+  .pickbox code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  input[type=file]{display:none}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px;font-family:inherit}
+  .summary{font-size:12px;color:var(--mut);line-height:1.8}
+  .summary b{color:var(--txt);font-weight:600}
+  .summary .cat{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:3px 0}
+  .warn{color:var(--warn)}
+  /* modal */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:620px;width:100%;max-height:85vh;overflow-y:auto;padding:20px}
+  .modal h2{margin:0 0 4px;font-size:17px}
+  .modal .sub{color:var(--mut);font-size:13px;margin:0 0 16px}
+  .plan{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.7;max-height:300px;overflow-y:auto;font-variant-numeric:tabular-nums}
+  .plan .g{color:var(--accent);font-weight:600;margin-top:8px}
+  .plan .g:first-child{margin-top:0}
+  .plan .f{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plan .f b{color:var(--txt);font-weight:600}
+  .modal .acts{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+  .prog{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;margin:14px 0 6px}
+  .prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .15s}
+  .plog{font-size:12px;color:var(--mut);max-height:180px;overflow-y:auto;line-height:1.6;font-variant-numeric:tabular-nums}
+  .plog .err{color:var(--bad)}
+  .plog .ok{color:var(--ok)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🖼️ Curador</h1>
+  <span class="prop" id="propName">— sin carpeta —</span>
+  <span class="spacer"></span>
+  <span class="count" id="count"></span>
+  <button class="ghost" id="btnPick">📁 Carpeta</button>
+  <button class="ghost" id="btnImport" disabled>⬆ Importar</button>
+  <button class="ghost" id="btnExport" disabled>⬇ JSON</button>
+  <button class="primary" id="btnFinish" disabled>✓ Terminar</button>
+  <input type="file" id="jsonInput" accept="application/json,.json" />
+</header>
+
+<div class="layout">
+  <div class="list" id="list"></div>
+
+  <div class="stage" id="stage">
+    <div class="pickbox">
+      <button class="primary" id="btnPick2" style="font-size:15px;padding:11px 20px">📁 Elegir carpeta de la propiedad</button>
+      <p>
+        Elegís la carpeta con las fotos y videos.<br />
+        Marcás <b>va</b> / <b>no va</b>, ponés categoría y orden.<br />
+        Al terminar se crea <code>&lt;carpeta&gt; curada</code> al lado, con los archivos
+        renombrados <code>Cocina - 1.jpg</code>.<br /><br />
+        <span class="mut">Los originales no se tocan ni se mueven.</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel"></div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   VOCAB — editá esta lista para cambiar las categorías.
+   El orden de acá es el orden en que salen las carpetas/categorías al exportar.
+   ══════════════════════════════════════════════════════════════════════════ */
+const VOCAB = [
+  'Fachada', 'Entrada', 'Living', 'Comedor', 'Cocina', 'Baño', 'Dormitorio',
+  'Balcón', 'Terraza', 'Patio', 'Jardín', 'Pileta', 'Lavadero', 'Placard',
+  'Cochera', 'Amenities', 'Vista', 'Entorno', 'Aérea', 'Plano', 'Video',
+];
+
+const IMG_EXT = ['jpg','jpeg','png','webp','avif','gif','bmp','heic','heif','tif','tiff'];
+const VID_EXT = ['mp4','mov','m4v','webm','avi','mkv','3gp','mpg','mpeg','wmv'];
+
+/* ── estado ─────────────────────────────────────────────────────────────── */
+let dirHandle = null;   // FileSystemDirectoryHandle de la carpeta origen
+let parentHandle = null; // carpeta padre (para crear "<nombre> curada" al lado)
+let propName = '';
+let items = [];         // {handle, file, name, ext, kind, url, va, cat, ord}
+let cur = 0;
+let cats = [...VOCAB];  // vocabulario vivo (VOCAB + las que agregue al vuelo)
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  list: $('list'), stage: $('stage'), panel: $('panel'),
+  propName: $('propName'), count: $('count'),
+  btnPick: $('btnPick'), btnPick2: $('btnPick2'), btnImport: $('btnImport'),
+  btnExport: $('btnExport'), btnFinish: $('btnFinish'), jsonInput: $('jsonInput'),
+};
+
+const extOf = (n) => (n.includes('.') ? n.split('.').pop().toLowerCase() : '');
+const kindOf = (ext) => (IMG_EXT.includes(ext) ? 'img' : VID_EXT.includes(ext) ? 'vid' : null);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* nombres de archivo seguros: sin / \ : * ? " < > | ni control chars */
+const safeName = (s) => {
+  const out = String(s).replace(/[\/\\:*?"<>|\x00-\x1f]/g, '-')
+                       .replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
+  // si no quedó ninguna letra o número, no es un nombre usable
+  return /[\p{L}\p{N}]/u.test(out) ? out : 'Sin categoria';
+};
+
+/* ── carga de carpeta ───────────────────────────────────────────────────── */
+async function pickFolder(){
+  if (!window.showDirectoryPicker){
+    alert('Este navegador no puede escribir en disco.\n\nUsá Chrome o Edge, servido en http://localhost (ver README).');
+    return;
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ mode:'readwrite', id:'curador-props' });
+  } catch (e) { return; } // canceló
+  await loadFolder(handle);
+}
+
+async function loadFolder(handle){
+  // permiso de escritura (necesario para crear la carpeta curada después)
+  if (await handle.queryPermission({mode:'readwrite'}) !== 'granted'){
+    if (await handle.requestPermission({mode:'readwrite'}) !== 'granted'){
+      alert('Sin permiso de escritura no puedo crear la carpeta curada.');
+      return;
+    }
+  }
+
+  // liberar URLs de la sesión anterior
+  items.forEach(it => it.url && URL.revokeObjectURL(it.url));
+
+  dirHandle = handle;
+  parentHandle = null;
+  propName = handle.name;
+  const found = [];
+  for await (const [name, h] of handle.entries()){
+    if (h.kind !== 'file') continue;
+    if (name.startsWith('.')) continue;
+    const ext = extOf(name);
+    const kind = kindOf(ext);
+    if (!kind) continue;
+    found.push({ handle:h, name, ext, kind });
+  }
+
+  found.sort((a,b) => a.name.localeCompare(b.name, 'es', {numeric:true, sensitivity:'base'}));
+
+  items = [];
+  for (const f of found){
+    const file = await f.handle.getFile();
+    items.push({ ...f, file, url:URL.createObjectURL(file), va:null, cat:null, ord:null });
+  }
+
+  cur = 0;
+  els.propName.textContent = propName;
+  els.btnImport.disabled = els.btnExport.disabled = els.btnFinish.disabled = items.length === 0;
+
+  if (!items.length){
+    els.stage.innerHTML = '<div class="hint">La carpeta <b>'+esc(propName)+'</b> no tiene imágenes ni videos reconocidos.</div>';
+    els.list.innerHTML = ''; els.panel.innerHTML = ''; els.count.textContent = '';
+    return;
+  }
+
+  await restoreLocal();
+  render();
+}
+
+/* ── autoguardado local (por nombre de propiedad) ───────────────────────── */
+const lsKey = () => 'curador:' + propName;
+
+function saveLocal(){
+  if (!propName) return;
+  try {
+    localStorage.setItem(lsKey(), JSON.stringify({ cats, sel: snapshot() }));
+  } catch (e) { /* cuota: no es crítico */ }
+}
+
+async function restoreLocal(){
+  let raw;
+  try { raw = localStorage.getItem(lsKey()); } catch(e){ return; }
+  if (!raw) return;
+  let data; try { data = JSON.parse(raw); } catch(e){ return; }
+  const n = applySnapshot(data.sel, data.cats);
+  if (n) els.count.dataset.restored = n;
+}
+
+function snapshot(){
+  return items.map(it => ({ archivo:it.name, va:it.va, categoria:it.cat, orden:it.ord }));
+}
+
+/* aplica una selección guardada/importada; devuelve cuántos archivos matcheó */
+function applySnapshot(sel, savedCats){
+  if (!Array.isArray(sel)) return 0;
+  if (Array.isArray(savedCats)) for (const c of savedCats) if (c && !cats.includes(c)) cats.push(c);
+  const by = new Map(sel.map(s => [s.archivo, s]));
+  let n = 0;
+  for (const it of items){
+    const s = by.get(it.name);
+    if (!s) continue;
+    it.va  = typeof s.va === 'boolean' ? s.va : null;
+    it.cat = s.categoria || null;
+    it.ord = Number.isFinite(s.orden) ? s.orden : null;
+    if (it.cat && !cats.includes(it.cat)) cats.push(it.cat);
+    n++;
+  }
+  return n;
+}
+
+/* ── orden dentro de cada categoría ─────────────────────────────────────── */
+/* los "va" con categoría, agrupados por categoría, ordenados por ord */
+function grouped(){
+  const g = new Map();
+  for (const it of items){
+    if (it.va !== true || !it.cat) continue;
+    if (!g.has(it.cat)) g.set(it.cat, []);
+    g.get(it.cat).push(it);
+  }
+  for (const arr of g.values()){
+    arr.sort((a,b) => {
+      const ao = a.ord ?? Infinity, bo = b.ord ?? Infinity;
+      if (ao !== bo) return ao - bo;
+      return items.indexOf(a) - items.indexOf(b);
+    });
+  }
+  // devolver en el orden de `cats`, y al final las que no estén en el vocabulario
+  const out = [];
+  for (const c of cats) if (g.has(c)) out.push([c, g.get(c)]);
+  for (const [c, arr] of g) if (!cats.includes(c)) out.push([c, arr]);
+  return out;
+}
+
+/* renumera 1..n dentro de cada categoría respetando el orden actual */
+function renumber(){
+  for (const [, arr] of grouped()) arr.forEach((it, i) => { it.ord = i + 1; });
+}
+
+/* mueve un item a la posición `pos` (1-based) de su categoría */
+function setOrder(it, pos){
+  const arr = (grouped().find(([c]) => c === it.cat) || [,[]])[1];
+  const others = arr.filter(x => x !== it);
+  const p = Math.max(1, Math.min(pos, others.length + 1));
+  others.splice(p - 1, 0, it);
+  others.forEach((x, i) => { x.ord = i + 1; });
+}
+
+/* ── acciones sobre el item actual ──────────────────────────────────────── */
+function setVa(v){
+  const it = items[cur]; if (!it) return;
+  it.va = v;
+  // si deja de "ir", la categoría y el orden que tenía no aplican más
+  if (v !== true){ it.cat = null; it.ord = null; renumber(); }
+  saveLocal(); render();
+}
+
+function setCat(c){
+  const it = items[cur]; if (!it) return;
+  const prev = it.cat;
+  if (it.cat === c){ it.cat = null; it.ord = null; }
+  else { it.cat = c; it.va = true; it.ord = null; }
+  if (prev && prev !== it.cat) renumber();
+  // el nuevo va al final de su categoría
+  if (it.cat){
+    const arr = (grouped().find(([x]) => x === it.cat) || [,[]])[1];
+    it.ord = arr.length ? Math.max(...arr.map(x => x.ord ?? 0)) : 1;
+    renumber();
+  }
+  saveLocal(); render();
+}
+
+function addCat(){
+  const raw = prompt('Nombre de la categoría nueva:');
+  if (!raw) return;
+  const c = safeName(raw);
+  if (!c) return;
+  const hit = cats.find(x => x.toLowerCase() === c.toLowerCase());
+  if (hit){ setCat(hit); return; }
+  cats.push(c);
+  setCat(c);
+}
+
+function go(d){
+  if (!items.length) return;
+  cur = Math.max(0, Math.min(items.length - 1, cur + d));
+  render();
+}
+
+/* ── render ─────────────────────────────────────────────────────────────── */
+function render(){
+  renderList(); renderStage(); renderPanel(); renderCount();
+}
+
+function renderCount(){
+  const va = items.filter(i => i.va === true).length;
+  const no = items.filter(i => i.va === false).length;
+  const pend = items.length - va - no;
+  const sinCat = items.filter(i => i.va === true && !i.cat).length;
+  let t = `${items.length} archivos · <b style="color:var(--ok)">${va} van</b> · ${no} no · ${pend} pendientes`;
+  if (sinCat) t += ` · <span class="warn">${sinCat} sin categoría</span>`;
+  els.count.innerHTML = t;
+  const r = els.count.dataset.restored;
+  if (r){ els.count.innerHTML += ` · <span style="color:var(--accent2)">↺ ${r} restaurados</span>`; }
+}
+
+function renderList(){
+  // agrupado: primero los que van (por categoría/orden), después sin categoría, pendientes y descartados
+  const inGroups = grouped();
+  const placed = new Set(inGroups.flatMap(([, arr]) => arr));
+  const sinCat  = items.filter(i => i.va === true && !i.cat);
+  const pend    = items.filter(i => i.va === null);
+  const fuera   = items.filter(i => i.va === false);
+
+  let h = '';
+  const row = (it) => {
+    const i = items.indexOf(it);
+    const media = it.kind === 'img'
+      ? `<img src="${it.url}" loading="lazy" />`
+      : `<video src="${it.url}" preload="metadata" muted></video><span class="vbadge">▶</span>`;
+    const dot = it.va === true ? (it.cat ? 'done' : '') : it.va === false ? 'out' : '';
+    return `<div class="thumb ${i===cur?'active':''} ${it.va===false?'out':''}" data-i="${i}">
+      <span class="dot ${dot}"></span>
+      <span class="tw">${media}</span>
+      <span class="meta">
+        <span class="nm">${esc(it.name)}</span>
+        <span class="tg" style="color:${it.cat?'var(--txt)':'var(--mut)'}">${it.cat ? esc(it.cat) : '—'}</span>
+      </span>
+      ${it.ord ? `<span class="ord">#${it.ord}</span>` : ''}
+    </div>`;
+  };
+
+  for (const [c, arr] of inGroups){
+    h += `<div class="grouphead">${esc(c)} · ${arr.length}</div>` + arr.map(row).join('');
+  }
+  if (sinCat.length) h += `<div class="grouphead warn">Van, sin categoría · ${sinCat.length}</div>` + sinCat.map(row).join('');
+  if (pend.length)   h += `<div class="grouphead">Pendientes · ${pend.length}</div>` + pend.map(row).join('');
+  if (fuera.length)  h += `<div class="grouphead">No van · ${fuera.length}</div>` + fuera.map(row).join('');
+
+  els.list.innerHTML = h;
+  els.list.querySelectorAll('.thumb').forEach(el => {
+    el.onclick = () => { cur = +el.dataset.i; render(); };
+  });
+  const act = els.list.querySelector('.thumb.active');
+  if (act) act.scrollIntoView({block:'nearest'});
+}
+
+function renderStage(){
+  const it = items[cur];
+  if (!it){ els.stage.innerHTML = '<div class="hint">Sin archivos.</div>'; return; }
+  const media = it.kind === 'img'
+    ? `<img src="${it.url}" />`
+    : `<video src="${it.url}" controls autoplay muted loop playsinline></video>`;
+  const stamp = it.va === true ? '<div class="stamp in">✓ VA</div>'
+              : it.va === false ? '<div class="stamp out">✕ NO VA</div>' : '';
+  els.stage.innerHTML = media + stamp +
+    `<div class="fname">${cur+1} / ${items.length} · ${esc(it.name)}${it.kind==='vid'?' · 🎬':''}</div>`;
+}
+
+function renderPanel(){
+  const it = items[cur];
+  if (!it){ els.panel.innerHTML = ''; return; }
+
+  const counts = new Map(grouped().map(([c, arr]) => [c, arr.length]));
+  const arr = (grouped().find(([c]) => c === it.cat) || [,[]])[1];
+  const total = arr.length || (it.cat ? 1 : 0);
+
+  els.panel.innerHTML = `
+    <div class="field">
+      <h3>¿Va? <span class="k"><kbd>A</kbd> va · <kbd>D</kbd> no</span></h3>
+      <div class="toggle">
+        <button class="yes ${it.va===true?'on':''}" id="bYes">✓ Va</button>
+        <button class="no ${it.va===false?'on':''}" id="bNo">✕ No va</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <h3>Categoría <span class="k"><kbd>1</kbd>–<kbd>9</kbd></span></h3>
+      <div class="chips" id="chips">
+        ${cats.map((c,i) => `<span class="chip ${it.cat===c?'on':''}" data-c="${esc(c)}">${
+          i < 9 ? `<span class="n">${i+1}</span> ` : ''}${esc(c)}${
+          counts.get(c) ? `<span class="n">${counts.get(c)}</span>` : ''}</span>`).join('')}
+        <span class="chip add" id="chipAdd">+ nueva</span>
+      </div>
+    </div>
+
+    ${it.cat ? `
+    <div class="field">
+      <h3>Orden en ${esc(it.cat)} <span class="k"><kbd>[</kbd> <kbd>]</kbd></span></h3>
+      <div class="ordbox">
+        <button id="bUp">↑</button>
+        <input id="ordIn" type="number" min="1" max="${total}" value="${it.ord ?? ''}" />
+        <button id="bDown">↓</button>
+        <span class="of">de ${total} → <b>${esc(it.cat)} - ${it.ord ?? '?'}.${it.ext}</b></span>
+      </div>
+    </div>` : ''}
+
+    <div class="field">
+      <h3>Navegar</h3>
+      <div class="nav">
+        <button id="bPrev">↑ Anterior</button>
+        <button id="bNext">Siguiente ↓</button>
+      </div>
+      <div class="nav">
+        <button id="bNextPend" class="ghost">→ Próximo pendiente</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <h3>Resumen</h3>
+      <div class="summary">
+        ${grouped().map(([c, a]) => `<div class="cat"><span>${esc(c)}</span><b>${a.length}</b></div>`).join('')
+          || '<span class="mut">Todavía no marcaste nada.</span>'}
+      </div>
+    </div>
+  `;
+
+  $('bYes').onclick = () => setVa(it.va === true ? null : true);
+  $('bNo').onclick  = () => setVa(it.va === false ? null : false);
+  els.panel.querySelectorAll('#chips .chip[data-c]').forEach(el => {
+    el.onclick = () => setCat(el.dataset.c);
+  });
+  $('chipAdd').onclick = addCat;
+  $('bPrev').onclick = () => go(-1);
+  $('bNext').onclick = () => go(1);
+  $('bNextPend').onclick = nextPending;
+
+  if (it.cat){
+    $('bUp').onclick   = () => { setOrder(it, (it.ord ?? 1) - 1); saveLocal(); render(); };
+    $('bDown').onclick = () => { setOrder(it, (it.ord ?? 1) + 1); saveLocal(); render(); };
+    $('ordIn').onchange = (e) => {
+      const v = parseInt(e.target.value, 10);
+      if (Number.isFinite(v)) { setOrder(it, v); saveLocal(); render(); }
+    };
+  }
+}
+
+function nextPending(){
+  for (let k = 1; k <= items.length; k++){
+    const i = (cur + k) % items.length;
+    if (items[i].va === null || (items[i].va === true && !items[i].cat)){ cur = i; render(); return; }
+  }
+  alert('No queda nada pendiente. Podés darle a Terminar.');
+}
+
+/* ── atajos ─────────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (document.querySelector('.backdrop')) return;               // modal abierto
+  const t = e.target.tagName;
+  if (t === 'INPUT' || t === 'TEXTAREA') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!items.length) return;
+
+  const k = e.key;
+  if (k === 'ArrowDown' || k === 'ArrowRight'){ e.preventDefault(); go(1); }
+  else if (k === 'ArrowUp' || k === 'ArrowLeft'){ e.preventDefault(); go(-1); }
+  else if (k === 'a' || k === 'A'){ e.preventDefault(); setVa(items[cur].va === true ? null : true); }
+  else if (k === 'd' || k === 'D'){ e.preventDefault(); setVa(items[cur].va === false ? null : false); }
+  else if (k === 'Tab'){ e.preventDefault(); nextPending(); }
+  else if (k >= '1' && k <= '9'){
+    const c = cats[+k - 1];
+    if (c){ e.preventDefault(); setCat(c); }
+  }
+  else if (k === '['){ const it = items[cur]; if (it.cat){ e.preventDefault(); setOrder(it, (it.ord ?? 1) - 1); saveLocal(); render(); } }
+  else if (k === ']'){ const it = items[cur]; if (it.cat){ e.preventDefault(); setOrder(it, (it.ord ?? 1) + 1); saveLocal(); render(); } }
+});
+
+/* ── JSON export / import ───────────────────────────────────────────────── */
+function exportJson(){
+  renumber();
+  const data = {
+    propiedad: propName,
+    generado: new Date().toISOString().slice(0,10),
+    total: items.length,
+    categorias: cats,
+    seleccion: snapshot(),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'curado.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+els.jsonInput.onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch (err) { alert('JSON inválido.'); return; }
+  const sel = data.seleccion || data.fotos;
+  const n = applySnapshot(sel, data.categorias);
+  renumber(); saveLocal(); render();
+  alert(n ? `Importados ${n} de ${(sel||[]).length}.` : 'Ningún nombre de archivo coincidió con esta carpeta.');
+};
+
+/* ── TERMINAR: crear "<carpeta> curada" ─────────────────────────────────── */
+function buildPlan(){
+  renumber();
+  const plan = [];   // {it, cat, dest}
+  const used = new Map();
+  for (const [c, arr] of grouped()){
+    const cat = safeName(c);
+    arr.forEach((it, i) => {
+      let base = `${cat} - ${i + 1}`;
+      let dest = `${base}.${it.ext}`;
+      // colisión (ej: dos categorías que se sanitizan al mismo nombre)
+      let k = 1;
+      while (used.has(dest.toLowerCase())) { dest = `${base} (${++k}).${it.ext}`; }
+      used.set(dest.toLowerCase(), true);
+      plan.push({ it, cat: c, dest });
+    });
+  }
+  return plan;
+}
+
+async function finish(){
+  const plan = buildPlan();
+  const sinCat = items.filter(i => i.va === true && !i.cat).length;
+  const pend   = items.filter(i => i.va === null).length;
+
+  if (!plan.length){ alert('No marcaste ningún archivo como "va" con categoría.'); return; }
+
+  const outName = propName + ' curada';
+  const groups = grouped();
+  const bytes = plan.reduce((s, p) => s + (p.it.file.size || 0), 0);
+  const mb = (bytes / 1048576).toFixed(bytes > 1048576*100 ? 0 : 1);
+
+  const bd = document.createElement('div');
+  bd.className = 'backdrop';
+  bd.innerHTML = `
+    <div class="modal">
+      <h2>Crear «${esc(outName)}»</h2>
+      <p class="sub">${plan.length} archivos · ${groups.length} categorías · ~${mb} MB
+        ${pend ? `<br /><span class="warn">⚠ ${pend} archivos sin marcar (quedan afuera)</span>` : ''}
+        ${sinCat ? `<br /><span class="warn">⚠ ${sinCat} marcados "va" pero sin categoría (quedan afuera)</span>` : ''}
+      </p>
+      <div class="plan">
+        ${groups.map(([c, arr]) => {
+          const ps = plan.filter(p => p.cat === c);
+          return `<div class="g">${esc(c)}</div>` + ps.map(p =>
+            `<div class="f">${esc(p.it.name)} → <b>${esc(p.dest)}</b></div>`).join('');
+        }).join('')}
+      </div>
+      <div id="progWrap" style="display:none">
+        <div class="prog"><i id="progBar"></i></div>
+        <div class="plog" id="progLog"></div>
+      </div>
+      <div class="acts" id="acts">
+        <button id="mCancel" class="ghost">Cancelar</button>
+        <button id="mGo" class="primary">Crear carpeta curada</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bd);
+
+  const close = () => bd.remove();
+  $('mCancel').onclick = close;
+  $('mGo').onclick = async () => {
+    $('mGo').disabled = $('mCancel').disabled = true;
+    $('progWrap').style.display = 'block';
+    const bar = $('progBar'), log = $('progLog');
+    const say = (msg, cls='') => {
+      log.insertAdjacentHTML('beforeend', `<div class="${cls}">${msg}</div>`);
+      log.scrollTop = log.scrollHeight;
+    };
+
+    // dónde crear la carpeta: al lado del origen si tenemos el padre, si no, la elige Martin
+    let outDir;
+    try {
+      const parent = parentHandle || await askParent(propName, outName);
+      if (!parent) throw new Error('cancelado');
+      outDir = await parent.getDirectoryHandle(outName, { create:true });
+    } catch (err) {
+      if (err.message !== 'cancelado') say('✕ No pude crear la carpeta: ' + esc(err.message), 'err');
+      $('mGo').disabled = $('mCancel').disabled = false;
+      $('mCancel').textContent = 'Cerrar';
+      return;
+    }
+
+    let ok = 0, fail = 0;
+    for (let i = 0; i < plan.length; i++){
+      const p = plan[i];
+      try {
+        const fh = await outDir.getFileHandle(p.dest, { create:true });
+        const w  = await fh.createWritable();
+        await p.it.file.stream().pipeTo(w);
+        ok++;
+        say(`${i+1}/${plan.length} ✓ ${esc(p.dest)}`, 'ok');
+      } catch (err) {
+        fail++;
+        say(`${i+1}/${plan.length} ✕ ${esc(p.dest)} — ${esc(err.message)}`, 'err');
+      }
+      bar.style.width = ((i+1) / plan.length * 100) + '%';
+    }
+
+    // dejar el JSON de la curación adentro, para poder rehacerla
+    try {
+      renumber();
+      const meta = { propiedad:propName, generado:new Date().toISOString().slice(0,10),
+        total:items.length, categorias:cats, seleccion:snapshot(),
+        salida:plan.map(p => ({ origen:p.it.name, destino:p.dest, categoria:p.cat })) };
+      const fh = await outDir.getFileHandle('curado.json', { create:true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(meta, null, 2));
+      await w.close();
+      say('✓ curado.json', 'ok');
+    } catch (err) { say('✕ curado.json — ' + esc(err.message), 'err'); }
+
+    say(`<br /><b>Listo: ${ok} copiados${fail ? `, ${fail} con error` : ''}.</b>`, fail ? 'err' : 'ok');
+    $('acts').innerHTML = '<button class="primary" id="mDone">Cerrar</button>';
+    $('mDone').onclick = close;
+  };
+}
+
+/* si no tenemos handle del padre, pedirle la carpeta contenedora */
+async function askParent(srcName, outName){
+  alert(`Elegí la carpeta que CONTIENE «${srcName}».\n\nAhí voy a crear «${outName}».`);
+  try {
+    return await window.showDirectoryPicker({ mode:'readwrite', id:'curador-parent' });
+  } catch (e) { throw new Error('cancelado'); }
+}
+
+/* ── wiring ─────────────────────────────────────────────────────────────── */
+els.btnPick.onclick = els.btnPick2.onclick = pickFolder;
+els.btnImport.onclick = () => els.jsonInput.click();
+els.btnExport.onclick = exportJson;
+els.btnFinish.onclick = finish;
+
+if (!window.showDirectoryPicker){
+  els.stage.innerHTML = `<div class="hint">
+    <b style="color:var(--bad)">Este navegador no puede escribir en disco.</b><br /><br />
+    El Curador necesita la File System Access API: <b>Chrome</b> o <b>Edge</b>,
+    servido en <code>http://localhost</code> (no funciona por <code>file://</code>).<br /><br />
+    Desde <code>project-context/SantiaPropiedades/tools/</code>:<br />
+    <code>pnpm dlx serve .</code> → abrí <code>http://localhost:3000/curador.html</code>
+  </div>`;
+  els.btnPick.disabled = true;
+}
+</script>
+</body>
+</html>
