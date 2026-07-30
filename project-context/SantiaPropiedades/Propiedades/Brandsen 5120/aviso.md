@@ -16,39 +16,23 @@ busca filtra por barrio.
 
 ## Descripción
 
-~1.100 caracteres. El mínimo técnico de ZonaProp son 150, pero el aviso rinde mejor completo:
-el algoritmo premia densidad de información y el interesado descarta lo que no responde sus
-dudas.
+~460 caracteres, tres párrafos cortos.
 
 ```
 Departamento de 2 ambientes de 45 m² en Villa Primera, muy luminoso y con balcón propio.
-Es contrafrente con orientación este, así que recibe sol de mañana y se mantiene
-silencioso, sin el ruido de la calle. Tiene cocina equipada, lavadero independiente y
-calefacción: está listo para entrar a vivir.
+Contrafrente y orientación este: sol de mañana y silencio, sin ruido de calle.
 
-La distribución aprovecha bien los metros. Living comedor amplio con salida directa al
-balcón, dormitorio con placard, baño completo, cocina separada y lavadero aparte. Que el
-lavadero sea independiente es un detalle que se agradece todos los días y que no suele
-aparecer en departamentos de esta superficie.
+Living comedor con salida al balcón, dormitorio, baño completo, cocina equipada y lavadero
+independiente. Tiene calefacción y está listo para entrar a vivir.
 
-Los 3 m² semicubiertos del balcón suman lugar real para desayunar o tomar aire sin achicar
-los ambientes interiores. La orientación este y la condición de contrafrente hacen que el
-departamento tenga muy buena luz natural durante toda la mañana.
-
-El edificio cuenta con ascensor y encargado, y tiene accesos adaptados para personas con
-movilidad reducida. Villa Primera es una zona residencial tranquila y arbolada, con
-comercios, transporte y servicios a pocas cuadras, y buena conexión con el centro.
-
-Se alquila sin amoblar. Escribinos y coordinamos la visita en el horario que te quede
-cómodo.
+El edificio cuenta con ascensor y encargado. Se alquila sin amoblar. Escribinos y
+coordinamos la visita.
 ```
 
-El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir. El resto queda
-colapsado detrás de "ver más", así que ahí van los argumentos de refuerzo, no los datos
-decisivos.
-
-**Ojo con el placard**: lo puse en el segundo párrafo porque es lo esperable, pero no vino en
-el JSON del martillero. Si el dormitorio no tiene, sacá esas dos palabras antes de publicar.
+El primer párrafo carga lo decisivo: es lo único que ZonaProp muestra sin expandir. Lo demás
+que sabemos del departamento (los 3 m² semicubiertos, los accesos adaptados, el detalle del
+barrio) está en los campos del portal, que es donde el interesado lo busca — repetirlo en
+prosa alarga sin agregar.
 
 ## Campos del portal
 
@@ -80,8 +64,6 @@ el JSON del martillero. Si el dormitorio no tiene, sacá esas dos palabras antes
   6300 (ambos Villa Primera), así que el 5120 cae en el medio. No está verificado contra
   cartografía oficial del municipio. Que lo confirme el martillero.
 - **Piso de la unidad** — no vino en el JSON.
-- **¿El dormitorio tiene placard?** La descripción lo da por hecho. Si no tiene, sacar la
-  mención antes de publicar.
 - **Plazo de contrato y requisitos de garantía** — ZonaProp los premia en la descripción.
 - **Elegir el staging del living** (v1 o v2, en `assets/drafts/higgsfield/`) y enderezarlo.
 - Staging o retoque del resto de los ambientes.
