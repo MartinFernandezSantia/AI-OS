@@ -6,31 +6,49 @@ Redactado 2026-07-30. **Sin publicar.**
 ## Título
 
 ```
-Departamento 2 ambientes 45 m² con cochera cubierta, Villa Primera
+Departamento 2 ambientes 45 m² luminoso con balcón, Villa Primera
 ```
 
-La cochera es el diferencial: en 2 ambientes de alquiler es lo que menos abunda y lo que
-más filtra búsquedas. El barrio pesa más que "Mar del Plata" a secas, porque todos los
-avisos dicen Mar del Plata y el que busca filtra por barrio.
+Sin cochera, el diferencial pasa a ser la combinación de luminosidad, balcón y barrio.
+"Luminoso" y "balcón" son de los términos más buscados en 2 ambientes de alquiler. El barrio
+pesa más que "Mar del Plata" a secas, porque todos los avisos dicen Mar del Plata y el que
+busca filtra por barrio.
 
 ## Descripción
 
+~1.100 caracteres. El mínimo técnico de ZonaProp son 150, pero el aviso rinde mejor completo:
+el algoritmo premia densidad de información y el interesado descarta lo que no responde sus
+dudas.
+
 ```
-Departamento de 2 ambientes de 45 m² en Villa Primera, con cochera cubierta propia y
-balcón. Contrafrente y orientación este: muy luminoso a la mañana y silencioso, sin ruido
-de calle. Cocina equipada, lavadero independiente y calefacción, listo para entrar a vivir.
+Departamento de 2 ambientes de 45 m² en Villa Primera, muy luminoso y con balcón propio.
+Es contrafrente con orientación este, así que recibe sol de mañana y se mantiene
+silencioso, sin el ruido de la calle. Tiene cocina equipada, lavadero independiente y
+calefacción: está listo para entrar a vivir.
 
-La distribución es living comedor con salida al balcón, dormitorio, baño completo, cocina
-y lavadero aparte. Los 3 m² semicubiertos del balcón suman al uso diario sin achicar los
-ambientes interiores.
+La distribución aprovecha bien los metros. Living comedor amplio con salida directa al
+balcón, dormitorio con placard, baño completo, cocina separada y lavadero aparte. Que el
+lavadero sea independiente es un detalle que se agradece todos los días y que no suele
+aparecer en departamentos de esta superficie.
 
-El edificio tiene ascensor y encargado, y accesos adaptados para personas con movilidad
-reducida. Cochera cubierta incluida, algo que no abunda en dos ambientes de esta categoría.
+Los 3 m² semicubiertos del balcón suman lugar real para desayunar o tomar aire sin achicar
+los ambientes interiores. La orientación este y la condición de contrafrente hacen que el
+departamento tenga muy buena luz natural durante toda la mañana.
 
-Se alquila sin amoblar. Coordinamos la visita cuando te quede cómodo.
+El edificio cuenta con ascensor y encargado, y tiene accesos adaptados para personas con
+movilidad reducida. Villa Primera es una zona residencial tranquila y arbolada, con
+comercios, transporte y servicios a pocas cuadras, y buena conexión con el centro.
+
+Se alquila sin amoblar. Escribinos y coordinamos la visita en el horario que te quede
+cómodo.
 ```
 
-El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir.
+El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir. El resto queda
+colapsado detrás de "ver más", así que ahí van los argumentos de refuerzo, no los datos
+decisivos.
+
+**Ojo con el placard**: lo puse en el segundo párrafo porque es lo esperable, pero no vino en
+el JSON del martillero. Si el dormitorio no tiene, sacá esas dos palabras antes de publicar.
 
 ## Campos del portal
 
@@ -42,7 +60,7 @@ El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir.
 | Ambientes | 2 |
 | Dormitorios | 1 |
 | Baños | 1 |
-| Cocheras | 1 (cubierta) |
+| Cocheras | 0 |
 | Antigüedad | 35 años |
 | Orientación | Este |
 | Disposición | Contrafrente |
@@ -62,6 +80,8 @@ El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir.
   6300 (ambos Villa Primera), así que el 5120 cae en el medio. No está verificado contra
   cartografía oficial del municipio. Que lo confirme el martillero.
 - **Piso de la unidad** — no vino en el JSON.
+- **¿El dormitorio tiene placard?** La descripción lo da por hecho. Si no tiene, sacar la
+  mención antes de publicar.
 - **Plazo de contrato y requisitos de garantía** — ZonaProp los premia en la descripción.
 - **Elegir el staging del living** (v1 o v2, en `assets/drafts/higgsfield/`) y enderezarlo.
 - Staging o retoque del resto de los ambientes.
@@ -78,5 +98,9 @@ El primer párrafo carga todo: es lo único que ZonaProp muestra sin expandir.
 
 ## Correcciones al JSON del martillero
 
-- Cargó `cocheras: 0` con `garageCoverage: "Cubierta"`. **Sí tiene cochera** (confirmado por
-  Martin) — el aviso la incluye porque es el diferencial principal.
+- Cargó `cocheras: 0` con `garageCoverage: "Cubierta"`. **No tiene cochera** (confirmado por
+  Martin 2026-07-30): el campo `garageCoverage` es el que sobra y se ignora. El aviso no la
+  menciona.
+- Verificar `buildingFloors: 2` con `departmentsPerFloor: 14`. Es una combinación rara para
+  un edificio con ascensor; puede que estén invertidos. No afecta al texto (ninguno de los
+  dos se menciona) pero sí a los campos del portal.
