@@ -2,7 +2,7 @@
 
 > Hay dos herramientas en esta carpeta:
 > - **`tagger.html`** (este archivo) — taggea las fotos para que Claude las mire y arme prompts. No renombra nada.
-> - **`curador.html`** — elegí qué va y qué no, con categoría y orden, y escribe una carpeta `<nombre> curada` con los archivos renombrados `Cocina - 1.jpg`. Ver `curador-README.md`.
+> - **`curador.html`** — elegí qué va y qué no, con categoría y orden, y descargá un ZIP `<nombre> curada` con los archivos renombrados `Cocina - 1.jpg`. Ver `curador-README.md`.
 
 Página HTML de un solo archivo para taggear las fotos de cada propiedad. Sin Supabase, sin deploy, sin auth. Corre en Firefox abriendo el archivo directo (`file://`).
 

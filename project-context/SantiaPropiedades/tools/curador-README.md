@@ -1,43 +1,29 @@
 # Curador de Propiedades (local, sin infra)
 
 Página HTML de un solo archivo para **elegir qué fotos y videos van**, ponerles categoría y
-orden, y escribir una carpeta nueva con los archivos ya renombrados `Cocina - 1.jpg`.
+orden, y descargar un ZIP con los archivos ya renombrados `Cocina - 1.jpg`.
 
-Los originales **no se tocan, no se mueven y no se renombran**. Se copian.
+Los originales **no se tocan, no se mueven y no se renombran**. Se copian dentro del ZIP.
 
-## Requisito: Chrome o Edge en localhost
+## Cómo abrirlo
 
-El Curador escribe archivos en disco, y para eso usa la File System Access API.
-Eso significa que, a diferencia del `tagger.html`:
+Igual que el tagger: **doble click en `curador.html`**. Anda en Firefox, Chrome o Edge, y
+también por `file://` — no necesita servidor ni permisos de disco.
 
-- ✅ **Chrome o Edge**, servido en `http://localhost`
-- ❌ **no** funciona en Firefox
-- ❌ **no** funciona abriendo el archivo con doble click (`file://`)
-
-Desde esta carpeta:
-
-```bash
-cd project-context/SantiaPropiedades/tools
-pnpm dlx serve .
-```
-
-Y abrí `http://localhost:3000/curador.html` en Chrome.
-
-> Si el puerto 3000 está ocupado, `serve` te dice cuál usó. También sirve
-> `python3 -m http.server 3000`.
+> Nada se sube a ningún lado. Los archivos se leen en el navegador y el ZIP se arma en tu
+> máquina; no hay backend.
 
 ## Cómo usar
 
-1. Click en **📁 Carpeta** y elegí la carpeta de la propiedad (ej: `Propiedades/Córdoba 2107 2 F`).
-   Chrome va a pedir permiso de lectura y escritura: dale **Permitir**.
+1. Click en **📁 Subir carpeta** y elegí la carpeta de la propiedad
+   (ej: `Propiedades/Córdoba 2107 2 F`). El navegador pide confirmar que subís la carpeta:
+   aceptá. El nombre de la propiedad sale de la carpeta.
 2. Para cada archivo decidí **✓ Va** / **✕ No va** y tocá la **categoría**.
 3. Si hace falta, ajustá el **orden** dentro de la categoría (`↑` `↓` o escribiendo el número).
 4. **✓ Terminar** → te muestra el plan completo (`archivo original → nombre nuevo`) antes de
-   escribir nada. Revisás y confirmás.
-5. Se crea **`<carpeta> curada`** al lado de la original, con los archivos copiados y renombrados.
-
-Chrome puede pedirte confirmar una segunda vez dónde crear la carpeta. Si pasa, elegí la
-carpeta que **contiene** a la de la propiedad (ej: `Propiedades/`).
+   armar nada. Revisás y confirmás.
+5. Se descarga **`<carpeta> curada.zip`**. Lo descomprimís donde quieras y adentro está la
+   carpeta `<carpeta> curada` con todo renombrado.
 
 ## Atajos
 
@@ -52,10 +38,10 @@ carpeta que **contiene** a la de la propiedad (ej: `Propiedades/`).
 
 ## Qué sale
 
-Con `Fachada` (2), `Cocina` (3) y un video en `Video`:
+Con `Fachada` (2), `Cocina` (3) y un video en `Video`, se baja
+`Nápoles 4619 curada.zip` y adentro tiene:
 
 ```
-Nápoles 4619/                  ← intacta
 Nápoles 4619 curada/
 ├── Fachada - 1.jpeg
 ├── Fachada - 2.jpeg
@@ -65,6 +51,10 @@ Nápoles 4619 curada/
 ├── Video - 1.mp4
 └── curado.json
 ```
+
+El ZIP va **sin comprimir** (método "store"): los JPEG y MP4 ya vienen comprimidos, así que
+volver a comprimirlos casi no baja el tamaño y tarda mucho más. El ZIP pesa parecido a la
+suma de los archivos que elegiste.
 
 La numeración arranca en **1 por cada categoría**. La extensión original se conserva
 (`.jpeg` queda `.jpeg`, no se convierte nada).
@@ -89,13 +79,21 @@ Autoguarda en el navegador por nombre de propiedad: volvés a cargar la misma ca
 aparece todo como lo dejaste (te avisa "↺ N restaurados" arriba a la derecha).
 
 Para llevarlo a otra máquina o tenerlo versionado, **⬇ JSON** exporta y **⬆ Importar** lo
-vuelve a aplicar (matchea por nombre de archivo).
+vuelve a aplicar (matchea por ruta relativa, y si no la encuentra, por nombre de archivo).
 
 ## Qué queda afuera
 
-Solo se copian los archivos marcados **va** *y* con categoría. Antes de escribir, el modal
-avisa en amarillo si quedaron pendientes sin marcar o archivos "va" sin categoría.
+Solo entran al ZIP los archivos marcados **va** *y* con categoría. Antes de armarlo, el
+modal avisa en amarillo si quedaron pendientes sin marcar o archivos "va" sin categoría.
 
 Extensiones reconocidas — imágenes: `jpg jpeg png webp avif gif bmp heic heif tif tiff`;
 videos: `mp4 mov m4v webm avi mkv 3gp mpg mpeg wmv`. Cualquier otro archivo de la carpeta
 se ignora.
+
+Si la carpeta tiene **subcarpetas**, sus fotos y videos también se levantan (se listan por
+ruta). En el ZIP salen todos planos, agrupados por la categoría que les pusiste.
+
+## Nota
+
+Todo se hace en memoria, así que una carpeta muy grande (varios GB de video) puede hacer
+trabajar al navegador. Para tandas así conviene curar de a una propiedad.

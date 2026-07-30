@@ -102,10 +102,11 @@
   <span class="prop" id="propName">— sin carpeta —</span>
   <span class="spacer"></span>
   <span class="count" id="count"></span>
-  <button class="ghost" id="btnPick">📁 Carpeta</button>
+  <button class="ghost" id="btnPick">📁 Subir carpeta</button>
   <button class="ghost" id="btnImport" disabled>⬆ Importar</button>
   <button class="ghost" id="btnExport" disabled>⬇ JSON</button>
   <button class="primary" id="btnFinish" disabled>✓ Terminar</button>
+  <input type="file" id="dirInput" webkitdirectory directory multiple />
   <input type="file" id="jsonInput" accept="application/json,.json" />
 </header>
 
@@ -114,13 +115,13 @@
 
   <div class="stage" id="stage">
     <div class="pickbox">
-      <button class="primary" id="btnPick2" style="font-size:15px;padding:11px 20px">📁 Elegir carpeta de la propiedad</button>
+      <button class="primary" id="btnPick2" style="font-size:15px;padding:11px 20px">📁 Subir carpeta de la propiedad</button>
       <p>
-        Elegís la carpeta con las fotos y videos.<br />
+        Subís la carpeta con las fotos y videos.<br />
         Marcás <b>va</b> / <b>no va</b>, ponés categoría y orden.<br />
-        Al terminar se crea <code>&lt;carpeta&gt; curada</code> al lado, con los archivos
+        Al terminar se descarga <code>&lt;carpeta&gt; curada.zip</code>, con los archivos
         renombrados <code>Cocina - 1.jpg</code>.<br /><br />
-        <span class="mut">Los originales no se tocan ni se mueven.</span>
+        <span class="mut">Los originales no se tocan. Nada sale de tu máquina.</span>
       </p>
     </div>
   </div>
@@ -143,8 +144,6 @@ const IMG_EXT = ['jpg','jpeg','png','webp','avif','gif','bmp','heic','heif','tif
 const VID_EXT = ['mp4','mov','m4v','webm','avi','mkv','3gp','mpg','mpeg','wmv'];
 
 /* ── estado ─────────────────────────────────────────────────────────────── */
-let dirHandle = null;   // FileSystemDirectoryHandle de la carpeta origen
-let parentHandle = null; // carpeta padre (para crear "<nombre> curada" al lado)
 let propName = '';
 let items = [];         // {handle, file, name, ext, kind, url, va, cat, ord}
 let cur = 0;
@@ -155,7 +154,8 @@ const els = {
   list: $('list'), stage: $('stage'), panel: $('panel'),
   propName: $('propName'), count: $('count'),
   btnPick: $('btnPick'), btnPick2: $('btnPick2'), btnImport: $('btnImport'),
-  btnExport: $('btnExport'), btnFinish: $('btnFinish'), jsonInput: $('jsonInput'),
+  btnExport: $('btnExport'), btnFinish: $('btnFinish'),
+  jsonInput: $('jsonInput'), dirInput: $('dirInput'),
 };
 
 const extOf = (n) => (n.includes('.') ? n.split('.').pop().toLowerCase() : '');
@@ -171,50 +171,37 @@ const safeName = (s) => {
 };
 
 /* ── carga de carpeta ───────────────────────────────────────────────────── */
-async function pickFolder(){
-  if (!window.showDirectoryPicker){
-    alert('Este navegador no puede escribir en disco.\n\nUsá Chrome o Edge, servido en http://localhost (ver README).');
-    return;
-  }
-  let handle;
-  try {
-    handle = await window.showDirectoryPicker({ mode:'readwrite', id:'curador-props' });
-  } catch (e) { return; } // canceló
-  await loadFolder(handle);
-}
+/* Subida por <input webkitdirectory>: anda en cualquier navegador, también
+   por file://. No se escribe nada en disco — al terminar se baja un .zip. */
+function pickFolder(){ els.dirInput.click(); }
 
-async function loadFolder(handle){
-  // permiso de escritura (necesario para crear la carpeta curada después)
-  if (await handle.queryPermission({mode:'readwrite'}) !== 'granted'){
-    if (await handle.requestPermission({mode:'readwrite'}) !== 'granted'){
-      alert('Sin permiso de escritura no puedo crear la carpeta curada.');
-      return;
-    }
-  }
+function loadFiles(fileList){
+  const all = [...fileList];
+  if (!all.length) return;
 
   // liberar URLs de la sesión anterior
   items.forEach(it => it.url && URL.revokeObjectURL(it.url));
 
-  dirHandle = handle;
-  parentHandle = null;
-  propName = handle.name;
+  // el nombre de la propiedad = carpeta raíz que eligió (primer tramo del path)
+  const rel = (f) => f.webkitRelativePath || f.relativePath || f.name;
+  propName = (rel(all[0]).split('/')[0]) || 'Propiedad';
+
   const found = [];
-  for await (const [name, h] of handle.entries()){
-    if (h.kind !== 'file') continue;
+  for (const f of all){
+    const path = rel(f);
+    const name = f.name;
     if (name.startsWith('.')) continue;
     const ext = extOf(name);
     const kind = kindOf(ext);
     if (!kind) continue;
-    found.push({ handle:h, name, ext, kind });
+    // subcarpetas: guardo el path relativo para poder distinguir homónimos
+    found.push({ file:f, name, path, ext, kind });
   }
 
-  found.sort((a,b) => a.name.localeCompare(b.name, 'es', {numeric:true, sensitivity:'base'}));
+  found.sort((a,b) => a.path.localeCompare(b.path, 'es', {numeric:true, sensitivity:'base'}));
 
-  items = [];
-  for (const f of found){
-    const file = await f.handle.getFile();
-    items.push({ ...f, file, url:URL.createObjectURL(file), va:null, cat:null, ord:null });
-  }
+  items = found.map(f => ({ ...f, url:URL.createObjectURL(f.file),
+                            va:null, cat:null, ord:null }));
 
   cur = 0;
   els.propName.textContent = propName;
@@ -226,7 +213,7 @@ async function loadFolder(handle){
     return;
   }
 
-  await restoreLocal();
+  restoreLocal();
   render();
 }
 
@@ -240,7 +227,7 @@ function saveLocal(){
   } catch (e) { /* cuota: no es crítico */ }
 }
 
-async function restoreLocal(){
+function restoreLocal(){
   let raw;
   try { raw = localStorage.getItem(lsKey()); } catch(e){ return; }
   if (!raw) return;
@@ -250,17 +237,23 @@ async function restoreLocal(){
 }
 
 function snapshot(){
-  return items.map(it => ({ archivo:it.name, va:it.va, categoria:it.cat, orden:it.ord }));
+  return items.map(it => ({ archivo:it.name, ruta:it.path,
+                            va:it.va, categoria:it.cat, orden:it.ord }));
 }
 
 /* aplica una selección guardada/importada; devuelve cuántos archivos matcheó */
 function applySnapshot(sel, savedCats){
   if (!Array.isArray(sel)) return 0;
   if (Array.isArray(savedCats)) for (const c of savedCats) if (c && !cats.includes(c)) cats.push(c);
-  const by = new Map(sel.map(s => [s.archivo, s]));
+  // matcheo por ruta relativa (única); si el JSON es viejo y no la tiene, por nombre
+  const byPath = new Map(), byName = new Map();
+  for (const s of sel){
+    if (s.ruta) byPath.set(s.ruta, s);
+    if (s.archivo && !byName.has(s.archivo)) byName.set(s.archivo, s);
+  }
   let n = 0;
   for (const it of items){
-    const s = by.get(it.name);
+    const s = byPath.get(it.path) || byName.get(it.name);
     if (!s) continue;
     it.va  = typeof s.va === 'boolean' ? s.va : null;
     it.cat = s.categoria || null;
@@ -593,7 +586,7 @@ async function finish(){
   bd.className = 'backdrop';
   bd.innerHTML = `
     <div class="modal">
-      <h2>Crear «${esc(outName)}»</h2>
+      <h2>Descargar «${esc(outName)}.zip»</h2>
       <p class="sub">${plan.length} archivos · ${groups.length} categorías · ~${mb} MB
         ${pend ? `<br /><span class="warn">⚠ ${pend} archivos sin marcar (quedan afuera)</span>` : ''}
         ${sinCat ? `<br /><span class="warn">⚠ ${sinCat} marcados "va" pero sin categoría (quedan afuera)</span>` : ''}
@@ -611,7 +604,7 @@ async function finish(){
       </div>
       <div class="acts" id="acts">
         <button id="mCancel" class="ghost">Cancelar</button>
-        <button id="mGo" class="primary">Crear carpeta curada</button>
+        <button id="mGo" class="primary">Armar y descargar ZIP</button>
       </div>
     </div>`;
   document.body.appendChild(bd);
@@ -627,60 +620,209 @@ async function finish(){
       log.scrollTop = log.scrollHeight;
     };
 
-    // dónde crear la carpeta: al lado del origen si tenemos el padre, si no, la elige Martin
-    let outDir;
+    renumber();
+    const meta = { propiedad:propName, generado:new Date().toISOString().slice(0,10),
+      total:items.length, categorias:cats, seleccion:snapshot(),
+      salida:plan.map(p => ({ origen:p.it.path || p.it.name, destino:p.dest, categoria:p.cat })) };
+
+    // el zip lleva todo dentro de una carpeta "<propiedad> curada/"
+    const entries = plan.map(p => ({ path:`${outName}/${p.dest}`, blob:p.it.file }));
+    entries.push({ path:`${outName}/curado.json`,
+                   blob:new Blob([JSON.stringify(meta, null, 2)], {type:'application/json'}) });
+
+    let blob;
     try {
-      const parent = parentHandle || await askParent(propName, outName);
-      if (!parent) throw new Error('cancelado');
-      outDir = await parent.getDirectoryHandle(outName, { create:true });
+      blob = await makeZip(entries, (done, total, name) => {
+        bar.style.width = (done / total * 100) + '%';
+        say(`${done}/${total} ✓ ${esc(name)}`, 'ok');
+      });
     } catch (err) {
-      if (err.message !== 'cancelado') say('✕ No pude crear la carpeta: ' + esc(err.message), 'err');
-      $('mGo').disabled = $('mCancel').disabled = false;
-      $('mCancel').textContent = 'Cerrar';
+      say('✕ No pude armar el ZIP: ' + esc(err.message), 'err');
+      $('acts').innerHTML = '<button class="primary" id="mDone">Cerrar</button>';
+      $('mDone').onclick = close;
       return;
     }
 
-    let ok = 0, fail = 0;
-    for (let i = 0; i < plan.length; i++){
-      const p = plan[i];
-      try {
-        const fh = await outDir.getFileHandle(p.dest, { create:true });
-        const w  = await fh.createWritable();
-        await p.it.file.stream().pipeTo(w);
-        ok++;
-        say(`${i+1}/${plan.length} ✓ ${esc(p.dest)}`, 'ok');
-      } catch (err) {
-        fail++;
-        say(`${i+1}/${plan.length} ✕ ${esc(p.dest)} — ${esc(err.message)}`, 'err');
-      }
-      bar.style.width = ((i+1) / plan.length * 100) + '%';
-    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = outName + '.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 
-    // dejar el JSON de la curación adentro, para poder rehacerla
-    try {
-      renumber();
-      const meta = { propiedad:propName, generado:new Date().toISOString().slice(0,10),
-        total:items.length, categorias:cats, seleccion:snapshot(),
-        salida:plan.map(p => ({ origen:p.it.name, destino:p.dest, categoria:p.cat })) };
-      const fh = await outDir.getFileHandle('curado.json', { create:true });
-      const w = await fh.createWritable();
-      await w.write(JSON.stringify(meta, null, 2));
-      await w.close();
-      say('✓ curado.json', 'ok');
-    } catch (err) { say('✕ curado.json — ' + esc(err.message), 'err'); }
-
-    say(`<br /><b>Listo: ${ok} copiados${fail ? `, ${fail} con error` : ''}.</b>`, fail ? 'err' : 'ok');
+    const mbz = (blob.size / 1048576).toFixed(1);
+    say(`<br /><b>Listo: ${entries.length} archivos · ${mbz} MB → ${esc(outName)}.zip</b>`, 'ok');
+    say('Se está descargando. Descomprimilo donde quieras.');
     $('acts').innerHTML = '<button class="primary" id="mDone">Cerrar</button>';
     $('mDone').onclick = close;
   };
 }
 
-/* si no tenemos handle del padre, pedirle la carpeta contenedora */
-async function askParent(srcName, outName){
-  alert(`Elegí la carpeta que CONTIENE «${srcName}».\n\nAhí voy a crear «${outName}».`);
-  try {
-    return await window.showDirectoryPicker({ mode:'readwrite', id:'curador-parent' });
-  } catch (e) { throw new Error('cancelado'); }
+/* ── ZIP (store, sin comprimir) ─────────────────────────────────────────────
+   Escrito a mano para que el archivo siga siendo autocontenido (cero deps).
+   Store y no deflate a propósito: los JPEG y MP4 ya vienen comprimidos, así
+   que comprimir de nuevo casi no baja el tamaño y tarda mucho más.
+   Emite Zip64 cuando hace falta (>4 GB o >65535 archivos).            ─────── */
+
+/* CRC-32 */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++){
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(u8, crc = 0){
+  crc = (crc ^ 0xFFFFFFFF) >>> 0;
+  for (let i = 0; i < u8.length; i++) crc = (CRC_TABLE[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8)) >>> 0;
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+const ZIP64_LIMIT = 0xFFFFFFFF;
+
+/* fecha/hora en formato MS-DOS */
+function dosDateTime(d){
+  const yr = Math.max(1980, d.getFullYear());
+  return {
+    time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+    date: ((yr - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+  };
+}
+
+async function makeZip(entries, onProgress){
+  const enc = new TextEncoder();
+  const chunks = [];          // partes del blob final
+  const central = [];         // headers del directorio central
+  let offset = 0;             // offset absoluto dentro del zip
+  const now = new Date();
+  const { time, date } = dosDateTime(now);
+
+  const put = (u8) => { chunks.push(u8); offset += u8.length; };
+
+  for (let i = 0; i < entries.length; i++){
+    const e = entries[i];
+    const nameBytes = enc.encode(e.path);
+    const data = new Uint8Array(await e.blob.arrayBuffer());
+    const size = data.length;
+    const crc = crc32(data);
+
+    // ¿este entry necesita Zip64? (tamaño grande, u offset del local header grande)
+    const bigLocal = size > ZIP64_LIMIT;
+    const bigOff   = offset > ZIP64_LIMIT;
+    const localOffset = offset;
+
+    // ── local file header ──
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true);              // firma
+    lh.setUint16(4, bigLocal ? 45 : 20, true);      // versión necesaria
+    lh.setUint16(6, 0x0800, true);                  // flag: nombre en UTF-8
+    lh.setUint16(8, 0, true);                       // método 0 = store
+    lh.setUint16(10, time, true);
+    lh.setUint16(12, date, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, bigLocal ? ZIP64_LIMIT : size, true);
+    lh.setUint32(22, bigLocal ? ZIP64_LIMIT : size, true);
+    lh.setUint16(26, nameBytes.length, true);
+    lh.setUint16(28, bigLocal ? 20 : 0, true);      // largo del campo extra
+    put(new Uint8Array(lh.buffer));
+    put(nameBytes);
+
+    if (bigLocal){                                   // extra field Zip64 del local
+      const ex = new DataView(new ArrayBuffer(20));
+      ex.setUint16(0, 0x0001, true);
+      ex.setUint16(2, 16, true);
+      ex.setBigUint64(4, BigInt(size), true);        // sin comprimir
+      ex.setBigUint64(12, BigInt(size), true);       // comprimido
+      put(new Uint8Array(ex.buffer));
+    }
+
+    put(data);
+
+    // ── central directory header (se escribe al final) ──
+    const needs64 = bigLocal || bigOff;
+    const extra = [];
+    if (needs64){
+      const n = (bigLocal ? 16 : 0) + (bigOff ? 8 : 0);
+      const ex = new DataView(new ArrayBuffer(4 + n));
+      ex.setUint16(0, 0x0001, true);
+      ex.setUint16(2, n, true);
+      let o = 4;
+      if (bigLocal){ ex.setBigUint64(o, BigInt(size), true); o += 8;
+                     ex.setBigUint64(o, BigInt(size), true); o += 8; }
+      if (bigOff)  { ex.setBigUint64(o, BigInt(localOffset), true); }
+      extra.push(new Uint8Array(ex.buffer));
+    }
+    const exLen = extra.reduce((s, x) => s + x.length, 0);
+
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true);
+    ch.setUint16(4, 0x031E, true);                  // "hecho por" unix
+    ch.setUint16(6, needs64 ? 45 : 20, true);
+    ch.setUint16(8, 0x0800, true);
+    ch.setUint16(10, 0, true);
+    ch.setUint16(12, time, true);
+    ch.setUint16(14, date, true);
+    ch.setUint32(16, crc, true);
+    ch.setUint32(20, bigLocal ? ZIP64_LIMIT : size, true);
+    ch.setUint32(24, bigLocal ? ZIP64_LIMIT : size, true);
+    ch.setUint16(28, nameBytes.length, true);
+    ch.setUint16(30, exLen, true);
+    ch.setUint16(32, 0, true);                      // comentario
+    ch.setUint16(34, 0, true);                      // disco
+    ch.setUint16(36, 0, true);                      // attrs internos
+    ch.setUint32(38, 0o644 << 16, true);            // attrs externos (permisos unix)
+    ch.setUint32(42, bigOff ? ZIP64_LIMIT : localOffset, true);
+    central.push(new Uint8Array(ch.buffer), nameBytes, ...extra);
+
+    if (onProgress) onProgress(i + 1, entries.length, e.path.split('/').pop());
+    // devolver el hilo para que la barra de progreso se dibuje
+    if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  // ── central directory ──
+  const cdStart = offset;
+  central.forEach(put);
+  const cdSize = offset - cdStart;
+  const count = entries.length;
+  const need64 = count > 0xFFFF || cdStart > ZIP64_LIMIT || cdSize > ZIP64_LIMIT;
+
+  if (need64){
+    const z = new DataView(new ArrayBuffer(56));
+    z.setUint32(0, 0x06064b50, true);               // Zip64 EOCD
+    z.setBigUint64(4, 44n, true);                   // tamaño de este record - 12
+    z.setUint16(12, 0x031E, true);
+    z.setUint16(14, 45, true);
+    z.setUint32(16, 0, true);
+    z.setUint32(20, 0, true);
+    z.setBigUint64(24, BigInt(count), true);
+    z.setBigUint64(32, BigInt(count), true);
+    z.setBigUint64(40, BigInt(cdSize), true);
+    z.setBigUint64(48, BigInt(cdStart), true);
+    const zEnd = offset;
+    put(new Uint8Array(z.buffer));
+
+    const loc = new DataView(new ArrayBuffer(20));
+    loc.setUint32(0, 0x07064b50, true);             // Zip64 locator
+    loc.setUint32(4, 0, true);
+    loc.setBigUint64(8, BigInt(zEnd), true);
+    loc.setUint32(16, 1, true);
+    put(new Uint8Array(loc.buffer));
+  }
+
+  const eo = new DataView(new ArrayBuffer(22));
+  eo.setUint32(0, 0x06054b50, true);                // EOCD
+  eo.setUint16(4, 0, true);
+  eo.setUint16(6, 0, true);
+  eo.setUint16(8, Math.min(count, 0xFFFF), true);
+  eo.setUint16(10, Math.min(count, 0xFFFF), true);
+  eo.setUint32(12, Math.min(cdSize, ZIP64_LIMIT), true);
+  eo.setUint32(16, Math.min(cdStart, ZIP64_LIMIT), true);
+  eo.setUint16(20, 0, true);
+  put(new Uint8Array(eo.buffer));
+
+  return new Blob(chunks, { type:'application/zip' });
 }
 
 /* ── wiring ─────────────────────────────────────────────────────────────── */
@@ -688,17 +830,7 @@ els.btnPick.onclick = els.btnPick2.onclick = pickFolder;
 els.btnImport.onclick = () => els.jsonInput.click();
 els.btnExport.onclick = exportJson;
 els.btnFinish.onclick = finish;
-
-if (!window.showDirectoryPicker){
-  els.stage.innerHTML = `<div class="hint">
-    <b style="color:var(--bad)">Este navegador no puede escribir en disco.</b><br /><br />
-    El Curador necesita la File System Access API: <b>Chrome</b> o <b>Edge</b>,
-    servido en <code>http://localhost</code> (no funciona por <code>file://</code>).<br /><br />
-    Desde <code>project-context/SantiaPropiedades/tools/</code>:<br />
-    <code>pnpm dlx serve .</code> → abrí <code>http://localhost:3000/curador.html</code>
-  </div>`;
-  els.btnPick.disabled = true;
-}
+els.dirInput.onchange = (e) => loadFiles(e.target.files);
 </script>
 </body>
 </html>
