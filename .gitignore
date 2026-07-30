@@ -24,3 +24,6 @@ tmp/
 
 # volcados temporales de ejecuciones n8n para debug
 project-context/TerminalGrafica/whatsapp-automation/n8n/flows/.tmp/
+
+# Derivados regenerables por tools/resize-zonaprop.sh
+project-context/**/zonaprop/
