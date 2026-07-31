@@ -215,7 +215,10 @@ const RUTEO = {
     fallback: 'Silencio Tier-2',
   },
   'Switch Intención': {
-    info: 'Salida Info', otro: 'Silencio Otro', catalogo: 'Prompt Selector',
+    // info pasa primero por `Datos Info` (2026-07-31): trae bot.info_negocio
+    // SIEMPRE, para que la rama no dependa de que el Agente Intención se acuerde
+    // de llamar su tool. Ver la seccion 12.
+    info: 'Datos Info', otro: 'Silencio Otro', catalogo: 'Prompt Selector',
   },
 };
 
@@ -793,6 +796,77 @@ console.log('\n11. LA OFERTA POR CANTIDAD NO SE PIERDE (promo inmobiliarias, 202
   } else E('los montos de la lista no se autorizan: el guard tumbaria el mensaje');
   if (/CANTIDADES FIJAS/.test(js)) OK('le explica al compositor que son cantidades fijas');
   else E('el compositor no sabe que la lista son las opciones reales');
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
+//
+// Dos hallazgos de la corrida real de Martin sobre WhatsApp:
+//   · "999999 impresiones a3" cotizo $399.999.600 (v10 no heredo el cap de v7)
+//   · "¿a que hora abren los sabados?" hizo handoff con el horario en la base
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const calc = N('Calcular Montos');
+  if (calc) {
+    const js = calc.parameters.jsCode;
+    // EL CAP VA AL TOTAL, NO AL TURNO: el unitario es cierto y se sigue diciendo.
+    if (!/CAP_TOTAL/.test(js)) E('no hay cap de volumen: "999999 impresiones" da un total de nueve cifras');
+    else OK('existe el cap de volumen');
+    if (!/motivoSinTotal = 'volumen'/.test(js)) E('el cap no deja motivo: el compositor improvisaria la razon');
+    else OK('el cap registra motivoSinTotal=volumen');
+    // que el cap NO mate el unitario es la mitad de la decision
+    if (/if \(total !== null && total > CAP_TOTAL\)[\s\S]{0,120}total = null/.test(js)) {
+      OK('el cap anula el total pero conserva el monto unitario');
+    } else E('el cap no conserva el unitario: el cliente se iria sin ningun dato');
+  }
+  // el compositor tiene que saber que decir cuando el cap actua
+  if (calc && !/mucho volumen/.test(calc.parameters.jsCode)) {
+    E('el prompt no le explica al compositor por que no hay total por volumen');
+  } else if (calc) OK('el compositor sabe explicar el cap sin inventar la causa');
+
+  // ── LA RAMA INFO NO PUEDE DEPENDER DE QUE EL LLM LLAME SU TOOL ──
+  const datos = N('Datos Info');
+  if (!datos) E('falta "Datos Info": la rama info escala cuando el agente no llena respuestaInfo');
+  else {
+    OK('existe "Datos Info"');
+    if (!/bot\.info_negocio/.test(datos.parameters.query || '')) E('Datos Info no consulta bot.info_negocio');
+    else OK('Datos Info lee bot.info_negocio');
+    if (datos.onError !== 'continueRegularOutput') E('Datos Info sin onError: un error de la base mataria el turno');
+    else OK('Datos Info degrada sin matar el turno');
+  }
+  const salida = N('Salida Info');
+  if (salida) {
+    const js = salida.parameters.jsCode;
+    if (!/Datos Info/.test(js)) E('Salida Info no usa el respaldo de la tabla: sigue dependiendo del agente');
+    else OK('Salida Info cae a la tabla cuando el agente no contesto');
+    // el respaldo NO puede inventar: sin match, se escala igual que antes
+    if (!/_score > 0/.test(js)) E('el respaldo no filtra por relevancia: mandaria la tabla entera');
+    else OK('el respaldo solo usa filas que matchean la pregunta');
+    if (!/infoDelRespaldo/.test(js)) E('no hay telemetria del respaldo: no se puede saber si el agente dejo de usar su tool');
+    else OK('registra si la respuesta salio del agente o de la tabla');
+  }
+  // la contradiccion del system prompt era la causa de fondo
+  const agI = N('Agente Intención');
+  if (agI) {
+    const sys = (agI.parameters.options || {}).systemMessage || '';
+    if (/UNICA salida es una clasificacion/.test(sys) && /respuestaInfo/.test(sys)) {
+      E('el prompt del clasificador se contradice: "no redactas" + "devolve la respuesta"');
+    } else OK('el prompt del clasificador ya no se contradice sobre respuestaInfo');
+    if (!/OBLIGATORIO/.test(sys)) E('el clasificador no sabe que contestar info es obligacion suya');
+    else OK('el clasificador sabe que la respuesta de info es suya');
+  }
+
+  // ── LA VOZ DEL MAIL (C-1/C-2 de la ronda) ──
+  const comp = N('Agente Compositor');
+  if (comp) {
+    const sys = (comp.parameters.options || {}).systemMessage || '';
+    if (!/CAJON DE SASTRE/.test(sys)) E('el compositor no sabe que el mail no es para informar');
+    else OK('el compositor sabe que informar es su trabajo, no del mail');
+    if (!/NO REPITAS SIEMPRE LA MISMA FRASE/.test(sys)) E('nada le impide repetir "el total se confirma por mail" como molde');
+    else OK('se le pide variar la frase segun el mensaje');
+    if (!/USA LAS PALABRAS DEL CLIENTE/.test(sys)) E('el compositor sigue forzado a los nombres de la base');
+    else OK('puede usar la palabra del cliente ("fotocopias")');
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
