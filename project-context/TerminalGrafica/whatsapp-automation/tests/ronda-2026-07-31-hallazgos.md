@@ -58,19 +58,46 @@ hoy no está. → **pregunta TG nueva**.
 **B-1. `Syntax error at or near "Hola"`** y **`Syntax error at line 23 near ">"`**
 
 Los dos en `Buscar Candidatos`. Contexto: el primero salió cuando un `Hola?` quedó
-colgado de un server caído y entró junto al mensaje siguiente; el segundo, cuando la
-ventana traía el markdown de la suite (`> \`500 volantes\``).
+colgado de un server caído y entró junto al mensaje siguiente; el segundo, en el turno de
+los tres pedidos del evento.
 
-- **Lo verificado:** los tres nodos Postgres del flujo usan `queryReplacement` con
-  parámetros preparados (`$1/$2/$3`), que **no** se rompen con caracteres raros. La
-  inyección clásica está descartada.
-- **Lo que queda por confirmar:** las tres *tools* (`explorar_catalogo`,
-  `verificar_en_base`, `consultar_info_negocio`) toman su parámetro de `$fromAI(...)`, y
-  dos de ellas usan `$$…$$` (dollar-quoting) como delimitador. Si el LLM devuelve un
-  valor que contiene `$$`, el string se cierra antes de tiempo y el resto del texto pasa
-  a ser SQL. **Esa es la hipótesis viva** y explica un `near ">"`.
-- **Cómo se cierra:** hay que ver la ejecución fallida y qué mandó el LLM como
-  parámetro. **Claude no ve las ejecuciones — el dato lo trae Martin.**
+**Lo que se descartó (verificado):**
+
+1. **Inyección por el valor.** Los tres nodos Postgres usan `queryReplacement` con
+   parámetros preparados (`$1/$2/$3`). Un `>` o un `Hola?` dentro de un parámetro no puede
+   romper el SQL. Primera hipótesis, descartada.
+2. **Dollar-quoting de las tools.** Dos tools usan `$$…$$` y un valor del LLM con `$$`
+   cerraría el string. Pero el error que Martin trajo es de `Buscar Candidatos`, que **no**
+   usa `$$`. Segunda hipótesis, descartada.
+3. **Edición manual del nodo.** La posición del nodo en la instancia (`[86608, 21168]`) no
+   coincide con la del repo (`[2528, 1700]`), pero eso lo reacomoda el import. Martin
+   confirmó que nunca tocó ese nodo. Descartada.
+
+**Lo que dice el dato:**
+
+- La línea 23 del query es **`where t <> ''`**. El `<>` es el operador estándar de
+  desigualdad: Postgres no puede fallar ahí. Que el error apunte a esa línea significa que
+  **algo partió el `<>` en `<` y `>`**.
+- El formato del mensaje no es de Postgres. Postgres emite
+  `ERROR: syntax error at or near ">"` + `LINE 23:` + `Position: N`. Lo que llegó es
+  `Syntax error at line 23 near ">"` — mayúscula inicial, sin `Position`, y con un número
+  de línea que corresponde al **template**, no a la query enviada.
+
+**Hipótesis viva (razonada, NO verificada):** el nodo Postgres de n8n pasa la query por un
+parser SQL propio antes de mandarla, y ese parser no soporta todos los operadores válidos.
+
+⚠️ **Lo que NO se pudo comprobar:** n8n corre en la VM, no en el entorno donde se hizo este
+análisis, así que **no se leyó el código del parser**. La hipótesis explica los dos errores
+y el formato del mensaje, pero es inferencia. En contra juega un argumento fuerte: la query
+también usa `->>` en cuatro líneas, y si el parser rompiera ese operador **ninguna** búsqueda
+andaría — y la mayoría anda. O el parser sólo actúa en cierto camino de ejecución, o la causa
+es otra.
+
+**Mitigación aplicada (defensiva, no depende de la causa):** se reescribieron los dos
+operadores más exóticos por equivalentes exactos —
+`t <> ''` → `length(t) > 0` y `kv.value #>> '{}'` → `to_jsonb(trim(both '"' from kv.value::text))`.
+Si la hipótesis es correcta, el error desaparece. Si no, no se rompió nada: son
+equivalentes. **Confirmar en la próxima ronda si el error vuelve.**
 
 **B-2. `Model output doesn't fit required format` — Agente Relevancia.**
 

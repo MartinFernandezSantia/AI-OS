@@ -856,6 +856,43 @@ console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
     else OK('el clasificador sabe que la respuesta de info es suya');
   }
 
+  // ── OPERADORES SQL QUE EL PARSER DE n8n PUEDE PARTIR ──
+  //
+  // Ronda del 31: `Buscar Candidatos` devolvio "Syntax error at line 23 near
+  // \">\"". La linea 23 era `where t <> ''` — el operador estandar de desigualdad,
+  // que Postgres no puede rechazar. El formato del mensaje tampoco es de Postgres
+  // (dice "line 23" del TEMPLATE, y no trae Position), asi que el error sale de un
+  // parser intermedio que parte el '<>' en '<' y '>'.
+  //
+  // NO se pudo leer el codigo de ese parser (n8n corre en la VM), asi que la causa
+  // es inferencia. Pero la mitigacion no depende de tenerla confirmada: se usan
+  // equivalentes exactos y listo. Este guard evita que los operadores vuelvan por
+  // un copy-paste futuro.
+  {
+    const RIESGOSOS = [
+      ['<>', "usar length(x) > 0 o 'is distinct from'"],
+      ['#>>', 'usar un cast a text'],
+    ];
+    for (const nodo of wf.nodes) {
+      const q = (nodo.parameters || {}).query;
+      if (!q) continue;
+      // se ignoran los comentarios: ahi los operadores estan documentados a proposito
+      const codigo = q.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+      for (const [op, alternativa] of RIESGOSOS) {
+        if (codigo.includes(op)) {
+          E('"' + nodo.name + '" usa el operador ' + op + ' — ' + alternativa
+            + ' (rompe el parser SQL de n8n, ronda 2026-07-31)');
+        }
+      }
+    }
+    if (!wf.nodes.some((n) => {
+      const q = (n.parameters || {}).query;
+      if (!q) return false;
+      const codigo = q.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+      return codigo.includes('<>') || codigo.includes('#>>');
+    })) OK('ningun query usa los operadores que rompen el parser de n8n');
+  }
+
   // ── LA VOZ DEL MAIL (C-1/C-2 de la ronda) ──
   const comp = N('Agente Compositor');
   if (comp) {
