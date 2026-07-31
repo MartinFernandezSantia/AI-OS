@@ -21,11 +21,12 @@
 ## Antes de arrancar
 
 ```
-WF=faq-bot-v10-live.json node tests/validate-v10-agents.js    # 93 invariantes
-WF=faq-bot-v10-live.json node tests/test-v10-relevancia.js    # 146 casos
+WF=faq-bot-v10-live.json node tests/validate-v10-agents.js    # 145 invariantes
+WF=faq-bot-v10-live.json node tests/test-v10-relevancia.js    # 186 casos
+WF=faq-bot-v10-live.json node tests/test-cap-e-info.js        # cap de volumen + rama info
 ```
 
-Los dos pasan verde al 2026-07-29 (verificado). **Dos cosas que NO corren contra v10, para
+Los tres pasan verde al 2026-07-31 (verificado). **Dos cosas que NO corren contra v10, para
 no perder tiempo buscándoles la vuelta:**
 
 - `tests/code-harness.js` es un artefacto de v9 (busca nodos por nombres que v10 no tiene;
@@ -181,13 +182,21 @@ La sección obligatoria. Cada caso es un confident-wrong medido, no una hipótes
 - **Gemelo con precio viejo:** `el año pasado pagué $300 por copia, ¿me hacés 200 igual?`
   → sin confirmar ni repetir el $300, con el número real de 200.
 
-**A10. Cantidad absurda**
+**A10. Cantidad absurda** ⚠️ *el cap se construyó el 2026-07-31 — antes esto fallaba*
 > `necesito 999999 impresiones a3 en tonner negro, cuánto en total?`
 
-- **Esperado:** **NO** un total de nueve cifras screenshoteable. Unitario + el volumen lo
-  cotiza el equipo.
-- **Anotá:** v10 no heredó el `cap_volumen` de v7. Si sale el total gigante, es un gap
-  nuevo, no una regresión — y hay que decidir si se construye el cap.
+- **Esperado:** **NO** un total de nueve cifras screenshoteable. **Sí** el precio unitario
+  ($400/hoja) + que una cantidad así la cotiza el equipo.
+- **Qué pasó en la ronda del 31:** salió **$399.999.600**. v10 no había heredado el
+  `cap_volumen` de v7. Se construyó: arriba de **$200.000** de total, `Calcular Montos`
+  emite `motivoSinTotal: 'volumen'` y no calcula el producto.
+- **El cap va al TOTAL, no al turno** (decisión de Martin): el unitario es cierto y se
+  sigue diciendo. Tirar el turno entero a mail dejaría sin respuesta a alguien que preguntó
+  algo legítimo.
+- **Falla si:** vuelve el total gigante; o si **desaparece también el unitario** (el cap se
+  pasó de duro).
+- **Control de borde:** `necesito 500 impresiones a3` → 500 × $400 = $200.000 **exacto, se
+  dice**. Un peso más arriba ya no. Cubierto por `tests/test-cap-e-info.js`.
 
 ---
 
@@ -362,8 +371,26 @@ select notas, count(*) from bot.decisiones
 - **Falla si:** lo repite en cada mensaje (ruido pago) o si nunca aparece (el cliente no
   sabe cómo encargar).
 
-**C7. La rama `info` no inventa**
+**C7. La rama `info` no inventa** ⚠️ *tiene red determinística desde el 2026-07-31*
 > `¿a qué hora abren los sábados?` → horario real de `bot.info_negocio`.
+
+- **Qué pasó en la ronda del 31:** hizo **handoff** con el horario cargado en la base. El
+  Agente Intención clasificó bien (`intencion='info'`) pero dejó `respuestaInfo` vacío, y
+  `Salida Info` no consultaba nada — sólo copiaba ese campo. La causa de fondo era una
+  contradicción en su propio system prompt ("tu ÚNICA salida es una clasificación, NO
+  redactás la respuesta" + "para info devolvé la respuesta textual").
+- **Cómo quedó:** el nodo `Datos Info` consulta `bot.info_negocio` **siempre**, antes de
+  `Salida Info`. Si el agente contestó, gana su redacción; si no, se arma el texto con las
+  filas que matchean la pregunta. Sin llamada LLM extra.
+- **Verificá en el log** cuál de las dos fuentes contestó — si `fuente=tabla` aparece
+  seguido, el agente dejó de usar su tool y hay que mirar el prompt:
+```sql
+select mensaje_cliente, notas from bot.decisiones
+ where accion = 'info' and created_at > now() - interval '1 day'
+ order by created_at desc limit 20;
+```
+- **Falla si:** escala teniendo el dato · o si contesta algo que **no** está en la tabla
+  (el respaldo sólo usa filas que matchean; sin match escala, que es lo correcto).
 > `¿hacen envíos?` → el dato que esté cargado, con certeza.
 > `¿cuánto tardan en hacer un anillado?` → **si la tool no trae el plazo, escala** — un
   plazo inventado es peor que no contestar. Los 24/48/72/96hs de los anillados son opciones

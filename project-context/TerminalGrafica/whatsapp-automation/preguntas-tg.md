@@ -224,6 +224,22 @@ adicional), pero es deuda con plata adentro.
     gate — ver `n8n/flows/faq-bot-v10-live.json`, nodo `Calcular Montos`, el comentario
     "UV DESBLOQUEADO".
 
+## 14. Ronda del 2026-07-31 (suite 8 sobre v10)
+
+Dos datos de catálogo que la corrida real dejó abiertos. Detalle completo en
+`tests/ronda-2026-07-31-hallazgos.md`.
+
+77. **¿Para qué se usa el papel vegetal?** — El bot cotizó `papel vegetal a4 x10` a $1.000
+    la hoja ($10.000 el total) y está bien. Pero si el vegetal es un **soporte de
+    impresión**, tiene que aparecer entre las opciones cuando alguien pregunta por imprimir,
+    y hoy no aparece. Si es otra cosa (calco, plantilla), saber cuál para no ofrecerlo mal.
+78. **¿Los ojales son sólo para lona y plástico corrugado?** — Ante `cuánto salen los
+    ojales?` el bot contestó *"los ojales para lonas o plástico corrugado los tenemos"*. La
+    parte de que el **cómo se cobra** se confirma por mail es correcta (ojales no tiene
+    `unidad_venta` decidida — es la pregunta 52). Lo que hay que confirmar es de dónde salió
+    *"lonas o plástico corrugado"*: **si es un dato real del negocio, se carga; si no, el
+    bot lo inventó** y es un confident-wrong sobre materiales.
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
