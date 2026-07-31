@@ -777,15 +777,40 @@ console.log('\n=== Totales: solo donde no hay recargo posible ===');
     JSON.stringify(pk.hechos[0]));
   check('dice que el precio ya es por el pack', pk.hechos[0] && pk.hechos[0].motivoSinTotal === 'no_multiplica');
 
-  // UV: el precio guardado es el BASE, el recargo lo pone el taller.
+  // UV: ya NO se excluye del total (Martin, 2026-07-31). Antes habia una tercera
+  // condicion `tecnologia === 'uv'` que lo bloqueaba, porque el precio guardado
+  // es el BASE y el recargo lo pone el taller. Se saco: el cliente que pregunta
+  // "cuanto sale una lona de 3x2" tiene que recibir el total.
+  //
+  // DEUDA: cuando existan las variantes con recargo (UV exterior, UV blanco,
+  // barniz), cada una trae su precio y este total pasa a ser exacto tambien
+  // para esos casos. Hoy es el precio del trabajo sin adicionales.
+  //
+  // Se chequea con unidad_venta='unidad' porque es lo que aisla el cambio: con
+  // 'm2' el total caeria igual por `cantidadEsLaUnidad` (la cantidad no esta en
+  // la unidad de cobro) y el test pasaria sin probar nada sobre UV.
   const FILA_UV = { ...FILAS[1], nombre_canonico: 'Vinilo, Lona Brillo/Mate Uv',
     precio_lista: '26000', rangos_cantidad: null, por_pagina: false,
-    atributos: { unidad_venta: 'm2', multiplica: true, tecnologia: 'uv' } };
+    atributos: { unidad_venta: 'unidad', multiplica: true, tecnologia: 'uv' } };
   const uv = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
     { 'Armar Candidatos': correr('Armar Candidatos', [FILA_UV], { 'Leer Selector': conCantidad(5) }) });
-  check('UV NO se totaliza (el precio es el BASE)', uv.hechos[0] && uv.hechos[0].total === null,
-    JSON.stringify(uv.hechos[0]));
-  check('dice que es por el UV', uv.hechos[0] && uv.hechos[0].motivoSinTotal === 'uv');
+  check('UV SI se totaliza (exclusion eliminada 2026-07-31)',
+    uv.hechos[0] && uv.hechos[0].total === 130000, JSON.stringify(uv.hechos[0]));
+  check('ya no hay motivo "uv"', uv.hechos[0] && uv.hechos[0].motivoSinTotal === null,
+    uv.hechos[0] && uv.hechos[0].motivoSinTotal);
+  check('el total de UV queda autorizado (si no, el guard lo tumba)',
+    (uv.montosAutorizados || []).includes(130000), JSON.stringify(uv.montosAutorizados));
+
+  // el m2 sigue sin totalizar, pero por la OTRA condicion: la cantidad que dijo
+  // el cliente no esta en la unidad en que se cobra.
+  const uvM2 = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },
+    { 'Armar Candidatos': correr('Armar Candidatos',
+      [{ ...FILA_UV, atributos: { ...FILA_UV.atributos, unidad_venta: 'm2' } }],
+      { 'Leer Selector': conCantidad(5) }) });
+  check('el m2 no totaliza por unidad_distinta, no por UV',
+    uvM2.hechos[0] && uvM2.hechos[0].total === null
+    && uvM2.hechos[0].motivoSinTotal === 'unidad_distinta',
+    uvM2.hechos[0] && uvM2.hechos[0].motivoSinTotal);
 
   // sin cantidad no hay total que dar
   const sinCant = correr('Calcular Montos', { output: { elegidos: [{ idx: 1, confianza: 0.9 }] } },

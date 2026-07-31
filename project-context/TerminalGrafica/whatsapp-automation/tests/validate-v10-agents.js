@@ -249,8 +249,12 @@ const IFS = {
   '¿Tiene Texto?': ['Wait — Debounce', 'Respuesta No-Texto'],
   '¿Violación Real Tier-2?': ['Strike Tier-2', 'Prompt Intención'],
   '¿Hay Algo Que Decir?': ['Agente Compositor', 'Label Escalación'],
-  // false NO va derecho a mail: pasa por el IF de reintento (seccion 9)
-  '¿Aprobado?': ['Enviar Mensaje', '¿Reintentar?'],
+  // false NO va derecho a mail: pasa por DOS IFs en cadena antes de escalar.
+  // Primero ¿Re-auditar? (¿la plata la metio el auditor al corregir? vuelve al
+  // auditor), y si no, ¿Reintentar? (¿el borrador estaba mal? vuelve al
+  // compositor). Recien despues, mail.
+  '¿Aprobado?': ['Enviar Mensaje', '¿Re-auditar?'],
+  '¿Re-auditar?': ['Prompt Re-auditoría', '¿Reintentar?'],
   '¿Reintentar?': ['Prompt Reintento', 'Label Escalación'],
   '¿Info Resuelta?': ['Enviar Mensaje', 'Label Escalación'],
 };
@@ -448,9 +452,17 @@ console.log('\n8e. TOTALES — el codigo multiplica, el LLM copia');
     const js = calc3.parameters.jsCode;
     if (!/const total =|total = monto \* cantidad/.test(js)) E('Calcular Montos no calcula el total');
     else OK('el total lo calcula el codigo, no el LLM');
-    // las tres condiciones: sin alguna, se cotiza de menos o se cobra de mas
-    if (!/uvPosible/.test(js)) E('no excluye los productos UV: el precio guardado es el BASE, el total sub-cotizaria');
-    else OK('excluye UV del total (precio base + recargo del taller)');
+    // UV YA NO SE EXCLUYE (Martin, 2026-07-31). Antes habia una tercera
+    // condicion (`uvPosible`) que impedia totalizar los 2 productos UV, porque
+    // el precio guardado es el BASE y el recargo lo pone el taller. Se saco: el
+    // cliente que pregunta "cuanto sale una lona de 3x2" tiene que recibir el
+    // total. La deuda que eso deja son las variantes con recargo (UV exterior,
+    // UV blanco, barniz) que todavia no existen en el catalogo — cuando se
+    // carguen, cada una trae su precio y el total pasa a ser exacto siempre.
+    // Se chequea que NO haya vuelto: si alguien lo reintroduce sin discutirlo,
+    // el bot deja de cotizar lonas y nadie se entera hasta la proxima ronda.
+    if (/uvPosible/.test(js)) E('volvio la exclusion de UV: se decidio el 2026-07-31 que UV totaliza');
+    else OK('UV totaliza (exclusion eliminada, decision 2026-07-31)');
     if (!/multiplicable/.test(js)) E('no mira `multiplica`: multiplicaria un pack por sus propias unidades');
     else OK('respeta el flag multiplica (los packs no se multiplican)');
     if (!/cantidadEsLaUnidad/.test(js)) {
@@ -560,11 +572,17 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
   if (!salidasPR.some((c) => c.node === 'Agente Compositor')) E('Prompt Reintento no vuelve al Agente Compositor: el loop no cierra');
   else OK('Prompt Reintento -> Agente Compositor (el ciclo cierra)');
 
-  // ¿Aprobado? false tiene que ir al IF de reintento, NO derecho a mail
+  // ¿Aprobado? false NO puede ir derecho a mail: tiene que pasar por la cadena
+  // de rescate (¿Re-auditar? -> ¿Reintentar?) antes de escalar.
   const salidasAprob = ((wf.connections['¿Aprobado?'] || {}).main || []);
-  if (!((salidasAprob[1] || []).map((c) => c.node).includes('¿Reintentar?'))) {
-    E('¿Aprobado? salida 1 (false) no pasa por ¿Reintentar?: el rechazo escalaria sin intentar corregir');
-  } else OK('¿Aprobado? false -> ¿Reintentar?');
+  const destAprobFalse = (salidasAprob[1] || []).map((c) => c.node);
+  if (!destAprobFalse.includes('¿Re-auditar?')) {
+    E('¿Aprobado? salida 1 (false) no pasa por ¿Re-auditar?: el rechazo escalaria sin intentar corregir');
+  } else OK('¿Aprobado? false -> ¿Re-auditar?');
+  const destReaudFalse = (((wf.connections['¿Re-auditar?'] || {}).main || [])[1] || []).map((c) => c.node);
+  if (!destReaudFalse.includes('¿Reintentar?')) {
+    E('¿Re-auditar? salida 1 (false) no cae en ¿Reintentar?: se perderia el rescate del compositor');
+  } else OK('¿Re-auditar? false -> ¿Reintentar? (la cadena de rescate sigue)');
 
   // LA COTA. Sin esto el ciclo es infinito.
   if (leerV) {
@@ -573,9 +591,29 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
     else OK('Leer Verificador calcula puedeReintentar');
     if (!/intento\s*<\s*2/.test(js)) E('COTA AUSENTE: puedeReintentar no exige intento < 2 — el loop seria infinito');
     else OK('cota dura: solo reintenta si intento < 2');
-    // la plata no se reintenta: los montos son identicos en la 2da vuelta
+    // la plata no se reintenta AL COMPOSITOR: los montos son identicos en la
+    // 2da vuelta, asi que reescribir la prosa llega al mismo rechazo.
     if (!/!montoInventado/.test(js)) E('puedeReintentar no excluye montoInventado: reintentar no puede arreglar un monto');
-    else OK('montoInventado NO es reintentable (va derecho a mail)');
+    else OK('montoInventado NO se reintenta al compositor');
+
+    // ═══ RE-AUDITORIA (Martin, 2026-07-31) ═══
+    // Cuando la plata la metio EL AUDITOR al corregir, el borrador del
+    // compositor estaba bien: mandarlo a reescribir no tiene sentido, y tirar
+    // el turno a mail castiga al cliente por un error del auditor. Vuelve al
+    // auditor, una sola vez.
+    if (!/puedeReauditar/.test(js)) E('Leer Verificador no calcula puedeReauditar');
+    else OK('Leer Verificador calcula puedeReauditar');
+    if (!/auditoria\s*<\s*2/.test(js)) E('COTA AUSENTE: puedeReauditar no exige auditoria < 2 — el auditor giraria sin fin');
+    else OK('cota dura: solo re-audita si auditoria < 2');
+    if (!/\$runIndex/.test(js)) E('`auditoria` no sale de $runIndex: un contador propio se desincroniza');
+    else OK('`auditoria` sale de $runIndex (lo lleva n8n)');
+    // la distincion que hace todo el mecanismo: quien tipeo la plata
+    if (!/montosDeLaCorreccion\.length > 0/.test(js) && !/plataDelAuditor/.test(js)) {
+      E('no distingue si la plata la metio el auditor o el compositor: re-auditaria un borrador que estaba mal');
+    } else OK('distingue plata del auditor vs plata del compositor');
+    // los dos caminos son excluyentes: si no, un turno entra a los dos
+    if (!/!puedeReauditar/.test(js)) E('puedeReintentar no excluye puedeReauditar: el turno tomaria las dos ramas');
+    else OK('re-auditoria y reintento son excluyentes');
   }
 
   // el contador tiene que venir de n8n ($runIndex), no de un campo del sobre
@@ -595,7 +633,43 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
     else OK('Prompt Reintento conserva los hechos autorizados originales');
   }
 
-  // NO puede haber otro ciclo en el grafo. Este es el unico permitido.
+  // el segundo ciclo: el auditor rehaciendo su propia correccion
+  {
+    const preaud = N('Prompt Re-auditoría');
+    if (!preaud) E('falta "Prompt Re-auditoría"');
+    else {
+      OK('existe "Prompt Re-auditoría"');
+      const js = preaud.parameters.jsCode;
+      // sin la evidencia original repite el error; sin el numero concreto no
+      // sabe que sacar.
+      if (!/Prompt Verificador/.test(js)) E('Prompt Re-auditoría no relee Prompt Verificador: el auditor perderia los hechos y las filas crudas');
+      else OK('la re-auditoría conserva la evidencia original');
+      if (!/montosDeLaCorreccion/.test(js)) E('Prompt Re-auditoría no le dice QUE monto invento: re-auditaria a ciegas');
+      else OK('le dice al auditor exactamente que monto invento');
+      if (!/montosAutorizados/.test(js)) E('Prompt Re-auditoría no le recuerda la lista autorizada');
+      else OK('le repite cuales son los montos que si puede usar');
+      const salidasPA = ((wf.connections['Prompt Re-auditoría'] || {}).main || [])[0] || [];
+      if (!salidasPA.some((c) => c.node === 'Agente Verificador')) E('Prompt Re-auditoría no vuelve al Agente Verificador: el loop no cierra');
+      else OK('Prompt Re-auditoría -> Agente Verificador (el ciclo cierra)');
+    }
+    // el auditor tiene que saber que hacer cuando le llega la segunda vuelta
+    const agV = N('Agente Verificador');
+    if (agV) {
+      const sys = (agV.parameters.options || {}).systemMessage || '';
+      if (!/SEGUNDA AUDITORIA/.test(sys)) E('el system prompt del verificador no contempla la segunda vuelta');
+      else OK('el verificador sabe que hacer en la segunda auditoría');
+      // la causa raiz del caso de la lona: el auditor calculando por su cuenta
+      if (!/NO HACES CUENTAS|no multiplicas|No multiplicas/i.test(sys)) {
+        E('el verificador no tiene prohibido calcular: puede volver a tipear un total');
+      } else OK('el verificador tiene prohibido hacer cuentas');
+      if (!/NO ES UN DEFECTO/i.test(sys)) {
+        E('el verificador no sabe que un mensaje sin total puede estar correcto: lo "arreglaria" calculando');
+      } else OK('sabe que la ausencia de total no es un defecto corregible');
+    }
+  }
+
+  // NO puede haber otro ciclo en el grafo. Son DOS los permitidos (2026-07-31):
+  // el reintento al compositor y la re-auditoría al verificador.
   {
     const salidas = (n) => Object.values((wf.connections[n] || {}).main || [])
       .flat().map((c) => c.node);
@@ -615,7 +689,8 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
       visitar(a, [a], new Set([a]));
       for (const c of ciclos) encontrados.add(c);
     }
-    const permitido = (c) => /Prompt Reintento/.test(c) && /Agente Compositor/.test(c);
+    const permitido = (c) => (/Prompt Reintento/.test(c) && /Agente Compositor/.test(c))
+      || (/Prompt Re-auditoría/.test(c) && /Agente Verificador/.test(c));
     const inesperados = [...encontrados].filter((c) => !permitido(c));
     if (inesperados.length) E('ciclo(s) inesperado(s) en el grafo: ' + inesperados.slice(0, 3).join(' ;; '));
     else OK('el reintento es el UNICO ciclo del grafo');
