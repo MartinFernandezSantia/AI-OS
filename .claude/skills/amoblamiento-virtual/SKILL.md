@@ -11,7 +11,7 @@ description: |
   modelo generativo. Cargar SIEMPRE junto con higgsfield-preflight,
   que sigue siendo el gate obligatorio antes de generar.
 metadata:
-  version: 1.0.0
+  version: 2.0.0
 ---
 
 # Amoblamiento virtual de propiedades
@@ -58,6 +58,118 @@ Lo que el auditor tiene que devolver:
   la IA inventa con más confianza.
 - **Qué muebles entran de verdad** — con la escala leída de la perspectiva, no del m² del aviso.
 - **Riesgos de geometría** — flotación, escala, oclusiones prohibidas.
+
+## El estilo de la casa (aprobado — Libertad 3948, jul-2026)
+
+Este es el look que Martin aprobó. **Arrancar siempre de acá**, no reinventar la estética
+cada propiedad. Ganadoras de referencia:
+`Propiedades/Libertad 3948 Dpto 1/editadas/comedor.png` y `.../cuarto.png`.
+
+**Los dos prompts completos, listos para copiar, están en
+`references/prompts-aprobados.md`** — junto con el historial de lo que no funcionó, para no
+repetir iteraciones ya descartadas.
+
+**Estética: IKEA / escandinavo accesible, casa de familia joven ya habitada.**
+
+- **Madera**: una sola, pale matte ash / light wood. **Nunca madera anaranjada ni barnizada.**
+- **Tela**: una sola familia, `muted dark grey-blue matte fabric`. Es lo que ancla la paleta.
+- **Regla de saturación** (la que resolvió el problema más grande): los muebles nuevos
+  **nunca** más saturados ni más contrastados que las paredes y el piso que ya están en la
+  foto. Textual:
+  `never more saturated or more contrasted than the walls and floor already in the photo`.
+  Sin esto la madera sale vibrante, destaca y se lee como pegote pegado encima.
+
+**Muebles con propósito — preguntarse por cada pieza "¿por qué o para qué está ahí?".**
+Un mueble vacío es de showroom; un mueble con uso es una casa. Lo que funcionó:
+
+| Pieza | Lo que la hace creíble |
+|---|---|
+| Mesa de comedor | camino de mesa de lino + frutera baja con naranjas |
+| Mueble bajo | planta chica + 2-3 libros apilados acostados + bowl de cerámica |
+| Cuadro | **COLGADO en la pared**, nunca apoyado sobre un mueble |
+| Mesa de luz | velador apagado + un libro acostado |
+| Escritorio | notebook cerrada + 2 libros + portalápices |
+| TV | apagada, pantalla negra mate, sin logo, sin reflejo |
+
+Nada de vajilla servida ni mesa puesta completa: se lee como set de catálogo.
+
+### Bloques de prompt que hay que copiar
+
+Estos tres bloques son los que movieron la aguja. Van casi textuales, adaptando solo los
+sustantivos de la foto.
+
+**1. Encuadre del pedido — "es una edición, no un render".** Va PRIMERO, antes que nada:
+
+```
+This is a photograph of a real apartment. Your ONLY task is to add furniture into it.
+This is a photo edit, not a new render. Every pixel not covered by new furniture stays
+identical to the source photograph.
+```
+
+**2. Anclaje del color de pared.** El fallo más caro y más repetido es que **aclara y enfría
+las paredes**. No alcanza con "no repintes": hay que *describirle el tono sucio que tiene* y
+prohibirle emparejarlo:
+
+```
+The walls in this photograph are a dull, cool, slightly dirty pale grey-white, unevenly lit,
+darker and greyer towards the left and in the corners. Reproduce that exact wall tone and
+that exact uneven shading, pixel for pixel. Do NOT repaint the walls. Do NOT make them
+whiter, cleaner, warmer, brighter or more uniform. Do NOT lift the shading or even out the
+gradient across them.
+```
+
+**3. Bloqueo de cámara explícito** (no alcanza con "mismo encuadre"):
+
+```
+DO NOT CHANGE THE CAMERA. Keep the exact same camera position, eye height, lens angle and
+field of view. The vanishing lines of the floor, walls and ceiling stay exactly where they
+are. Do not re-compose, re-frame, shift the viewpoint or straighten anything.
+```
+
+### La regla de la zona prohibida
+
+**El hallazgo más útil de la sesión.** El modelo borró dos veces un calefactor de tiro
+balanceado, pese a pedirle en detalle que lo preservara. La causa: le habíamos puesto un
+escritorio **en esa misma pared**. Al obligarlo a redibujar la zona, se llevó puesto el
+artefacto.
+
+La solución que funcionó no es insistir con la preservación, es **sacarle el conflicto**:
+mandar los muebles nuevos a otra pared y declarar esa zona intocable.
+
+```
+THE RIGHT-HAND WALL IS OFF LIMITS. No new object of any kind goes on that wall or in front
+of it. [el artefacto] must remain in the finished image, unchanged and unobstructed.
+Nothing may overlap it, nothing may stand in front of it, and no furniture may be placed
+on that side of the room.
+```
+
+Regla general: **nunca poner un mueble nuevo contra la pared donde vive un artefacto que hay
+que conservar** (calefactor, calefón, split, termotanque). Si el mueble tiene que ir sí o sí,
+asumir que el artefacto se pierde y planificar el compuesto.
+
+### Palabras que salieron caras
+
+- **`blank wall`** — la usé para decir "sin aberturas" y el modelo la leyó como "superficie
+  limpia": repintó toda la pared y borró las manchas. Decir `solid plaster with no openings`.
+- **`professionally colour graded`** — licencia para aplanar el contraste (ya estaba en v1).
+- Prohibición genérica sin nombrar el riesgo. `do not add any window` solo no alcanzó: igual
+  inventó una ventana. Funciona mejor **nombrar la pared concreta**: `the left wall and the
+  back wall are solid plaster with no openings`.
+
+### Verificar el color con números, no a ojo
+
+El desvío de pared se **mide**, no se estima. Muestrear la misma zona de pared limpia en el
+original alineado y en el resultado:
+
+```bash
+ffmpeg -nostdin -v error -i imagen.png -vf "crop=500:300:1500:150,scale=1:1" \
+  -f rawvideo -pix_fmt rgb24 - | od -An -tu1 | head -1
+```
+
+Referencia de lo que se consiguió en Libertad 3948 (pared del comedor):
+original `167,175,188` → v2 `188,200,218` (mal) → v3 `173,184,206` (aprobada).
+Un desvío de ~10 puntos pasa; ~25 puntos se ve como otra pintura. Ojo con el canal azul: es
+el que más se va, y una pared "un poco más clara" en realidad suele estar **azulada**.
 
 ## Paso 3 — El prompt
 
@@ -140,34 +252,86 @@ sin obligar al modelo a reconstruir textura.
 higgsfield generate cost nano_banana_2 --prompt "..." --image "./foto.jpg"
 
 higgsfield generate create nano_banana_2 \
-  --aspect_ratio "4:3" --resolution "2k" \
+  --aspect_ratio "16:9" --resolution "2k" \
   --image "./foto.jpg" --wait --wait-timeout 15m \
   --prompt "..."
 ```
 
 - **`aspect_ratio` SIEMPRE explícito.** El default del modelo es `1:1` y recorta la foto a
-  cuadrado. Las fotos del celular de Martin son 4:3.
+  cuadrado. Las fotos del celular de Martin son 4:3 (8192x6144).
+- **Para avisos, Martin pide 16:9** (verificado jul-2026). **No hace falta recortar la foto
+  antes**: pasándole la 4:3 original con `--aspect_ratio "16:9"`, el modelo **recorta arriba
+  y abajo**, no inventa laterales. Se probó con 1 generación antes de asumirlo. Ojo igual:
+  elige él qué recortar, así que si arriba hay algo que no se puede perder (un calefón, una
+  ventana alta), conviene recortar con ffmpeg y elegir el encuadre uno mismo.
 - Params del modelo con guión bajo (`--aspect_ratio`), flags del CLI con guión medio
   (`--wait-timeout`). El error `Unknown params` es esto.
-- **Modelo**: `nano_banana_2` (Pro, 2 créditos) vs `nano_banana_flash` (1,5). La diferencia
-  es chica y Pro se justifica en escenas con geometría exigente — pisos en damero,
-  perspectiva fuerte. Pro es **premium**: nunca se corre sin un sí explícito de Martin, y el
-  número real sale de `generate cost`, nunca estimado a ojo.
+- **Modelo**: `nano_banana_2` (Pro). **Cuesta lo mismo que `nano_banana_flash`: 2 créditos
+  los dos** (verificado con `generate cost` en jul-2026 — la versión anterior de esta skill
+  decía 1,5 para flash y estaba mal). Si el precio empata, va Pro siempre: rinde mejor en
+  geometría. Sigue siendo **premium**: no se corre sin un sí explícito de Martin, y el número
+  sale de `generate cost`, nunca a ojo.
 - Generar siempre **desde la foto original**, no desde una versión anterior, para no
   acumular degradación entre iteraciones.
+
+### Elegir la foto: cuántas anclas visuales tiene
+
+**Predice el resultado mejor que cualquier prompt.** El modelo preserva la geometría cuando
+tiene con qué anclarse. Si el ambiente es dos paredes lisas y piso, no edita: **reconstruye
+la escena entera** — mueve la cámara, cambia el tamaño de las ventanas, repinta.
+
+- **Ambiente con anclas** (mesada, puerta panelada, granito, azulejos, muebles existentes) →
+  preserva bastante. El comedor de Libertad 3948 salió en 3 pasadas.
+- **Ambiente casi vacío** (paredes lisas, piso liso) → se va a render nuevo. El cuarto de
+  Libertad 3948 movió la perspectiva en las 3 pasadas, con la cámara bloqueada en el prompt.
+
+Si la foto es del segundo tipo, decirlo **antes de generar** y ofrecer las alternativas:
+elegir otra foto del mismo ambiente con más quiebres de geometría, o publicarlo vacío.
+Un aviso puede mezclar fotos amobladas y vacías sin problema.
+
+**Tope de intentos: 2 pasadas.** Si a la segunda el modelo sigue reconstruyendo, no insistir
+con variaciones de prompt — es límite del modelo con ese ambiente, no del wording.
+
+### Cuándo el compuesto NO sirve
+
+Tentación natural: generar y después restituir con ffmpeg la zona que el modelo arruinó.
+**Solo funciona si la geometría coincide** entre el original y el generado. Verificar SIEMPRE
+antes, alineando el original al 16:9 y comparando la zona lado a lado:
+
+```bash
+ffmpeg -nostdin -loglevel error -y -i original.jpg -vf "crop=8192:4608:0:768,scale=2752:1536" orig_align.png
+ffmpeg -nostdin -loglevel error -y -i orig_align.png -vf "crop=800:1300:1950:236,scale=650:-2" a.jpg
+ffmpeg -nostdin -loglevel error -y -i generada.png -vf "crop=800:1300:1950:236,scale=650:-2" b.jpg
+ffmpeg -nostdin -loglevel error -y -i a.jpg -i b.jpg -filter_complex hstack cmp.jpg
+```
+
+Si la perspectiva se movió, el pegado se nota en el zócalo y en la línea de pared: no hay
+compuesto posible y hay que decirlo en vez de intentarlo.
 
 ## Paso 5 — Revisar el resultado
 
 Mirar la imagen antes de dársela por buena. Chequeo, en orden de probabilidad de fallo:
 
-1. **Patas y contacto con el piso** — sillas con tres patas, muebles flotando sin sombra.
+1. **Color de pared, MEDIDO** — el fallo más frecuente. Muestrear RGB contra el original
+   (ver arriba). Aclara y azulea sistemáticamente.
+2. **Perspectiva** — comparar lado a lado contra el original alineado. ¿Se movió la cámara?
+   ¿Cambió el escorzo de una puerta? ¿Se ensanchó el campo visual?
+3. **Artefactos que debían quedar** — calefactor, calefón, split. Chequear que estén, y en su
+   posición y tamaño original. Se borran o se mueven, sobre todo si hay un mueble nuevo cerca.
+4. **Aberturas inventadas** — recorrer las paredes que en el original son llenas. Inventa
+   ventanas aunque el prompt lo prohíba.
+5. **Carpintería simplificada** — las puertas paneladas pierden los relieves y quedan lisas,
+   y les cambia el picaporte.
+6. **Patas y contacto con el piso** — sillas con tres patas, muebles flotando sin sombra.
    Las sillas de comedor son lo más difícil: patas finas, escorzo fuerte, grilla visible.
-2. **Continuidad de las juntas** del piso alrededor de cada mueble.
-3. **La vista por el vidrio** — comparar contra el original: ¿apareció follaje? ¿cambió un techo?
-4. **Las cuatro esquinas**, si hubo enderezado: moldura que no cierra o zócalo cortado raro
-   = relleno inventado.
-5. **Escala contra referencias fijas** — el respaldo de un sofá tiene que quedar claramente
-   por debajo del tomacorriente.
+   También se fusionan entre sí: pedir `space the chairs clearly apart so every individual
+   leg is separately visible`.
+7. **Deformación de tapas** — la tapa de una mesa curvada en vez de recta. Pedir
+   `perfectly straight flat top and square edges`.
+8. **Continuidad de las juntas** del piso alrededor de cada mueble.
+9. **La vista por el vidrio** — comparar contra el original: ¿apareció follaje? ¿cambió un techo?
+10. **Escala contra referencias fijas** — el respaldo de un sofá tiene que quedar claramente
+    por debajo del tomacorriente.
 
 Reportar lo que salió distinto de lo pedido aunque se vea bien. Si el modelo puso el sofá en
 otro lado, se dice: es información para decidir si vale otra pasada.
