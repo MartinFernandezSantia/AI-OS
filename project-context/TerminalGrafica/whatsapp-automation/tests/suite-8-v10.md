@@ -95,23 +95,26 @@ La sección obligatoria. Cada caso es un confident-wrong medido, no una hipótes
   multiplicación. **Desviación tolerada: CERO.**
 - **Falla si:** no da total (v10 cotiza cerrado donde puede), o si el número no cierra.
 
-**A3. Total NO, donde hay recargo UV**
+**A3. El UV ahora SÍ totaliza** ⚠️ *cambió el 2026-07-31 — antes este caso esperaba lo contrario*
 > `una lona brillo uv de 3x2, ¿cuánto me sale todo?`
 
-- **Esperado:** **$22.000 por metro** (verificado) **sin total** y sin calcular los 6 m². La
-  razón que diga es la del sistema ("el total se confirma por mail"), nunca una inventada.
-- **Falla si:** multiplica; o si explica el recargo ("depende del material", "hay
+- **Esperado:** **$22.000 por metro** (verificado) **y el total**, si la unidad en que el
+  cliente contó coincide con la unidad de cobro del producto. El total lo calcula el código;
+  el compositor lo copia. **Verificá la multiplicación a mano: desviación tolerada CERO.**
+- **Falla si:** el número no cierra; o si explica el recargo ("depende del material", "hay
   recargos") — esa causa no está en los hechos y fue un bug real del 29.
-- **BD:** `motivoSinTotal: 'uv'`.
-- **Ojo — este caso no aísla nada.** El total se bloquea por **tres** caminos a la vez:
-  `tecnologia: "uv"`, `multiplica: false` y `unidad_venta: metro` (que no es la unidad en que
-  el cliente contó). Pasa incluso con dos de los tres guards roto. **No sirve para concluir
-  que el guard de UV funciona.**
-- El otro producto UV (`Impresión Uv Holografico / Glitter`, $26.000, `multiplica: true`)
-  tampoco lo aísla: su `unidad_venta` es `m2` y cae por el mismo lado. **Conclusión honesta:
-  el guard de UV no se puede aislar desde WhatsApp con el catálogo de hoy** — los dos
-  productos UV están cubiertos por otros guards. Si hace falta verificarlo, es un test de
-  código sobre `Calcular Montos`, no un caso de esta suite.
+- **Por qué cambió:** hasta el 30-jul el bot nunca daba el total de un producto UV, porque
+  el precio cargado es el **base** y el recargo lo pone el taller. Martin levantó el bloqueo:
+  el cliente que pregunta "cuánto sale todo" tiene que recibir el número.
+- ⚠️ **Lo que este verde NO dice.** El total que sale es el del trabajo **sin adicionales**.
+  Las variantes con recargo (UV exterior, UV blanco, barniz) **no existen todavía en el
+  catálogo** — preguntas TG 74-76. Si el cliente pide un adicional, el bot cotiza de menos.
+  Anotá el número igual: cuando esas variantes se carguen, este caso hay que re-correrlo.
+- **Ojo con la unidad.** `Vinilo, Lona Brillo/Mate Uv` se cobra por **metro** y el cliente
+  contó en metros cuadrados (3x2). Si el total NO sale, mirá `motivoSinTotal`: si dice
+  `unidad_distinta`, el bloqueo es ese y **no** el UV — es correcto y no hay nada que
+  arreglar. El otro producto UV (`Impresión Uv Holografico / Glitter`, $26.000) se cobra
+  por `m2` y cae por el mismo lado.
 
 **A4. El pack no se multiplica**
 > `necesito 150 tarjetas, cuánto salen?`
@@ -283,13 +286,25 @@ Esta sección no existe en ninguna suite anterior.
 - **Cómo se mira:** el verificador es el último eslabón y nadie lo audita después. Su
   corrección pasa por **el mismo chequeo determinístico** que el borrador.
 - **Esperado en toda la ronda:** `senales.correccionRechazada` en **false** siempre.
-- **Si sale true una sola vez:** el auditor tipeó un monto que el cálculo no produjo. El
-  turno se rechaza entero (bien), pero **hay que mirar el caso** — es la señal de que el
-  eslabón sin auditoría empezó a escribir números.
+- **Si sale true:** el auditor tipeó un monto que el cálculo no produjo. **Ya no mata el
+  turno** (cambió el 2026-07-31): vuelve al propio auditor con el número que inventó, para
+  que rehaga la corrección sin él o apruebe el original. Si en esa segunda vuelta sale
+  aprobado, `senales.rescatadoPorReauditoria` queda en true y el cliente recibe respuesta.
+  Igual **hay que mirar el caso**: es la señal de que el eslabón sin auditoría se puso a
+  escribir números.
+- **Caso real que motivó el cambio (2026-07-31, lona UV 3x2):** el compositor escribió el
+  mensaje correcto; el auditor lo aprobó y de paso multiplicó 22.000 × 6 y tipeó $132.000.
+  El guard tumbó el turno entero y el cliente se fue a mail teniendo una respuesta válida
+  escrita y aprobada. Ahora ese turno se rescata.
+- **Si `motivoNoReintento = 'auditor_reincidio'`:** volvió a meter plata en la segunda
+  vuelta y ahí sí escaló. Dos veces seguidas es prompt, no ruido — hay que mirarlo.
 ```sql
-select created_at, mensaje_cliente, notas
+select created_at, mensaje_cliente, notas,
+       senales->>'auditoria'                as vuelta,
+       senales->>'rescatadoPorReauditoria'  as rescatado
   from bot.decisiones
  where notas like '%CORRECCION-CON-PLATA-INVENTADA%'
+    or notas like '%RE-AUDITA%'
  order by created_at desc;
 ```
 
@@ -614,8 +629,11 @@ Gaps y decisiones conocidas. Un cambio acá es una regresión, no una mejora.
 **H1. ¿Cuántas llamadas LLM por turno?** En n8n → Executions → una ejecución de precio →
 contá los nodos `Agente *` que corrieron.
 - **Esperado:** 5 en el camino de precio (Intención, Selector, Relevancia, Compositor,
-  Verificador) + 1 más si hubo reintento. Son **más que en v9** (2-3): este número es el
-  insumo de la conversación de token-reduction.
+  Verificador) + 1 si hubo reintento al compositor + 1 si hubo re-auditoría (el verificador
+  rehaciendo su corrección, §C2). Son **más que en v9** (2-3): este número es el insumo de
+  la conversación de token-reduction.
+- Las dos vueltas extra son excepcionales por diseño: si aparecen seguidas, el costo por
+  turno se va a 7 llamadas y hay que mirar por qué rebota tanto.
 - Los turnos de `info` deberían costar **1** (Intención con su tool y nada más).
 
 **H2. ¿Cuánto tarda?** Cronometrá el peor caso.

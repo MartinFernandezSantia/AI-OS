@@ -197,6 +197,33 @@ si TG corrige una, se mueve el flag y el mecanismo no cambia. Aplicadas en
     "necesito un sobre" el bot cotizaría A4; podría ser el inglés ($500) si la gente los
     pide para carta. Confirmar cuál se vende más.
 
+## 13. Recargos del UV — el total ya sale, falta la variante (2026-07-31)
+
+Hasta hoy el bot **nunca** daba el total de un producto UV: decía el precio por metro y
+mandaba el total a mail. La razón era que el precio cargado es el **base** y el recargo lo
+pone el taller, así que multiplicar sub-cotizaba. Martin levantó ese bloqueo el 2026-07-31:
+el cliente que pregunta "cuánto sale una lona de 3x2" tiene que recibir el número, y hoy se
+iba a mail teniendo el dato.
+
+**Lo que eso deja abierto:** el total que sale ahora es el del trabajo **sin adicionales**.
+Si el cliente pide UV exterior, UV blanco o barniz UV, el precio real es más alto y el bot
+no lo sabe — cotizaría de menos con confianza. No bloquea el go-live (el caso normal es sin
+adicional), pero es deuda con plata adentro.
+
+74. **¿Cuánto es el recargo de cada adicional UV?** — Los tres que Martin nombró: **UV
+    exterior**, **UV blanco** y **barniz UV**. Para cada uno: ¿es un porcentaje sobre el
+    precio base, un monto fijo por m², o un precio propio? ¿Se pueden combinar (exterior +
+    blanco en el mismo trabajo)?
+75. **¿Van como variantes del producto o como adicional aparte?** — Si cada combinación es
+    una variante con su propio precio, el bot las cotiza exacto sin tocar el motor (es el
+    camino preferido). Si es un recargo que se aplica sobre cualquier lona, hace falta
+    modelarlo distinto. La respuesta decide si esto es carga de catálogo o desarrollo.
+76. **Mientras tanto, ¿el total sin adicionales se puede afirmar?** — O sea: un cliente que
+    pide "lona brillo UV 3x2" y no menciona ningún adicional, ¿paga el precio base × los
+    metros? Si la respuesta es no (siempre hay algún recargo), hay que volver a poner el
+    gate — ver `n8n/flows/faq-bot-v10-live.json`, nodo `Calcular Montos`, el comentario
+    "UV DESBLOQUEADO".
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
