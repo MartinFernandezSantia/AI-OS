@@ -42,6 +42,10 @@ Estas cuatro no se asumen. Cada una cambia el prompt, y equivocarse cuesta una g
 
 Usar `AskUserQuestion` con estas, no una lista en prosa: son decisiones, no conversación.
 
+Si el ambiente admite más de un uso (un cuarto puede ser dormitorio, dormitorio + escritorio
+o living), **preguntar también el uso**: cambia todo el razonamiento de muebles de la sección
+siguiente, y es decisión de Martin, no tuya.
+
 ## Paso 2 — Auditar la foto antes de escribir el prompt
 
 Correr el fan-out de agentes de `higgsfield-preflight` (Reference Auditor + Adversarial
@@ -79,19 +83,89 @@ repetir iteraciones ya descartadas.
   `never more saturated or more contrasted than the walls and floor already in the photo`.
   Sin esto la madera sale vibrante, destaca y se lee como pegote pegado encima.
 
-**Muebles con propósito — preguntarse por cada pieza "¿por qué o para qué está ahí?".**
-Un mueble vacío es de showroom; un mueble con uso es una casa. Lo que funcionó:
+## Cómo razonar los muebles (hacer esto ANTES de escribir el prompt)
 
-| Pieza | Lo que la hace creíble |
-|---|---|
-| Mesa de comedor | camino de mesa de lino + frutera baja con naranjas |
-| Mueble bajo | planta chica + 2-3 libros apilados acostados + bowl de cerámica |
-| Cuadro | **COLGADO en la pared**, nunca apoyado sobre un mueble |
-| Mesa de luz | velador apagado + un libro acostado |
-| Escritorio | notebook cerrada + 2 libros + portalápices |
-| TV | apagada, pantalla negra mate, sin logo, sin reflejo |
+**La diferencia entre un staging que parece una casa y uno que parece un showroom no está en
+la calidad del render: está en si los objetos tienen una razón de estar.** Un mueble vacío
+grita "esto es una foto de catálogo". Un mueble con las marcas de su uso desaparece como
+mueble y se lee como hogar.
 
-Nada de vajilla servida ni mesa puesta completa: se lee como set de catálogo.
+Esto NO se resuelve con una lista de recetas. Se resuelve razonando cada pieza. El método,
+pieza por pieza, son cuatro preguntas encadenadas:
+
+### 1. ¿Qué actividad humana pasa acá?
+
+No "qué mueble va", sino **qué hace una persona en ese punto del ambiente**. Comer, dormir,
+laburar, dejar las llaves al entrar, tomar mate mirando la ventana. El mueble es la
+consecuencia de la actividad, nunca al revés. Si no podés nombrar la actividad, ese mueble
+no va — estás rellenando espacio.
+
+### 2. ¿Qué deja atrás esa actividad cuando la persona no está?
+
+Esta es la pregunta que produce el realismo, y la que casi nadie hace. La foto muestra el
+ambiente **vacío de gente**, así que lo único que cuenta la historia son los rastros. Pensar
+en qué queda sobre el mueble cuando el que lo usa se levantó y se fue:
+
+- Se come en la mesa → queda el mantel o el camino puesto, y la fruta que se deja a mano.
+- Se duerme en la cama → queda tendida pero con una manta doblada a los pies, y en la mesa
+  de luz el velador y el libro que estabas leyendo.
+- Se trabaja en el escritorio → queda la notebook cerrada, los libros de consulta apilados,
+  los lápices en un vaso.
+
+**El objeto correcto es el que quedó ahí solo, no el que alguien acomodó para la foto.**
+
+### 3. ¿Es la cantidad de un día común?
+
+El error clásico es pasarse: mesa servida con vajilla completa, frutera desbordada, diez
+libros perfectamente alineados. Eso es una producción, y se nota. La regla es
+**dos o tres objetos por superficie, y que sean disparejos** — dos libros, no seis; una
+frutera con unas naranjas, no un centro de mesa floral.
+
+Menos objetos y bien elegidos ganan siempre, y además le dan menos oportunidades de
+alucinar al modelo.
+
+### 4. ¿Este objeto obliga al modelo a dibujar algo que dibuja mal?
+
+Filtro final, técnico. Aunque el objeto sea perfecto narrativamente, se descarta si arrastra
+riesgo de fabricación:
+
+- **Texto** — lomos de libros, etiquetas, diarios, pantallas encendidas. Siempre sale
+  deforme. Libros de lomo liso, pantallas apagadas.
+- **Caras y detalle fino** — fotos familiares enmarcadas, arte figurativo. Va abstracto.
+- **Reflejos** — espejos, vidrio, metal pulido: duplican la escena y la duplican mal.
+- **Objetos que implican una promesa comercial** — un TV o electrodomésticos en un alquiler
+  sin amoblar hacen pensar que se entregan.
+
+### Ejemplos ya resueltos con este método
+
+Salidos de Libertad 3948. Sirven de atajo, pero **el método manda**: si el ambiente nuevo es
+otro (living, balcón, cocina, baño), razonarlo con las cuatro preguntas en vez de forzar
+estas recetas.
+
+| Pieza | Actividad | Lo que queda cuando no hay nadie |
+|---|---|---|
+| Mesa de comedor | se come en familia | camino de lino + frutera baja con naranjas |
+| Mueble bajo | guardar y apoyar | planta chica + 2-3 libros acostados + bowl |
+| Mesa de luz | leer antes de dormir | velador apagado + un libro acostado |
+| Escritorio | estudiar / laburar | notebook cerrada + 2 libros + portalápices |
+| Cama | dormir | tendida + manta doblada a los pies |
+| Cuadro | decorar | **COLGADO en la pared**, nunca apoyado sobre un mueble |
+| TV | mirar | apagada, pantalla negra mate, sin logo ni reflejo |
+
+Para razonar ambientes que todavía no hicimos, el mismo método:
+*living* → se sienta a mirar o charlar → manta tirada en el brazo del sofá, taza o par de
+libros en la mesa ratona. *Balcón* → se toma algo afuera → una silla, una planta, nada más.
+*Cocina* → se cocina → repasador colgado, tabla apoyada, frutera; nunca comida servida.
+
+### Y una regla de composición que vale doble
+
+Cuando el ambiente tiene una mancha fea, un cable suelto o un zócalo golpeado, **el mueble
+que elegís por su función también resuelve el problema visual si lo ubicás delante**. Es la
+forma honesta de mejorar la foto: no borrás nada de la propiedad, simplemente la casa
+amoblada tapa lo que taparía en la vida real. Preferir siempre esto a pedirle al modelo que
+limpie la pared.
+
+## Reglas técnicas del modelo (aprendidas a créditos)
 
 ### Bloques de prompt que hay que copiar
 
@@ -230,21 +304,20 @@ el que más se va, y una pared "un poco más clara" en realidad suele estar **az
 
 ### Muebles: qué agregar
 
+**El qué y el por qué de cada pieza salen del método de razonamiento de más arriba**
+("Cómo razonar los muebles"). Acá van solo las restricciones de conjunto:
+
 Regla de oro: **una familia de materiales, no muebles sueltos.** Un tapizado compartido
 entre sofá y sillas, una madera única en todas las piezas. Es lo que separa un staging que
 parece un living de uno que parece un catálogo.
 
 Para un living comedor típico argentino de 2 ambientes: sofá contra la pared larga, mesa
-ratona, mesa redonda de 4 cerca de la luz natural, y un mueble bajo. Cuidado con
-sobrecargar: en ~20 m² no entran dos zonas completas en el mismo campo visual, y un aviso
-saturado **achica visualmente el ambiente**, que es lo contrario del objetivo.
+ratona, mesa de 4 cerca de la luz natural, y un mueble bajo. Cuidado con sobrecargar: en
+~20 m² no entran dos zonas completas en el mismo campo visual, y un aviso saturado **achica
+visualmente el ambiente**, que es lo contrario del objetivo.
 
-Si va TV: **apagada, pantalla negra mate, sin logo ni contenido**. Una TV encendida es
-fabricación gratuita y se nota. En un alquiler sin amoblar además induce a pensar que se
-entrega.
-
-Un mueble contra la pared es la mejor forma de tapar un cable suelto o una marca: resuelve
-sin obligar al modelo a reconstruir textura.
+Separación explícita entre piezas: `space the chairs clearly apart so every individual leg
+is separately visible`. Si no, las patas se fusionan entre sí y con la mesa.
 
 ## Paso 4 — Generar
 
