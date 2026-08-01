@@ -29,6 +29,10 @@ Todos los `v6/v8/v9-*`, `r7-*`, `e0-atomizacion`, `increment-b`, `suite5-ronda2`
 `prompts/system-prompt-tg.md` (prompt de v5; el real vive en los nodos del flow).
 → Vivo: `n8n/setup-guide.md`.
 
+## raíz — `preguntas-para-tg.md`
+El mensaje de 25 preguntas que Martin **ya le envió a TG** (copia estática, registro).
+→ Vivo quedó `preguntas-tg.md` (el maestro / fuente de verdad de lo pendiente).
+
 ## `db/` — logs explicativos de curación (solo los `.md`)
 `curacion-2026-07-23/24/24b/27/28.md` y `curacion-e0-2026-07-26.md`.
 → **Todos los `.sql` de curación se conservaron** en `db/` (son la historia aplicada de la base).
