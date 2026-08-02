@@ -3,7 +3,7 @@
 > **Fuente única de verdad.** Este archivo describe el flow que está VIVO hoy
 > (`n8n/flows/faq-bot-v10-live.json`, 75 nodos) tal como es, no lo que dicen los
 > planes viejos. Si tocás el flow y esto no cambió, el archivo miente.
-> **Última verificación contra el JSON: 2026-08-01.**
+> **Última verificación contra el JSON (conexiones reales): 2026-08-02, con Martin en el canvas.**
 
 ## Aviso importante antes de leer nada
 
@@ -28,24 +28,31 @@ de TG, y si no puede, deriva a un humano por mail. Está montado sobre Chatwoot
 
 ---
 
-## El pipeline en 9 etapas
+## El pipeline en 10 etapas
 
-El flow tiene 75 nodos, pero son **9 etapas**. Leé esta tabla y tenés el modelo mental
-completo. La columna **etiqueta** separa la complejidad en tres clases:
+El flow tiene 75 nodos, pero son **10 etapas en este orden real** (verificado contra las
+conexiones del JSON y confirmado por Martin en el canvas, 2026-08-02). La columna **etiqueta**
+separa la complejidad en tres clases:
 `CARGA PESO` (necesaria, no tocar) · `EVALUABLE` (real pero quizás recortable, post-entrega)
 · `CLUTTER` (basura, se puede tirar).
 
+Orden de un vistazo:
+`Webhook → HMAC → Filtro → **Firewall** → ¿Texto? → Debounce → Historial → Decidir → Guardrails
+→ Intención → Selector→Relevancia→Montos → Compositor → Verificador → Envío/Log`.
+Ojo al detalle que confundía: **el Firewall corre temprano, ANTES del debounce y de Decidir.**
+
 | # | Etapa | Qué hace | Por qué existe (qué falla si no está) | Nodos principales | Etiqueta |
 |---|---|---|---|---|---|
-| 1 | **Intake** | Recibe el webhook de Chatwoot, valida firma HMAC, filtra (solo texto entrante, sin asignar), junta mensajes rápidos (debounce 3s) y trae el historial | Sin HMAC entra cualquiera. Sin debounce, "quiero 3 carteles" en 3 mensajes se contesta 3 veces suelto (INC-15) | `Chatwoot Webhook`, `Verificar HMAC`, `Filtro Ingreso`, `Wait — Debounce`, `Get Historial` | CARGA PESO |
-| 2 | **Decidir** | Un code node decide la acción: saludo / injection / cap de volumen / procesar / descartar (idempotencia: ¿ya contesté?) | Sin idempotencia el bot se contesta a sí mismo. El cap frena floods (cada mensaje cuesta plata desde oct-2026) | `Decidir`, `Switch Ruteo` | CARGA PESO |
-| 3 | **Firewall Tier-1** | Chequea remitente/texto contra patrones en la DB (`bot.firewall_check`): pasa / rechaza / silencia / dropea | Bloqueo barato (SQL, sin LLM) de injections y spam conocidos | `Firewall Tier-1`, `Switch Firewall` | CARGA PESO |
-| 4 | **Guardrails Tier-2** | Segunda capa, esta con LLM: detecta jailbreak/tema-fuera. Sistema de "strikes" que silencia al reincidente | Atrapa ataques nuevos que Tier-1 no conoce | `Guardrails Tier-2`, `¿Violación Real Tier-2?`, `Strike Tier-2` | **EVALUABLE** — es una llamada LLM extra por turno; ¿justifica el costo sobre Tier-1? Medir post-entrega |
-| 5 | **Agente Intención** | Clasifica: `info` (horarios/capacidades), `catalogo` (cotizar), `otro` (derivar). Rama info responde con datos de `bot.info_negocio` | Separa "¿a qué hora abren?" de "¿cuánto sale un cartel?" — caminos distintos | `Agente Intención`, `consultar_info_negocio`, `Switch Intención` | CARGA PESO |
-| 6 | **Selector + Montos** | El Selector busca productos candidatos en el catálogo (`explorar_catalogo`). **`Calcular Montos` (code) calcula los precios** | **El corazón de la plata.** Los montos salen de código determinista, NUNCA los tipea el LLM. Es lo que evita sub-cotizar | `Agente Selector`, `explorar_catalogo`, `Armar Candidatos`, `Calcular Montos` | CARGA PESO (Calcular Montos = intocable) |
-| 7 | **Agente Relevancia** | Ordena/filtra los candidatos por relevancia (lista cerrada, sin volver a buscar) | Evita mostrar productos que no vienen al caso | `Agente Relevancia` | **EVALUABLE** — el handoff marca que filtra "demasiado agresivo" y pierde opciones (hallazgo D-1) |
-| 8 | **Agente Compositor** | Redacta la respuesta final en tono natural, con los montos ya autorizados por código | Que el mensaje no suene a robot recitando el catálogo | `Agente Compositor`, `¿Hay Algo Que Decir?` | CARGA PESO |
-| 9 | **Verificador + Envío + Log** | El Verificador audita el borrador (¿inventó un monto?). Loops de **reintento** (mal borrador) y **re-auditoría** (auditor mal), tope 1 cada uno. Después: envía a Chatwoot, verifica entrega, y **loguea todo en `bot.decisiones`** | El auditor blinda contra montos inventados. El log es la ÚNICA forma de detectar confident-wrong (no hay humano mirando) | `Agente Verificador`, `¿Aprobado?`, `¿Reintentar?`, `¿Re-auditar?`, `Enviar Mensaje`, `Log Turno` | **EVALUABLE** — los loops de reintento/re-auditoría son la parte más frágil; ¿ganan su peso? |
+| 1 | **Intake (puerta)** | Recibe el webhook, valida firma HMAC, y filtra (solo texto entrante, WhatsApp, conversación **sin asignar**) | Sin HMAC dispara cualquiera. El filtro "sin asignar" hace que si un humano toma la charla, el bot se calle | `Chatwoot Webhook`, `Verificar HMAC`, `Filtro Ingreso` | CARGA PESO |
+| 2 | **Firewall Tier-1** | `bot.firewall_check` chequea remitente/texto contra la DB y devuelve `action`: pass/refusal/silence/drop. `Switch Firewall` rutea por `action`. **Corre antes del debounce** | Bloqueo determinista (SQL, sin LLM) de injections/spam/flood conocidos, antes de gastar un token | `Firewall Tier-1`, `Switch Firewall` | CARGA PESO · ⚠️ **bug conocido:** el `silence` de strike-max cae en el aviso de rate (ver handoff §3.i) |
+| 3 | **Texto + Debounce** | ¿Es texto o archivo? Si es texto, espera 3s (debounce) y trae el historial | Sin debounce, "quiero 3 carteles" en 3 globitos se procesa descoordinado (INC-15). Archivo → hoy "no puedo procesar" | `¿Tiene Texto?`, `Wait — Debounce`, `Get Historial` | CARGA PESO |
+| 4 | **Decidir** | Code node: elige la acción — descartar (idempotencia + gana-el-último del debounce), saludo, anti-injection, cap de volumen, o procesar. `Switch Ruteo` reparte | Sin idempotencia el bot se contesta solo; acá mueren N-1 globitos de una ráfaga antes del LLM | `Decidir`, `Switch Ruteo` | CARGA PESO · nota: el anti-injection de acá se solapa con el del firewall (etapa 2) → revisar si es redundante |
+| 5 | **Guardrails Tier-2** | Segunda capa, con LLM: jailbreak/tema-fuera. Strikes que silencian al reincidente | Atrapa ataques nuevos que el Tier-1 (patrones fijos) no conoce | `Guardrails Tier-2`, `¿Violación Real Tier-2?`, `Strike Tier-2`, `Switch Strike Tier-2` | **EVALUABLE** — llamada LLM extra por turno; ¿justifica sobre Tier-1? Medir post-entrega |
+| 6 | **Agente Intención** | Clasifica `info` / `catalogo` / `otro`. Rama info responde con `bot.info_negocio` | Separa "¿a qué hora abren?" de "¿cuánto sale un cartel?" — caminos distintos | `Agente Intención`, `consultar_info_negocio`, `Switch Intención`, `Datos Info` | CARGA PESO |
+| 7 | **Selector → Relevancia → Montos** | El Selector busca candidatos (`explorar_catalogo`); se extraen palabras y se arman candidatos; `Agente Relevancia` filtra; **`Calcular Montos` calcula los precios al final** | **El corazón de la plata.** Los montos salen de código determinista, NUNCA los tipea el LLM. Relevancia corre ANTES de Montos | `Agente Selector`, `explorar_catalogo`, `Extraer Palabras`, `Buscar Candidatos`, `Armar Candidatos`, `Agente Relevancia`, `Calcular Montos` | CARGA PESO (Calcular Montos = intocable) · Relevancia **EVALUABLE** (filtra "demasiado agresivo", D-1) |
+| 8 | **Agente Compositor** | Redacta la respuesta natural con los montos ya autorizados por código | Que el mensaje no suene a robot recitando el catálogo | `¿Hay Algo Que Decir?`, `Agente Compositor`, `Leer Compositor` | CARGA PESO |
+| 9 | **Verificador + loops** | Audita el borrador (¿inventó un monto?). Loops de **reintento** (mal borrador) y **re-auditoría** (auditor mal), tope 1 cada uno | El auditor blinda contra montos inventados | `Agente Verificador`, `¿Aprobado?`, `¿Re-auditar?`, `¿Reintentar?` | **EVALUABLE** — los loops son la parte más frágil; ¿ganan su peso? |
+| 10 | **Envío + Log + Escalación** | Envía a Chatwoot, verifica entrega, y **loguea todo en `bot.decisiones`**. Si no hay qué decir o falla, deriva a mail | El log es la ÚNICA forma de detectar confident-wrong (no hay humano mirando) | `Enviar Mensaje`, `Chequear Envio`, `¿Se Entregó?`, `Log Turno`, `Label`/`Mensaje`/`Log Escalación` | CARGA PESO |
 
 **Salidas laterales** (no son etapas, son finales): `Mensaje Escalación` + `Label`/`Log Escalación`
 (derivar a humano por mail) · `Mensaje Cap Email` (tope de volumen) · varios `Descartar`/`Silencio`

@@ -196,6 +196,18 @@ variantes de E0 que no resolvieron (b).
 razón nueva del lado del código vuelve a rebotar contra el enum. Un enum es la estructura
 equivocada para eso. Queda anotado, no resuelto.
 
+**i. El `silence` de strike-max manda el aviso de rate** — *bug de ruteo, hallado 2026-08-02 en el
+walkthrough con Martin (leído por él en el SQL + confirmado en el nodo Switch).* `bot.firewall_check`
+devuelve `action='silence'` en **dos** casos con `reason` distinto: `rate` (1er cruce de volumen,
+quiere mandar el aviso "frená") y `strike-max` (3ra injection, quiere silencio mudo 24 h). Pero el
+`Switch Firewall` rutea **solo por `json.action`** (is-equal `silence`, una sola ruta), así que las
+dos caen en `Aviso Rate Firewall`: **el atacante de strike-max recibe "frená, mucho volumen"** —
+copy equivocado y le confirma que hay un bot, justo lo que el diseño evita. **Severidad baja/acotada:**
+sólo se filtra ese único mensaje; desde el siguiente cae en "ya silenciado" → `drop` mudo. **No
+aplicado (freeze de entrega).** Fix mínimo cuando Martin decida: en `db/firewall-tier1.sql` línea 197,
+que strike-max devuelva `'drop'` en vez de `'silence'` → cae en `Descartar` (silencio real); el
+`silenciado_hasta` de 24 h ya queda seteado igual, y el rate sigue con su `'silence'` → aviso.
+
 ---
 
 ## 4. Preguntas a TG que bloquean algo
