@@ -221,6 +221,17 @@ rotulados: *Abuso* (blocklist+rate, pre-merge) + *Contenido* (injection+Tier-2, 
 Requiere pasada adversarial antes de aplicar. Contexto: el objetivo de fondo es que Martin pueda
 mantener el firewall solo — la dispersión actual es parte de por qué no era ownable.
 
+**k. `bot.info_negocio` NO EXISTÍA — la rama info estaba inerte en prod** — *hallado 2026-08-03 con
+Martin, durante el walkthrough.* La tabla que consultan el nodo `Datos Info` y la tool
+`consultar_info_negocio` **nunca se creó** (sin migración en el repo, sin objeto en la base). Con la
+tabla ausente, las dos queries devuelven vacío → la red determinística de `Salida Info` no hace nada
+→ la rama info cae 100% en `respuestaInfo` del agente (el bug que `8585b95` quería tapar), y como la
+tool también da vacío, el agente tampoco puede traer el dato: **todo "¿a qué hora abren?" se iba a
+mail.** `test-cap-e-info.js` pasaba igual porque **mockea las filas** — [[tests-fixtures-mienten]] otra
+vez: "la tabla no existe" queda afuera del test por construcción. **Fix preparado:** `db/info-negocio.sql`
+(create table + grant a `bot_readonly` + seed); Martin completa los valores reales de TG y aplica.
+Pendiente: agregar la tabla a `data-model.md` (hoy no la documenta).
+
 ---
 
 ## 4. Preguntas a TG que bloquean algo
