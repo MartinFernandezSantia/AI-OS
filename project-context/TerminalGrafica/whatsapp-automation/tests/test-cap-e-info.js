@@ -4,9 +4,10 @@
 //     $399.999.600. v10 no heredó el cap_volumen de v7. El cap va al TOTAL, no al
 //     turno: el precio unitario se sigue diciendo (decisión de Martin).
 //
-//   · RAMA INFO — "¿a qué hora abren los sábados?" hizo handoff con el horario
-//     cargado en bot.info_negocio. El Agente Intención clasificó bien pero dejó
-//     `respuestaInfo` vacío, y `Salida Info` no consultaba nada.
+//   · RAMA INFO — rediseñada el 2026-08-03: Intención dejó de redactar info (era
+//     clasificador + redactor a la vez). Ahora un Agente Info dedicado redacta
+//     grounded en bot.info_negocio (o escala). Se testea lo determinístico
+//     (Prompt Info inyecta la tabla, Leer Info normaliza); la salida LLM se mockea.
 //
 // Corre el jsCode REAL extraído del workflow (no una copia), así el test no puede
 // quedar desincronizado de los nodos.
@@ -85,38 +86,57 @@ check('el borde exacto ($200.000) SI se dice', borde.hechos[0] && borde.hechos[0
 const pasado = calcular(501);  // 200.400
 check('un peso arriba del borde ya no', pasado.hechos[0] && pasado.hechos[0].total === null);
 
-console.log('\n=== Rama info: "¿a que hora abren los sabados?" ===');
+console.log('\n=== Rama info (rediseño 2026-08-03): Prompt Info + Leer Info ===');
+// El diseño nuevo separa clasificar de redactar: Intención solo clasifica; Datos
+// Info trae toda la tabla; Prompt Info se la inyecta al Agente Info (LLM), que
+// redacta grounded o escala; Leer Info normaliza. Aca se corre lo DETERMINISTICO
+// (Prompt Info y Leer Info); la salida del LLM se mockea (el harness no lo ejecuta).
 const FILAS_INFO = [
-  { clave: 'horario_atencion', valor: 'Lunes a viernes de 8 a 20, sabados de 9 a 13.' },
+  { clave: 'horario_semana', valor: 'Lunes a viernes de 8 a 20.' },
+  { clave: 'horario_sabado', valor: 'Sabados de 9 a 13.' },
   { clave: 'direccion', valor: 'Rodríguez Peña 3865' },
-  { clave: 'formas_pago', valor: 'Efectivo, débito y transferencia.' },
 ];
-const salidaInfo = (userMessage, respuestaInfo, filas) => correr('Salida Info', {}, {
-  'Leer Intención': { userMessage, respuestaInfo, intencion: 'info' },
+const promptInfo = (userMessage, filas) => correr('Prompt Info', {}, {
+  'Leer Intención': { userMessage, intencion: 'info' },
   'Datos Info': filas,
 });
+const leerInfo = (pInfoJson, agentOut) => correr('Leer Info', { output: agentOut },
+  { 'Prompt Info': pInfoJson });
 
-const sinAgente = salidaInfo('¿a qué hora abren los sábados?', '', FILAS_INFO);
-check('AHORA contesta igual (antes escalaba)', sinAgente.hayRespuesta === true, JSON.stringify(sinAgente.final));
-check('trae el horario real', /sabados de 9 a 13/i.test(sinAgente.final), sinAgente.final);
-check('NO manda la tabla entera', !/Rodríguez Peña/.test(sinAgente.final), sinAgente.final);
-check('marca que salio del respaldo', sinAgente.infoDelRespaldo === true);
-check('lo deja en notas', /fuente=tabla/.test(sinAgente.notas), sinAgente.notas);
+// --- Prompt Info: le inyecta al agente TODA la tabla + la pregunta ---
+const pi = promptInfo('¿a qué hora abren los sábados?', FILAS_INFO);
+check('Prompt Info cuenta las filas disponibles', pi.infoFilas === 3, pi.infoFilas);
+check('inyecta el horario del sabado', /Sabados de 9 a 13/.test(pi.promptInfo), pi.promptInfo);
+check('inyecta TODAS las filas (no filtra, de eso decide el LLM)',
+  /Rodríguez Peña/.test(pi.promptInfo) && /Lunes a viernes/.test(pi.promptInfo));
+check('incluye la pregunta del cliente', /abren los sábados/.test(pi.promptInfo));
 
-const conAgente = salidaInfo('¿a qué hora abren los sábados?', 'Los sábados abrimos de 9 a 13.', FILAS_INFO);
-check('si el agente contesto, gana su redaccion', conAgente.final === 'Los sábados abrimos de 9 a 13.');
-check('se marca como fuente agente', /fuente=agente/.test(conAgente.notas), conAgente.notas);
+const piVacio = promptInfo('¿a qué hora abren?', []);
+check('tabla vacia -> infoFilas 0', piVacio.infoFilas === 0);
+check('tabla vacia -> (sin datos) en el prompt', /\(sin datos\)/.test(piVacio.promptInfo));
 
-const sinDato = salidaInfo('¿tienen estacionamiento propio?', '', FILAS_INFO);
-check('sin dato NO inventa: escala', sinDato.hayRespuesta === false, JSON.stringify(sinDato.final));
-check('lo registra', /fuente=ninguna/.test(sinDato.notas), sinDato.notas);
+const piCaida = promptInfo('¿a qué hora abren?', [{ error: 'connection refused' }]);
+check('base caida -> filas filtradas, infoFilas 0', piCaida.infoFilas === 0);
 
-const baseCaida = salidaInfo('¿a qué hora abren?', '', [{ error: 'connection refused' }]);
-check('la base caida degrada a escalacion, no a crash', baseCaida.hayRespuesta === false);
+// --- Leer Info: normaliza {respuesta, escalar} -> hayRespuesta ---
+const resp = leerInfo(pi, { respuesta: 'Los sábados abrimos de 9 a 13.', escalar: false });
+check('agente contesta -> hayRespuesta true', resp.hayRespuesta === true, JSON.stringify(resp.final));
+check('pasa la redaccion del agente tal cual', resp.final === 'Los sábados abrimos de 9 a 13.');
+check('lo marca en notas', /fuente=agente/.test(resp.notas), resp.notas);
 
-const dir = salidaInfo('dónde queda el local?', '', FILAS_INFO);
-check('la direccion sale para una pregunta de direccion', /Rodríguez Peña/.test(dir.final), dir.final);
-check('y no le pega el horario', !/9 a 13/.test(dir.final), dir.final);
+const esc = leerInfo(pi, { respuesta: '', escalar: true });
+check('agente pide escalar -> hayRespuesta false (mail)', esc.hayRespuesta === false, JSON.stringify(esc.final));
+check('escala queda en notas', /fuente=escala/.test(esc.notas), esc.notas);
+
+const vacia = leerInfo(pi, { respuesta: '', escalar: false });
+check('respuesta vacia -> escala igual (no manda vacio)', vacia.hayRespuesta === false);
+
+const sinTabla = leerInfo(piVacio, { respuesta: 'Abrimos siempre', escalar: false });
+check('sin filas en la tabla NO se contesta aunque el agente redacte',
+  sinTabla.hayRespuesta === false, JSON.stringify(sinTabla.final));
+
+const baseCaida = leerInfo(piCaida, { respuesta: 'algo', escalar: false });
+check('base caida degrada a escalacion, no a crash', baseCaida.hayRespuesta === false);
 
 console.log('\n' + (fail ? 'FALLA: ' + fail : 'TODO OK'));
 process.exit(fail ? 1 : 0);

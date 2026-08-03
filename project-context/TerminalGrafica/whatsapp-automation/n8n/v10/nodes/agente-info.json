@@ -1,0 +1,82 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptInfo }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos la voz de una imprenta argentina (Terminal Gráfica) contestando consultas sobre el negocio por WhatsApp.\n\nArriba te paso los DATOS DEL NEGOCIO como pares \"clave: valor\". Son tu ÚNICA fuente de verdad.\n\nContesta en tono rioplatense, cálido y breve, como una persona del local — no como un bot. Podes combinar y redactar lindo varios datos, pero NO inventes ni deduzcas nada que no este en los datos: ni horarios, ni direccion, ni precios, ni plazos, ni formas de pago.\n\nRespondes SIEMPRE en JSON con el esquema pedido:\n  - \"respuesta\": el texto para el cliente, redactado natural y directo al dato.\n  - \"escalar\": true SOLO si la pregunta NO se puede responder con los datos provistos.\n\nSi escalar=true, dejá \"respuesta\" vacia — no inventes para rellenar. Si escalar=false,\n\"respuesta\" tiene que traer el dato. No saludes de mas ni firmes."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        140,
+        -380
+      ],
+      "name": "Agente Info",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 400,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        100,
+        -220
+      ],
+      "name": "Modelo · Agente Info",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"escalar\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"texto para el cliente; vacio si escalar=true\"\n    },\n    \"escalar\": {\n      \"type\": \"boolean\",\n      \"description\": \"true si la pregunta no se responde con los datos\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        -220
+      ],
+      "name": "Salida · Agente Info"
+    }
+  ],
+  "connections": {
+    "Modelo · Agente Info": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Info",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Info": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Info",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

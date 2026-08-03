@@ -824,9 +824,13 @@ console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
     E('el prompt no le explica al compositor por que no hay total por volumen');
   } else if (calc) OK('el compositor sabe explicar el cap sin inventar la causa');
 
-  // ── LA RAMA INFO NO PUEDE DEPENDER DE QUE EL LLM LLAME SU TOOL ──
+  // ── RAMA INFO: CLASIFICADOR PURO + AGENTE GROUNDED EN LA TABLA ──
+  // Rediseño 2026-08-03: Intención ya NO redacta info (era un clasificador que
+  // ademas componia = design smell + causa del handoff del 31). Ahora: Datos Info
+  // trae toda la tabla, Prompt Info la inyecta, Agente Info redacta SOLO con esos
+  // datos (o escala), Leer Info normaliza. Suena humano pero no puede inventar.
   const datos = N('Datos Info');
-  if (!datos) E('falta "Datos Info": la rama info escala cuando el agente no llena respuestaInfo');
+  if (!datos) E('falta "Datos Info": la rama info se queda sin la tabla que alimenta al agente');
   else {
     OK('existe "Datos Info"');
     if (!/bot\.info_negocio/.test(datos.parameters.query || '')) E('Datos Info no consulta bot.info_negocio');
@@ -834,26 +838,52 @@ console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
     if (datos.onError !== 'continueRegularOutput') E('Datos Info sin onError: un error de la base mataria el turno');
     else OK('Datos Info degrada sin matar el turno');
   }
-  const salida = N('Salida Info');
-  if (salida) {
-    const js = salida.parameters.jsCode;
-    if (!/Datos Info/.test(js)) E('Salida Info no usa el respaldo de la tabla: sigue dependiendo del agente');
-    else OK('Salida Info cae a la tabla cuando el agente no contesto');
-    // el respaldo NO puede inventar: sin match, se escala igual que antes
-    if (!/_score > 0/.test(js)) E('el respaldo no filtra por relevancia: mandaria la tabla entera');
-    else OK('el respaldo solo usa filas que matchean la pregunta');
-    if (!/infoDelRespaldo/.test(js)) E('no hay telemetria del respaldo: no se puede saber si el agente dejo de usar su tool');
-    else OK('registra si la respuesta salio del agente o de la tabla');
+  // Prompt Info inyecta la tabla ENTERA al agente (no lo obliga a llamar una tool)
+  const pInfo = N('Prompt Info');
+  if (!pInfo) E('falta "Prompt Info": nadie le pasa la tabla al Agente Info');
+  else {
+    const js = pInfo.parameters.jsCode || '';
+    if (!/Datos Info/.test(js)) E('Prompt Info no lee las filas de Datos Info');
+    else OK('Prompt Info inyecta las filas de la tabla al agente');
+    if (!/promptInfo/.test(js) || !/infoFilas/.test(js)) E('Prompt Info no arma promptInfo/infoFilas');
+    else OK('Prompt Info arma el prompt y cuenta las filas disponibles');
   }
-  // la contradiccion del system prompt era la causa de fondo
+  // Agente Info: LLM dedicado, grounded, con escalacion explicita
+  const agInfo = N('Agente Info');
+  if (!agInfo) E('falta "Agente Info": la rama info no tiene quien redacte natural');
+  else {
+    const sys = (agInfo.parameters.options || {}).systemMessage || '';
+    if (!/no inventes/i.test(sys) || !/fuente de verdad/i.test(sys)) {
+      E('el Agente Info no tiene la regla de grounding (solo la tabla, no inventar)');
+    } else OK('el Agente Info solo puede afirmar lo que esta en la tabla');
+    if (!/escalar/i.test(sys)) E('el Agente Info no sabe escalar cuando el dato no esta');
+    else OK('el Agente Info escala si la pregunta no esta en la tabla');
+    if (agInfo.onError !== 'continueRegularOutput') E('Agente Info sin onError: un fallo del LLM mataria el turno');
+    else OK('Agente Info degrada sin matar el turno');
+  }
+  // Leer Info: setea hayRespuesta (lo que mira ¿Info Resuelta?) y escala sin datos
+  const lInfo = N('Leer Info');
+  if (!lInfo) E('falta "Leer Info": nadie normaliza la salida del Agente Info');
+  else {
+    const js = lInfo.parameters.jsCode || '';
+    if (!/hayRespuesta/.test(js)) E('Leer Info no setea hayRespuesta: ¿Info Resuelta? no puede rutear');
+    else OK('Leer Info setea hayRespuesta para ¿Info Resuelta?');
+    if (!/infoFilas/.test(js) || !/escal/i.test(js)) E('Leer Info no escala cuando no hay datos o el agente pidio escalar');
+    else OK('Leer Info escala a mail si no hay dato o el agente pidio escalar');
+  }
+  // Agente Intención: clasificador PURO, ya no redacta info
   const agI = N('Agente Intención');
   if (agI) {
     const sys = (agI.parameters.options || {}).systemMessage || '';
-    if (/UNICA salida es una clasificacion/.test(sys) && /respuestaInfo/.test(sys)) {
-      E('el prompt del clasificador se contradice: "no redactas" + "devolve la respuesta"');
-    } else OK('el prompt del clasificador ya no se contradice sobre respuestaInfo');
-    if (!/OBLIGATORIO/.test(sys)) E('el clasificador no sabe que contestar info es obligacion suya');
-    else OK('el clasificador sabe que la respuesta de info es suya');
+    if (/respuestaInfo/.test(sys)) E('el clasificador todavia cree que redacta info (menciona respuestaInfo)');
+    else OK('el clasificador ya no redacta info (sin respuestaInfo en el prompt)');
+    if (!/(ÚNICO trabajo es clasificar|no contest[aá]s info)/i.test(sys)) {
+      E('el clasificador no deja claro que su unico trabajo es clasificar');
+    } else OK('el clasificador sabe que su unico trabajo es clasificar');
+    const par = N('Salida · Agente Intención');
+    if (par && /respuestaInfo/.test(par.parameters.inputSchema || '')) {
+      E('el schema del clasificador todavia pide respuestaInfo');
+    } else if (par) OK('el schema del clasificador ya no pide respuestaInfo');
   }
 
   // ── OPERADORES SQL QUE EL PARSER DE n8n PUEDE PARTIR ──

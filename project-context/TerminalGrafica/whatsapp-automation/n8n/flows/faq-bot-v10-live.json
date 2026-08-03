@@ -1129,7 +1129,7 @@
         "text": "={{ $json.promptAgente }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Sos el clasificador de entrada de una imprenta argentina (Terminal Gráfica).\nNO decis precios y NO elegis productos: de eso se encargan otros.\n\nCon UNA excepcion, abajo: las preguntas de `info` las contestas vos.\n\nClasifica el ultimo mensaje del cliente en una de estas intenciones:\n  precio      - pide o negocia un precio, cantidades, \"cuanto sale\", \"me haces X\"\n  info        - horarios, direccion, formas de pago, plazos, envios, contacto\n  producto    - pregunta si HACEN algo, sin pedir precio todavia\n  seguimiento - contesta a algo que el bot ya le pregunto (elige una opcion, da una cantidad)\n  otro        - saludo suelto, agradecimiento, off-topic\n\n═══ SI CLASIFICAS `info`, CONTESTAS VOS ═══\n\nEs OBLIGATORIO: llamas la tool consultar_info_negocio y escribis la respuesta\nal cliente en `respuestaInfo`. No es opcional y no lo hace nadie despues tuyo —\nsi dejas ese campo vacio, el cliente se va a un mail por un horario que estaba\ncargado en la base.\n\nComo se redacta: corto, rioplatense, con el dato concreto que pidio. Nada de\nsaludos largos.\n\nEl UNICO caso en que `respuestaInfo` va vacio es que la tool no traiga el dato.\nAhi si, vacia: NO inventes horarios, direcciones, plazos ni formas de pago. Un\ndato inventado sobre el negocio es peor que no responder.\n\nRespondes SIEMPRE en JSON con el esquema pedido.",
+          "systemMessage": "Sos el clasificador de entrada de una imprenta argentina (Terminal Gráfica).\nTu ÚNICO trabajo es clasificar el último mensaje del cliente. NO redactás respuestas,\nNO decís precios, NO elegís productos, NO contestás info: de eso se encargan otros nodos.\n\nClasifica el último mensaje en una de estas intenciones:\n  precio      - pide o negocia un precio, cantidades, \"cuanto sale\", \"me haces X\"\n  info        - horarios, direccion, formas de pago, plazos, envios, contacto\n  producto    - pregunta si HACEN algo, sin pedir precio todavia\n  seguimiento - contesta a algo que el bot ya le pregunto (elige una opcion, da una cantidad)\n  otro        - saludo suelto, agradecimiento, off-topic\n\nRespondes SIEMPRE en JSON con el esquema pedido: intencion, confianza (0 a 1) y motivo.",
           "maxIterations": 5,
           "returnIntermediateSteps": true
         }
@@ -1169,7 +1169,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"intencion\",\n    \"confianza\"\n  ],\n  \"properties\": {\n    \"intencion\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"precio\",\n        \"info\",\n        \"producto\",\n        \"seguimiento\",\n        \"otro\"\n      ]\n    },\n    \"confianza\": {\n      \"type\": \"number\",\n      \"description\": \"0 a 1\"\n    },\n    \"respuestaInfo\": {\n      \"type\": \"string\",\n      \"description\": \"solo si intencion=info y la tool trajo el dato; si no, vacio\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"intencion\",\n    \"confianza\"\n  ],\n  \"properties\": {\n    \"intencion\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"precio\",\n        \"info\",\n        \"producto\",\n        \"seguimiento\",\n        \"otro\"\n      ]\n    },\n    \"confianza\": {\n      \"type\": \"number\",\n      \"description\": \"0 a 1\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
@@ -1178,31 +1178,6 @@
         200
       ],
       "name": "Salida · Agente Intención"
-    },
-    {
-      "parameters": {
-        "descriptionType": "manual",
-        "toolDescription": "Devuelve datos operativos del negocio: horarios, direccion, formas de pago, plazos de entrega, envios. Usala cuando el cliente pregunta por como funciona el negocio y NO por el precio de un producto.",
-        "operation": "executeQuery",
-        "query": "select clave, valor from bot.info_negocio where clave ilike '%' || $1 || '%' or $1 = '' limit 12",
-        "options": {
-          "queryReplacement": "={{ $fromAI('tema', 'tema consultado: horario, direccion, pago, plazo, envio', 'string', '') }}"
-        }
-      },
-      "type": "n8n-nodes-base.postgresTool",
-      "typeVersion": 2.6,
-      "position": [
-        -900,
-        260
-      ],
-      "name": "consultar_info_negocio",
-      "credentials": {
-        "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
-        }
-      },
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -1492,7 +1467,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normaliza la salida del Agente 1. Si el agente fallo (onError:continue) o\n// devolvio algo que no matchea el schema, se cae a 'precio': es la rama con\n// verificacion completa, asi que un error de clasificacion se degrada hacia la\n// ruta MAS controlada, no hacia la mas suelta.\nconst d = $('Prompt Intención').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst VALIDAS = ['precio', 'info', 'producto', 'seguimiento', 'otro'];\nlet intencion = String(out.intencion || '').toLowerCase();\nif (!VALIDAS.includes(intencion)) intencion = 'precio';\n\nconst confianza = Number(out.confianza);\n\n// Confianza baja = tratarlo como pedido de precio (ruta verificada), no como info.\nif (Number.isFinite(confianza) && confianza < 0.5 && intencion === 'info') intencion = 'precio';\n\nreturn [{ json: {\n  ...d,\n  intencion,\n  confianzaIntencion: Number.isFinite(confianza) ? confianza : 0,\n  respuestaInfo: String(out.respuestaInfo || '').trim(),\n  motivoIntencion: String(out.motivo || ''),\n} }];"
+        "jsCode": "// Normaliza la salida del Agente 1 (clasificador puro). Si el agente fallo\n// (onError:continue) o devolvio algo fuera de schema, se cae a 'precio': la rama\n// con verificacion completa, para degradar hacia la ruta MAS controlada.\nconst d = $('Prompt Intención').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst VALIDAS = ['precio', 'info', 'producto', 'seguimiento', 'otro'];\nlet intencion = String(out.intencion || '').toLowerCase();\nif (!VALIDAS.includes(intencion)) intencion = 'precio';\n\nconst confianza = Number(out.confianza);\n\n// Confianza baja en info -> tratarlo como precio (ruta verificada).\nif (Number.isFinite(confianza) && confianza < 0.5 && intencion === 'info') intencion = 'precio';\n\nreturn [{ json: {\n  ...d,\n  intencion,\n  confianzaIntencion: Number.isFinite(confianza) ? confianza : 0,\n  motivoIntencion: String(out.motivo || ''),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1560,18 +1535,6 @@
         0
       ],
       "name": "Switch Intención"
-    },
-    {
-      "parameters": {
-        "jsCode": "// RED DETERMINISTICA DE LA RAMA INFO (Martin, 2026-07-31)\n//\n// Antes esto era una linea: copiaba `respuestaInfo` y si venia vacio el turno\n// escalaba. Ronda real del 31: \"¿a que hora abren los sabados?\" -> handoff, con\n// el Agente Intencion clasificando BIEN (intencion=info) y el horario cargado en\n// bot.info_negocio. El dato estaba y nadie fue a buscarlo.\n//\n// La causa es una contradiccion en el propio system prompt del agente: le dice\n// \"tu UNICA salida es una clasificacion, NO redactas la respuesta al cliente\" y\n// cuatro lineas despues \"para info devolve la respuesta textual en\n// respuestaInfo\". Cuando gana la primera, el campo queda vacio. Encima\n// `respuestaInfo` no esta en `required`, asi que el output parser lo deja pasar.\n//\n// Se podria pelear el prompt, pero un dato que ya esta en una tabla no deberia\n// depender de que un LLM se acuerde de pedirlo. `Datos Info` consulta la tabla\n// SIEMPRE (misma query que la tool, con $1='' que trae todo) y aca se usa como\n// respaldo. Si el agente contesto, gana su redaccion; si no, se arma el texto\n// desde las filas. Sin llamada LLM extra.\nconst d = $('Leer Intención').first().json;\nconst texto = String(d.respuestaInfo || '').trim();\n\n// filas de bot.info_negocio (clave, valor). El nodo tiene alwaysOutputData, asi\n// que ante error o tabla vacia llega un item sin `clave` — se filtra.\nlet filas = [];\ntry {\n  filas = $('Datos Info').all()\n    .map((i) => i.json)\n    .filter((r) => r && r.clave && r.valor);\n} catch (e) { filas = []; }\n\n// QUE FILAS SIRVEN PARA ESTA PREGUNTA. La tabla es chica (limit 12) pero mandarla\n// entera seria un mensaje ilegible. Se puntua cada fila por cuantas palabras del\n// cliente aparecen en su clave o su valor, y se queda con las que matchean.\n// Sin match no se inventa nada: se escala, que es la conducta vieja.\nconst norm = (s) => String(s || '').normalize('NFC').toLowerCase()\n  .replace(/[áéíóúü]/g, (c) => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' }[c]))\n  .replace(/ñ/g, 'n');\n\nconst PISTAS = {\n  horario: ['horario', 'hora', 'abren', 'abre', 'cierran', 'cierra', 'sabado', 'sabados',\n    'domingo', 'feriado', 'atienden', 'atiende', 'abierto', 'hoy', 'ahora'],\n  direccion: ['direccion', 'donde', 'ubicado', 'ubicacion', 'local', 'quedan', 'queda', 'llegar'],\n  pago: ['pago', 'pagar', 'tarjeta', 'efectivo', 'transferencia', 'debito', 'credito', 'mercado'],\n  envio: ['envio', 'envios', 'mandan', 'mandar', 'entrega', 'domicilio', 'cadeteria'],\n  plazo: ['plazo', 'demora', 'tardan', 'tarda', 'cuando', 'listo', 'urgente'],\n  contacto: ['telefono', 'contacto', 'whatsapp', 'mail', 'correo', 'instagram'],\n};\n\nconst pregunta = norm(d.userMessage || '');\nconst temas = Object.keys(PISTAS).filter((t) => PISTAS[t].some((p) => pregunta.includes(p)));\n\nconst puntuar = (r) => {\n  const clave = norm(r.clave);\n  let score = 0;\n  for (const t of temas) {\n    if (clave.includes(t)) score += 3;\n    if (PISTAS[t].some((p) => clave.includes(p))) score += 2;\n  }\n  // palabras largas del cliente que aparezcan en la clave\n  for (const w of pregunta.split(/[^a-z0-9]+/).filter((w) => w.length >= 5)) {\n    if (clave.includes(w)) score += 2;\n  }\n  return score;\n};\n\nconst relevantes = filas.map((r) => ({ ...r, _score: puntuar(r) }))\n  .filter((r) => r._score > 0)\n  .sort((a, b) => b._score - a._score)\n  .slice(0, 4);\n\n// El respaldo se arma con el dato CRUDO de la tabla. No es la prosa mas linda,\n// pero es verdadera y llega — que es infinitamente mejor que un mail.\nconst respaldo = relevantes.map((r) => String(r.valor).trim()).join('\\n');\n\nconst final = texto || respaldo;\n\nreturn [{ json: {\n  ...d,\n  final,\n  accion: 'info',\n  hayRespuesta: final.length > 0,\n  // telemetria: sin esto no se puede saber si la rama info se sostiene sola o\n  // vive del respaldo (que seria sintoma de que el agente nunca usa su tool).\n  infoDelAgente: texto.length > 0,\n  infoDelRespaldo: !texto && respaldo.length > 0,\n  notas: 'v10-info' + (texto ? ' fuente=agente' : (respaldo ? ' fuente=tabla' : ' fuente=ninguna'))\n    + ' filas=' + filas.length + ' relevantes=' + relevantes.length\n    + (temas.length ? ' temas=' + temas.join(',') : ''),\n} }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        0,
-        -300
-      ],
-      "name": "Salida Info"
     },
     {
       "parameters": {
@@ -1930,6 +1893,84 @@
         -300
       ],
       "name": "¿Info Resuelta?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el prompt del Agente Info: le inyecta TODA la tabla bot.info_negocio\n// (via Datos Info) + la pregunta. El agente redacta SOLO con estos datos.\nconst d = $('Leer Intención').first().json;\nlet filas = [];\ntry {\n  filas = $('Datos Info').all().map((i) => i.json).filter((r) => r && r.clave && r.valor);\n} catch (e) { filas = []; }\nconst tabla = filas.map((r) => '- ' + r.clave + ': ' + String(r.valor).trim()).join('\\n');\nreturn [{ json: {\n  ...d,\n  infoFilas: filas.length,\n  promptInfo: [\n    'DATOS DEL NEGOCIO (unica fuente de verdad; no afirmes nada que no este aca):',\n    tabla || '(sin datos)',\n    '',\n    'PREGUNTA DEL CLIENTE:',\n    String(d.userMessage || ''),\n  ].join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        -380
+      ],
+      "name": "Prompt Info"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 400,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        100,
+        -220
+      ],
+      "name": "Modelo · Agente Info",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptInfo }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos la voz de una imprenta argentina (Terminal Gráfica) contestando consultas sobre el negocio por WhatsApp.\n\nArriba te paso los DATOS DEL NEGOCIO como pares \"clave: valor\". Son tu ÚNICA fuente de verdad.\n\nContesta en tono rioplatense, cálido y breve, como una persona del local — no como un bot. Podes combinar y redactar lindo varios datos, pero NO inventes ni deduzcas nada que no este en los datos: ni horarios, ni direccion, ni precios, ni plazos, ni formas de pago.\n\nRespondes SIEMPRE en JSON con el esquema pedido:\n  - \"respuesta\": el texto para el cliente, redactado natural y directo al dato.\n  - \"escalar\": true SOLO si la pregunta NO se puede responder con los datos provistos.\n\nSi escalar=true, dejá \"respuesta\" vacia — no inventes para rellenar. Si escalar=false,\n\"respuesta\" tiene que traer el dato. No saludes de mas ni firmes."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        140,
+        -380
+      ],
+      "name": "Agente Info",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"escalar\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"texto para el cliente; vacio si escalar=true\"\n    },\n    \"escalar\": {\n      \"type\": \"boolean\",\n      \"description\": \"true si la pregunta no se responde con los datos\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        -220
+      ],
+      "name": "Salida · Agente Info"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza la salida del Agente Info (JSON {respuesta, escalar}). Redacta prosa\n// natural anclada en la tabla, o escalar=true si la pregunta no esta cubierta.\n// Sin filas en la tabla (infoFilas=0) tambien se escala: nunca se inventa info.\nconst d = $('Prompt Info').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\nconst respuesta = String(out.respuesta || '').trim();\nconst escala = out.escalar === true || respuesta === '' || (d.infoFilas || 0) === 0;\nconst final = escala ? '' : respuesta;\nreturn [{ json: {\n  ...d,\n  final,\n  accion: 'info',\n  hayRespuesta: final.length > 0,\n  notas: 'v10-info-agente filas=' + (d.infoFilas || 0) + (escala ? ' fuente=escala' : ' fuente=agente'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        -380
+      ],
+      "name": "Leer Info"
     }
   ],
   "connections": {
@@ -1961,17 +2002,6 @@
           {
             "node": "Agente Intención",
             "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "consultar_info_negocio": {
-      "ai_tool": [
-        [
-          {
-            "node": "Agente Intención",
-            "type": "ai_tool",
             "index": 0
           }
         ]
@@ -2405,18 +2435,7 @@
       "main": [
         [
           {
-            "node": "Salida Info",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Salida Info": {
-      "main": [
-        [
-          {
-            "node": "¿Info Resuelta?",
+            "node": "Prompt Info",
             "type": "main",
             "index": 0
           }
@@ -2756,6 +2775,61 @@
         [
           {
             "node": "Label Cap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Info": {
+      "main": [
+        [
+          {
+            "node": "Agente Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo · Agente Info": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Info",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Info": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Info",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Info": {
+      "main": [
+        [
+          {
+            "node": "Leer Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Info": {
+      "main": [
+        [
+          {
+            "node": "¿Info Resuelta?",
             "type": "main",
             "index": 0
           }

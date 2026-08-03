@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Arma el prompt del Agente Info: le inyecta TODA la tabla bot.info_negocio\n// (via Datos Info) + la pregunta. El agente redacta SOLO con estos datos.\nconst d = $('Leer Intención').first().json;\nlet filas = [];\ntry {\n  filas = $('Datos Info').all().map((i) => i.json).filter((r) => r && r.clave && r.valor);\n} catch (e) { filas = []; }\nconst tabla = filas.map((r) => '- ' + r.clave + ': ' + String(r.valor).trim()).join('\\n');\nreturn [{ json: {\n  ...d,\n  infoFilas: filas.length,\n  promptInfo: [\n    'DATOS DEL NEGOCIO (unica fuente de verdad; no afirmes nada que no este aca):',\n    tabla || '(sin datos)',\n    '',\n    'PREGUNTA DEL CLIENTE:',\n    String(d.userMessage || ''),\n  ].join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        -380
+      ],
+      "name": "Prompt Info"
+    }
+  ],
+  "connections": {}
+}

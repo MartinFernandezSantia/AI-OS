@@ -9,7 +9,7 @@
 - **Sincronizar:** exportá el workflow sobre el monolito y corré `node _split-monolito.js`. `git diff` muestra qué nodos cambiaron.
 - **Actualizar un nodo en n8n:** importá/pegá su `.json` de `nodes/` (trae el nodo + sus sub-nodos ai_).
 
-## Índice de nodos (61 archivos, 75 nodos)
+## Índice de nodos (63 archivos, 78 nodos)
 
 | archivo | nodo | tipo | sub-nodos incluidos |
 |---|---|---|---|
@@ -22,7 +22,8 @@
 | `nodes/tiene-texto.json` | ¿Tiene Texto? | if | — |
 | `nodes/violacion-real-tier-2.json` | ¿Violación Real Tier-2? | if | — |
 | `nodes/agente-compositor.json` | Agente Compositor | agent | Modelo · Agente Compositor, Salida · Agente Compositor |
-| `nodes/agente-intencion.json` | Agente Intención | agent | Modelo · Agente Intención, Salida · Agente Intención, consultar_info_negocio |
+| `nodes/agente-info.json` | Agente Info | agent | Modelo · Agente Info, Salida · Agente Info |
+| `nodes/agente-intencion.json` | Agente Intención | agent | Modelo · Agente Intención, Salida · Agente Intención |
 | `nodes/agente-relevancia.json` | Agente Relevancia | agent | Modelo · Agente Relevancia, Salida · Agente Relevancia |
 | `nodes/agente-selector.json` | Agente Selector | agent | Modelo · Agente Selector, Salida · Agente Selector, explorar_catalogo |
 | `nodes/agente-verificador.json` | Agente Verificador | agent | Modelo · Agente Verificador, Salida · Agente Verificador, verificar_en_base |
@@ -46,6 +47,7 @@
 | `nodes/label-envio-fallido.json` | Label Envío Fallido | httpRequest | — |
 | `nodes/label-escalacion.json` | Label Escalación | httpRequest | — |
 | `nodes/leer-compositor.json` | Leer Compositor | code | — |
+| `nodes/leer-info.json` | Leer Info | code | — |
 | `nodes/leer-intencion.json` | Leer Intención | code | — |
 | `nodes/leer-selector.json` | Leer Selector | code | — |
 | `nodes/leer-verificador.json` | Leer Verificador | code | — |
@@ -56,6 +58,7 @@
 | `nodes/mensaje-escalacion.json` | Mensaje Escalación | httpRequest | — |
 | `nodes/mensaje-firewall-refusal.json` | Mensaje Firewall Refusal | httpRequest | — |
 | `nodes/mensaje-refusal-tier-2.json` | Mensaje Refusal Tier-2 | httpRequest | — |
+| `nodes/prompt-info.json` | Prompt Info | code | — |
 | `nodes/prompt-intencion.json` | Prompt Intención | code | — |
 | `nodes/prompt-re-auditoria.json` | Prompt Re-auditoría | code | — |
 | `nodes/prompt-reintento.json` | Prompt Reintento | code | — |
@@ -63,7 +66,6 @@
 | `nodes/prompt-verificador.json` | Prompt Verificador | code | — |
 | `nodes/respuesta-no-texto.json` | Respuesta No-Texto | httpRequest | — |
 | `nodes/router-fail-tier-2.json` | Router Fail Tier-2 | code | — |
-| `nodes/salida-info.json` | Salida Info | code | — |
 | `nodes/saludo-bienvenida.json` | Saludo Bienvenida | httpRequest | — |
 | `nodes/silencio-otro.json` | Silencio Otro | noOp | — |
 | `nodes/silencio-tier-2.json` | Silencio Tier-2 | noOp | — |
@@ -109,8 +111,7 @@ tienen varias salidas; el índice `[i]` es el orden del puerto.
 - **Prompt Intención**  [0]→ Agente Intención
 - **Leer Intención**  [0]→ Switch Intención
 - **Switch Intención**  [0]→ Datos Info   [1]→ Silencio Otro   [2]→ Prompt Selector
-- **Salida Info**  [0]→ ¿Info Resuelta?
-- **Datos Info**  [0]→ Salida Info
+- **Datos Info**  [0]→ Prompt Info
 - **Prompt Selector**  [0]→ Agente Selector
 - **Leer Selector**  [0]→ Extraer Palabras
 - **Armar Candidatos**  [0]→ Agente Relevancia
@@ -128,13 +129,15 @@ tienen varias salidas; el índice `[i]` es el orden del puerto.
 - **¿Se Entregó?**  [0]→ Log Turno   [1]→ Label Envío Fallido
 - **Label Envío Fallido**  [0]→ Log Turno
 - **¿Info Resuelta?**  [0]→ Enviar Mensaje   [1]→ Label Escalación
+- **Prompt Info**  [0]→ Agente Info
+- **Agente Info**  [0]→ Leer Info
+- **Leer Info**  [0]→ ¿Info Resuelta?
 
 ## Sub-nodos ai_ (modelo / parser / tool → agente)
 
 - `OpenRouter Chat Model` → **Guardrails Tier-2**
 - `Modelo · Agente Intención` → **Agente Intención**
 - `Salida · Agente Intención` → **Agente Intención**
-- `consultar_info_negocio` → **Agente Intención**
 - `Modelo · Agente Selector` → **Agente Selector**
 - `Salida · Agente Selector` → **Agente Selector**
 - `explorar_catalogo` → **Agente Selector**
@@ -145,3 +148,5 @@ tienen varias salidas; el índice `[i]` es el orden del puerto.
 - `Modelo · Agente Verificador` → **Agente Verificador**
 - `Salida · Agente Verificador` → **Agente Verificador**
 - `verificar_en_base` → **Agente Verificador**
+- `Modelo · Agente Info` → **Agente Info**
+- `Salida · Agente Info` → **Agente Info**

@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Normaliza la salida del Agente Info (JSON {respuesta, escalar}). Redacta prosa\n// natural anclada en la tabla, o escalar=true si la pregunta no esta cubierta.\n// Sin filas en la tabla (infoFilas=0) tambien se escala: nunca se inventa info.\nconst d = $('Prompt Info').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\nconst respuesta = String(out.respuesta || '').trim();\nconst escala = out.escalar === true || respuesta === '' || (d.infoFilas || 0) === 0;\nconst final = escala ? '' : respuesta;\nreturn [{ json: {\n  ...d,\n  final,\n  accion: 'info',\n  hayRespuesta: final.length > 0,\n  notas: 'v10-info-agente filas=' + (d.infoFilas || 0) + (escala ? ' fuente=escala' : ' fuente=agente'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        -380
+      ],
+      "name": "Leer Info"
+    }
+  ],
+  "connections": {}
+}
