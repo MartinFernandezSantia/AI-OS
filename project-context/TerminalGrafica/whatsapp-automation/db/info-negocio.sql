@@ -41,17 +41,24 @@ begin
   end if;
 end $$;
 
--- --- SEED — MARTIN COMPLETA con los valores reales de TG y aplica -------------
--- Reemplazá cada 'COMPLETAR: ...' por el dato real. Borrá las filas que no apliquen
--- y agregá las que falten. El `valor` es el texto que puede terminar en el mensaje
--- al cliente (o del que Salida Info arma el respaldo), así que redactalo claro.
+-- --- SEED — valores reales de TG (Martin, 2026-08-03) -------------------------
+-- Datos confirmados por Martin. Queda UNA fila 'COMPLETAR' (factura): resolver con
+-- TG antes o después de aplicar. Los `valor` están redactados como frases claras y
+-- autónomas: son los hechos que el agente de info lee y parafrasea (no los tipea el
+-- LLM de memoria). Podés editar el texto libremente; mantené las claves legibles.
 insert into bot.info_negocio (clave, valor) values
-  ('horario',   'COMPLETAR: días y horarios de atención'),
-  ('direccion', 'COMPLETAR: dirección del local'),
-  ('pago',      'COMPLETAR: formas de pago (efectivo, transferencia, Mercado Pago, tarjeta)'),
-  ('envio',     'COMPLETAR: ¿hay envíos o solo retiro en el local?'),
-  ('plazo',     'COMPLETAR: plazos de entrega / cómo se informan'),
-  ('contacto',  'COMPLETAR: teléfono / mail / instagram')
+  ('horario_semana',  'De lunes a viernes atendemos de 8 a 20 hs.'),
+  ('horario_sabado',  'Los sábados atendemos de 9 a 13 hs. Domingos cerrado.'),
+  ('direccion',       'Estamos en Rodríguez Peña 3865.'),
+  ('estacionamiento', 'No tenemos estacionamiento propio para clientes, pero se puede estacionar sobre ambos lados de la calle Rodríguez Peña.'),
+  ('pago',            'Aceptamos efectivo y transferencia. Para arrancar un trabajo se pide una seña del 30%.'),
+  ('factura',         'COMPLETAR: ¿emiten factura? ¿qué tipo (A/B/C)?'),
+  ('envio',           'No hacemos envíos: los trabajos se retiran en el local, en Rodríguez Peña 3865.'),
+  ('plazo',           'El plazo de entrega depende de cada trabajo y se confirma por mail.'),
+  ('urgente',         'Trabajamos pedidos urgentes, pero eso se coordina por mail o directamente en el local.'),
+  ('contacto',        'Este WhatsApp es solo informativo. Para hacer un pedido o hablar con una persona del equipo, escribinos a terminalgrafica@gmail.com o acercate al local.'),
+  ('contacto_redes',  'Nos encontrás en Instagram (instagram.com/terminalgrafica) y en Facebook (facebook.com/terminalgrafica).'),
+  ('presentacion',    'Soy el asistente virtual de Terminal Gráfica.')
 on conflict (clave) do nothing;
 
 -- Sanity tras aplicar:
