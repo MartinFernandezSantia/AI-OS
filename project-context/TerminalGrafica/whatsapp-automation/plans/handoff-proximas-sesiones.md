@@ -208,6 +208,19 @@ aplicado (freeze de entrega).** Fix mínimo cuando Martin decida: en `db/firewal
 que strike-max devuelva `'drop'` en vez de `'silence'` → cae en `Descartar` (silencio real); el
 `silenciado_hasta` de 24 h ya queda seteado igual, y el rate sigue con su `'silence'` → aviso.
 
+**j. Firewall disperso en 4 lugares → unificar** — *idea de diseño 2026-08-03, con Martin. NO
+decidida, NO aplicada (freeze de entrega).* Hoy la lógica de abuso/seguridad está repartida:
+Tier-1 SQL (etapa 2, pre-merge, ve **solo el mensaje suelto**), injection en `Decidir` (etapa 4,
+ve la **ráfaga**), Tier-2 LLM (etapa 5, ve la ráfaga vía `Decidir.userMessage`), y `Strike Tier-2`
+aparte. Martin quiere consolidarla en **una sección bien definida** (no un solo nodo). Trade-off
+clave verificado leyendo el flow: `blocklist`+`rate` conviene que corran **temprano** (escudo
+barato antes del debounce 3 s y del `Get Historial`); `injection`+contenido quieren correr
+**post-merge** (ven la ráfaga). Dos formas sobre la mesa: **(A)** todo unificado post-merge — más
+simple de mantener, pero el conocido-malo hace más trabajo antes de morir; **(B)** dos gates
+rotulados: *Abuso* (blocklist+rate, pre-merge) + *Contenido* (injection+Tier-2, post-merge).
+Requiere pasada adversarial antes de aplicar. Contexto: el objetivo de fondo es que Martin pueda
+mantener el firewall solo — la dispersión actual es parte de por qué no era ownable.
+
 ---
 
 ## 4. Preguntas a TG que bloquean algo
