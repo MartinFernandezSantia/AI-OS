@@ -9,7 +9,7 @@
 - **Sincronizar:** exportá el workflow sobre el monolito y corré `node _split-monolito.js`. `git diff` muestra qué nodos cambiaron.
 - **Actualizar un nodo en n8n:** importá/pegá su `.json` de `nodes/` (trae el nodo + sus sub-nodos ai_).
 
-## Índice de nodos (62 archivos, 75 nodos)
+## Índice de nodos (61 archivos, 75 nodos)
 
 | archivo | nodo | tipo | sub-nodos incluidos |
 |---|---|---|---|
@@ -41,7 +41,7 @@
 | `nodes/filtro-ingreso.json` | Filtro Ingreso | filter | — |
 | `nodes/firewall-tier-1.json` | Firewall Tier-1 | postgres | — |
 | `nodes/get-historial.json` | Get Historial | httpRequest | — |
-| `nodes/guardrails-tier-2.json` | Guardrails Tier-2 | guardrails | — |
+| `nodes/guardrails-tier-2.json` | Guardrails Tier-2 | guardrails | OpenRouter Chat Model |
 | `nodes/label-cap.json` | Label Cap | httpRequest | — |
 | `nodes/label-envio-fallido.json` | Label Envío Fallido | httpRequest | — |
 | `nodes/label-escalacion.json` | Label Escalación | httpRequest | — |
@@ -56,7 +56,6 @@
 | `nodes/mensaje-escalacion.json` | Mensaje Escalación | httpRequest | — |
 | `nodes/mensaje-firewall-refusal.json` | Mensaje Firewall Refusal | httpRequest | — |
 | `nodes/mensaje-refusal-tier-2.json` | Mensaje Refusal Tier-2 | httpRequest | — |
-| `nodes/openrouter-chat-model.json` | OpenRouter Chat Model | lmChatOpenRouter | — |
 | `nodes/prompt-intencion.json` | Prompt Intención | code | — |
 | `nodes/prompt-re-auditoria.json` | Prompt Re-auditoría | code | — |
 | `nodes/prompt-reintento.json` | Prompt Reintento | code | — |
@@ -132,6 +131,7 @@ tienen varias salidas; el índice `[i]` es el orden del puerto.
 
 ## Sub-nodos ai_ (modelo / parser / tool → agente)
 
+- `OpenRouter Chat Model` → **Guardrails Tier-2**
 - `Modelo · Agente Intención` → **Agente Intención**
 - `Salida · Agente Intención` → **Agente Intención**
 - `consultar_info_negocio` → **Agente Intención**

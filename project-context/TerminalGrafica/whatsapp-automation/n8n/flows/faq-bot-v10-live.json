@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "chatwoot-v10",
+        "path": "chatwoot",
         "options": {
           "rawBody": true
         }
@@ -1933,6 +1933,17 @@
     }
   ],
   "connections": {
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Guardrails Tier-2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Modelo · Agente Intención": {
       "ai_languageModel": [
         [

@@ -3,7 +3,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "chatwoot-v10",
+        "path": "chatwoot",
         "options": {
           "rawBody": true
         }
