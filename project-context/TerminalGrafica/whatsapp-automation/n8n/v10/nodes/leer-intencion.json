@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Normaliza la salida del Agente 1. Si el agente fallo (onError:continue) o\n// devolvio algo que no matchea el schema, se cae a 'precio': es la rama con\n// verificacion completa, asi que un error de clasificacion se degrada hacia la\n// ruta MAS controlada, no hacia la mas suelta.\nconst d = $('Prompt Intención').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst VALIDAS = ['precio', 'info', 'producto', 'seguimiento', 'otro'];\nlet intencion = String(out.intencion || '').toLowerCase();\nif (!VALIDAS.includes(intencion)) intencion = 'precio';\n\nconst confianza = Number(out.confianza);\n\n// Confianza baja = tratarlo como pedido de precio (ruta verificada), no como info.\nif (Number.isFinite(confianza) && confianza < 0.5 && intencion === 'info') intencion = 'precio';\n\nreturn [{ json: {\n  ...d,\n  intencion,\n  confianzaIntencion: Number.isFinite(confianza) ? confianza : 0,\n  respuestaInfo: String(out.respuestaInfo || '').trim(),\n  motivoIntencion: String(out.motivo || ''),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "name": "Leer Intención"
+    }
+  ],
+  "connections": {}
+}

@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const d = $('Calcular Montos').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst mensaje = String(out.mensaje || '').trim();\n\n// QUE VUELTA ES. El contador NO puede vivir en el sobre: `d` sale de\n// $('Calcular Montos'), que corre UNA sola vez, asi que en el reintento\n// devolveria el mismo valor de siempre y el loop no terminaria nunca.\n// $runIndex del compositor lo lleva n8n: 0 la primera pasada, 1 la segunda.\nlet intento = 1;\ntry { intento = Number($runIndex) + 1; } catch (e) { intento = 1; }\nif (!Number.isFinite(intento) || intento < 1) intento = 1;\n\nreturn [{ json: {\n  ...d,\n  borrador: mensaje,\n  huboCompositor: mensaje.length > 0,\n  intento,\n  // se arrastra el feedback de la vuelta anterior para poder loguearlo aunque\n  // el segundo intento salga aprobado (queremos saber que hubo que corregir)\n  feedbackPrevio: String(d.feedbackPrevio || ''),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        0
+      ],
+      "name": "Leer Compositor"
+    }
+  ],
+  "connections": {}
+}

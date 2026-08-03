@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7ef66965-5a92-438f-8075-f955f63c7a4e",
+      "name": "Descartar (debounce/dup)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1648,
+        -80
+      ]
+    }
+  ],
+  "connections": {}
+}

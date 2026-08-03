@@ -1,0 +1,27 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- RESPALDO DETERMINISTICO DE LA RAMA INFO (2026-07-31).\n-- Misma tabla y mismas columnas que la tool `consultar_info_negocio`, pero sin\n-- depender de que el LLM se acuerde de llamarla: se trae la tabla entera (es\n-- chica) y `Salida Info` elige las filas que aplican a la pregunta.\n-- El limit es la red por si la tabla crece: 40 filas ya serian un problema de\n-- curacion, no de este nodo.\nselect clave, valor from bot.info_negocio order by clave limit 40",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -100,
+        -300
+      ],
+      "name": "Datos Info",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}

@@ -1,0 +1,36 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: $json.final, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000003",
+      "name": "Enviar Mensaje",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3344,
+        1440
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {}
+}

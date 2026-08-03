@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "08192031-4c5d-46e7-8f80-920314253647",
+      "name": "Silencio Tier-2",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3296,
+        1440
+      ]
+    }
+  ],
+  "connections": {}
+}

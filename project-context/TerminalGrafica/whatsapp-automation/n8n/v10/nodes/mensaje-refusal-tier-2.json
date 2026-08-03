@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: 'Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?', message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "f7081920-3b4c-45d6-8e7f-809203142536",
+      "name": "Mensaje Refusal Tier-2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3296,
+        1280
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}

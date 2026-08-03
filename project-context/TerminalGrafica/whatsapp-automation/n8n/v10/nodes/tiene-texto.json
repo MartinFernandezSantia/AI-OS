@@ -1,0 +1,37 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-content",
+              "leftValue": "={{ $('Chatwoot Webhook').first().json.body.content }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ca5400db-7c91-451a-8ea7-dacd582c1613",
+      "name": "¿Tiene Texto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        144,
+        416
+      ]
+    }
+  ],
+  "connections": {}
+}

@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from bot.firewall_strike($1, $2, $3, $4)",
+        "options": {
+          "queryReplacement": "={{ (() => { const r = $('Router Fail Tier-2').first().json; return [ r.senderKey, r.userMessage || '', r.conversationId, r.reason ]; })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2848,
+        1360
+      ],
+      "id": "d5e6f708-192a-43b4-8c5d-6e7f80920314",
+      "name": "Strike Tier-2",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      }
+    }
+  ],
+  "connections": {}
+}

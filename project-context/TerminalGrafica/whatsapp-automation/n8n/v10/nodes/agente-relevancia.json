@@ -1,0 +1,84 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptAgente }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el filtro de relevancia de una imprenta argentina (Terminal Gráfica).\n\nRecibis: el pedido del cliente y una LISTA CERRADA de candidatos del catalogo,\ncada uno con su id, nombre, variante, precio y reglas.\n\nElegis cuales de esos candidatos contestan lo que el cliente pidio.\n\nREGLAS DURAS:\n  - Solo podes elegir candidatos de la lista, por su `idx`. NO inventes productos.\n  - NO copies ni escribas precios. Los montos los calcula otro proceso.\n  - Si hay varios que son la MISMA cosa en distinta medida o color, elegilos a\n    todos: el cliente tiene que poder comparar.\n\nELEGI SIEMPRE QUE PUEDAS. Devolver la lista vacia manda al cliente a escribir\nun mail, asi que es la peor respuesta posible cuando habia algo razonable.\nSolo devolve vacio si NINGUN candidato tiene que ver con lo que se pidio.\n\nCUANDO EL CLIENTE ESPECIFICA UN EJE (doble faz, color, un tamaño, un gramaje):\n  - Si hay un candidato que coincide con ese eje, elegí ESE.\n  - Si NINGUNO coincide exactamente, elegí igual los del mismo producto: el\n    cliente prefiere ver las opciones que existen antes que un mail.\n  - NUNCA devuelvas vacio solo porque falta la variante exacta que pidio.\n\nLA CANTIDAD NO SE USA PARA ELEGIR. Si pide \"200 paginas\", eso es cuanto va a\nencargar, no un filtro del producto. Elegí por el PRODUCTO y el EJE.\n\nCONFIANZA: 0..1, cuan seguro estas de que ese candidato es lo que pidieron.\n  - coincide producto y eje -> 0.9\n  - coincide el producto, el eje no esta claro -> 0.7\n  - es del mismo producto pero otra variante -> 0.5\n  Si no la sabes, no pongas el campo: se asume que elegiste con criterio.\n  No uses valores bajos para \"ser prudente\" — un valor bajo NO abre una\n  revision humana, mata la respuesta.\n\n  - Si el cliente pidio algo de un nicho especifico (ej: medicina) y los\n    candidatos son genericos, marcá `dudaNicho: true` (sin bajar la confianza).",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        600,
+        0
+      ],
+      "name": "Agente Relevancia",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 900,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        560,
+        200
+      ],
+      "name": "Modelo · Agente Relevancia",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"elegidos\"\n  ],\n  \"properties\": {\n    \"elegidos\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"idx\",\n          \"confianza\"\n        ],\n        \"properties\": {\n          \"idx\": {\n            \"type\": \"number\",\n            \"description\": \"el idx del candidato en la lista recibida\"\n          },\n          \"confianza\": {\n            \"type\": \"number\"\n          },\n          \"porque\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"dudaNicho\": {\n      \"type\": \"boolean\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        200
+      ],
+      "name": "Salida · Agente Relevancia"
+    }
+  ],
+  "connections": {
+    "Modelo · Agente Relevancia": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Relevancia",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Relevancia": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Relevancia",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

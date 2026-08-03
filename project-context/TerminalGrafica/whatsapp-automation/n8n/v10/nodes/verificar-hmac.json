@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        416
+      ],
+      "id": "b5fd7133-10ec-4bc8-a6b3-4a370c542781",
+      "name": "Verificar HMAC"
+    }
+  ],
+  "connections": {}
+}

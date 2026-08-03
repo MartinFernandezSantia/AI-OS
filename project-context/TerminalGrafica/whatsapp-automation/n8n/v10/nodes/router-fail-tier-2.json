@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si OpenRouter está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\nconst reason = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        1280
+      ],
+      "id": "b3c4d5e6-f708-4192-8a3b-4c5d6e7f8192",
+      "name": "Router Fail Tier-2"
+    }
+  ],
+  "connections": {}
+}

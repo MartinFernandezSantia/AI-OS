@@ -1,0 +1,54 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "bot",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "decisiones",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $('Chequear Envio').first().json.conversationId }}",
+            "mensaje_cliente": "={{ $('Chequear Envio').first().json.userMessage }}",
+            "producto_resuelto": "={{ $('Chequear Envio').first().json.productoResuelto }}",
+            "nivel_resolucion": "n2_llm",
+            "accion": "={{ $('Chequear Envio').first().json.accion }}",
+            "filas_sql": "={{ $('Chequear Envio').first().json.filasSql }}",
+            "hubo_handoff": false,
+            "notas": "={{ $('Chequear Envio').first().json.notas }}",
+            "borrador": "={{ $('Chequear Envio').first().json.borrador || $('Chequear Envio').first().json.reply }}",
+            "final": "={{ $('Chequear Envio').first().json.final }}",
+            "execution_id": "={{ $execution.id || '' }}",
+            "senales": "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000004",
+      "name": "Log Turno",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3552,
+        1440
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}

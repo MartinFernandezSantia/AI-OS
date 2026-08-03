@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from bot.firewall_check($1, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ (() => { const b = $('Chatwoot Webhook').first().json.body; const sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? ''; return [ String(sid), b.content || '', b.conversation.id ]; })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -96,
+        640
+      ],
+      "id": "a1f2c3d4-5e6f-4708-9a1b-2c3d4e5f6071",
+      "name": "Firewall Tier-1",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      }
+    }
+  ],
+  "connections": {}
+}

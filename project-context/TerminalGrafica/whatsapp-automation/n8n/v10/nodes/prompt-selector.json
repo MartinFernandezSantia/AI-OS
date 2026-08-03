@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const d = $('Leer Intención').first().json;\nconst conv = Array.isArray(d.conversation) ? d.conversation : [];\nconst ultimos = conv.slice(-6)\n  .map((m) => (m.role === 'user' ? 'CLIENTE: ' : 'NOSOTROS: ') + String(m.content || ''))\n  .join('\\n');\nreturn [{ json: { ...d, promptAgente: [\n  'CONVERSACION:', ultimos || '(sin historial)', '',\n  'PEDIDO A RESOLVER:', String(d.userMessage || ''),\n].join('\\n') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "name": "Prompt Selector"
+    }
+  ],
+  "connections": {}
+}

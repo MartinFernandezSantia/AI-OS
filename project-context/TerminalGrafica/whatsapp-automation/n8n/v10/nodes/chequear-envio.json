@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.\n//\n// Caso real (2026-07-29): Chatwoot devolvio \"Service temporarily unavailable\" y\n// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el\n// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje\n// en `final`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo\n// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.\n//\n// Un log que miente es peor que el error que oculta: es lo que usas para saber\n// si el bot esta funcionando.\n//\n// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su `id`\n// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,\n// porque con onError el nodo puede emitir un item de error sin status alguno.\nconst env = $('Leer Verificador').first().json;\nconst r = $input.first().json || {};\n\n// el id puede venir en la raiz o anidado segun como responda Chatwoot\nconst idMensaje = r.id || (r.data && r.data.id) || null;\nconst huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');\nconst entregado = !!idMensaje && !huboError;\n\n// que fue lo que fallo, para poder verlo en el log sin abrir la ejecucion\nconst detalle = entregado ? null : String(\n  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message\n  || 'Chatwoot no devolvio id de mensaje'\n).slice(0, 300);\n\nreturn [{ json: {\n  ...env,\n  entregado,\n  idMensajeChatwoot: idMensaje || null,\n  // Log Turno lee estos dos: si no se entrego, `final` NO se escribe como\n  // respuesta enviada — se marca el fallo. Asi una consulta por turnos\n  // contestados no cuenta los que se perdieron.\n  accion: entregado ? env.accion : 'envio_fallido',\n  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),\n  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3500,
+        240
+      ],
+      "name": "Chequear Envio"
+    }
+  ],
+  "connections": {}
+}

@@ -1,0 +1,49 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "bot",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "decisiones",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $('Decidir').first().json.conversationId }}",
+            "mensaje_cliente": "={{ $('Decidir').first().json.userMessage }}",
+            "nivel_resolucion": "ninguno",
+            "accion": "handoff",
+            "hubo_handoff": true,
+            "notas": "={{ (() => { try { const v = $('Leer Verificador').first().json; if (v && v.falla) return 'v10 rechazo=' + v.falla + (v.queFalta ? ' · ' + v.queFalta : ''); } catch (e) {} try { const c = $('Calcular Montos').first().json; if (c && !c.hayAlgoQueDecir) return 'v10 vacio=' + (c.motivoVacio || '?') + ' cand=' + ((c.candidatos || []).length) + ' idxInv=' + (c.idxInvalidos || 0) + ' confBaja=' + (c.descartadosPorConfianza || 0) + (c.crudoAgente ? ' crudo=' + c.crudoAgente.slice(0, 200) : ''); } catch (e) {} try { const i = $('Leer Intención').first().json; if (i && i.intencion === 'info') return 'v10 info_sin_dato'; } catch (e) {} return 'v10 escalacion'; })() }}",
+            "execution_id": "={{ $execution.id || '' }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "71fd6ea5-828c-4643-a970-5a0a7b5ca3fc",
+      "name": "Log Escalación",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4176,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}

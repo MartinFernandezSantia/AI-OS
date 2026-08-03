@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptAgente }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el especialista en catalogo de una imprenta argentina (Terminal Gráfica).\nTu trabajo es traducir el pedido del cliente a TERMINOS DE BUSQUEDA del catalogo.\n\nNO decis precios. NO elegis la variante final. NO redactas nada para el cliente.\n\nUsa la tool explorar_catalogo para ver como se llaman realmente los productos\nantes de decidir. El cliente dice \"tarjetas\", el catalogo puede decir\n\"Tarjetas personales 9x5\". Tu salida tiene que usar las palabras del CATALOGO.\n\nDevolve en `terminos` las palabras que mejor identifican el producto (2 a 6).\nDevolve en `cantidad` el numero que pidio el cliente si lo dijo, o null.\nSi el pedido menciona VARIOS productos distintos, listalos en `productos`.\nSi no entendes que producto es, dejalo vacio y poné `necesitaAclaracion: true`\ncon la pregunta corta que haria falta. Preferir preguntar antes que adivinar.",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        -200,
+        0
+      ],
+      "name": "Agente Selector",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 900,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        200
+      ],
+      "name": "Modelo · Agente Selector",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"terminos\"\n  ],\n  \"properties\": {\n    \"terminos\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"productos\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"cantidad\": {\n      \"type\": [\n        \"number\",\n        \"null\"\n      ]\n    },\n    \"necesitaAclaracion\": {\n      \"type\": \"boolean\"\n    },\n    \"pregunta\": {\n      \"type\": \"string\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -80,
+        200
+      ],
+      "name": "Salida · Agente Selector"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Busca productos del catalogo por nombre o sinonimo aproximado y devuelve como se llaman canonicamente, su rubro y su rango de precios. Usala para descubrir el nombre real de lo que pide el cliente. NO devuelve el precio final a cotizar.",
+        "operation": "executeQuery",
+        "query": "select t.nombre_canonico, t.categoria,\n       array_to_string(t.sinonimos, ', ') as sinonimos,\n       count(v.variante_id) as n_variantes,\n       min(v.precio_lista) filter (where v.precio_lista > 0) as desde,\n       max(v.precio_lista) as hasta\n  from bot.taxonomia t\n  left join bot.variantes v on v.producto_id = t.producto_id\n where translate(lower(t.nombre_canonico), $$áéíóúñ$$, $$aeioun$$) like $$%$$ || translate(lower($1), $$áéíóúñ$$, $$aeioun$$) || $$%$$\n    or exists (select 1 from unnest(t.sinonimos) s\n                where translate(lower(s), $$áéíóúñ$$, $$aeioun$$) like $$%$$ || translate(lower($1), $$áéíóúñ$$, $$aeioun$$) || $$%$$)\n group by t.nombre_canonico, t.categoria, t.sinonimos\n limit 15",
+        "options": {
+          "queryReplacement": "={{ $fromAI('termino', 'una palabra del producto a buscar en el catalogo', 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -500,
+        260
+      ],
+      "name": "explorar_catalogo",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Modelo · Agente Selector": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Selector",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Selector": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Selector",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "explorar_catalogo": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Selector",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

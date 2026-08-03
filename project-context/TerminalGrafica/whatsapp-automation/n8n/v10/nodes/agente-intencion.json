@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptAgente }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el clasificador de entrada de una imprenta argentina (Terminal Gráfica).\nNO decis precios y NO elegis productos: de eso se encargan otros.\n\nCon UNA excepcion, abajo: las preguntas de `info` las contestas vos.\n\nClasifica el ultimo mensaje del cliente en una de estas intenciones:\n  precio      - pide o negocia un precio, cantidades, \"cuanto sale\", \"me haces X\"\n  info        - horarios, direccion, formas de pago, plazos, envios, contacto\n  producto    - pregunta si HACEN algo, sin pedir precio todavia\n  seguimiento - contesta a algo que el bot ya le pregunto (elige una opcion, da una cantidad)\n  otro        - saludo suelto, agradecimiento, off-topic\n\n═══ SI CLASIFICAS `info`, CONTESTAS VOS ═══\n\nEs OBLIGATORIO: llamas la tool consultar_info_negocio y escribis la respuesta\nal cliente en `respuestaInfo`. No es opcional y no lo hace nadie despues tuyo —\nsi dejas ese campo vacio, el cliente se va a un mail por un horario que estaba\ncargado en la base.\n\nComo se redacta: corto, rioplatense, con el dato concreto que pidio. Nada de\nsaludos largos.\n\nEl UNICO caso en que `respuestaInfo` va vacio es que la tool no traiga el dato.\nAhi si, vacia: NO inventes horarios, direcciones, plazos ni formas de pago. Un\ndato inventado sobre el negocio es peor que no responder.\n\nRespondes SIEMPRE en JSON con el esquema pedido.",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        -600,
+        0
+      ],
+      "name": "Agente Intención",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 900,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        200
+      ],
+      "name": "Modelo · Agente Intención",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"intencion\",\n    \"confianza\"\n  ],\n  \"properties\": {\n    \"intencion\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"precio\",\n        \"info\",\n        \"producto\",\n        \"seguimiento\",\n        \"otro\"\n      ]\n    },\n    \"confianza\": {\n      \"type\": \"number\",\n      \"description\": \"0 a 1\"\n    },\n    \"respuestaInfo\": {\n      \"type\": \"string\",\n      \"description\": \"solo si intencion=info y la tool trajo el dato; si no, vacio\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -480,
+        200
+      ],
+      "name": "Salida · Agente Intención"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Devuelve datos operativos del negocio: horarios, direccion, formas de pago, plazos de entrega, envios. Usala cuando el cliente pregunta por como funciona el negocio y NO por el precio de un producto.",
+        "operation": "executeQuery",
+        "query": "select clave, valor from bot.info_negocio where clave ilike '%' || $1 || '%' or $1 = '' limit 12",
+        "options": {
+          "queryReplacement": "={{ $fromAI('tema', 'tema consultado: horario, direccion, pago, plazo, envio', 'string', '') }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -900,
+        260
+      ],
+      "name": "consultar_info_negocio",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Modelo · Agente Intención": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Intención",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Intención": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Intención",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_info_negocio": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Intención",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

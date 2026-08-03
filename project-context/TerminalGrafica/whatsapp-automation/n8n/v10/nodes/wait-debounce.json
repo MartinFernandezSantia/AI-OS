@@ -1,0 +1,19 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "71ade26a-ce96-4144-a093-eb457cad1e9e",
+      "name": "Wait — Debounce",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        192
+      ],
+      "webhookId": "wait-debounce-tg"
+    }
+  ],
+  "connections": {}
+}

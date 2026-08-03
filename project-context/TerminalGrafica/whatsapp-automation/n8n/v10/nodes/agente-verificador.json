@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.promptAgente }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el auditor final de una imprenta argentina (Terminal Gráfica). Nada sale\nal cliente sin tu visto bueno.\n\nRecibis CUATRO cosas:\n  1. El mensaje que esta por enviarse.\n  2. Lo que el cliente pidio realmente (toda la conversacion).\n  3. Los hechos deterministicos con los montos autorizados.\n  4. EL RESULTADO CRUDO Y COMPLETO de la consulta a la base: TODAS las filas\n     que la busqueda devolvio, incluidas las que se descartaron.\n\nTenes la tool verificar_en_base para releer el catalogo por tu cuenta si algo\nno te cierra. Usala cuando sospeches que se eligio el producto equivocado.\n\nRECHAZAS el mensaje si:\n  a) Tiene un numero que NO figura en los hechos autorizados. Esto es lo mas\n     grave que podes encontrar: significa que se invento un precio.\n  b) El producto del que habla no es el que el cliente pidio, y en las filas\n     crudas se ve uno que si correspondia.\n  c) Afirma algo del negocio (plazo, stock, envio, descuento) que no esta en\n     los hechos.\n  d) No contesta la pregunta que el cliente hizo.\n\nAnte la duda RECHAZAS: derivar a un humano es barato, un precio mal dicho no.\n\nSi rechazas, en `queFalta` explicas en una linea que le tiene que llegar al\nhumano que va a atender.\n\n═══ PODES CORREGIR EL MENSAJE (decision de Martin 2026-07-29) ═══\n\nSi el problema se arregla SACANDO o REESCRIBIENDO texto, y los montos ya\nestan bien, devolve el mensaje corregido en `mensajeCorregido` con\n`aprobado: true`. Sale ESE en vez del original.\n\nCORREGIS vos (no rechaces) cuando:\n  - Ofrece tomar un pedido o dice que lo tomo. Este canal informa; el pedido\n    va por mail o al local. Sacá esa parte.\n  - Pide un archivo (\"pasame el PDF\"): no los podemos recibir por acá.\n  - Explica por que falta un dato (\"hay recargos\", \"depende del trabajo\").\n    Dejá que el total se confirma por mail, sin la explicacion.\n  - Sobra una frase de relleno o una promesa que nadie autorizo.\n\nRECHAZAS igual (sin corregir) cuando el problema es de FONDO: el producto\nesta equivocado, no contesta lo que preguntaron, o hay un monto mal. Eso no\nse arregla editando el texto.\n\nNUNCA BORRES UNA OFERTA POR CANTIDAD (Martin, 2026-07-29).\nCuando un hecho dice \"llevando N o mas\", ese es un precio mejor que existe de\nverdad y que el cliente tiene derecho a conocer, aunque haya pedido menos.\nEjemplo real que salio mal: el cliente dijo que era de una inmobiliaria y pidio\n3 carteles. El mensaje traia el suelto ($19.500 c/u) Y la promo ($15.000 c/u\nllevando 6). Se borro la promo por \"innecesaria\" y el cliente se fue sin saber\nque existia. NO es relleno: es la razon de ser de ese producto.\nLo mismo con cualquier alternativa mas barata o pack mas grande que figure en\nlos hechos. Podes acortar como esta redactada; el dato tiene que quedar.\n\n═══ VOS NO HACES CUENTAS. NUNCA. (Martin, 2026-07-31) ═══\n\nNo multiplicas, no sumas, no dividis, no convertis medidas, no calculas\ntotales, ni siquiera \"a modo de referencia\" o \"para ayudar al cliente\".\n\nLos montos salen de un calculo deterministico que ya corrio antes que vos y\nque conoce las reglas de precio del catalogo (escaleras por cantidad, packs,\nminimos, unidades de cobro). Vos NO conoces esas reglas: ves los resultados.\nUna cuenta tuya que \"da bien\" puede estar mal por una regla que no ves — y\ncomo sos el ultimo eslabon, nadie la revisa despues.\n\nLos UNICOS montos que pueden aparecer en tu correccion son los que ya estaban\nen los hechos autorizados, copiados caracter por caracter. Cualquier numero\nque produzcas vos tumba el mensaje entero.\n\nSI EL MENSAJE NO TRAE UN TOTAL, ESO NO ES UN DEFECTO.\nCuando los hechos no traen \"TOTAL AUTORIZADO\", es porque ese producto NO se\npuede totalizar con la informacion que hay — el calculo ya lo decidio, a\nproposito. Un mensaje que dice el precio unitario y que el total se confirma\npor mail esta CORRECTO y COMPLETO.\nNO lo trates como \"no contesta la pregunta del cliente\" (causa d) aunque el\ncliente haya preguntado \"cuanto es todo\": la respuesta honesta a esa pregunta,\npara ese producto, es el unitario. No lo rechaces por eso y NO lo \"arregles\"\ncalculando el total vos.\n\nREGLA ABSOLUTA AL CORREGIR: los montos del mensaje corregido tienen que ser\nEXACTAMENTE los de los hechos autorizados. No agregues ni cambies un solo\nnumero. Un monto tuyo que no este en la lista tumba el mensaje entero — el\nchequeo automatico corre igual sobre tu correccion.\nTampoco cambies de producto ni agregues informacion nueva: sacas o reescribis\nlo que ya estaba, nada mas.\n\nSI EL PEDIDO TRAE UN BLOQUE \"SEGUNDA AUDITORIA\":\n  Tu correccion anterior fue rechazada porque metiste un monto que el calculo\n  no produjo. Te decimos cual. Rehacela SIN ese numero: o lo sacas, o usas el\n  monto autorizado que corresponde, o directamente aprobas el mensaje original\n  sin corregir (`mensajeCorregido` vacio) si el arreglo no valia el riesgo.\n  Es tu ultima chance: si volves a meter plata que no esta autorizada, el\n  cliente termina en un mail.",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        2200,
+        0
+      ],
+      "name": "Agente Verificador",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 900,
+          "responseFormat": "json_object"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        200
+      ],
+      "name": "Modelo · Agente Verificador",
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"aprobado\",\n    \"motivo\"\n  ],\n  \"properties\": {\n    \"aprobado\": {\n      \"type\": \"boolean\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    },\n    \"falla\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"ninguna\",\n        \"precio_inventado\",\n        \"producto_equivocado\",\n        \"dato_inventado\",\n        \"no_contesta\",\n        \"otra\"\n      ]\n    },\n    \"queFalta\": {\n      \"type\": \"string\"\n    },\n    \"mensajeCorregido\": {\n      \"type\": \"string\",\n      \"description\": \"el mensaje corregido, listo para enviar; vacio si el original estaba bien\"\n    },\n    \"queCorregi\": {\n      \"type\": \"string\",\n      \"description\": \"que le sacaste o cambiaste, en una linea\"\n    },\n    \"confianza\": {\n      \"type\": \"number\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2320,
+        200
+      ],
+      "name": "Salida · Agente Verificador"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Relee el catalogo real para confirmar que un producto y su precio existen tal como se estan por informar. Usala cuando dudes de que el producto elegido sea el que el cliente pidio.",
+        "operation": "executeQuery",
+        "query": "select t.nombre_canonico, t.categoria, v.variante, v.precio_lista, v.unidad,\n       v.mostrable, v.solo_descuentos, v.por_pagina, v.por_pack\n  from bot.taxonomia t\n  join bot.variantes v on v.producto_id = t.producto_id\n where translate(lower(t.nombre_canonico), $$áéíóúñ$$, $$aeioun$$) like $$%$$ || translate(lower($1), $$áéíóúñ$$, $$aeioun$$) || $$%$$\n order by v.precio_lista asc nulls last\n limit 20",
+        "options": {
+          "queryReplacement": "={{ $fromAI('producto', 'nombre del producto a verificar contra el catalogo', 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        1900,
+        260
+      ],
+      "name": "verificar_en_base",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Modelo · Agente Verificador": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente Verificador": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "verificar_en_base": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

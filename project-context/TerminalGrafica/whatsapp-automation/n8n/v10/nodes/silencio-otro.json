@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -500
+      ],
+      "name": "Silencio Otro"
+    }
+  ],
+  "connections": {}
+}

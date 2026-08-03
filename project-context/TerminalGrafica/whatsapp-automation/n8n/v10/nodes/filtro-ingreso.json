@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-hmac",
+              "leftValue": "={{ $json._hmac.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "e1291243-4ac9-40be-81fb-a82cd6b9a3a8",
+              "leftValue": "={{ $json.body.event }}",
+              "rightValue": "message_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "32924ee4-86d8-4744-9f01-b063b40417c6",
+              "leftValue": "={{ $json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a9573b13-98f6-4a16-b64a-c27310a0b302",
+              "leftValue": "={{ $json.body.conversation.channel }}",
+              "rightValue": "Channel::Whatsapp",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "f7b04d3e-4fd2-46e4-af08-e514baaf5928",
+              "leftValue": "={{ !$json.body.conversation.meta?.assignee }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -96,
+        416
+      ],
+      "id": "97a09252-e976-4fa8-bac7-7096eb7d3227",
+      "name": "Filtro Ingreso"
+    }
+  ],
+  "connections": {}
+}

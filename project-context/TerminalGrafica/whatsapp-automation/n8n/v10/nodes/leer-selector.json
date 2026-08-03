@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Traduce la salida del Agente 2 al contrato que ya espera `Extraer Palabras`:\n// { precio: { producto }, opciones: { productos } }.\nconst d = $('Prompt Selector').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n\nconst terminos = (Array.isArray(out.terminos) ? out.terminos : []).filter(Boolean).map(String);\nconst productos = (Array.isArray(out.productos) ? out.productos : []).filter(Boolean).map(String);\n\nreturn [{ json: {\n  ...d,\n  seleccion: {\n    terminos,\n    productos,\n    cantidad: Number.isFinite(Number(out.cantidad)) ? Number(out.cantidad) : null,\n    necesitaAclaracion: !!out.necesitaAclaracion,\n    pregunta: String(out.pregunta || ''),\n  },\n  // contrato que consume Extraer Palabras (heredado de v9)\n  precio: { producto: terminos.join(' ') },\n  opciones: { productos },\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "name": "Leer Selector"
+    }
+  ],
+  "connections": {}
+}

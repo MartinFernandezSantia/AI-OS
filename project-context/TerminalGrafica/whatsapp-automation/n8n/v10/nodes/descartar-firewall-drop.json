@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e5f60718-92a3-4b4c-8d5e-6f7081930415",
+      "name": "Descartar Firewall (drop)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        352,
+        800
+      ]
+    }
+  ],
+  "connections": {}
+}

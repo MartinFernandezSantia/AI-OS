@@ -1,0 +1,23 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-v10",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "e12ded3f-936c-41c5-bd35-8d34c5dd21af",
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        416
+      ],
+      "webhookId": "chatwoot-tg-va"
+    }
+  ],
+  "connections": {}
+}

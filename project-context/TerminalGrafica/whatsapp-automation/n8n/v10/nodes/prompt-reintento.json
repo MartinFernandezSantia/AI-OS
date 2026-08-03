@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Rearma el prompt del compositor sumandole el feedback del auditor. Los HECHOS\n// son los mismos de la primera vuelta (salen de Calcular Montos, que no se\n// re-ejecuta): lo unico que cambia es que ahora sabe que fallo.\nconst v = $('Leer Verificador').first().json;\nconst base = $('Calcular Montos').first().json;\n\nconst queFalta = String(v.queFalta || '').trim();\nconst motivo = String(v.motivoVerificador || v.motivo || '').trim();\n\nreturn [{ json: {\n  ...base,\n  intento: 2,\n  feedbackPrevio: (motivo + (queFalta ? ' · ' + queFalta : '')).slice(0, 600),\n  borradorRechazado: String(v.borrador || ''),\n  fallaPrevia: String(v.falla || ''),\n  promptAgente: [\n    String(base.promptAgente || ''),\n    '',\n    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n    'SEGUNDO INTENTO — TU MENSAJE ANTERIOR FUE RECHAZADO POR EL AUDITOR.',\n    '',\n    'Lo que escribiste antes:',\n    '\"\"\"', String(v.borrador || ''), '\"\"\"',\n    '',\n    'Por que lo rechazo:',\n    motivo || '(sin motivo)',\n    queFalta ? '' : null,\n    queFalta ? 'Que falta corregir:' : null,\n    queFalta || null,\n    '',\n    'Reescribi el mensaje corrigiendo ESO. Los HECHOS AUTORIZADOS de arriba no',\n    'cambiaron: son los mismos montos y no se tocan. Si el auditor dijo que el',\n    'mensaje no contestaba lo que el cliente pregunto, contestalo derecho.',\n    'Es tu ultima oportunidad: si vuelve a fallar, el cliente termina en un mail.',\n  ].filter((l) => l !== null).join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        480
+      ],
+      "name": "Prompt Reintento"
+    }
+  ],
+  "connections": {}
+}

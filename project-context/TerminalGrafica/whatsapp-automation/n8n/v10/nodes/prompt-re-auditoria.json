@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// SEGUNDA AUDITORIA — el auditor rehace SU PROPIA correccion (Martin, 2026-07-31)\n//\n// Se llega aca cuando el verificador aprobo el mensaje pero, al corregirlo,\n// tipeo un monto que el calculo deterministico no produjo. El borrador del\n// compositor estaba BIEN; el error es del auditor. Por eso vuelve al auditor y\n// no al compositor: no hay nada que recomponer.\n//\n// Se le devuelve el MISMO prompt de la primera vuelta (misma evidencia: hechos,\n// filas crudas, escaleras) mas el bloque que le dice que numero invento. Sin la\n// evidencia completa repetiria el error, y sin el numero concreto no sabe que\n// sacar.\nconst v = $('Leer Verificador').first().json;\nconst base = $('Prompt Verificador').first().json;\n\nconst inventados = (v.montosDeLaCorreccion || []).map((n) => '$' + n).join(', ');\nconst fmtLista = (v.montosAutorizados || []).map((n) => '$' + n).join(', ');\n\nreturn [{ json: {\n  ...base,\n  auditoriaPrevia: 2,\n  correccionRechazadaTexto: String(v.mensajeCorregido || ''),\n  promptAgente: [\n    String(base.promptAgente || ''),\n    '',\n    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n    'SEGUNDA AUDITORIA — TU CORRECCION ANTERIOR FUE RECHAZADA.',\n    '',\n    'Vos aprobaste el mensaje y devolviste esta correccion:',\n    '\"\"\"', String(v.mensajeCorregido || v.borrador || ''), '\"\"\"',\n    '',\n    'PROBLEMA: metiste ' + (inventados ? 'este monto que el calculo NO produjo: ' + inventados\n      : 'un monto que el calculo no produjo') + '.',\n    'Lo mas probable es que lo hayas CALCULADO vos (multiplicando, sumando o',\n    'convirtiendo medidas). Eso no esta permitido: los montos salen del calculo',\n    'deterministico, nunca de una cuenta tuya.',\n    '',\n    'Los unicos montos que podes escribir son estos: ' + (fmtLista || '(ninguno)'),\n    '',\n    'QUE HACER AHORA — elegi una:',\n    '  1. Rehace la correccion SIN ese numero (sacalo, o deci que el total se',\n    '     confirma por mail).',\n    '  2. Si el mensaje original ya estaba bien, aprobalo tal cual: devolve',\n    '     `mensajeCorregido` VACIO y `aprobado: true`. Es la opcion mas segura.',\n    '',\n    'NO vuelvas a calcular. Si el mensaje no trae total, esta CORRECTO asi.',\n    'Es la ultima vuelta: si volves a meter plata no autorizada, el cliente',\n    'termina en un mail teniendo una respuesta valida escrita.',\n  ].join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        -480
+      ],
+      "name": "Prompt Re-auditoría"
+    }
+  ],
+  "connections": {}
+}
