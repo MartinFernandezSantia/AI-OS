@@ -124,6 +124,15 @@ preguntar** de B-1/B-3, así que **depende de B-3**. Corolario: si se decide pre
 ante ambigüedad, el rationale "cupo = tamaño de mensaje" se disuelve y el cupo queda
 puro recall.
 
+**Nota (baja prioridad — sin bugs observados): la cantidad la extrae el LLM.** La
+`seleccion.cantidad` que usa `Calcular Montos` (para elegir tramo y multiplicar el
+total) la extrae el **Agente Selector** del mensaje, no un parseo determinístico. El
+guard de plata (`montosAutorizados`) **no** cubre una cantidad mal leída: el total se
+autoriza calculado con esa misma cantidad, así que un total con cantidad equivocada
+pasa igual (el precio unitario, que sale del SQL, siempre es correcto). Martin no
+recuerda que esto haya dado bugs en la práctica; queda anotado como punto ciego
+conocido, no como fix pendiente.
+
 ---
 
 ## B-3 · Estructura de diálogo para guiar la conversación (parent de B-1)
