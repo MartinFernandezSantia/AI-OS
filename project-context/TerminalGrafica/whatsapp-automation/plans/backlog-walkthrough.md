@@ -102,6 +102,19 @@ decide Relevancia, no el cupo. El comentario del código ata el 8 a "mensaje leg
 pero eso mide en la etapa equivocada. **Rol real del cupo = recall** (cuántos
 productos puede considerar Relevancia), no tamaño de mensaje.
 
+**AGRAVANTE — el corte relativo dropea productos débiles (Martin, 2026-08-04):** la
+IDF corre sobre TODOS los tokens en una sola bolsa (un score por producto = suma de
+IDF de los tokens que matchea). El corte de `Buscar Candidatos` es
+`score >= 0.4 * max(score)` con `max` **global a toda la consulta**. En un pedido
+multi-producto, el producto con tokens raros fija un `max` alto y **guillotina** al
+producto que llegó con pocos/flojos tokens: no queda "más abajo", queda **afuera del
+candidato set**. El cliente pidió 3 y desaparece 1.
+**Consecuencia para el fix:** esto **invalida la opción 1** (escalar caps): meter más
+tokens del producto débil no sube su score absoluto frente al máximo del fuerte, así
+que el corte global igual lo mata. Solo lo resuelve la **opción 2 (búsqueda
+por-producto / fan-out)**, donde cada producto tiene su propio ranking y su propio
+corte. → empuja B-2 hacia la opción 2.
+
 **Ambigüedad intra-producto → repregunta (Martin, 2026-08-04):** hoy Relevancia hace
 lo contrario a repreguntar — su prompt dice "si hay varios que son la misma cosa en
 distinta medida/color, elegilos a TODOS, el cliente compara" (mostrar-todo). La
