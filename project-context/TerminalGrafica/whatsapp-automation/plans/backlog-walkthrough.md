@@ -247,3 +247,30 @@ revisión offline.
 **Decisión abierta:** ¿`dudaNicho` debería cambiar la conducta — un caveat ("esto es
 genérico; para medicina confirmá por mail") o una escalación — o queda solo como
 telemetría? Caso hermano de `necesitaAclaracion` (B-1) pero más leve (al menos se loguea).
+
+---
+
+## B-9 · Camino False (¿Hay Algo Que Decir? → mail): retry antes de escalar
+
+**Sección 7→8 · ¿Hay Algo Que Decir?** Estado: `abierto — a arreglar` (Martin, 2026-08-04).
+
+**Decisión de Martin:** el camino False (no hubo ni hechos ni caveats → hoy escala
+directo a mail) hay que arreglarlo para que **al menos haya un retry con mayores
+chances de éxito** antes de derivar a un humano. Escalar en el primer intento fallido
+quema resoluciones que un segundo intento más permisivo podría cerrar.
+
+**Casos que debería cubrir el retry** (los `motivoVacio` del camino False):
+- `busqueda_vacia` (no-match): reintentar la búsqueda más amplia.
+- `agente_no_eligio`: re-preguntarle a Relevancia con la lista, o aflojar su sesgo.
+- `idx_invalidos` / `salida_ilegible`: reintentar el agente (falla de formato/LLM).
+- `confianza_baja`: raro, pero el retry aplicaría igual.
+
+**Levers posibles para "mayores chances"** (a definir): aflojar el corte relativo
+(0.4 → más bajo), subir el cap de tokens / cupo, relajar el guard de nicho, quitar
+stopwords, o re-promptear el Selector/Relevancia con más contexto. La idea es que el
+2º intento sea deliberadamente más permisivo que el 1º.
+
+**Relacionado:** B-5 (distinguir error de búsqueda vs no-match — el retry sobre un
+error SQL es reintento de infra, distinto del retry sobre un no-match). Mecanismo
+análogo a los loops de reintento/re-auditoría del Verificador (sección 9): ya existe
+el patrón "reintentar N veces antes de rendirse" en el flow.
