@@ -164,3 +164,77 @@ pero a nivel **intra-producto**.
 
 **Relacionado:** B-1 (repregunta del Selector), B-2 (cupo/variantes), B-3 (estructura
 de diálogo — esta regla vive adentro de esa estructura).
+
+---
+
+## B-5 · Lista vacía a Relevancia: error de búsqueda vs no-match genuino
+
+**Sección 7 · Buscar Candidatos → Armar Candidatos.** Estado: `abierto`.
+
+**Observación (Martin):** identificar por qué le llegó lista vacía a Relevancia;
+posible rama de fallback con acceso al catálogo si `Buscar Candidatos` falló.
+
+**Evidencia:** `Calcular Montos` ya distingue causas de vacío en `motivoVacio`
+(`busqueda_vacia`, `agente_no_eligio`, `idx_invalidos`, `confianza_baja`,
+`sin_precio_publicable`, `salida_ilegible`) y las loguea. **Hueco:** no distingue
+`Buscar Candidatos` **errado** (SQL falló → `onError:continue` emite item de error →
+`Armar Candidatos` lo filtra) de un **no-match genuino**. Ambos colapsan en
+`busqueda_vacia`. Un error de infra (reintentable) se ve igual que "no existe" (→ mail).
+
+**Opciones:** (a) detectar el item de error de `Buscar Candidatos` y marcar
+`motivoVacio='busqueda_error'` aparte; (b) rama de fallback (reintento o búsqueda
+alternativa) solo para el caso error, no para el no-match.
+
+---
+
+## B-6 · Prompt de Relevancia: "elegí todos" enumera solo medida/color
+
+**Sección 7 · Agente Relevancia.** Estado: `abierto — refinamiento de prompt`.
+
+**Observación (Martin):** la regla "si hay varios que son la misma cosa en distinta
+medida o color, elegilos a todos" enumera solo **medida/color** y puede sesgar al
+agente a colapsar/filtrar ejes no nombrados (**faz, gramaje, acabado**).
+
+**Dirección:** hacer la regla **agnóstica del eje** — si el cliente no especificó un
+eje, mostrar todas las variantes de ese eje (no solo medida/color). Emparentado con
+el incidente ya documentado (simple faz $400 vs doble faz $750: se descartó la barata
+por leer mal un eje).
+
+---
+
+## B-7 · "La cantidad no se usa para elegir" vs packs modelados como producto
+
+**Sección 7 · Agente Relevancia + Extraer Palabras.** Estado: `abierto — REQUIERE
+verificar catálogo (dato que Claude no ve)`.
+
+**Observación (Martin):** la regla "la cantidad no se usa para elegir, elegí por
+producto y eje" puede chocar con rifas/tarjetas.
+
+**Evidencia (parcial, desde comentarios):** `Extraer Palabras` trata `"100 Tarjetas"`
+y `"1000 Tarjetas"` como **nombres canónicos distintos** (productos separados) y saca
+los **números puros** de la búsqueda. Si es así: "1000 tarjetas" pierde el `1000` →
+matchea igual a las dos, y el prompt le prohíbe a Relevancia usar la cantidad para
+elegir → **no puede distinguirlas**. En cambio las rifas usan `pack_tiers` (tramos de
+UN producto), que sí resuelve bien `Calcular Montos` por cantidad.
+
+**Pregunta a resolver con Martin/TG (dato de catálogo):** ¿los packs se modelan como
+**productos separados** ("100 Tarjetas" / "1000 Tarjetas") o como **tiers de un
+producto**? Si hay productos separados por cantidad, la regla tiene un hueco real y
+hay que: o unificar el modelado del catálogo, o dejar que la cantidad participe de la
+selección cuando está en el nombre del producto.
+
+---
+
+## B-8 · `dudaNicho` es conductualmente inerte (solo telemetría)
+
+**Sección 7 · Agente Relevancia.** Estado: `abierto — decisión`.
+
+**Verificado (2026-08-04):** `dudaNicho` la produce Relevancia, la propaga `Calcular
+Montos` y se escribe en `bot.decisiones` (Log Turno). **No la consume el Compositor.**
+O sea: si el cliente pide algo de nicho (ej. medicina) y los candidatos son genéricos,
+el bot **contesta igual con precios genéricos**; el flag solo queda en el log para
+revisión offline.
+
+**Decisión abierta:** ¿`dudaNicho` debería cambiar la conducta — un caveat ("esto es
+genérico; para medicina confirmá por mail") o una escalación — o queda solo como
+telemetría? Caso hermano de `necesitaAclaracion` (B-1) pero más leve (al menos se loguea).
