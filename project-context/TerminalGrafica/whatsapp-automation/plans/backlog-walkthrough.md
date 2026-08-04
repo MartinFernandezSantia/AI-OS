@@ -128,3 +128,26 @@ opciones vs escalar, cuántas repreguntas se toleran antes de derivar, y cómo s
 recuerda lo ya preguntado. Es diseño de conversación, no un fix de nodo.
 
 **Depende de esto:** B-1 (rama de aclaración del Selector).
+
+---
+
+## B-4 · Regla: ¿mostrar varias opciones del mismo producto o repreguntar?
+
+**Decisión de política (transversal, parte de B-3).** Estado: `abierto — a decidir,
+NO ahora` (Martin, 2026-08-04).
+
+**Qué hay que decidir:** dado un mismo producto con varias variantes válidas para lo
+que pidió el cliente (distinto tamaño/color/faz/gramaje), ¿el bot **muestra todas**
+para que compare, o **repregunta** para desambiguar? Hoy siempre muestra todas (el
+prompt de Relevancia lo ordena; ver B-2). Falta la regla que decida caso por caso:
+cuántas variantes justifican mostrar vs preguntar, qué ejes valen la repregunta,
+cómo se combina con multi-producto (una repregunta por producto ambiguo vs una sola
+estructurada).
+
+**Por qué importa:** es el punto donde se cruzan legibilidad del mensaje, costo de
+turnos de WhatsApp, y experiencia (una lista larga de variantes puede ser peor que
+una pregunta corta, o al revés). Es el mismo eje mostrar-todo vs preguntar de B-1/B-3
+pero a nivel **intra-producto**.
+
+**Relacionado:** B-1 (repregunta del Selector), B-2 (cupo/variantes), B-3 (estructura
+de diálogo — esta regla vive adentro de esa estructura).
