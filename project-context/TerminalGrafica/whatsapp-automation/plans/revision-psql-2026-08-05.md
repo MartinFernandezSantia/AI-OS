@@ -1,5 +1,22 @@
 # Revisión nodo-por-nodo v10-live — foco PSQL (2026-08-05)
 
+## ✅ APLICADO 2026-08-05 (rama docs/vps-setup-guide, editando n8n/v10/nodes/*)
+Cambios agrupados y aplicados uno por uno (Martin re-importa cada nodo y re-exporta el monolito):
+- **Rate limit** `c_cap 10→15` en `db/firewall-tier1.sql` (aplica Martin).
+- **G1 · injection `\y`** (DE-A2): `nuevo rol`/`ignor..rol` ya no matchean "rollo"/"control". Nodos: `Decidir`. SQL: `db/injection-boundary-2026-08-05.sql` (update filas cargadas) + seed corregido.
+- **G2 · guards de datos**: parseo jsonb-como-string (AC-2) en `Armar Candidatos`; guard `elegidos:[null]` en `Calcular Montos`.
+- **G3 · escalera sin cantidad** (CM-1/AC-1): precio de 1 unidad (menor minQty = techo) + `faltaCantidad` → compositor informa Y pregunta. Nodos: `Calcular Montos`, `Armar Candidatos`. No toca CM-2 (diferido) ni lista de precios.
+- **G4 · H2**: mapeo `topicalAlignment→offtopic` en `Router Fail Tier-2` (el log Tier-2 topical rebotaba mudo). Base intacta.
+- **G5 · B-12**: quitado `usoTodosLosHechos` del schema de `Agente Compositor` (campo muerto).
+- **AC-3/B-5 opción (a)**: `busquedaError` en `Armar Candidatos` → `motivoVacio='busqueda_error'` en `Calcular Montos` (distingue caída de SQL de no-match; se loguea en `Log Escalación.notas`).
+- **H1 (listo, aplica Martin)**: `db/enum-envio-fallido-2026-08-05.sql`.
+
+**Nodos únicos a re-importar:** `Decidir`, `Armar Candidatos`, `Calcular Montos`, `Router Fail Tier-2`, `Agente Compositor`.
+**SQL a correr:** `injection-boundary-2026-08-05.sql`, `enum-envio-fallido-2026-08-05.sql`, `firewall-tier1.sql` (c_cap=15).
+**Diferido/abierto:** CM-2 (cantidad fuera de escalera, preguntas-tg #79), B-20 Fase 2 (sesión propia), B-21 (Selector unit-aware), CM-5 (regex decimal, acoplado a B-21), B-26 (dashboard curación).
+
+---
+
 > Revisión pedida por Martin antes de modificar el workflow. Método: cada nodo PSQL
 > validado input → query → output contra el schema autoritativo. **Claude no ve la base
 > ni las ejecuciones** — los ítems marcados "CONFIRMAR EN BASE" necesitan que Martin corra
