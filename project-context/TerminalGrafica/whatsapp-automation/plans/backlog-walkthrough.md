@@ -429,3 +429,52 @@ salga.
 **Relación:** parte del paquete B-1 / B-3 / B-4 (diálogo y repreguntas). No se
 toca hasta diseñar esa estructura, pero queda anotado como requisito del
 Verificador dentro de ese trabajo.
+
+---
+
+## B-18 · Un rebote de Log Turno / Log Escalación no debe morir en silencio
+
+**Sección 10 · Log Turno + Log Escalación.** Estado: `abierto` — estructural.
+
+**Qué se observó (Martin, 2026-08-05):** el patrón "columna con tipo/constraint que
+rebota + `onError:continueRegularOutput` = pérdida silenciosa del log" ya pasó TRES
+veces: `accion` null (2026-07-28), `producto_resuelto` uuid vs texto (2026-08-05, ver
+`db/decisiones-producto-resuelto-text.sql`), y el envío fallido que se logueaba como
+entregado (2026-07-29, ya tapado por Chequear Envio). El fix de cada columna NO cierra
+la clase de bug: el próximo cambio de schema puede volver a romper el INSERT y nadie
+se entera hasta mirar WhatsApp.
+
+**El agujero:** cuando Log Turno rebota, la ejecución sigue como si hubiera logueado.
+El bot puede estar sin registrar turnos enteros y las auditorías desde `bot.decisiones`
+lo dan por completo. Justo la clase de dato en el que Martin se apoya para evaluar el
+bot (confident-wrong, rescates, escalaciones).
+
+**Opciones a decidir:**
+1. Que un rebote de Log Turno/Escalación deje rastro fuera de la propia tabla (una
+   rama de error → Chatwoot label `log-fallido`, o un insert a `bot.errores`).
+2. Smoke-test contra el SCHEMA REAL de `bot.decisiones` (no un fixture): insertar una
+   fila de prueba con la forma que produce Leer Verificador y verificar que entra,
+   antes de confiar en el log. Ataca la raíz (los fixtures mienten, ver
+   [[tests-fixtures-mienten]]): el harness mockea el resultado del INSERT, así que un
+   type mismatch con la tabla real queda afuera por construcción.
+3. Las dos: la #2 lo caza en dev, la #1 lo caza en prod.
+
+**Relación:** misma familia que el trabajo de "el log no puede mentir" (Chequear
+Envio). Es la pieza que falta de ese principio: hoy protege el `final`, no el INSERT.
+
+---
+
+## B-19 · El mensaje de escalación está hardcodeado (no sale de bot.info_negocio)
+
+**Sección 10 · Mensaje Escalación.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** `Mensaje Escalación` manda un texto fijo con
+el horario y la dirección LITERALES dentro del nodo ("...pasar por el local, Rodríguez
+Peña 3865, de lunes a viernes de 8 a 20 y sábados de 9 a 13"). Con la rama info
+rediseñada el 2026-08-03 —que lee todo de `bot.info_negocio`— esto quedó inconsistente:
+si TG cambia el horario, se actualiza en la tabla pero este mensaje sigue con el viejo.
+Y para el productizado a N imprentas, cada clon tendría que editar el JSON del nodo.
+
+**A decidir:** componer este mensaje desde `bot.info_negocio` (direccion + horarios +
+contacto) en vez de hardcodearlo. Coherente con la decisión de raíz de la rama info
+(la info del negocio vive en la tabla, no en el flow).
