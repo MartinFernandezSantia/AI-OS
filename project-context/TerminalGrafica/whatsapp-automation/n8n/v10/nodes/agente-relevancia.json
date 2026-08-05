@@ -46,7 +46,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"elegidos\"\n  ],\n  \"properties\": {\n    \"elegidos\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"idx\",\n          \"confianza\"\n        ],\n        \"properties\": {\n          \"idx\": {\n            \"type\": \"number\",\n            \"description\": \"el idx del candidato en la lista recibida\"\n          },\n          \"confianza\": {\n            \"type\": \"number\"\n          },\n          \"porque\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"dudaNicho\": {\n      \"type\": \"boolean\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"elegidos\"\n  ],\n  \"properties\": {\n    \"elegidos\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"idx\"\n        ],\n        \"properties\": {\n          \"idx\": {\n            \"type\": \"number\",\n            \"description\": \"el idx del candidato en la lista recibida\"\n          },\n          \"confianza\": {\n            \"type\": \"number\"\n          },\n          \"porque\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"dudaNicho\": {\n      \"type\": \"boolean\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
