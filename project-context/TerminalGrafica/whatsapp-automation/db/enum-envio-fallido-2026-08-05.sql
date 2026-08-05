@@ -1,0 +1,40 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- H1 — falta 'envio_fallido' en el enum bot.accion
+--
+-- Preparada por Claude, APLICA MARTIN (regla: yo preparo, vos aplicás).
+-- Confirmado en base 2026-08-05: el enum tiene los 16 valores
+--   fallback_error, firewall_drop_blocklist/rate/silenciado, firewall_refusal,
+--   firewall_silence_rate, firewall_strike_max, firewall_tier2_abuso/jailbreak/
+--   offtopic/strike_max, handoff, informo_capacidad, informo_precio, noop, repregunto
+-- y NO tiene 'envio_fallido'.
+--
+-- QUÉ ROMPE. `Chequear Envio` (n8n) pone accion='envio_fallido' cuando Chatwoot no
+-- entrega el mensaje (no devuelve id). `Log Turno` inserta ese valor en la columna
+-- enum bot.decisiones.accion (NOT NULL). El valor no existe → el INSERT rebota con
+-- "invalid input value for enum bot.accion" → y como Log Turno tiene
+-- onError:continueRegularOutput, el fallo es MUDO. Resultado: en el turno donde la
+-- entrega falló —el caso EXACTO que Chequear Envio se construyó para registrar
+-- (incidente 2026-07-29)— no se escribe ninguna fila. La telemetría de fallo de
+-- envío se pierde justo cuando importa. Los tests dan verde falso: sólo chequean que
+-- el STRING aparezca en el jsCode, no que el enum lo acepte ([[tests-fixtures-mienten]]).
+--
+-- POR QUÉ AL ENUM Y NO NORMALIZAR EL CÓDIGO (a diferencia de H2). 'envio_fallido' es
+-- una categoría REAL que ningún valor existente cubre: no es informar, ni preguntar,
+-- ni escalar (handoff), ni un error del motor (fallback_error es un fallo interno del
+-- bot, no una caída de entrega de Chatwoot). Colapsarlo en fallback_error mezclaría
+-- dos causas distintas en el índice de revisión humana. Acá el enum SÍ es la
+-- estructura correcta (cardinalidad cerrada), al revés que el firewall_tier2_ de H2.
+--
+-- IDEMPOTENTE. `add value if not exists`. Se puede correr dos veces.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+alter type bot.accion add value if not exists 'envio_fallido';
+
+-- ── VERIFICACIÓN (correr en una corrida APARTE, después de la de arriba) ──────
+-- Postgres no deja LEER un valor de enum recién agregado en la misma corrida que lo
+-- agrega ("unsafe use of new value", SQLSTATE 55P04): el ALTER tiene que estar
+-- commiteado. En el SQL Editor de Supabase, ejecutá el ALTER solo, y DESPUÉS este
+-- select en otra ejecución.
+--
+-- select unnest(enum_range(null::bot.accion))::text as valor order by 1;
+-- -- debe aparecer 'envio_fallido' entre los 17 valores.
