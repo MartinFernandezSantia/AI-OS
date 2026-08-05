@@ -18,6 +18,18 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-08-05 — Bot TG: tope de respuestas anti-baneo (2 fases) + excepción de escalación por fallo detectado del bot
+
+**Decision:** el bot tiene que tener un tope de respuestas (hoy el de 25/24h es código muerto: DE-A1, unidades ms vs segundos). Se construye en dos fases. **Fase 1 (determinística):** arreglar unidades + conteo, ventana móvil de 24h, DOS contadores (mensajes salientes = riesgo Meta/baneo; presupuesto de tokens = ataque de gasto), empezar por mensajes. **Fase 2 (rama LLM, sesión aparte):** cada 10 respuestas del bot en una conversación, un contador barato dispara un LLM que lee la conversación y juzga si el bot está spammeando/repitiéndose/fallando en loop. Si detecta fallo: (1) disculpa al cliente derivándolo al MAIL (canal seguro, no se promete humano en WhatsApp); (2) Label + Nota Privada en Chatwoot con resumen, bot mudo en esa conversación; (3) notificación al **quote-automation-system** (que TG tiene abierto todo el día) para que un humano se entere. Esto es una **excepción deliberada** a la decisión 2026-07-27 (escalación solo por mail).
+
+**Why:** cada respuesta cuesta (Meta cobra por mensaje desde oct-2026) y el exceso puede hacer que Meta banee el número — un tope real vale la pena. El diseño de 2 fases sigue el patrón que el proyecto ya usa (gate determinístico barato + LLM solo si se dispara, como la "2ª opinión sobre el silencio"): la Etapa 2 gasta tokens justo cuando preocupa el gasto de tokens, así que va detrás del tripwire y es rara. La excepción a mail-only es legítima porque un **fallo DETECTADO del bot con cliente insatisfecho** es recuperación de servicio, categoría distinta del no-match normal. Lo que la hace viable sin romper "TG no mira Chatwoot" [[tg-bot-no-chatwoot-humano]]: el humano se entera por el quote-system (su herramienta diaria), no por Chatwoot; al cliente se lo manda al mail. Cambiaría de idea si TG no se compromete a mirar esas alertas, o si la Fase 1 sola ya controla el baneo.
+
+**Alternatives considered:** escalar a un agente humano en Chatwoot (rechazado: nadie mira Chatwoot → el cliente queda peor, esperando un humano que no llega; y `assignee_id` deja el bot mudo para siempre — la mina del 2026-07-27); avisar al humano por mail a TG (sirve pero el mail no lo miran todo el día como el quote-system); un cap fijo sin LLM (no distingue un cliente legítimo de largo aliento de un bot que falla en loop); meter la evaluación LLM en cada turno (encarece el 100% para un caso raro).
+
+**Abierto:** cliente sospechoso (competencia relevando precios — on-topic, invisible al guard offtopic; abuso por tokens) ¿mismo LLM-juez de Fase 2 o ítem separado? Detalle en `plans/backlog-walkthrough.md` B-20.
+
+**Owner:** Martin.
+
 ## 2026-08-05 — Bot TG: en escalera por cantidad, el bot da el precio de 1 unidad y pregunta la cantidad; una respuesta puede informar Y preguntar
 
 **Decision:** cuando un producto se cobra por escalera de cantidad y el cliente no dijo cuántas quiere, el bot da el precio **por 1 unidad** (el tramo 1, el más caro por unidad), avisa que es **según cantidad**, y **pregunta cuántas necesita**. Principio general que fija: una respuesta del bot no es solo informativa — cuando falta un dato para dar un número concreto, la respuesta **informa lo que puede + termina en la pregunta que falta**. Reemplaza el fix "desde $piso" que Claude había propuesto para el cluster de plata (CM-1 / AC-1 de la revisión 2026-08-05).

@@ -478,3 +478,51 @@ Y para el productizado a N imprentas, cada clon tendría que editar el JSON del 
 **A decidir:** componer este mensaje desde `bot.info_negocio` (direccion + horarios +
 contacto) en vez de hardcodearlo. Coherente con la decisión de raíz de la rama info
 (la info del negocio vive en la tabla, no en el flow).
+
+---
+
+## B-20 · Tope de respuestas del bot (anti-baneo) + rama de recuperación de servicio
+
+**Sección 3 · Decidir.** Estado: `decidido — a construir en 2 fases` (Martin, 2026-08-05).
+Origen: hallazgo DE-A1 de `plans/revision-psql-2026-08-05.md` (el cap actual es código muerto).
+
+**El problema base (DE-A1):** el cap de 25 respuestas/24 h de `Decidir` nunca se activa —
+`Date.now()` (ms) se resta contra `created_at` de Chatwoot (segundos), la diferencia nunca es
+`< 86.400.000`, así que el contador siempre da 0. El bot no tiene tope real en prod (v10-live y
+v9). Agravante: `Get Historial` no pagina (última página ~20 msgs), el conteo no llegaría a 25.
+El firewall Tier-1 ya frena la **ráfaga rápida** (rate/strike); este cap es el volumen **sostenido**
+del día y complementa, no reemplaza.
+
+**Fase 1 — determinística, barata, PRIMERO.** Arreglar unidades (ms→seg) + resolver el conteo
+(paginar o contar de otra forma) para que el tope EXISTA. **Ventana móvil de 24 h** (no día
+calendario: se resetea sola cuando los mensajes viejos salen de la ventana; el calendario es
+gameable). **Dos contadores** (costos distintos): mensajes salientes (riesgo Meta/baneo, el filoso)
+y presupuesto de tokens LLM (el ataque de "hacernos gastar indefinidamente"). Empezar por mensajes.
+
+**Fase 2 — rama LLM de recuperación de servicio (su propia sesión).** Cada **10 respuestas del bot
+en una misma conversación**, un contador barato dispara una llamada LLM que lee la conversación y
+juzga si el bot está **spammeando / repitiéndose / fallando en loop** (riesgo de baneo por
+comportamiento del propio bot). Si detecta el fallo:
+1. **Disculpa al cliente** derivándolo al **mail** (`terminalgrafica@gmail.com`), el canal seguro de
+   respuesta. NO se le promete un humano en WhatsApp.
+2. **Label + Nota Privada** en Chatwoot con el resumen que arma el LLM (registro); el bot queda
+   mudo en esa conversación (deja de fallar).
+3. **Notificación al quote-automation-system** — el sistema que TG tiene abierto **todo el día**.
+   Esto es lo que hace que un humano se entere (resuelve el "nadie mira Chatwoot"). A configurar más
+   adelante; requiere una superficie de alerta en ese sistema (`projects/TerminalGrafica/
+   quote-automation-system`) → integración cross-sistema, trabajo propio.
+
+**Por qué es una EXCEPCIÓN legítima a "escalación solo por mail" (decisión 2026-07-27):** aquélla es
+para el no-match / fuera de alcance normal. Esto es otra categoría: **fallo DETECTADO del bot con un
+cliente probablemente insatisfecho** = recuperación de servicio, que sí justifica avisar a un humano.
+La clave que lo hace viable sin romper "TG no mira Chatwoot": el humano se entera por el
+quote-system (su herramienta diaria), no por Chatwoot.
+
+**Compromiso comercial con TG:** TG tiene que aceptar mirar y actuar sobre estas alertas (son pocas:
+solo fallos detectados). Encaja en los pendientes comerciales (handoff asíncrono = cambio de alcance,
+SLA de reclamos). Confirmar con TG.
+
+**Abierto (a decidir):** los casos de **cliente sospechoso** — competencia relevando la lista de
+precios (es on-topic, el guard offtopic de Tier-2 no lo ve) y abuso por tokens — ¿los mira el mismo
+LLM-juez de la Fase 2 en la misma pasada, o son un ítem separado? Distintos en intención (bot que
+falla vs cliente malicioso) aunque comparten el disparador de volumen.
