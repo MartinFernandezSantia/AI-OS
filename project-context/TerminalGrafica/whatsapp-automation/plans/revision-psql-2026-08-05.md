@@ -208,6 +208,13 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
    **APROBADO Martin 2026-08-05** (riesgo casi cero; seguro contra la mudanza al KVM 4).
 5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
    **APROBADO Martin 2026-08-05** (red atrás: Tier-1/Tier-2 hacen su propia detección).
+   ⚠️ **REVISAR ALCANCE antes de tocar (hallazgo 2026-08-05):** los patrones ya NO viven solo en
+   `Decidir` — se movieron a la tabla SQL `bot.injection_patterns` (`db/firewall-tier1.sql:44-67`). Ahí
+   `\yDAN\y` ya está bounded, PERO `nuevo rol` (línea 59) e `ignor[aá].*(...|rol)` (57) siguen SIN `\y`
+   → los falsos positivos ("rollo", "control") disparan desde la capa SQL también. En Postgres el
+   word-boundary es `\y` (no `\b`). Y puede haber un regex duplicado y viejo en `Decidir` (Code) — hay
+   que ver si sigue activo o quedó muerto tras mover los patrones. Es el "firewall disperso" del handoff
+   §j: el fix toca `bot.injection_patterns` (SQL) y quizá `Decidir`. Confirmar las dos capas antes de aplicar.
 6. Cap real de respuestas (DE-A1) — **DECIDIDO 2 fases** (ver decisions/log.md + B-20). **Fase 1**:
    arreglar unidades ms→seg + conteo (paginar), ventana móvil 24h, 2 contadores (mensajes + tokens).
    **Fase 2** (sesión aparte): rama LLM cada 10 respuestas → si el bot spammea/falla, disculpa al mail

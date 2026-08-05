@@ -549,3 +549,74 @@ emita la cantidad ya como número limpio y con la semántica de la unidad, y que
 "el LLM nunca tipea plata". **A probar:** primero ver qué emite HOY el Selector en `cantidad` (si ya es
 un número limpio, CM-4 no muerde hoy, pero falta el guard de validación). Emparentado con el gap de
 unidades continuas (metro/m²) que hoy caen en "se confirma por mail" (INFO en la revisión).
+
+---
+
+## B-22 · Jailbreak vía historial: un mensaje bloqueado re-entra como contexto
+
+**Sección 3-5 · Get Historial → Decidir / Guardrails Tier-2.** Estado: `abierto — SEGURIDAD, discutir a fondo` (Martin, 2026-08-05).
+
+**Qué se observó (Martin):** un mensaje malicioso lo frena Tier-2 EN EL MOMENTO, pero queda guardado en
+Chatwoot. Si el cliente después sigue conversando normal, ese mensaje entra por `Get Historial` como
+**historial** en los turnos siguientes, donde NO se vuelve a chequear injection. Un ataque bloqueado
+re-entra como contexto del LLM, sin control. Riesgo presente hoy (la ventana de historial se le pasa al
+LLM tal cual). **Direcciones (a discutir, sesión propia):** (a) excluir del historial los mensajes que el
+firewall marcó/bloqueó; (b) re-sanitizar el historial antes de dárselo al LLM; (c) no pasar historial
+crudo. Relacionado con la nota "¿darle más historial que las últimas 6?" — subir la ventana agranda esta
+superficie, así que las dos decisiones van juntas.
+
+---
+
+## B-23 · El Verificador debería detectar rama equivocada y derivar a info
+
+**Sección 9 · Agente Verificador.** Estado: `abierto — dirección` (Martin, 2026-08-05).
+
+**Origen (nota #7):** `Leer Intención` manda el info de baja confianza a la rama precio/catálogo
+(`confianza < 0.5 && intencion==='info' -> intencion='precio'`), pero esa rama NO tiene acceso a
+`bot.info_negocio`, así que no puede responder ni verificar un info → termina sin producto → mail. El
+Verificador "ve todo", así que es el nodo indicado para detectar "esto era un info, se clasificó como
+catálogo" y **rerutear a la rama info** (Datos Info, que sí tiene el respaldo determinístico). A diseñar.
+
+---
+
+## B-24 · La intención fina (precio/producto/seguimiento) es telemetría, no la usa la resolución
+
+**Sección 6 · Agente Intención → Switch Intención.** Estado: `abierto — decisión` (Martin, 2026-08-05).
+
+**Verificado (nota #9):** el Agente de Intención clasifica en 5 (`precio`, `info`, `producto`,
+`seguimiento`, `otro`), pero abajo del Switch la ruta de resolución (Selector/Buscar/Relevancia/Calcular)
+**no lee** el valor: `intencion` solo lo consumen `Log Escalación` (telemetría) y `Leer Verificador` (lo
+pasa de largo). O sea precio/producto/seguimiento van todos por la misma rama y la distinción fina solo
+alimenta el log. **A decidir:** colapsar la clasificación a lo que la resolución realmente necesita
+(info / catálogo / otro), o dejar la distinción como telemetría asumida su costo. Misma familia que
+`dudaNicho` (B-8, telemetría inerte).
+
+---
+
+## B-25 · Contradicción schema-vs-prompt en la salida de Relevancia (confianza)
+
+**Sección 7 · Agente Relevancia + Salida.** Estado: `abierto — fix chico` (Martin, 2026-08-05).
+
+**Verificado (nota #10/#11):** `Salida · Agente Relevancia` es un `outputParserStructured` con schema
+manual que marca `confianza` como **required** por candidato. Pero el system message le dice al LLM
+*"Si no la sabes, no pongas el campo"*. **Se contradicen** → el LLM omite `confianza` legítimamente y
+rompe el "required", por eso `Calcular Montos` necesita parseo defensivo ("confianza ausente != cero").
+**Fix:** alinear schema y prompt (o `confianza` deja de ser required, o el prompt deja de decir que se
+omita). Aparte, dato para tener presente: la confianza de Relevancia SÍ se usa para descartar (UMBRAL en
+Calcular Montos → `motivoVacio='confianza_baja'`), y el propio prompt admite que no está calibrada
+("no uses valores bajos para ser prudente, mata la respuesta") — descartar con un número no calibrado es
+frágil, pregunta de diseño aparte.
+
+---
+
+## B-26 · Dashboard de curación de catálogo (UX)
+
+**Herramienta, no un nodo.** Estado: `abierto — workstream propio` (Martin, 2026-08-05).
+
+**Necesidad (nota #15):** curar el catálogo categoría por categoría necesita ver AL MISMO TIEMPO cómo
+está cargado un producto/variante en `public.*` (el mostrador) y cómo lo ve el bot (`bot.taxonomia` /
+`bot.variantes` / overlays), más categoría **padre y abuelo**, nombre de la(s) **regla(s) de precio** que
+lo afectan, y otros campos expandibles. Orientado a UX (dashboard), no un SQL suelto. Caso concreto que
+lo motiva: el bot **no detecta "plotter papel"** aunque en la categoría PLOTEADOS hay 2 productos que
+cumplen (Papel 130gr Recubierto/Encapado, Papel Obra Vegetal Color/Negro) → gap de resolución que una
+vista así haría evidente. Se conecta con la skill `tg-curar-catalogo` y el curador visual existente.
