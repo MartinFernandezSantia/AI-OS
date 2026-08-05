@@ -240,6 +240,18 @@ Dos datos de catálogo que la corrida real dejó abiertos. Detalle completo en
     *"lonas o plástico corrugado"*: **si es un dato real del negocio, se carga; si no, el
     bot lo inventó** y es un confident-wrong sobre materiales.
 
+## 15. Revisión v10-live (2026-08-05)
+
+79. **¿Qué precio aplica cuando el cliente pide MÁS que el último tramo de una escalera por
+    cantidad?** — Ejemplo real: **Imanes (impresión laminada y corte)** tiene tramos
+    1-3 = $8.000, 4-10 = $7.200, 11-20 = $6.500 c/u, y la tabla **corta en 20**. Si un cliente
+    pide **25 imanes**, no hay tramo cargado para esa cantidad. ¿Qué querés que cobre el bot?
+    (a) el precio del último tramo (11-20 → $6.500 c/u), o (b) avisar que para esa cantidad el
+    precio se confirma por mail (por si hay un descuento mayor no cargado). Hoy el bot cae al
+    tramo 1 ($8.000, el más caro) y lo multiplica → sobre-cotiza ~1,23× con formato de "total
+    cerrado". Se deja como está hasta que TG decida. Aplica a todo producto con escalera que
+    termine en un tope (imanes y los demás que coticen por rangos de cantidad).
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice

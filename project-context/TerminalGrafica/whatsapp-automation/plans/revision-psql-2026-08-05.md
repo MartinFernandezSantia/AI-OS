@@ -183,7 +183,9 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
    **preguntar la cantidad**. La respuesta informa + pregunta. Aplica a Calcular Montos (el `texto`) y
    a Armar Candidatos (en vez de `$0`, el precio de 1 unidad). — cierra el cluster de plata.
    Principio general nuevo: una respuesta puede ser informativa Y llevar la pregunta que falta al final.
-3. Cantidad fuera de escalera → caer al último tramo aplicable, no al tramo 1.
+3. Cantidad fuera de escalera (CM-2) → **DIFERIDO**: se deja como está hasta que TG decida
+   (pregunta 79 en preguntas-tg.md, ejemplo Imanes). Opciones: caer al último tramo aplicable, o
+   confirmar por mail para cantidades sobre el tope.
 4. Guard `elegidos:[null]` + guard `typeof jsonb==='string'?JSON.parse` en Armar Candidatos.
 5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
 6. Cap real de respuestas (unidades a segundos) + paginar Get Historial — o decidir que no hay cap.
