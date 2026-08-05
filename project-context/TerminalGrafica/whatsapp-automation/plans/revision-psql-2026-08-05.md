@@ -95,7 +95,98 @@ vive en `accion`/`senales`. Decidir si se anula `final` o se deja (documentado).
 - Firewall Tier-1 / Strike Tier-2: aridad y tipos de las funciones cuadran (text,text,bigint[,text]). ✓
 - Log Escalación: `accion='handoff'`, `nivel_resolucion='ninguno'` — ambos válidos. ✓
 
-## Pendiente
-- Pasada Fable sobre Code complejos: `decidir`, `calcular-montos`, `armar-candidatos`,
-  `extraer-palabras` (input → procesamiento → output, foco en la frontera con los PSQL).
-- Correr `node tests/code-harness.js` como red tras cualquier cambio.
+## Pasada Fable — Code complejos (4 nodos, cada uno ejecutado con casos reales)
+
+Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproducibles en
+`/tmp/.../scratchpad/` (run-decidir.js, harness-montos.js, run-armar.js, etc.).
+
+### Decidir (`nodes/decidir.json`)
+- **A1 🔴 el cap de 25 respuestas/24h es CÓDIGO MUERTO (ms vs segundos).** `nowMs=Date.now()` en
+  ms; Chatwoot manda `created_at` en **segundos** (confirmado en `tests/chatwoot-mock.js:60-62`).
+  `nowMs - num(created_at) < 86400000` nunca es true → `botOut24` siempre vacío → las ramas `cap`
+  y `cap-ya-avisado` **no se alcanzan jamás**. El bot no tiene tope real de respuestas. Igual en
+  v10-live y v9 → está en prod. Agravante: `Get Historial` no pagina (última página ~20 msgs), así
+  que ni arreglando unidades el conteo llegaría a 25. Ningún test lo cubre.
+- **A2 🔴 falsos positivos de injection con vocabulario de imprenta.** `"nuevo rollo de vinilo"` →
+  `/nuevo rol/i` (sin `\b`, "rollo"⊃"rol"); `"...ME DAN 100 TARJETAS"` → `/\bDAN\b/`;
+  `"me ignoraron el control de calidad"` → `/ignor[aá].*rol/i` (cont**rol**). El cliente recibe el
+  mensaje anti-injection en vez de su cotización. (FN triviales pasan, pero de eso se ocupan T1/T2.)
+- **M1 ⚠️** `avisoDado` / cap / `lastBotReplies` se calculan sobre la última página truncada del
+  historial → en conversación larga el bot repite el mail (familia del bug "mail dos veces" 07-29).
+- B1-B4 🟡: consumidores nuevos en ramas cortas leerían `userMessage` undefined en silencio;
+  fragilidades de `created_at` ISO / empates de segundo / ventana de 6 recortada antes de filtrar.
+  Crash por `body.conversation.id` inalcanzable hoy (lo tapa `Filtro Ingreso`).
+
+### Calcular Montos (`nodes/calcular-montos.json`)  — los bugs de PLATA
+- **🔴 ALTA sub-cotización: el "desde" nunca se escribe.** Escalera continua ($480/$300/$150) sin
+  cantidad → `monto=Math.min(values)` y `texto` sale **"$150 por hoja"** plano. El campo `desde`
+  viaja aparte y ni el `promptAgente` ni el `texto` lo nombran; el compositor copia `texto` verbatim.
+  El tramo más barato (51-250 u) presentado como EL precio → para 5 unidades lo real es $480:
+  **sub-cotiza 3,2×**. (Mismo origen que el $0 de Armar Candidatos, visto río abajo.)
+- **🔴 ALTA cantidad fuera de escalera: cotiza el tramo 1 y lo totaliza.** cantidad=25 con tramos
+  1-3/4-10/11-20 → ningún `find` matchea → `monto` queda en `precio_lista` (tramo 1) y como `>0` el
+  fallback de escalón inferior no corre → con `multiplica` sale "TOTAL $200.000 por 25 unidades"
+  cuando a ≥11 pagan menos (~$162.500): **sobre-cotiza 1,23×** con formato autoritativo.
+- **⚠️ MEDIA crash con `elegidos:[null]`** → `TypeError` mata el turno **sin log** (familia B-13).
+- **⚠️ MEDIA `cantidad` sin normalizar:** `"1.000"` (es-AR) → `Number(...)`=1 → cotiza tramo 1.
+- **⚠️ MEDIA una sola `seleccion.cantidad` multiplica TODOS los hechos** ("100 tarjetas y 500
+  volantes" → un total con la cantidad equivocada).
+- 🟡 precios con decimales rompen el guard de `Leer Verificador` (`/\$\s?[\d.]+/` corta en la coma
+  → falsa ALERTA de monto inventado, tumba el mensaje correcto); caveats contradictorios;
+  lista-de-precios con `multiplica=true` dispara cap falso; lona m² sigue yendo a mail (UV no cubre).
+- Contrato con consumidores OK salvo el crash. `rangos_cantidad` llega como **array** (Array.isArray
+  anda) — pero ver el punto siguiente.
+
+### Armar Candidatos (`nodes/armar-candidatos.json`) — frontera con el PSQL
+- **🔴 ALTA `precio_lista=0` con escalera se presenta como `precio: $0` y sin línea de rangos** → el
+  Agente Relevancia ve "$0" y puede descartar/desrankear el candidato correcto (las rifas). `fmt(0)`
+  = `'$0'` porque solo filtra `n==null`. Si Relevancia lo descarta, Calcular Montos nunca lo ve.
+- **⚠️ MEDIA jsonb como string degrada TODO en silencio.** El código asume jsonb ya parseado
+  (`(r.atributos||{}).unidad_venta`, `Array.isArray(r.rangos_cantidad)`). Si el nodo Postgres lo
+  devuelve como string (depende de versión/config), `atributos`→`unidad_venta` undefined→ todo a
+  caveat "se confirma por mail", y `rangos_cantidad`→null → en un `por_pagina` **reintroduce el
+  confident-wrong 1,7×** por forma del dato, no por lógica. No hay guard `typeof==='string'?JSON.parse`.
+  (Hoy Calcular Montos lo ve como array, pero nada lo garantiza si cambia la config.)
+- **⚠️ MEDIA error SQL indistinguible de búsqueda vacía** — el item de error de `Buscar Candidatos`
+  (`onError:continueRegularOutput`) lo come el `filter(r&&r.producto_id)` → `motivoVacio='busqueda_vacia'`
+  miente si la base falló. Clase B-18.
+- 🟡 `"tambien hay packs de "` colgante (length check antes del filter); `es_default`/`orden`/
+  `ejes_variantes` (el fix del 07-27) se descartan del candidato — el default sobrevive solo como
+  posición 1; dos variantes de nombre vacío salen ambas como "única".
+
+### Extraer Palabras (`nodes/extraer-palabras.json`)
+- **Veredicto ü/ç (H5): asimetría REAL en mecanismo, LATENTE en el catálogo.** Grepeó nombres +
+  sinónimos: **cero ü/ç hoy** (la única ü es "ambigüedad" en un comentario). Se activa si una
+  curación futura agrega p.ej. "tarjetas bilingües". Mismo riesgo con acento **descompuesto (NFD)**
+  en un nombre de catálogo. Fix barato: `üç→uc` al translate del lado buscable en buscar-candidatos.
+- **⚠️ MEDIA el cap de 12 tokens SÍ pierde tokens del cliente en la rama `opciones`** (4 nombres
+  largos del LLM llenan los 12 → `kraft`/`anilladas` del cliente quedan afuera — justo la info nueva).
+- 🟡 el comentario "los gramajes se conservan" es falso a medias (`"80 gr"`→ se pierde todo;
+  `"80gr"` no matchea `"75 gr"` separado del catálogo); whitelist `a[0-5]` excluye `a6`.
+- Corrió `tests/validate-sql-busqueda.js` con `WF=faq-bot-v10-live.json` → **0 errores**.
+
+## Temas transversales (donde conviene atacar)
+1. **Plata / escalera de cantidad** (lo más caro): Calcular Montos ALTA×2 + el `$0` de Armar
+   Candidatos son el mismo cluster — el piso/`$0` de una escalera se presenta como precio plano.
+   Es exactamente el confident-wrong que el proyecto persigue. **Prioridad 1.**
+2. **Logs silenciosos / telemetría perdida:** H1 (envio_fallido), H2 (tier2 topical), Armar #error-SQL,
+   Decidir A1 (cap muerto). Todos por `onError`/`exception when others`/unidades. **Prioridad 2.**
+3. **Fragilidad jsonb-as-string:** Armar #2 — un guard de parseo cierra un modo de falla 1,7×.
+4. **Falsos positivos de injection** (Decidir A2) — cortan cotizaciones reales de imprenta.
+5. **Historial truncado** (Decidir M1 + A1) — `Get Historial` sin paginar contamina cap y avisoDado.
+
+## Cola de fixes sugerida (Martin decide y aplica; contraste adversarial antes de cada uno)
+1. `alter type bot.accion add value 'envio_fallido'` + resolver H2 (mapear `topicalAlignment→offtopic`
+   en Router Fail Tier-2, cierra la cardinalidad abierta). — barato, alto valor de telemetría.
+2. Escalera sin cantidad → escribir `"desde $piso (según cantidad)"` en `texto` (Calcular Montos) y
+   `"desde $piso"` en vez de `$0` en Armar Candidatos. — cierra el cluster de plata.
+3. Cantidad fuera de escalera → caer al último tramo aplicable, no al tramo 1.
+4. Guard `elegidos:[null]` + guard `typeof jsonb==='string'?JSON.parse` en Armar Candidatos.
+5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
+6. Cap real de respuestas (unidades a segundos) + paginar Get Historial — o decidir que no hay cap.
+7. CONFIRMAR EN BASE: enum `accion`, `bot.info_negocio`, y aplicar §2i.
+
+## Red tras cualquier cambio
+`node tests/code-harness.js` — pero OJO: `validate-v10-agents.js` busca `faq-bot-v9-test.json` (no
+existe) y no corre; `test-cap-e-info.js` mockea filas. Los tests dan verde falso en varios de estos
+hallazgos ([[tests-fixtures-mienten]]): confirmar cada fix con un caso que ejercite el camino real.

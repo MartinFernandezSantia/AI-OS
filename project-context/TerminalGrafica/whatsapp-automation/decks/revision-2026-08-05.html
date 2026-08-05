@@ -1,0 +1,311 @@
+<title>Revisión v10-live — foco PSQL + Code (2026-08-05)</title>
+<style>
+  :root {
+    --ground: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #16191f;
+    --ink-soft: #4a5260;
+    --ink-faint: #7c8494;
+    --hair: #e2e5ea;
+    --hair-strong: #cfd4dc;
+    /* print-shop CMYK-derived accent */
+    --cyan: #0785a6;
+    --cyan-soft: #e2f1f5;
+    --crit: #c02636;
+    --crit-soft: #f9e6e8;
+    --warn: #b26a00;
+    --warn-soft: #f8eddb;
+    --low: #5a6472;
+    --low-soft: #eceef1;
+    --ok: #2f7d52;
+    --ok-soft: #e5f1ea;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", "Cascadia Mono", "Roboto Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0f1216; --panel: #171b21; --ink: #e8eaee; --ink-soft: #a7aebb;
+      --ink-faint: #6f7885; --hair: #262c34; --hair-strong: #333b45;
+      --cyan: #35b6d6; --cyan-soft: #12333d;
+      --crit: #ef5566; --crit-soft: #3a1a1f; --warn: #d59422; --warn-soft: #37290f;
+      --low: #97a1b0; --low-soft: #232830; --ok: #57b483; --ok-soft: #16301f;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#f4f5f7;--panel:#fff;--ink:#16191f;--ink-soft:#4a5260;--ink-faint:#7c8494;
+    --hair:#e2e5ea;--hair-strong:#cfd4dc;--cyan:#0785a6;--cyan-soft:#e2f1f5;
+    --crit:#c02636;--crit-soft:#f9e6e8;--warn:#b26a00;--warn-soft:#f8eddb;
+    --low:#5a6472;--low-soft:#eceef1;--ok:#2f7d52;--ok-soft:#e5f1ea;
+  }
+  :root[data-theme="dark"] {
+    --ground:#0f1216;--panel:#171b21;--ink:#e8eaee;--ink-soft:#a7aebb;--ink-faint:#6f7885;
+    --hair:#262c34;--hair-strong:#333b45;--cyan:#35b6d6;--cyan-soft:#12333d;
+    --crit:#ef5566;--crit-soft:#3a1a1f;--warn:#d59422;--warn-soft:#37290f;
+    --low:#97a1b0;--low-soft:#232830;--ok:#57b483;--ok-soft:#16301f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans);
+    line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 24px 96px; }
+
+  /* header */
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--cyan); display: flex; align-items: center; gap: 10px; }
+  .regmark { width: 13px; height: 13px; flex: none; }
+  h1 { font-size: clamp(26px, 4.4vw, 40px); line-height: 1.08; letter-spacing: -.02em; margin: 16px 0 10px;
+    text-wrap: balance; font-weight: 680; }
+  .lede { color: var(--ink-soft); font-size: 16.5px; max-width: 64ch; margin: 0; }
+  .meta { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 12px; }
+  .chip { border: 1px solid var(--hair-strong); border-radius: 100px; padding: 4px 11px; color: var(--ink-soft);
+    background: var(--panel); }
+
+  /* scorecard */
+  .score { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 32px 0 8px; }
+  .stat { background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 16px 16px 14px;
+    position: relative; overflow: hidden; }
+  .stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+  .stat .n { font-family: var(--mono); font-size: 30px; font-weight: 620; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ink); }
+  .stat .l { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* section */
+  .sec { margin-top: 40px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 4px; }
+  .sec-num { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .sec-head h2 { font-size: 18.5px; margin: 0; letter-spacing: -.01em; font-weight: 640; }
+  .sec-note { color: var(--ink-soft); font-size: 13.5px; margin: 8px 0 0; }
+
+  /* finding card */
+  .find { background: var(--panel); border: 1px solid var(--hair); border-left: 4px solid var(--c);
+    border-radius: 10px; padding: 18px 20px; margin-top: 14px; }
+  .find-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sev { font-family: var(--mono); font-size: 10.5px; font-weight: 640; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--c); background: var(--c-soft); border-radius: 5px; padding: 3px 8px; }
+  .fid { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); font-weight: 600; }
+  .node { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); margin-left: auto;
+    background: var(--low-soft); border-radius: 5px; padding: 3px 8px; }
+  .find h3 { font-size: 16px; margin: 11px 0 8px; line-height: 1.32; letter-spacing: -.01em; font-weight: 620;
+    text-wrap: balance; }
+  .find p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .find p + p { margin-top: 8px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--low-soft); padding: 1px 5px;
+    border-radius: 4px; color: var(--ink); }
+  .impact { display: inline-flex; align-items: center; gap: 7px; margin-top: 11px; font-family: var(--mono);
+    font-size: 12.5px; font-weight: 600; color: var(--c); background: var(--c-soft); border-radius: 6px;
+    padding: 5px 10px; }
+  .fix { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--hair-strong); font-size: 13.5px;
+    color: var(--ink); }
+  .fix b { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ok); font-weight: 640; margin-right: 6px; }
+
+  /* compact list for lows */
+  .mini { background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; margin-top: 14px;
+    overflow: hidden; }
+  .mini .row { display: flex; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--hair); align-items: baseline; }
+  .mini .row:first-child { border-top: 0; }
+  .mini .row .s { font-family: var(--mono); font-size: 10px; font-weight: 640; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--c); flex: none; width: 62px; padding-top: 1px; }
+  .mini .row .t { font-size: 13.5px; color: var(--ink-soft); }
+  .mini .row .t b { color: var(--ink); font-weight: 600; }
+
+  /* confirm / queue callouts */
+  .callout { background: var(--cyan-soft); border: 1px solid color-mix(in srgb, var(--cyan) 32%, transparent);
+    border-radius: 12px; padding: 20px 22px; margin-top: 40px; }
+  .callout h2 { font-size: 16.5px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .callout .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 14px; }
+  pre { font-family: var(--mono); font-size: 12.5px; background: var(--panel); border: 1px solid var(--hair);
+    border-radius: 8px; padding: 12px 14px; margin: 0; overflow-x: auto; color: var(--ink); line-height: 1.7; }
+  pre .cm { color: var(--ink-faint); }
+
+  ol.queue { list-style: none; counter-reset: q; margin: 14px 0 0; padding: 0; }
+  ol.queue li { counter-increment: q; position: relative; padding: 11px 0 11px 44px; border-top: 1px solid
+    color-mix(in srgb, var(--cyan) 22%, transparent); font-size: 14px; color: var(--ink); }
+  ol.queue li:first-child { border-top: 0; }
+  ol.queue li::before { content: counter(q); position: absolute; left: 0; top: 9px; width: 28px; height: 28px;
+    border-radius: 7px; background: var(--cyan); color: #fff; font-family: var(--mono); font-weight: 640;
+    font-size: 13px; display: grid; place-items: center; }
+  ol.queue li b { font-weight: 640; }
+  .foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--hair); font-family: var(--mono);
+    font-size: 11.5px; color: var(--ink-faint); line-height: 1.7; }
+
+  @media (max-width: 680px) {
+    .score { grid-template-columns: repeat(2, 1fr); }
+    .node { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .find, .stat { transition: border-color .2s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">
+      <svg class="regmark" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M10 0v20M0 10h20" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+      Terminal Gráfica · Bot WhatsApp · Revisión de workflow
+    </div>
+    <h1>Revisión nodo-por-nodo de <span style="font-family:var(--mono);font-weight:600;">faq-bot-v10-live</span></h1>
+    <p class="lede">Contratos de los 6 nodos PSQL validados contra el schema real, y los 4 Code
+      complejos ejecutados con casos adversariales (pasada Fable). El hilo que une los hallazgos
+      grandes: precios de escalera que se presentan planos, y fallas que no dejan rastro en el log.</p>
+    <div class="meta">
+      <span class="chip">2026-08-05</span>
+      <span class="chip">6 PSQL · 4 Code</span>
+      <span class="chip">Claude no ve la base → 3 ítems a confirmar</span>
+      <span class="chip">detalle: plans/revision-psql-2026-08-05.md</span>
+    </div>
+  </header>
+
+  <div class="score">
+    <div class="stat" style="--c:var(--crit)"><div class="n">4</div><div class="l">Crítico / Alto — plata o telemetría</div></div>
+    <div class="stat" style="--c:var(--warn)"><div class="n">7</div><div class="l">Medio — degradan en silencio</div></div>
+    <div class="stat" style="--c:var(--low)"><div class="n">9</div><div class="l">Bajo / latente</div></div>
+    <div class="stat" style="--c:var(--cyan)"><div class="n">3</div><div class="l">A confirmar en la base</div></div>
+  </div>
+
+  <!-- PLATA -->
+  <section class="sec">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Plata — la escalera de cantidad</h2></div>
+    <p class="sec-note">El cluster más caro y el más alineado con el confident-wrong que el proyecto
+      persigue. Tres hallazgos, un mismo origen: el piso o el <code>$0</code> de una escalera se
+      presenta como precio plano.</p>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">CM-1</span><span class="node">Calcular Montos</span></div>
+      <h3>El “desde” prometido nunca se escribe en el texto</h3>
+      <p>Escalera continua ($480 / $300 / $150) sin cantidad → <code>monto = Math.min(values)</code> y
+        el <code>texto</code> sale <b>“$150 por hoja”</b>, plano. El campo <code>desde</code> viaja
+        aparte y ni el prompt ni el texto lo nombran; el compositor copia <code>texto</code> verbatim.</p>
+      <div class="impact">↓ sub-cotiza 3,2× — el tramo 51-250 u presentado como el precio de 5 u</div>
+      <div class="fix"><b>Fix</b>escribir <code>"desde $piso (según cantidad)"</code> dentro de <code>texto</code>.</div>
+    </article>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">CM-2</span><span class="node">Calcular Montos</span></div>
+      <h3>Cantidad fuera de la escalera: cotiza el tramo 1 y lo totaliza</h3>
+      <p>cantidad=25 con tramos 1-3 / 4-10 / 11-20 → ningún <code>find</code> matchea → <code>monto</code>
+        queda en <code>precio_lista</code> (tramo 1) y, como es <code>&gt;0</code>, el fallback de escalón
+        inferior no corre → con <code>multiplica</code> sale “TOTAL $200.000 por 25 unidades”.</p>
+      <div class="impact">↑ sobre-cotiza 1,23× con formato autoritativo (a ≥11 pagan menos)</div>
+      <div class="fix"><b>Fix</b>caer al último tramo aplicable, no al tramo 1.</div>
+    </article>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">AC-1</span><span class="node">Armar Candidatos</span></div>
+      <h3><code>precio_lista = 0</code> con escalera se muestra como <code>precio: $0</code></h3>
+      <p>Río arriba del anterior: <code>fmt(0)</code> devuelve <code>'$0'</code> (solo filtra
+        <code>n==null</code>) y no se emite ninguna línea de rangos. El Agente Relevancia ve “$0” y puede
+        descartar el candidato correcto — que entonces Calcular Montos nunca llega a ver.</p>
+      <div class="impact">el candidato correcto (rifas) puede desaparecer antes del cálculo</div>
+      <div class="fix"><b>Fix</b>con rangos &gt; 0, mostrar <code>"desde $piso"</code> en vez de <code>$0</code>.</div>
+    </article>
+  </section>
+
+  <!-- LOGS -->
+  <section class="sec">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Logs silenciosos — telemetría perdida</h2></div>
+    <p class="sec-note">Fallas que no dejan rastro: <code>onError:continueRegularOutput</code>,
+      <code>exception when others then null</code>, y una unidad de tiempo equivocada. El log es lo que
+      usás para saber si el bot funciona; cuando miente, es peor que el error que oculta.</p>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">H1</span><span class="node">Log Turno · enum</span></div>
+      <h3><code>envio_fallido</code> no existe en el enum <code>bot.accion</code></h3>
+      <p>Cuando Chatwoot no entrega, <code>Chequear Envio</code> pone <code>accion:'envio_fallido'</code>
+        y Log Turno lo inserta en una columna enum NOT NULL. El valor no está en el enum → el INSERT
+        rebota <b>mudo</b> → no se escribe la fila justo en el turno que falló la entrega, que es el
+        caso exacto que ese nodo se construyó para registrar. Los tests dan verde falso.</p>
+      <div class="impact">telemetría de fallo de envío = 0 justo cuando importa</div>
+      <div class="fix"><b>Fix</b><code>alter type bot.accion add value 'envio_fallido';</code></div>
+    </article>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">H2</span><span class="node">Strike Tier-2 · enum</span></div>
+      <h3><code>firewall_tier2_topicalAlignment</code> no existe en el enum</h3>
+      <p>El guard se llama <code>topicalAlignment</code>; <code>fw_log</code> arma
+        <code>'firewall_tier2_'||reason</code> y el enum tiene <code>offtopic</code>, no
+        <code>topicalAlignment</code>. <code>fw_log</code> traga el error con
+        <code>exception when others</code> → un refusal topical de Tier-2 por debajo de strike-max no
+        loguea. (<code>jailbreak</code> sí cuadra.)</p>
+      <div class="fix"><b>Fix</b>mapear <code>topicalAlignment → offtopic</code> en Router Fail Tier-2 (cierra la cardinalidad abierta §h).</div>
+    </article>
+
+    <article class="find" style="--c:var(--crit);--c-soft:var(--crit-soft)">
+      <div class="find-top"><span class="sev">Alta</span><span class="fid">DE-A1</span><span class="node">Decidir</span></div>
+      <h3>El cap de 25 respuestas/24 h es código muerto (ms vs segundos)</h3>
+      <p><code>Date.now()</code> está en milisegundos; Chatwoot manda <code>created_at</code> en
+        <b>segundos</b>. La resta nunca es <code>&lt; 86.400.000</code> → <code>botOut24</code> siempre
+        vacío → las ramas <code>cap</code> no se alcanzan jamás. El bot no tiene tope real de respuestas,
+        en prod (v10-live y v9). Agravante: <code>Get Historial</code> no pagina.</p>
+      <div class="impact">sin freno de volumen — riesgo de costo y de baneo de Meta</div>
+      <div class="fix"><b>Fix</b>convertir a segundos + paginar Get Historial — o decidir que no hay cap.</div>
+    </article>
+  </section>
+
+  <!-- OTROS MEDIOS -->
+  <section class="sec">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Degradan en silencio — medios</h2></div>
+
+    <div class="mini">
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · AC-2</span><span class="t"><b>jsonb como string degrada todo.</b> Armar Candidatos asume jsonb parseado. Si el nodo Postgres lo devuelve string (según versión/config), <code>atributos</code>→ todo a “se confirma por mail” y <code>rangos_cantidad</code>→null reintroduce el confident-wrong 1,7× en un <code>por_pagina</code>. Falta guard de parseo.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · AC-3</span><span class="t"><b>Error SQL indistinguible de búsqueda vacía.</b> El item de error de Buscar Candidatos lo come el <code>filter(r&&r.producto_id)</code> → <code>motivoVacio='busqueda_vacia'</code> miente si la base falló. Clase B-18.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · CM-3</span><span class="t"><b>Crash con <code>elegidos:[null]</code>.</b> <code>TypeError</code> mata el turno entero sin log (familia B-13). Un guard lo cierra.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · CM-4</span><span class="t"><b>Cantidad sin normalizar.</b> <code>"1.000"</code> (formato es-AR) → <code>Number()</code>=1 → cotiza el tramo 1 a quien pidió mil.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · DE-A2</span><span class="t"><b>Falsos positivos de injection con vocabulario de imprenta.</b> “nuevo <b>rol</b>lo de vinilo”, “ME <b>DAN</b> 100 tarjetas”, “el cont<b>rol</b> de calidad” disparan el mensaje anti-injection en vez de la cotización. Faltan <code>\b</code>.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · DE-M1</span><span class="t"><b>Historial truncado.</b> <code>avisoDado</code> y el cap se calculan sobre la última página (~20 msgs) → el bot repite el mail en conversaciones largas.</span></div>
+      <div class="row" style="--c:var(--warn)"><span class="s">Med · EP-1</span><span class="t"><b>El cap de 12 tokens pierde señal del cliente.</b> En la rama <code>opciones</code>, 4 nombres largos del LLM llenan los 12 lugares → los tokens nuevos del cliente (<code>kraft</code>, <code>anilladas</code>) quedan afuera.</span></div>
+    </div>
+  </section>
+
+  <!-- BAJOS -->
+  <section class="sec">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Bajos y latentes</h2></div>
+    <div class="mini">
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · H5</span><span class="t"><b>Asimetría ü/ç.</b> El JS folda <code>ü→u</code>, el <code>translate</code> del SQL no. Real en mecanismo, <b>latente</b>: cero ü/ç en el catálogo hoy. Se activa con una curación futura (“bilingües”) o un acento NFD.</span></div>
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · H4</span><span class="t"><b>Ruteo strike-max (§2i).</b> <code>firewall_check</code> devuelve <code>silence</code> para rate y strike-max; el Switch rutea solo por action → el atacante recibe “frená, mucho volumen”. Ya backlogueado.</span></div>
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · H6</span><span class="t"><b><code>final</code> no se anula en envío fallido.</b> La entrega solo vive en <code>accion</code>/<code>senales</code>; un <code>select final</code> ingenuo muestra texto no entregado.</span></div>
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · CM-5</span><span class="t"><b>Precios con decimales rompen el guard del verificador.</b> <code>fmt(88.5)</code>→ el regex del verificador corta en la coma → falsa ALERTA y tumba el mensaje correcto. Solo si el catálogo deja de ser entero.</span></div>
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · AC-4</span><span class="t"><b>“también hay packs de ” colgante</b> + <code>es_default</code>/<code>orden</code>/<code>ejes_variantes</code> descartados del candidato (el default sobrevive solo como posición 1).</span></div>
+      <div class="row" style="--c:var(--low)"><span class="s">Bajo · EP-2</span><span class="t"><b>Gramaje no se conserva como dice el comentario</b> (“80 gr” se pierde; “80gr” no matchea “75 gr” separado); whitelist <code>a[0-5]</code> excluye <code>a6</code>.</span></div>
+    </div>
+  </section>
+
+  <!-- CONFIRMAR -->
+  <div class="callout">
+    <h2>A confirmar en la base</h2>
+    <p class="sub">Claude no ve la base ni las ejecuciones. Tres selects deciden si H1/H2/H3 ya muerden hoy.</p>
+    <pre><span class="cm">-- H1/H2: ¿faltan esos valores en el enum?</span>
+select unnest(enum_range(null::bot.accion))::text order by 1;
+
+<span class="cm">-- H3: si da error o 0, la rama info está inerte (todo "¿a qué hora abren?" → mail)</span>
+select count(*) from bot.info_negocio;
+
+<span class="cm">-- schema de las vistas: confirmar que E0 (07-26) es lo último aplicado</span>
+select column_name from information_schema.columns
+ where table_schema='bot' and table_name='variantes' order by 1;</pre>
+  </div>
+
+  <!-- COLA -->
+  <div class="callout" style="background:var(--panel);border-color:var(--hair-strong)">
+    <h2>Cola de fixes sugerida</h2>
+    <p class="sub">Martin decide y aplica. Contraste adversarial antes de cada uno; caso de harness que
+      ejercite el camino real (los tests actuales dan verde falso en varios de estos).</p>
+    <ol class="queue">
+      <li><b>Enum:</b> <code>add value 'envio_fallido'</code> + mapear <code>topicalAlignment→offtopic</code>. Barato, cierra dos logs mudos.</li>
+      <li><b>Escalera:</b> escribir el <code>"desde $piso"</code> en Calcular Montos y en Armar Candidatos. Cierra el cluster de plata.</li>
+      <li><b>Fuera de escalera:</b> caer al último tramo aplicable, no al tramo 1.</li>
+      <li><b>Guards:</b> <code>elegidos:[null]</code> y <code>typeof jsonb==='string'?JSON.parse</code> en Armar Candidatos.</li>
+      <li><b>Injection:</b> <code>\b</code> en los patrones + whitelist de vocab de imprenta.</li>
+      <li><b>Cap real:</b> unidades a segundos + paginar Get Historial — o decidir explícitamente que no hay cap.</li>
+    </ol>
+  </div>
+
+  <p class="foot">
+    Registro completo con líneas y contratos: plans/revision-psql-2026-08-05.md ·
+    Harness reproducibles de la pasada Fable en scratchpad (run-decidir / harness-montos / run-armar) ·
+    validate-sql-busqueda.js corre 0 errores sobre v10-live · los tests que mockean filas ocultan H1/H3/AC-2.
+  </p>
+</div>
