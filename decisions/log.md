@@ -18,6 +18,16 @@ Append-only record of meaningful decisions and why they were made. `/level-up` P
 
 Keep it terse. Future-you will thank present-you for capturing the *why*, not just the *what*.
 
+## 2026-08-05 — Bot TG: en escalera por cantidad, el bot da el precio de 1 unidad y pregunta la cantidad; una respuesta puede informar Y preguntar
+
+**Decision:** cuando un producto se cobra por escalera de cantidad y el cliente no dijo cuántas quiere, el bot da el precio **por 1 unidad** (el tramo 1, el más caro por unidad), avisa que es **según cantidad**, y **pregunta cuántas necesita**. Principio general que fija: una respuesta del bot no es solo informativa — cuando falta un dato para dar un número concreto, la respuesta **informa lo que puede + termina en la pregunta que falta**. Reemplaza el fix "desde $piso" que Claude había propuesto para el cluster de plata (CM-1 / AC-1 de la revisión 2026-08-05).
+
+**Why:** dar el precio por 1 unidad es más seguro que el piso: como el tramo 1 es el techo por unidad, cualquier cantidad mayor solo **baja** el precio → imposible sub-cotizar (el daño que el proyecto persigue). El piso ($150) suena más barato pero decepciona al que lleva pocas. Y sin la cantidad no existe un número correcto, así que la pregunta es necesaria, no cosmética. NO contradice la decisión 2026-07-27 ("el bot no repregunta para desambiguar"): aquella es sobre elegir entre opciones ya mostradas (opcional); esta es sobre un dato sin el cual cualquier número es mentira (necesario). Cambiaría de idea si una ronda real mide que agregar la pregunta al final baja la tasa de respuesta del cliente vs. dar solo el número.
+
+**Alternatives considered:** "desde $piso (según cantidad)" sin preguntar (arranca por el número más barato → decepción al que lleva pocas; y deja al cliente sin saber que puede pedir la cantidad); mostrar la tabla de tramos entera (más pesada en WhatsApp y no responde "cuánto sale"); no preguntar y esperar que el cliente aclare solo (pierde el turno).
+
+**Owner:** Martin.
+
 ## 2026-07-28 — El bot no elige variante por defecto: muestra todas con su precio
 
 **Decision:** cuando el cliente no especifica cuál variante quiere, el bot lista TODAS con su precio en un solo mensaje, en vez de elegir una. Se elimina el desempate "la más barata" de `elegirVariante`. Excepciones: si el cliente ancló la variante, se cotiza esa; si el producto cotiza por escalera de cantidad, se conserva la reducción (el menú perdería la tabla de rangos).

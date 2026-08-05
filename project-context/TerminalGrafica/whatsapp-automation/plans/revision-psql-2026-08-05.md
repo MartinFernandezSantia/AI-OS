@@ -178,8 +178,11 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
 ## Cola de fixes sugerida (Martin decide y aplica; contraste adversarial antes de cada uno)
 1. `alter type bot.accion add value 'envio_fallido'` + resolver H2 (mapear `topicalAlignment→offtopic`
    en Router Fail Tier-2, cierra la cardinalidad abierta). — barato, alto valor de telemetría.
-2. Escalera sin cantidad → escribir `"desde $piso (según cantidad)"` en `texto` (Calcular Montos) y
-   `"desde $piso"` en vez de `$0` en Armar Candidatos. — cierra el cluster de plata.
+2. Escalera sin cantidad → **decisión Martin 2026-08-05** (ver decisions/log.md): dar el precio
+   **por 1 unidad** (tramo 1, techo por unidad → imposible sub-cotizar), avisar "según cantidad", y
+   **preguntar la cantidad**. La respuesta informa + pregunta. Aplica a Calcular Montos (el `texto`) y
+   a Armar Candidatos (en vez de `$0`, el precio de 1 unidad). — cierra el cluster de plata.
+   Principio general nuevo: una respuesta puede ser informativa Y llevar la pregunta que falta al final.
 3. Cantidad fuera de escalera → caer al último tramo aplicable, no al tramo 1.
 4. Guard `elegidos:[null]` + guard `typeof jsonb==='string'?JSON.parse` en Armar Candidatos.
 5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
