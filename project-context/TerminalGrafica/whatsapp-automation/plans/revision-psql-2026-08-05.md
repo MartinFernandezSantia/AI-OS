@@ -201,6 +201,7 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
 4. Guard `elegidos:[null]` + guard `typeof jsonb==='string'?JSON.parse` en Armar Candidatos.
    **APROBADO Martin 2026-08-05** (riesgo casi cero; seguro contra la mudanza al KVM 4).
 5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
+   **APROBADO Martin 2026-08-05** (red atrás: Tier-1/Tier-2 hacen su propia detección).
 6. Cap real de respuestas (unidades a segundos) + paginar Get Historial — o decidir que no hay cap.
 7. CONFIRMAR EN BASE: enum `accion`, `bot.info_negocio`, y aplicar §2i.
 
