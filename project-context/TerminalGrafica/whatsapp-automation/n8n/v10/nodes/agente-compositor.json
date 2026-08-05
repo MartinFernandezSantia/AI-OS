@@ -46,7 +46,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"mensaje\"\n  ],\n  \"properties\": {\n    \"mensaje\": {\n      \"type\": \"string\",\n      \"description\": \"el texto tal cual va a WhatsApp\"\n    },\n    \"usoTodosLosHechos\": {\n      \"type\": \"boolean\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"mensaje\"\n  ],\n  \"properties\": {\n    \"mensaje\": {\n      \"type\": \"string\",\n      \"description\": \"el texto tal cual va a WhatsApp\"\n    },\n    \"motivo\": {\n      \"type\": \"string\"\n    }\n  }\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
