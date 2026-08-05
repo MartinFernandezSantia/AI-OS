@@ -87,19 +87,11 @@ tabla (columnas `clave`,`valor`). **CONFIRMAR EN BASE:** `select count(*) from b
 atacante de strike-max recibe "frená, mucho volumen". Confirmado presente. Fix mínimo ya escrito
 en handoff §2i (que strike-max devuelva `'drop'`). No aplicado por freeze de entrega.
 
-### 🟡 H5 — asimetría de normalización ü/ç entre JS y SQL (latente, bajo riesgo)
-`Extraer Palabras` folda `ü→u` (y á é í ó ú ñ); el `translate()` de `Buscar Candidatos` sobre el
-lado catálogo sólo cubre `áéíóúñ`. Un nombre de catálogo con `ü`/`ç` se partiría en el
-`regexp_replace [^a-z0-9]+` y no matchearía el token ya foldeado del cliente. Con el catálogo
-actual (imprenta, sin esos glifos) no muerde, pero es la clase exacta de bug que el propio nodo
-documenta. Fix trivial: agregar `ü→u` (y `ç→c`) al `translate` del SQL.
+### ~~H5 — asimetría ü/ç~~ — DESCARTADO (Martin 2026-08-05)
+Descartado: nunca va a haber un producto con `ü`/`ç` en el catálogo de la imprenta. No se acciona.
 
-### 🟡 H6 — `final` se escribe igual en un envío fallido (menor)
-`Chequear Envio` marca el fallo vía `accion` y `senales.envioFallido`, pero NO limpia `final`: en
-una fila de envío fallido (si H1 se arregla y la fila entra) `final` sigue con el texto que no se
-entregó. El comentario del nodo dice "final NO se escribe como respuesta enviada" pero el código no
-lo anula. Una consulta ingenua `select final` mostraría texto no entregado. La delivered-ness sólo
-vive en `accion`/`senales`. Decidir si se anula `final` o se deja (documentado).
+### ~~H6 — `final` en envío fallido~~ — IGNORADO (Martin 2026-08-05)
+Ignorado por decisión de Martin. No se acciona.
 
 ## Contratos validados OK (sin hallazgo)
 - Extraer Palabras → Buscar Candidatos: `palabras/ventana/cupo` = $1/$2/$3. ✓
@@ -143,9 +135,13 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
 - **⚠️ MEDIA `cantidad` sin normalizar:** `"1.000"` (es-AR) → `Number(...)`=1 → cotiza tramo 1.
 - **⚠️ MEDIA una sola `seleccion.cantidad` multiplica TODOS los hechos** ("100 tarjetas y 500
   volantes" → un total con la cantidad equivocada).
-- 🟡 precios con decimales rompen el guard de `Leer Verificador` (`/\$\s?[\d.]+/` corta en la coma
-  → falsa ALERTA de monto inventado, tumba el mensaje correcto); caveats contradictorios;
-  lista-de-precios con `multiplica=true` dispara cap falso; lona m² sigue yendo a mail (UV no cubre).
+- **⚠️ CM-5 (subida de sev, Martin 2026-08-05): totales DECIMALES rompen el guard de `Leer
+  Verificador`.** `/\$\s?[\d.]+/` corta en la coma → falsa ALERTA de monto inventado, tumba el mensaje
+  correcto. NO hace falta un precio con centavos: un precio entero × una cantidad continua da total
+  decimal ($150 × 1,45 m = $217,50). **Acoplado a B-21 / unidades continuas:** el día que la cotización
+  por metro/m² funcione, este regex hay que arreglarlo en la misma tanda o rechaza totales válidos.
+- 🟡 caveats contradictorios; lista-de-precios con `multiplica=true` dispara cap falso; lona m² sigue
+  yendo a mail (UV no cubre).
 - Contrato con consumidores OK salvo el crash. `rangos_cantidad` llega como **array** (Array.isArray
   anda) — pero ver el punto siguiente.
 
