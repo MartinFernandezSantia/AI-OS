@@ -17,6 +17,16 @@ había tocado (Webhook/Firewall/Debounce/Decidir/Guardrails). Reparto:
   (falsos positivos de injection), **DE-M1** (historial truncado), **H4** (§2i firewall), **H5** (ü/ç),
   **AC-2** (jsonb string), **CM-4/CM-5**. Más el *qué* concreto de H1/H2 (los valores de enum que faltan).
 
+## CONFIRMADO EN BASE (Martin, 2026-08-05)
+- ✅ **Schema E0 vivo:** `bot.variantes` tiene las 18 columnas de E0 (atributos, familias, por_pack,
+  por_pagina, precio_actualizado, rangos_cantidad, mostrable, tiene_override, n_reglas_cantidad,
+  solo_descuentos, tiene_reglas, variante_origen, etc.). Todas las que Buscar Candidatos usa existen.
+  Buscar Candidatos validado contra la base real.
+- ✅ **H3 RESUELTO:** `bot.info_negocio` existe con **12 filas** (= el seed). La rama info NO está
+  inerte. (Menor: verificar con TG si la fila `factura` ya tiene valor real, no bloquea.)
+- ⏳ **H1/H2 pendiente:** el `unnest(enum_range(bot.accion))` volvió como `count` en vez de la lista;
+  re-correr `select unnest(enum_range(null::bot.accion))::text as valor order by 1;` para ver los nombres.
+
 ## Schema autoritativo usado
 - Enum `bot.accion` = **5 originales** (`informo_precio`, `informo_capacidad`, `repregunto`,
   `handoff`, `fallback_error`) — `supabase/migrations/20260629182322_bot_catalog_access.sql:29`
