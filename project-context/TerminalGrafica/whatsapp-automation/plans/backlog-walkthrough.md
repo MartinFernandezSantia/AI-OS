@@ -274,3 +274,75 @@ stopwords, o re-promptear el Selector/Relevancia con más contexto. La idea es q
 error SQL es reintento de infra, distinto del retry sobre un no-match). Mecanismo
 análogo a los loops de reintento/re-auditoría del Verificador (sección 9): ya existe
 el patrón "reintentar N veces antes de rendirse" en el flow.
+
+---
+
+## B-10 · "Se confirma por mail" se dispara de más en cotizaciones simples
+
+**Sección 8 · Agente Compositor.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** la regla del systemMessage "si vino TOTAL
+YA CALCULADO lo decís; si no vino, precio unitario + se confirma por mail" hace que
+CASI TODO mensaje termine mencionando el mail, aun cuando el cliente solo pregunta el
+precio de UN producto y no hace falta. Ensucia la respuesta y suena a máquina.
+
+**Evidencia:** `agente-compositor.json` systemMessage, bloque "COTIZAS TOTALES, PERO
+NO LOS CALCULAS" + bloque "EL MAIL NO ES EL CAJON DE SASTRE" (que ya intenta frenar
+esto pero sigue saliendo). El mail solo debería aparecer cuando (a) falta un dato
+para cerrar el número, o (b) el cliente quiere ENCARGAR. Consultar un precio unitario
+no es ninguna de las dos.
+
+**A decidir:** afinar el prompt para que el mail sea la excepción, no el default de
+todo turno sin total.
+
+---
+
+## B-11 · "El mail no es cajón de sastre" es una regla no determinística en el prompt
+
+**Sección 8 · Agente Compositor.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** el bloque "EL MAIL NO ES EL CAJON DE SASTRE"
+le pide al agente JUZGAR ("mandar a alguien al mail para algo que vos podías averiguar
+es perder la venta") en vez de darle una regla clara. Eso deja lugar a interpretación
+y el agente puede resolverlo distinto turno a turno.
+
+**Relación con B-10:** son la misma tensión. B-10 es el síntoma (mail de más), B-11 es
+la causa en el prompt (regla ambigua). Al reescribir, buscar reglas accionables y no
+criterios de juicio ("si el cliente pidió otra medida/pack, ofrecé averiguarlo acá"
+en vez de "no uses el mail de cajón de sastre").
+
+---
+
+## B-12 · `usoTodosLosHechos` es campo muerto
+
+**Sección 8 · Agente Compositor.** Estado: `abierto` (mismo patrón que B-1).
+
+**Qué se observó (Martin, 2026-08-05):** el parser del Compositor recolecta
+`usoTodosLosHechos` (bool) y `motivo`, pero **ningún nodo los lee** (verificado por
+grep en todos los nodos) y tampoco entran en `senales` (Leer Verificador arma
+`senales` a mano sin incluirlos). Se recolecta y se tira.
+
+**A decidir:** o se consume (loguearlo en `senales` para auditar si el compositor
+está dejando hechos afuera) o se borra del parser. Es telemetría potencialmente útil
+para auditoría — probablemente convenga loguearlo antes que borrarlo.
+
+---
+
+## B-13 · Un crash del Compositor no queda marcado como tal en el log
+
+**Sección 8 · Leer Compositor → Leer Verificador.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** si el Agente Compositor falla en sí
+(`onError:continueRegularOutput` → devuelve vacío), Leer Compositor calcula
+`huboCompositor = false`, pero ese campo **no llega a `senales`** (Leer Verificador no
+lo mapea). Se computa y se descarta. Resultado: un crash del compositor no queda
+registrado COMO crash en `bot.decisiones`; se ve como una falla río abajo (el
+Verificador audita un mensaje vacío y rechaza) y se pierde la causa raíz.
+
+**Contraste:** la recuperación SÍ se loguea bien (`senales.rescatadoPorReintento`,
+`notas: RESCATADO-POR-REINTENTO` + `feedback1=...`). Lo que falta es marcar el fallo
+del propio agente.
+
+**A decidir:** propagar `huboCompositor` a `senales` (y quizá un contador de crashes)
+para que las auditorías del sistema puedan identificar fallos del compositor. Es
+justo el tipo de dato que Martin quiere tener limpio para diagnosticar.
