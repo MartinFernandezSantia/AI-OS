@@ -526,3 +526,26 @@ SLA de reclamos). Confirmar con TG.
 precios (es on-topic, el guard offtopic de Tier-2 no lo ve) y abuso por tokens — ¿los mira el mismo
 LLM-juez de la Fase 2 en la misma pasada, o son un ítem separado? Distintos en intención (bot que
 falla vs cliente malicioso) aunque comparten el disparador de volumen.
+
+---
+
+## B-21 · La cantidad la extrae el Selector (unit-aware), no la parsea Calcular Montos
+
+**Sección 7 · Agente Selector → Calcular Montos.** Estado: `decidido — dirección, a probar` (Martin, 2026-08-05).
+Origen: hallazgo CM-4 de `plans/revision-psql-2026-08-05.md`.
+
+**El problema (CM-4):** `Calcular Montos` hace `Number((d.seleccion||{}).cantidad)` sobre lo que venga.
+`Number("1.000")` = **1** (JS lee el punto como decimal, no como separador de miles es-AR) → un pedido
+de mil se cotiza como 1. `Number("1,000")` = NaN. Toca plata.
+
+**Por qué el fix ingenuo NO sirve (Martin):** strippear los puntos rompe las **unidades continuas**:
+"1.45 metros" de lona → 145 metros (sobre-cotización catastrófica). El punto significa cosas distintas
+según la unidad: separador de miles en discretas (volantes, hojas), decimal en continuas (metro, m²).
+No hay una regla única.
+
+**Dirección decidida:** que **el Selector** (que ve el contexto: "mil volantes" vs "1.45 m de lona")
+emita la cantidad ya como número limpio y con la semántica de la unidad, y que `Calcular Montos` solo
+**valide** en vez de adivinar sobre texto. La cantidad no es un monto → que la provea el LLM no rompe
+"el LLM nunca tipea plata". **A probar:** primero ver qué emite HOY el Selector en `cantidad` (si ya es
+un número limpio, CM-4 no muerde hoy, pero falta el guard de validación). Emparentado con el gap de
+unidades continuas (metro/m²) que hoy caen en "se confirma por mail" (INFO en la revisión).
