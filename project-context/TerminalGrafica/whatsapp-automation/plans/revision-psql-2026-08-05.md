@@ -5,6 +5,18 @@
 > ni las ejecuciones** — los ítems marcados "CONFIRMAR EN BASE" necesitan que Martin corra
 > el select indicado. Los Code complejos van por Fable (pasada aparte, en curso).
 
+## Reconciliación con el backlog del walkthrough (`plans/backlog-walkthrough.md`)
+El walkthrough previo (B-1..B-19) recorrió las **Secciones 7-10** (Buscar/Selector/Relevancia/
+Extraer/Compositor/Verificador/log). Esta revisión cubrió además las **Secciones 1-6** que aquél no
+había tocado (Webhook/Firewall/Debounce/Decidir/Guardrails). Reparto:
+- **Ya en el backlog** (no re-abrir, referir al B-item): **AC-3 = B-5** (error SQL vs no-match; fix
+  ya decidido en B-9, retry antes de escalar) · **EP-1 = B-2** (cap de 12 tokens; dirección de Martin
+  2026-08-04 ya anotada) · **CM-3 ≈ B-13** (crash sin marcar en el log) · **H1/H2 = instancias
+  concretas de B-18** (rebote de Log mudo, estructural) · **H3 ≈ B-19** (escalación desde info_negocio).
+- **Nuevos** (Secciones 1-6, el walkthrough no había llegado): **DE-A1** (cap muerto ms/seg), **DE-A2**
+  (falsos positivos de injection), **DE-M1** (historial truncado), **H4** (§2i firewall), **H5** (ü/ç),
+  **AC-2** (jsonb string), **CM-4/CM-5**. Más el *qué* concreto de H1/H2 (los valores de enum que faltan).
+
 ## Schema autoritativo usado
 - Enum `bot.accion` = **5 originales** (`informo_precio`, `informo_capacidad`, `repregunto`,
   `handoff`, `fallback_error`) — `supabase/migrations/20260629182322_bot_catalog_access.sql:29`
@@ -187,6 +199,7 @@ Cada agente Fable ejecutó el jsCode aislado con harness en scratchpad. Reproduc
    (pregunta 79 en preguntas-tg.md, ejemplo Imanes). Opciones: caer al último tramo aplicable, o
    confirmar por mail para cantidades sobre el tope.
 4. Guard `elegidos:[null]` + guard `typeof jsonb==='string'?JSON.parse` en Armar Candidatos.
+   **APROBADO Martin 2026-08-05** (riesgo casi cero; seguro contra la mudanza al KVM 4).
 5. Injection A2 → `\b` en los patrones y whitelist de vocab de imprenta (rollo, control, dan).
 6. Cap real de respuestas (unidades a segundos) + paginar Get Historial — o decidir que no hay cap.
 7. CONFIRMAR EN BASE: enum `accion`, `bot.info_negocio`, y aplicar §2i.
