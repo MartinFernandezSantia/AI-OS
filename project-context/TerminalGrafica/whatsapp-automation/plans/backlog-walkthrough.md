@@ -620,3 +620,45 @@ lo afectan, y otros campos expandibles. Orientado a UX (dashboard), no un SQL su
 lo motiva: el bot **no detecta "plotter papel"** aunque en la categoría PLOTEADOS hay 2 productos que
 cumplen (Papel 130gr Recubierto/Encapado, Papel Obra Vegetal Color/Negro) → gap de resolución que una
 vista así haría evidente. Se conecta con la skill `tg-curar-catalogo` y el curador visual existente.
+
+---
+
+## B-27 · Muchas variantes válidas → el Compositor pide aclarar por eje (no lista todo)
+
+**Sección 8 · Agente Compositor.** Estado: `decidido — dirección` (Martin, 2026-08-05). Hermano de B-6.
+
+**Origen:** al hacer B-6 axis-agnóstico, Relevancia ahora elige TODAS las variantes de los ejes
+que el cliente no especificó (correcto: hay que surfacearlas). Fable propuso un tope pragmático
+("mostrá las extremas y la más común") para no saturar — **Martin lo descartó: está mal truncar**.
+
+**Comportamiento correcto (Martin):** cuando un producto tiene muchas variantes válidas y el cliente
+NO pidió ver todas, el Compositor debe **detectar los ejes que varían y pedirle al cliente que
+aclare**, en vez de listar el producto cartesiano. Mismo principio "informa Y pregunta" de G3.
+
+**Matiz de UX por tipo de eje (Martin):**
+- Ejes que **todo el mundo conoce** → preguntar directo, sin listar: **faz** (simple/doble),
+  **color** (color/byn), **tamaño de hoja** (A4/A3…). Ej: "¿la querés simple o doble faz?".
+- Ejes donde el cliente **puede no saber las opciones** → mostrar las disponibles: **gramaje**,
+  **tipo de papel**, acabado. Ej: "viene en 90, 130 o 300 gr, ¿cuál buscás?".
+
+**Excepción:** si el cliente pidió explícitamente ver todas las opciones, se listan (no se pregunta).
+
+**Relación:** parte de la estructura de diálogo B-3/B-4 (repreguntas guiadas). Requiere que el
+Compositor reciba de los hechos QUÉ ejes varían entre los candidatos elegidos (hoy no viaja
+explícito) — puede necesitar un campo nuevo desde Calcular Montos/Armar Candidatos.
+
+---
+
+## B-28 · Regla de negocio: medida > A3 se cotiza por metro / m²
+
+**Sección 7 · catálogo + Selector/Calcular Montos.** Estado: `dato de TG confirmado` (2026-08-05).
+
+**Dato (TG, respondido):** toda medida **mayor a A3** se mide **en metro o m²**, según las opciones
+que declare el producto. **Si el producto NO tiene esa variante (metro/m²), es porque no se trabaja
+esa medida mayor** — no hay que inventar un precio ni caer a una unidad discreta.
+
+**Implicancia:** es la regla que justifica las unidades continuas. Acoplado a **B-21** (Selector
+extrae cantidad unit-aware: "1.45 m" no es 145) y **CM-5** (totales decimales: entero × metros da
+decimal, hay que arreglar el regex `/\$\s?[\d.]+/` de Leer Verificador que corta en la coma). Cuando
+se ataque unidades continuas, esta regla define el fallback: sin variante metro/m² = medida no
+trabajada = a mail / no cotiza, no un número aproximado.
