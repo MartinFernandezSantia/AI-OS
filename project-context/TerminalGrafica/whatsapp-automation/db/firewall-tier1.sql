@@ -54,9 +54,9 @@ create table if not exists bot.injection_patterns (
 -- Nota \b -> en Postgres el word-boundary es \y (\\b es backspace).
 -- 'DAN' va case-sensitive para no pegar con el español "dan" (me dan, dan ganas).
 insert into bot.injection_patterns (patron, case_sensitive, nota) values
-  ('ignor[aá].*(instrucciones|reglas|rol)', false, 'ignorar instrucciones ES'),
-  ('olvid[aá].*(instrucciones|reglas|rol)', false, 'olvidar instrucciones ES'),
-  ('nuevo rol',                             false, 'cambio de rol ES'),
+  ('ignor[aá].*\y(instrucciones|reglas|rol)\y', false, 'ignorar instrucciones ES'),
+  ('olvid[aá].*\y(instrucciones|reglas|rol)\y', false, 'olvidar instrucciones ES'),
+  ('\ynuevo rol\y',                             false, 'cambio de rol ES'),
   ('ignore (previous|instructions|your)',   false, 'ignore instructions EN'),
   ('system prompt',                         false, 'pedir el system prompt'),
   ('jailbreak',                             false, 'jailbreak'),
