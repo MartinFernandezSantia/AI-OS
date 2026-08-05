@@ -348,3 +348,84 @@ del propio agente.
 **A decidir:** propagar `huboCompositor` a `senales` (y quizá un contador de crashes)
 para que las auditorías del sistema puedan identificar fallos del compositor. Es
 justo el tipo de dato que Martin quiere tener limpio para diagnosticar.
+
+---
+
+## B-14 · Bloque "SEGUNDA AUDITORIA" del systemMessage del Verificador — redundante
+
+**Sección 9 · Agente Verificador.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** el systemMessage tiene un bloque
+condicional "SI EL PEDIDO TRAE UN BLOQUE SEGUNDA AUDITORIA: ...". Pero
+`Prompt Re-auditoría` YA inyecta en runtime, en la 2da vuelta, las mismas
+instrucciones + el monto concreto que el auditor inventó + las opciones 1/2.
+
+**Evaluación:** no es inútil del todo (es la mitad estática del contrato), pero
+está duplicado: inerte en la 1ra auditoría (no hay bloque que dispare el
+condicional), redundante en la 2da (dice lo mismo que el runtime, con menos
+detalle). Fuente de verdad partida en dos.
+
+**A decidir:** consolidar a una sola fuente. Probablemente dejar solo el bloque
+de `Prompt Re-auditoría` (más específico, trae el número) y sacar el condicional
+del systemMessage — o al revés, pero no ambos.
+
+---
+
+## B-15 · El Verificador debería puntuar la importancia de sus correcciones/fallas
+
+**Sección 9 · Agente Verificador + Leer Verificador.** Estado: `abierto`.
+
+**Qué se observó (Martin, 2026-08-05):** hoy toda corrección que pasa el guard de
+plata se aplica, sin importar si es cosmética o de fondo. Una corrección trivial
+puede además disparar el costo del loop de re-auditoría. Falta una noción de
+SEVERIDAD.
+
+**Idea de Martin:** que el auditor genere un valor de importancia para cada
+cambio/falla, de modo que:
+  - correcciones de poca importancia se descarten (sale el original);
+  - la tolerancia después del 2do intento sea mayor (comparar el resultado del
+    2do contra el 1ro y quedarse con el mejor, en vez de rechazar de nuevo).
+
+**Nota:** el parser del Verificador YA tiene un campo `confianza` (number) que
+hoy no consume nadie — punto de partida natural para esto. Encaja con B-12/B-1
+(campos que se recolectan y no se usan).
+
+**A decidir:** definir la escala, el umbral de descarte, y la política de
+"quedate con el mejor de los dos intentos".
+
+---
+
+## B-16 · "Nunca borres una oferta por cantidad" es demasiado específico
+
+**Sección 9 · Agente Verificador (systemMessage).** Estado: `abierto` (hermano de B-6).
+
+**Qué se observó (Martin, 2026-08-05):** la regla está anclada al eje
+cantidad/pack ("llevando N o más"). El prompt intenta generalizar ("lo mismo con
+cualquier alternativa más barata o pack más grande"), pero sigue nombrando el eje
+y podría no cubrir otras familias con su propia alternativa relevante (ej.
+módulos de medicina).
+
+**A decidir:** reformular axis-agnóstico: "no borres una alternativa relevante
+que figure en los hechos autorizados" sin nombrar cantidad/pack. Mismo patrón que
+B-6 (hacer la regla de Relevancia agnóstica al eje). Conviene resolver los dos
+con el mismo criterio.
+
+---
+
+## B-17 · La causa de rechazo "no contesta" bloquea las repreguntas
+
+**Sección 9 · Agente Verificador (causa d).** Estado: `abierto` — BLOQUEADO por B-1/B-3.
+
+**Qué se observó (Martin, 2026-08-05):** el Verificador rechaza si el mensaje "no
+contesta la pregunta que el cliente hizo" (causa d). Una repregunta, por
+definición, NO contesta todavía la pregunta del cliente → la causa (d) la
+tumbaría.
+
+**Consecuencia:** cuando se implementen las repreguntas (B-1, dependientes de la
+estructura de diálogo B-3), la causa (d) necesita una excepción explícita para
+repreguntas legítimas — si no, el auditor mata toda repregunta antes de que
+salga.
+
+**Relación:** parte del paquete B-1 / B-3 / B-4 (diálogo y repreguntas). No se
+toca hasta diseñar esa estructura, pero queda anotado como requisito del
+Verificador dentro de ese trabajo.
