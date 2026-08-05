@@ -313,18 +313,20 @@ en vez de "no uses el mail de cajón de sastre").
 
 ---
 
-## B-12 · `usoTodosLosHechos` es campo muerto
+## B-12 · `usoTodosLosHechos` es campo muerto — quitar
 
-**Sección 8 · Agente Compositor.** Estado: `abierto` (mismo patrón que B-1).
+**Sección 8 · Agente Compositor.** Estado: `decidido: QUITAR` (Martin, 2026-08-05).
 
 **Qué se observó (Martin, 2026-08-05):** el parser del Compositor recolecta
 `usoTodosLosHechos` (bool) y `motivo`, pero **ningún nodo los lee** (verificado por
 grep en todos los nodos) y tampoco entran en `senales` (Leer Verificador arma
 `senales` a mano sin incluirlos). Se recolecta y se tira.
 
-**A decidir:** o se consume (loguearlo en `senales` para auditar si el compositor
-está dejando hechos afuera) o se borra del parser. Es telemetría potencialmente útil
-para auditoría — probablemente convenga loguearlo antes que borrarlo.
+**Decisión de Martin:** se **quita** del parser. Para que sirviera habría que loguear
+además TODOS los hechos de esa ejecución (el bool solo dice "los usé todos" o "no";
+sin la lista de hechos no sabés cuál se saltó), y eso es peso muerto en el log. El
+costo de hacerlo útil supera el valor. Se borra `usoTodosLosHechos` del inputSchema
+del parser del Compositor (`agente-compositor.json`).
 
 ---
 
