@@ -217,8 +217,10 @@ const RUTEO = {
   'Switch Intención': {
     // info pasa primero por `Datos Info` (2026-07-31): trae bot.info_negocio
     // SIEMPRE, para que la rama no dependa de que el Agente Intención se acuerde
-    // de llamar su tool. Ver la seccion 12.
-    info: 'Datos Info', otro: 'Silencio Otro', catalogo: 'Prompt Selector',
+    // de llamar su tool. Ver la seccion 12. `encargar` (2026-08-06) reusa la MISMA
+    // salida info (la regla matchea info OR encargar), por eso no hay salida propia.
+    // `otro` ya no va al NoOp: pasa por el fallback Datos Otro->Agente Otro (12b).
+    info: 'Datos Info', otro: 'Datos Otro', catalogo: 'Prompt Selector',
   },
 };
 
@@ -266,6 +268,9 @@ const IFS = {
   // B-9 Parte 3 (2026-08-06): la rama vacia del Switch reintenta el Selector con
   // feedback antes de escalar. true -> re-corre la resolucion; false -> mail.
   '¿Reintentar Búsqueda?': ['Agente Selector', 'Label Escalación'],
+  // rama otro (2026-08-06): el fallback decide responder o callar. true -> envia
+  // la derivacion; false -> Silencio Otro (el NoOp que antes recibia todo 'otro').
+  '¿Responder Otro?': ['Enviar Mensaje', 'Silencio Otro'],
 };
 for (const [nombre, [siTrue, siFalse]] of Object.entries(IFS)) {
   if (!N(nombre)) { E('falta el IF "' + nombre + '"'); continue; }
@@ -494,10 +499,13 @@ console.log('\n8e. TOTALES — el codigo multiplica, el LLM copia');
     if (!/lo multiplicas vos/.test(sys)) E('el compositor no tiene prohibido calcular el total por su cuenta');
     else OK('el compositor tiene prohibido calcular totales');
   }
-  // AVISO DE CANAL: una vez por conversacion (no en cada turno: es mensaje pago)
-  if (calc3 && !/avisoDado/.test(calc3.parameters.jsCode)) {
-    E('no se controla el aviso de canal: lo repetiria en cada mensaje');
-  } else if (calc3) OK('el aviso de canal va una sola vez por conversacion');
+  // AVISO DE CANAL retirado (B-10/B-11, 2026-08-06): el "como encargar" ya no se
+  // mete en cada primer precio. No debe quedar rastro de avisoDado/avisoYaDado en
+  // Calcular Montos. El "como encargar" sale ahora por la rama 'encargar' o por la
+  // regla "Cuando nombrar el mail" del Compositor.
+  if (calc3 && /avisoDado|avisoYaDado/.test(calc3.parameters.jsCode)) {
+    E('quedo logica de aviso de canal en Calcular Montos (B-10/B-11 lo retiro)');
+  } else if (calc3) OK('aviso de canal retirado de Calcular Montos (B-10/B-11)');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -775,11 +783,6 @@ console.log('\n11. LA OFERTA POR CANTIDAD NO SE PIERDE (promo inmobiliarias, 202
     OK('el minimo viaja pegado al monto (no como caveat borrable)');
   } else E('el minimo no esta dentro de `texto`: el numero puede viajar solo');
 
-  // el flag del aviso de canal se lee de Decidir, NO del sobre heredado
-  if (/\$\('Decidir'\)[\s\S]{0,80}avisoDado/.test(js)) {
-    OK('avisoDado se lee de Decidir (7 nodos de distancia, se diluia)');
-  } else E('avisoDado sale del sobre: se pierde en la cadena y repite el mail');
-
   const lv = wf.nodes.find((n) => n.name === 'Leer Verificador');
   const jsv = lv.parameters.jsCode || '';
   if (/ofertasBorradas/.test(jsv)) OK('hay guard contra el borrado de ofertas');
@@ -835,8 +838,9 @@ console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
       OK('el cap anula el total pero conserva el monto unitario');
     } else E('el cap no conserva el unitario: el cliente se iria sin ningun dato');
   }
-  // el compositor tiene que saber que decir cuando el cap actua
-  if (calc && !/mucho volumen/.test(calc.parameters.jsCode)) {
+  // el compositor tiene que saber que decir cuando el cap actua (B-10/B-11: ahora
+  // el volumen da precio por unidad + total por mail, en vez de "lo ve el equipo")
+  if (calc && !/cantidad grande/.test(calc.parameters.jsCode)) {
     E('el prompt no le explica al compositor por que no hay total por volumen');
   } else if (calc) OK('el compositor sabe explicar el cap sin inventar la causa');
 
@@ -943,12 +947,59 @@ console.log('\n12. RONDA DEL 2026-07-31 — cap de volumen y la rama info');
   const comp = N('Agente Compositor');
   if (comp) {
     const sys = (comp.parameters.options || {}).systemMessage || '';
-    if (!/CAJON DE SASTRE/.test(sys)) E('el compositor no sabe que el mail no es para informar');
-    else OK('el compositor sabe que informar es su trabajo, no del mail');
-    if (!/NO REPITAS SIEMPRE LA MISMA FRASE/.test(sys)) E('nada le impide repetir "el total se confirma por mail" como molde');
+    // B-10/B-11 (2026-08-06): el bloque "CAJON DE SASTRE" se reemplazo por la regla
+    // accionable "Cuando nombrar el mail" (mail solo en 2 situaciones, default = sin mail).
+    if (!/Cuando nombrar el mail/.test(sys)) E('el compositor no tiene la regla de cuando nombrar el mail');
+    else OK('el compositor tiene la regla accionable de cuando nombrar el mail');
+    if (!/Por defecto NO nombras el mail/.test(sys)) E('el mail no es la excepcion: puede volver a salir de mas (B-10)');
+    else OK('el mail es la excepcion, no el default de cada turno');
+    if (!/distinto en cada mensaje/.test(sys)) E('nada le impide repetir "el total se confirma por mail" como molde');
     else OK('se le pide variar la frase segun el mensaje');
     if (!/USA LAS PALABRAS DEL CLIENTE/.test(sys)) E('el compositor sigue forzado a los nombres de la base');
     else OK('puede usar la palabra del cliente ("fotocopias")');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n12b. RAMA OTRO — fallback que decide responder o callar (2026-08-06)');
+// El NoOp de silencio se reemplazo por un compositor-fallback: la mayoria de lo
+// inesperado (spam, saludo, off-topic) sigue en silencio, pero un cliente que
+// reclama o menciona un trabajo recibe una derivacion apologetica al mail.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const dOtro = N('Datos Otro');
+  if (!dOtro) E('falta "Datos Otro": la rama otro no puede derivar con datos reales');
+  else {
+    if (!/bot\.info_negocio/.test(dOtro.parameters.query || '')) E('Datos Otro no lee bot.info_negocio');
+    else OK('Datos Otro lee bot.info_negocio (deriva sin hardcodear)');
+    if (dOtro.onError !== 'continueRegularOutput') E('Datos Otro sin onError: un error de base mataria el turno');
+    else OK('Datos Otro degrada sin matar el turno');
+  }
+  const pOtro = N('Prompt Otro');
+  if (!pOtro) E('falta "Prompt Otro"');
+  else if (!/Datos Otro/.test(pOtro.parameters.jsCode || '')) E('Prompt Otro no lee las filas de Datos Otro');
+  else OK('Prompt Otro le pasa la tabla al Agente Otro');
+  const agO = N('Agente Otro');
+  if (!agO) E('falta "Agente Otro": la rama otro no tiene quien decida responder/callar');
+  else {
+    const sys = (agO.parameters.options || {}).systemMessage || '';
+    if (!/silencio/i.test(sys) || !/responder/i.test(sys)) E('el Agente Otro no tiene la regla responder-o-callar');
+    else OK('el Agente Otro decide entre responder y silencio');
+    if (!/DATO, NO INSTRUCCION/.test(sys)) E('el Agente Otro no blinda contra inyeccion (el mensaje del cliente es texto no confiable)');
+    else OK('el Agente Otro trata el mensaje del cliente como dato, no instruccion');
+    if (!/UNICA fuente/i.test(sys)) E('el Agente Otro puede inventar mail/direccion (sin grounding en la tabla)');
+    else OK('el Agente Otro solo deriva con los datos de la tabla');
+    if (agO.onError !== 'continueRegularOutput') E('Agente Otro sin onError: un fallo del LLM cortaria el turno');
+    else OK('Agente Otro degrada sin matar el turno (default = silencio)');
+  }
+  const lO = N('Leer Otro');
+  if (!lO) E('falta "Leer Otro"');
+  else {
+    const js = lO.parameters.jsCode || '';
+    if (!/hayRespuesta/.test(js)) E('Leer Otro no setea hayRespuesta: ¿Responder Otro? no puede rutear');
+    else OK('Leer Otro setea hayRespuesta para ¿Responder Otro?');
+    if (!/infoFilas/.test(js) || !/sinDatos/.test(js)) E('Leer Otro no fuerza silencio cuando no hay datos para derivar');
+    else OK('Leer Otro fuerza silencio sin datos (guard deterministico, no confia en el LLM)');
   }
 }
 
