@@ -639,11 +639,14 @@ corpus derivado del estado **editado** → refleja la curación en vivo. Diagnó
 es token muerto (df 0) porque ningún producto tiene una palabra que empiece con "plotter" (dicen
 "plotear/ploteo") → **fix: agregar "plotter" como sinónimo en PLOTEADOS** (validado en un test).
 
-- **Etapa 3 — PENDIENTE — nombres de reglas de precio.** Requiere `curador-export-v3.sql`: extender el
-  SELECT para surfacer los NOMBRES de las `pricing_rules` que afectan a cada variante/producto,
-  respetando la herencia por la cadena de categorías (misma lógica que `collectCategoryRules()`, ver
-  `data-model.md` decisión 3). Hoy el export solo trae `n_reglas_cantidad` (conteo) y `tiene_override`
-  (bool). Se hace al final porque necesita el round-trip a la DB de Martin.
+- **Etapa 3 — HECHA en código (2026-08-06) — nombres de reglas de precio.** `db/curador-export-v3.sql`
+  agrega, por producto (reglas de nivel producto/categoría, con `origen`) y por variante (reglas
+  específicas), los NOMBRES + tipo (`override`/`quantity_range`/`discount`) + `confirmacion` de las
+  `pricing_rules` activas, con el MISMO predicado de match que `bot.variantes` (regla activa → variante |
+  producto | categoría ancestra, cadena completa; copiado de `cotizador-v7b.sql`) → los nombres coinciden
+  con `tiene_override`/`n_reglas_cantidad`. La app los muestra en el detalle (chips por tipo). **Falta
+  que Martin corra el export v3** en el Supabase de testing y verifique que los nombres coinciden con los
+  contadores (con v2 el detalle sigue andando y avisa que faltan las reglas).
 
 ---
 
