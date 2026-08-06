@@ -621,27 +621,29 @@ lo motiva: el bot **no detecta "plotter papel"** aunque en la categoría PLOTEAD
 cumplen (Papel 130gr Recubierto/Encapado, Papel Obra Vegetal Color/Negro) → gap de resolución que una
 vista así haría evidente. Se conecta con la skill `tg-curar-catalogo` y el curador visual existente.
 
-**Enfoque decidido (Martin, 2026-08-06): dashboard completo, por etapas.** Archivo nuevo
-`tools/dashboard-catalogo.html` (companion del curador, NO lo reemplaza — el curador sigue siendo
-la herramienta de edición + SQL de overlay). Lee el MISMO export (`db/curador-export-v2.sql`).
+**CONSTRUIDO (Martin, 2026-08-06): app Next+React standalone, todo en una pantalla.**
+Ubicación: **`projects/TerminalGrafica/whatsapp-automation/`** (repo git propio, rama
+`feat/catalogo-dashboard`). Decisión de Martin: NO un HTML suelto ni una ruta dentro del sistema de
+presupuestos, sino app Next independiente (el bot es proyecto aparte del quote-system) con estado
+fluido (React/zustand). **Fusiona curación + simulación en una sola pantalla** (Martin: "no quiero ir
+y venir") — reemplaza al curador HTML y al dashboard HTML. File-based: se sube el export de
+`db/curador-export-v2.sql`; la app genera el SQL de overlay por clave natural que Martin aplica.
+Tema light único, azul/verde (pedido de Martin, nada de rojo chocante). Stack: Next 16 + React 19 +
+Tailwind 4 + zustand. Lógica portada VERBATIM y testeada (vitest, 13 tests: reproduce el gap
+"plotter papel", guard de nicho, descarte de números).
 
-- **Etapa 1 — Simulador de resolución** (arranca acá; corre 100% sobre el export actual, sin DB en vivo).
-  Replica FIEL la resolución real del bot: `Extraer Palabras` (`n8n/v10/nodes/extraer-palabras.json`,
-  tokenización JS: NFC + fold acentos, STOP words, números puros fuera, largo≥3 salvo `a0-a5/opp/uv/pvc`)
-  + `Buscar Candidatos` (`n8n/v10/nodes/buscar-candidatos.json`, IDF: `buscable` = nombre_canónico +
-  sinónimos efectivos, match por prefijo de palabra `% tok%`, `IDF=ln(N/df)`, score = Σ IDF, corte al 40%
-  del mejor, cupo 8, orden default→score→n_tokens→precio_piso, guard de nicho). Corpus = solo no-`oculto`
-  (la vista los filtra). Escribís lo que diría el cliente → ves tokens + IDF, candidatos que pasan, los que
-  matchearon pero fueron cortados (con motivo), y "por qué NO aparece X" (qué tokens matchean su buscable).
-  Ataca directo el caso "plotter papel".
-- **Etapa 2 — Explorador comparado.** Browse por rubro con jerarquía padre/abuelo (el export ya trae
-  `parent_id` en `rubros`). Por producto: panel public↔bot lado a lado (nombre_vivo/categoría cruda +
-  variantes crudas vs nombre_canónico/sinónimos/casos/familias/atributos + línea LLM), campos expandibles.
-- **Etapa 3 — Nombres de reglas de precio.** Requiere `curador-export-v3.sql`: extender el SELECT para
-  surfacer los NOMBRES de las `pricing_rules` que afectan a cada variante/producto, respetando la herencia
-  por la cadena de categorías (misma lógica que `collectCategoryRules()`, ver `data-model.md` decisión 3).
-  Hoy el export solo trae `n_reglas_cantidad` (conteo) y `tiene_override` (bool). Se hace al final porque
-  necesita el round-trip a la DB de Martin.
+Etapas 1 (simulador) y 2 (explorador comparado con jerarquía padre/abuelo) **hechas**. El simulador
+espeja FIEL `Extraer Palabras` + `Buscar Candidatos` (IDF: buscable = nombre_canónico + sinónimos
+efectivos, match por prefijo `% tok%`, `IDF=ln(N/df)`, corte 40%, cupo, guard de nicho) sobre el
+corpus derivado del estado **editado** → refleja la curación en vivo. Diagnóstico del gap: "plotter"
+es token muerto (df 0) porque ningún producto tiene una palabra que empiece con "plotter" (dicen
+"plotear/ploteo") → **fix: agregar "plotter" como sinónimo en PLOTEADOS** (validado en un test).
+
+- **Etapa 3 — PENDIENTE — nombres de reglas de precio.** Requiere `curador-export-v3.sql`: extender el
+  SELECT para surfacer los NOMBRES de las `pricing_rules` que afectan a cada variante/producto,
+  respetando la herencia por la cadena de categorías (misma lógica que `collectCategoryRules()`, ver
+  `data-model.md` decisión 3). Hoy el export solo trae `n_reglas_cantidad` (conteo) y `tiene_override`
+  (bool). Se hace al final porque necesita el round-trip a la DB de Martin.
 
 ---
 
