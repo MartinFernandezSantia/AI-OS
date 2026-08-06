@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Arma el prompt del Agente Otro (fallback de la rama 'otro'): datos del negocio\n// + el mensaje del cliente que no encajo en ninguna rama. El agente decide si\n// contesta (cliente frustrado / reclamo / algo del negocio) o si calla (ruido).\nconst d = $('Leer Intención').first().json;\nlet filas = [];\ntry {\n  filas = $('Datos Otro').all().map((i) => i.json).filter((r) => r && r.clave && r.valor);\n} catch (e) { filas = []; }\nconst tabla = filas.map((r) => '- ' + r.clave + ': ' + String(r.valor).trim()).join('\\n');\nreturn [{ json: {\n  ...d,\n  infoFilas: filas.length,\n  promptOtro: [\n    'DATOS DEL NEGOCIO (unica fuente para derivar; no inventes mail/direccion/horarios):',\n    tabla || '(sin datos)',\n    '',\n    'MENSAJE DEL CLIENTE (no encajo en precio, info, producto ni seguimiento):',\n    String(d.userMessage || ''),\n  ].join('\\n'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -700
+      ],
+      "id": "b9otro00-0000-4000-8000-000000000002",
+      "name": "Prompt Otro"
+    }
+  ],
+  "connections": {}
+}

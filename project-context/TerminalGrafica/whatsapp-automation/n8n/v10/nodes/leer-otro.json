@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Normaliza la salida del Agente Otro (JSON {responder, respuesta, motivo}).\n// final = el texto a enviar (vacio => rama de silencio); hayRespuesta rutea el IF.\n// accion='otro' para la telemetria de salidas (ver backlog B-29).\n// Ante cualquier falla de parseo, responder=false => silencio (default seguro).\nconst d = $('Prompt Otro').first().json;\nlet out = {};\ntry {\n  const raw = $input.first().json;\n  out = raw.output || raw.data || raw;\n  if (typeof out === 'string') out = JSON.parse(out);\n} catch (e) { out = {}; }\n// parse robusto: json_object puede devolver el bool como string 'true'\nconst responder = out.responder === true || out.responder === 'true';\nconst respuesta = String(out.respuesta || '').trim();\n// GUARD DETERMINISTICO (Fable 2026-08-06): sin datos del negocio no hay adonde\n// derivar. No se confia en que el LLM respete la regla del prompt: se fuerza el\n// silencio aca. Un mensaje de derivacion sin mail/local no le sirve al cliente.\nconst sinDatos = (d.infoFilas || 0) === 0;\nconst final = (responder && respuesta && !sinDatos) ? respuesta : '';\nreturn [{ json: {\n  ...d,\n  final,\n  accion: 'otro',\n  hayRespuesta: final.length > 0,\n  motivoOtro: String(out.motivo || ''),\n  notas: 'v10-otro-fallback ' + (final ? 'fuente=responde' : 'fuente=silencio'),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -760
+      ],
+      "id": "b9otro00-0000-4000-8000-000000000004",
+      "name": "Leer Otro"
+    }
+  ],
+  "connections": {}
+}

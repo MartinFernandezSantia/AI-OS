@@ -1,0 +1,28 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- DATOS DEL NEGOCIO PARA LA RAMA 'otro' (fallback, 2026-08-06).\n-- Clon de Datos Info: misma tabla, para que el Agente Otro derive al mail/\n-- local con datos reales en vez de hardcodearlos. La rama 'otro' no comparte\n-- ejecucion con la rama info, por eso necesita su propia lectura.\nselect clave, valor from bot.info_negocio order by clave limit 40",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        -700
+      ],
+      "id": "b9otro00-0000-4000-8000-000000000001",
+      "name": "Datos Otro",
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}
