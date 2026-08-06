@@ -471,7 +471,7 @@ console.log('\n8e. TOTALES — el codigo multiplica, el LLM copia');
   const comp3 = N('Agente Compositor');
   if (calc3) {
     const js = calc3.parameters.jsCode;
-    if (!/const total =|total = monto \* cantidad/.test(js)) E('Calcular Montos no calcula el total');
+    if (!/const total =|total = (?:Math\.round\()?monto \* cantidad/.test(js)) E('Calcular Montos no calcula el total');
     else OK('el total lo calcula el codigo, no el LLM');
     // UV YA NO SE EXCLUYE (Martin, 2026-07-31). Antes habia una tercera
     // condicion (`uvPosible`) que impedia totalizar los 2 productos UV, porque
@@ -1009,6 +1009,80 @@ console.log('\n12b. RAMA OTRO — fallback que decide responder o callar (2026-0
     else OK('Leer Otro setea hayRespuesta para ¿Responder Otro?');
     if (!/infoFilas/.test(js) || !/sinDatos/.test(js)) E('Leer Otro no fuerza silencio cuando no hay datos para derivar');
     else OK('Leer Otro fuerza silencio sin datos (guard deterministico, no confia en el LLM)');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n13. GUARD DE NICHO — sin texto crudo del usuario al SQL (seguridad)');
+// ───────────────────────────────────────────────────────────────────────────
+// La ventana cruda (concatenado de mensajes del cliente) era el UNICO texto del
+// usuario que viajaba al SQL, y el vector que se rompio en R1. Ahora el guard de
+// nicho recibe flags controlados 'si'/'no', calculados en Extraer Palabras.
+{
+  const ep = N('Extraer Palabras');
+  if (ep) {
+    const js = ep.parameters.jsCode || '';
+    if (!/nichoMedicina/.test(js) || !/nichoInmobiliaria/.test(js)) E('Extraer Palabras no calcula los flags de nicho');
+    else OK('Extraer Palabras calcula los flags de nicho (medicina/inmobiliarias)');
+    if (/\n\s*ventana,/.test(js)) E('Extraer Palabras todavia emite la ventana cruda al SQL');
+    else OK('Extraer Palabras ya NO emite la ventana cruda (solo flags)');
+  }
+  for (const nm of ['Buscar Candidatos', 'Buscar Candidatos (fallback)']) {
+    const bc = N(nm);
+    if (!bc) continue;
+    const qr = bc.parameters.options.queryReplacement || '';
+    if (/b\.ventana/.test(qr)) E(nm + ': todavia pasa la ventana cruda como parametro SQL');
+    else OK(nm + ': pasa flags de nicho, no la ventana cruda');
+    const q = bc.parameters.query || '';
+    // R1: ningun $<digito> en comentarios (los señuelos rompian el binding de n8n)
+    const enCom = q.split('\n').reduce((n, l) => { const i = l.indexOf('--'); return n + (i >= 0 ? (l.slice(i).match(/\$(?=\d)/g) || []).length : 0); }, 0);
+    if (enCom > 0) E(nm + ': hay $<digito> en comentarios SQL (señuelo que rompe el binding de params, R1)');
+    else OK(nm + ': sin señuelos $<digito> en comentarios (R1)');
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n14. RAMA DE ACLARACION — cortocircuito cuando el Selector repregunta (R5/B-1)');
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const conTo = (src, idx = 0) => ((wf.connections[src] || {}).main?.[idx] || []).map((c) => c.node);
+  const na = N('¿Necesita Aclaración?');
+  if (!na) E('falta "¿Necesita Aclaración?": la repregunta del Selector se sigue ignorando (B-1)');
+  else {
+    OK('existe la rama de aclaracion (¿Necesita Aclaración?)');
+    // Leer Selector ahora bifurca por el IF, no va directo a Extraer Palabras
+    if (!conTo('Leer Selector').includes('¿Necesita Aclaración?')) E('Leer Selector no pasa por ¿Necesita Aclaración?');
+    else OK('Leer Selector bifurca por ¿Necesita Aclaración? antes de la rama precio');
+    // rama false = precio normal preservada
+    if (!conTo('¿Necesita Aclaración?', 1).includes('Extraer Palabras')) E('¿Necesita Aclaración? [false] no conserva la rama precio (Extraer Palabras)');
+    else OK('¿Necesita Aclaración? [false] conserva la rama precio');
+    // rama true = pipeline de aclaracion
+    if (!conTo('¿Necesita Aclaración?', 0).includes('Prompt Aclaración')) E('¿Necesita Aclaración? [true] no va a la rama de aclaracion');
+    else OK('¿Necesita Aclaración? [true] cortocircuita a la rama de aclaracion');
+  }
+  const aa = N('Agente Aclaración');
+  if (aa) {
+    const sys = aa.parameters.options.systemMessage || '';
+    if (!/DATO, nunca instrucci/i.test(sys)) E('Agente Aclaración sin blindaje anti-inyeccion');
+    else OK('Agente Aclaración trata el mensaje del cliente como dato, no instruccion');
+    if (aa.onError !== 'continueRegularOutput') E('Agente Aclaración sin onError: un fallo del LLM cortaria el turno');
+    else OK('Agente Aclaración degrada sin matar el turno');
+  }
+  const la = N('Leer Aclaración');
+  if (la) {
+    const js = la.parameters.jsCode || '';
+    if (!/repregunto/.test(js)) E("Leer Aclaración no marca accion='repregunto' (enum bot.accion)");
+    else OK("Leer Aclaración loguea accion='repregunto'");
+    if (!/typeof out\.escalar !== 'boolean'|out\.escalar === true/.test(js)) E('Leer Aclaración no valida defensivamente el output del LLM');
+    else OK('Leer Aclaración valida el output del LLM (no confia en el parser)');
+  }
+  // la rama va DIRECTO a enviar, nunca al Verificador de plata (B-17 innecesario)
+  const conTo2 = (src, idx = 0) => ((wf.connections[src] || {}).main?.[idx] || []).map((c) => c.node);
+  if (N('¿Aclaración OK?')) {
+    if (!conTo2('¿Aclaración OK?', 0).includes('Enviar Mensaje')) E('¿Aclaración OK? [true] no envia la repregunta al cliente');
+    else OK('¿Aclaración OK? [true] envia directo (no pasa por el Verificador de plata)');
+    if (!conTo2('¿Aclaración OK?', 1).includes('Label Escalación')) E('¿Aclaración OK? [false] no cae a mail');
+    else OK('¿Aclaración OK? [false] cae a mail si la repregunta no cierra');
   }
 }
 

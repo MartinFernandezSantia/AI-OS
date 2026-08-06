@@ -23,7 +23,7 @@
         }
       },
       "alwaysOutputData": true,
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {}
