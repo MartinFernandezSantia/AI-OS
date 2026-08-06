@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "bot",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "errores",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_nombre": "={{ $workflow.name }}",
+            "nodo_fallido": "Buscar Candidatos",
+            "mensaje": "={{ $('Armar Candidatos').first().json.busquedaErrorMsg }}",
+            "execution_id": "={{ $execution.id }}",
+            "modo": "={{ $execution.mode }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "b9log0er-0000-4000-8000-000000000002",
+      "name": "Log Error Búsqueda",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2528,
+        2260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {}
+}
