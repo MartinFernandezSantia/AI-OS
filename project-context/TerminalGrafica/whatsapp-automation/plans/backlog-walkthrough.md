@@ -662,3 +662,26 @@ extrae cantidad unit-aware: "1.45 m" no es 145) y **CM-5** (totales decimales: e
 decimal, hay que arreglar el regex `/\$\s?[\d.]+/` de Leer Verificador que corta en la coma). Cuando
 se ataque unidades continuas, esta regla define el fallback: sin variante metro/m² = medida no
 trabajada = a mail / no cotiza, no un número aproximado.
+
+---
+
+## B-29 · Loguear en la DB TODAS las salidas del bot + telemetría
+
+**Transversal (salida) · toda rama.** Estado: `anotado — prioridad baja` (Martin, 2026-08-06).
+
+**Qué (Martin):** hoy no queda registro sistemático de lo que el bot efectivamente MANDA al cliente.
+Falta una tabla que loguee **todas las salidas** — respuestas de cotización, info, encargar, la
+derivación de la rama `otro`, y **también los silencios** (cuando el bot decide no contestar) — con
+algo de telemetría de cada una. Modelo mental: como `bot.decisiones`, pero para todo lo que sale
+(o deja de salir).
+
+**Por qué:** sin esto, auditar el comportamiento real (confident-wrong, silencios de más, mail de
+más/de menos) depende de mirar ejecuciones a mano. Un log de salidas + telemetría es la base para
+revisar desde la base, no desde n8n. Encaja con la filosofía de revisión offline del proyecto.
+
+**A definir cuando se ataque:** esquema de la tabla (turno, conversación, rama/acción, texto enviado
+o `null` si silencio, motivo, flags de confianza, modo, execution_id, timestamp); punto(s) de
+inserción (un nodo log al final de cada rama, o uno central antes de `Enviar Mensaje` + uno en la
+rama silencio); grant para `bot_readonly`. Relación: extiende lo que hoy hacen `bot.decisiones` y
+`bot.errores`. La rama `otro` (silencio-o-responde, 2026-08-06) es el primer lugar donde el silencio
+es una decisión que hay que registrar.
