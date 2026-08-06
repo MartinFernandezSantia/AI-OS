@@ -10,11 +10,19 @@
                   "caseSensitive": false,
                   "version": 2
                 },
-                "combinator": "and",
+                "combinator": "or",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.intencion }}",
                     "rightValue": "info",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.intencion }}",
+                    "rightValue": "encargar",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
