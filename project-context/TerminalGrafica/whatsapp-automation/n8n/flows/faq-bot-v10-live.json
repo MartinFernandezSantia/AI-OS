@@ -1246,7 +1246,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.\n//\n// Caso real (2026-07-29): Chatwoot devolvio \"Service temporarily unavailable\" y\n// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el\n// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje\n// en `final`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo\n// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.\n//\n// Un log que miente es peor que el error que oculta: es lo que usas para saber\n// si el bot esta funcionando.\n//\n// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su `id`\n// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,\n// porque con onError el nodo puede emitir un item de error sin status alguno.\n// El sobre lo produce el nodo Leer de la rama que se ejecuto (precio / info /\n// otro / aclaracion). Todas van directo a Enviar Mensaje SIN pasar por el\n// Verificador, asi que $('Leer Verificador') explota con \"hasn't been executed\"\n// fuera de la rama precio. Se toma el sobre del primer Leer que ejecuto.\nlet env = {};\nfor (const _nm of ['Leer Verificador', 'Leer Info', 'Leer Otro', 'Leer Aclaración']) {\n  try { const _it = $(_nm).first(); if (_it && _it.json) { env = _it.json; break; } } catch (e) { /* rama no ejecutada */ }\n}\nconst r = $input.first().json || {};\n\n// el id puede venir en la raiz o anidado segun como responda Chatwoot\nconst idMensaje = r.id || (r.data && r.data.id) || null;\nconst huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');\nconst entregado = !!idMensaje && !huboError;\n\n// que fue lo que fallo, para poder verlo en el log sin abrir la ejecucion\nconst detalle = entregado ? null : String(\n  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message\n  || 'Chatwoot no devolvio id de mensaje'\n).slice(0, 300);\n\nreturn [{ json: {\n  ...env,\n  entregado,\n  idMensajeChatwoot: idMensaje || null,\n  // Log Turno lee estos dos: si no se entrego, `final` NO se escribe como\n  // respuesta enviada — se marca el fallo. Asi una consulta por turnos\n  // contestados no cuenta los que se perdieron.\n  accion: entregado ? env.accion : 'envio_fallido',\n  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),\n  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },\n} }];"
+        "jsCode": "// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.\n//\n// Caso real (2026-07-29): Chatwoot devolvio \"Service temporarily unavailable\" y\n// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el\n// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje\n// en `final`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo\n// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.\n//\n// Un log que miente es peor que el error que oculta: es lo que usas para saber\n// si el bot esta funcionando.\n//\n// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su `id`\n// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,\n// porque con onError el nodo puede emitir un item de error sin status alguno.\n// El sobre viene de Preparar Envio, el punto unico por el que pasan las 4 ramas\n// (precio / info / otro / aclaracion) antes de enviar. Referenciar el Leer de\n// cada rama NO sirve: en el task runner de n8n, apuntar a un nodo que no ejecuto\n// en la rama actual BLOQUEA hasta el timeout de 300s (no tira error).\nconst env = $('Preparar Envio').first().json;\nconst r = $input.first().json || {};\n\n// el id puede venir en la raiz o anidado segun como responda Chatwoot\nconst idMensaje = r.id || (r.data && r.data.id) || null;\nconst huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');\nconst entregado = !!idMensaje && !huboError;\n\n// que fue lo que fallo, para poder verlo en el log sin abrir la ejecucion\nconst detalle = entregado ? null : String(\n  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message\n  || 'Chatwoot no devolvio id de mensaje'\n).slice(0, 300);\n\nreturn [{ json: {\n  ...env,\n  entregado,\n  idMensajeChatwoot: idMensaje || null,\n  // Log Turno lee estos dos: si no se entrego, `final` NO se escribe como\n  // respuesta enviada — se marca el fallo. Asi una consulta por turnos\n  // contestados no cuenta los que se perdieron.\n  accion: entregado ? env.accion : 'envio_fallido',\n  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),\n  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -2785,6 +2785,19 @@
       ],
       "name": "¿Aclaración OK?",
       "id": "6d9d7cc0-d333-49d0-acac-b94f58d9e92c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PUNTO UNICO DE CONVERGENCIA ANTES DE ENVIAR.\n//\n// Las 4 ramas (precio/info/otro/aclaracion) pasan por aca antes de Enviar\n// Mensaje. Chequear Envio lee el sobre DESDE ESTE NODO (siempre ejecuto), en\n// vez de referenciar el Leer de cada rama: en el task runner de n8n, apuntar a\n// un nodo que NO ejecuto en la rama actual BLOQUEA hasta el timeout de 300s.\n// Passthrough puro: no toca el sobre.\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        92320,
+        20912
+      ],
+      "name": "Preparar Envio",
+      "id": "c580ae65-cb11-44c9-a723-bb41de984912"
     }
   ],
   "connections": {
@@ -3165,7 +3178,7 @@
       "main": [
         [
           {
-            "node": "Enviar Mensaje",
+            "node": "Preparar Envio",
             "type": "main",
             "index": 0
           }
@@ -3281,7 +3294,7 @@
       "main": [
         [
           {
-            "node": "Enviar Mensaje",
+            "node": "Preparar Envio",
             "type": "main",
             "index": 0
           }
@@ -3748,7 +3761,7 @@
       "main": [
         [
           {
-            "node": "Enviar Mensaje",
+            "node": "Preparar Envio",
             "type": "main",
             "index": 0
           }
@@ -3912,7 +3925,7 @@
       "main": [
         [
           {
-            "node": "Enviar Mensaje",
+            "node": "Preparar Envio",
             "type": "main",
             "index": 0
           }
@@ -3920,6 +3933,17 @@
         [
           {
             "node": "Label Escalación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Envio": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje",
             "type": "main",
             "index": 0
           }

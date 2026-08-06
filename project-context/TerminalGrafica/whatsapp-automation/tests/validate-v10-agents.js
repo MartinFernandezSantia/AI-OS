@@ -162,14 +162,29 @@ const envios = wf.nodes.filter((n) => n.name === 'Enviar Mensaje');
 if (envios.length !== 1) E('esperaba exactamente 1 nodo "Enviar Mensaje", hay ' + envios.length);
 else OK('un solo punto de envio al cliente');
 
-// Todo lo que llega a Enviar Mensaje tiene que venir de un chequeo.
+// Las 4 ramas convergen en Preparar Envio (punto unico) y de ahi a Enviar
+// Mensaje. Chequear Envio lee el sobre de Preparar Envio: referenciar el Leer de
+// cada rama BLOQUEA el task runner de n8n si esa rama no ejecuto (timeout 300s).
+const haciaConv = Object.entries(wf.connections)
+  .filter(([, c]) => (c.main || []).some((g) => g.some((x) => x.node === 'Preparar Envio')))
+  .map(([src]) => src);
+console.log('  entran a Preparar Envio: ' + haciaConv.join(', '));
+if (haciaConv.includes('Agente Compositor')) E('el compositor escribe DIRECTO al cliente sin pasar por el verificador');
+else OK('nada llega al cliente sin pasar por un chequeo');
+if (!haciaConv.includes('¿Aprobado?')) E('la rama verificada no llega al envio');
+else OK('la rama verificada converge en Preparar Envio');
 const haciaEnvio = Object.entries(wf.connections)
   .filter(([, c]) => (c.main || []).some((g) => g.some((x) => x.node === 'Enviar Mensaje')))
   .map(([src]) => src);
-console.log('  entran a Enviar Mensaje: ' + haciaEnvio.join(', '));
-if (haciaEnvio.includes('Agente Compositor')) E('el compositor escribe DIRECTO al cliente sin pasar por el verificador');
-else OK('nada llega al cliente sin pasar por un chequeo');
-if (!haciaEnvio.includes('¿Aprobado?')) E('la rama verificada no llega a Enviar Mensaje');
+if (haciaEnvio.length === 1 && haciaEnvio[0] === 'Preparar Envio') OK('Preparar Envio es el unico que alimenta Enviar Mensaje directo');
+else E('Enviar Mensaje recibe directo de [' + haciaEnvio.join(', ') + '] (deberia ser solo Preparar Envio)');
+// Chequear Envio NO puede referenciar el Leer de una rama (bloquea si no ejecuto)
+const ceCheck = N('Chequear Envio');
+if (ceCheck) {
+  const js = ceCheck.parameters.jsCode || '';
+  if (/\$\('Leer (Verificador|Info|Otro|Aclaración)'\)/.test(js)) E('Chequear Envio referencia un Leer de rama: bloquea el task runner si esa rama no ejecuto');
+  else if (/\$\('Preparar Envio'\)/.test(js)) OK('Chequear Envio lee el sobre de Preparar Envio (no de un Leer de rama)');
+}
 
 // La escalacion existe y es a mail.
 if (!N('Label Escalación') || !N('Mensaje Escalación')) E('falta la rama de escalacion');
@@ -268,16 +283,16 @@ const IFS = {
   // Primero ¿Re-auditar? (¿la plata la metio el auditor al corregir? vuelve al
   // auditor), y si no, ¿Reintentar? (¿el borrador estaba mal? vuelve al
   // compositor). Recien despues, mail.
-  '¿Aprobado?': ['Enviar Mensaje', '¿Re-auditar?'],
+  '¿Aprobado?': ['Preparar Envio', '¿Re-auditar?'],
   '¿Re-auditar?': ['Prompt Re-auditoría', '¿Reintentar?'],
   '¿Reintentar?': ['Prompt Reintento', 'Label Escalación'],
-  '¿Info Resuelta?': ['Enviar Mensaje', 'Label Escalación'],
+  '¿Info Resuelta?': ['Preparar Envio', 'Label Escalación'],
   // B-9 Parte 3 (2026-08-06): la rama vacia del Switch reintenta el Selector con
   // feedback antes de escalar. true -> re-corre la resolucion; false -> mail.
   '¿Reintentar Búsqueda?': ['Agente Selector', 'Label Escalación'],
   // rama otro (2026-08-06): el fallback decide responder o callar. true -> envia
   // la derivacion; false -> Silencio Otro (el NoOp que antes recibia todo 'otro').
-  '¿Responder Otro?': ['Enviar Mensaje', 'Silencio Otro'],
+  '¿Responder Otro?': ['Preparar Envio', 'Silencio Otro'],
 };
 for (const [nombre, [siTrue, siFalse]] of Object.entries(IFS)) {
   if (!N(nombre)) { E('falta el IF "' + nombre + '"'); continue; }
@@ -1079,8 +1094,8 @@ console.log('\n14. RAMA DE ACLARACION — cortocircuito cuando el Selector repre
   // la rama va DIRECTO a enviar, nunca al Verificador de plata (B-17 innecesario)
   const conTo2 = (src, idx = 0) => ((wf.connections[src] || {}).main?.[idx] || []).map((c) => c.node);
   if (N('¿Aclaración OK?')) {
-    if (!conTo2('¿Aclaración OK?', 0).includes('Enviar Mensaje')) E('¿Aclaración OK? [true] no envia la repregunta al cliente');
-    else OK('¿Aclaración OK? [true] envia directo (no pasa por el Verificador de plata)');
+    if (!conTo2('¿Aclaración OK?', 0).includes('Preparar Envio')) E('¿Aclaración OK? [true] no envia la repregunta al cliente');
+    else OK('¿Aclaración OK? [true] envia (via Preparar Envio, sin pasar por el Verificador de plata)');
     if (!conTo2('¿Aclaración OK?', 1).includes('Label Escalación')) E('¿Aclaración OK? [false] no cae a mail');
     else OK('¿Aclaración OK? [false] cae a mail si la repregunta no cierra');
   }

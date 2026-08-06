@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// PUNTO UNICO DE CONVERGENCIA ANTES DE ENVIAR.\n//\n// Las 4 ramas (precio/info/otro/aclaracion) pasan por aca antes de Enviar\n// Mensaje. Chequear Envio lee el sobre DESDE ESTE NODO (siempre ejecuto), en\n// vez de referenciar el Leer de cada rama: en el task runner de n8n, apuntar a\n// un nodo que NO ejecuto en la rama actual BLOQUEA hasta el timeout de 300s.\n// Passthrough puro: no toca el sobre.\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        92320,
+        20912
+      ],
+      "name": "Preparar Envio"
+    }
+  ],
+  "connections": {}
+}
