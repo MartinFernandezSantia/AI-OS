@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// B-9 Parte 3: reintento del Selector cuando la busqueda quedo VACIA.\n// Contador con $runIndex (n8n, por nodo — no un flag del sobre que se desincronice):\n// 1a pasada por aca reintenta; 2a se rinde. Espejo de 'Prompt Reintento' del compositor.\nconst base = $('Prompt Selector').first().json;\n\nlet intento = 1;\ntry { intento = Number($runIndex) + 1; } catch (e) { intento = 1; }\nif (!Number.isFinite(intento) || intento < 1) intento = 1;\nconst puedeReintentarBusqueda = intento < 2;\n\n// que se busco y no trajo nada (para darle contexto util al Selector)\nlet terminos = '';\ntry { terminos = String($('Extraer Palabras').first().json.palabras || '').trim(); } catch (e) {}\n\nreturn [{ json: {\n  ...base,\n  intentoBusqueda: intento,\n  puedeReintentarBusqueda,\n  // en la 2a vuelta ya no importa el prompt (va a mail); se deja el base intacto.\n  promptAgente: puedeReintentarBusqueda ? [\n    String(base.promptAgente || ''),\n    '',\n    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n    'SEGUNDO INTENTO — TU BUSQUEDA ANTERIOR NO TRAJO NINGUN CANDIDATO.',\n    '',\n    terminos ? ('Buscaste con estos terminos y el catalogo no devolvio nada: ' + terminos)\n             : 'La busqueda anterior no devolvio nada.',\n    '',\n    'Reinterpreta lo que pidio el cliente o ensancha la busqueda:',\n    '  - Pudo usar una palabra coloquial que en el catalogo se llama distinto',\n    '    (ej: \"apuntes\"/\"fotocopias\" -> \"impresiones\"; \"carpeta\" -> \"anillado\").',\n    '  - Proba con un termino mas general o con sinonimos.',\n    '  - Si nombro un producto que no existe tal cual, elegi el mas parecido.',\n    'Es tu ultima vuelta: si esta busqueda tampoco trae nada, el cliente va a un mail.',\n  ].join('\\n') : String(base.promptAgente || ''),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        1900
+      ],
+      "id": "b9pr3sel-0000-4000-8000-000000000004",
+      "name": "Prompt Reintento Selector"
+    }
+  ],
+  "connections": {}
+}

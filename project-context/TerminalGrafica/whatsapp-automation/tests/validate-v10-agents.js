@@ -263,6 +263,9 @@ const IFS = {
   '¿Re-auditar?': ['Prompt Re-auditoría', '¿Reintentar?'],
   '¿Reintentar?': ['Prompt Reintento', 'Label Escalación'],
   '¿Info Resuelta?': ['Enviar Mensaje', 'Label Escalación'],
+  // B-9 Parte 3 (2026-08-06): la rama vacia del Switch reintenta el Selector con
+  // feedback antes de escalar. true -> re-corre la resolucion; false -> mail.
+  '¿Reintentar Búsqueda?': ['Agente Selector', 'Label Escalación'],
 };
 for (const [nombre, [siTrue, siFalse]] of Object.entries(IFS)) {
   if (!N(nombre)) { E('falta el IF "' + nombre + '"'); continue; }
@@ -674,9 +677,9 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
     }
   }
 
-  // NO puede haber otro ciclo en el grafo. Son TRES los permitidos: el reintento
-  // al compositor y la re-auditoría al verificador (2026-07-31), y el
-  // retry/fallback de busqueda antes de escalar (B-9, 2026-08-06).
+  // NO puede haber otro ciclo en el grafo. Son CUATRO los permitidos: el reintento
+  // al compositor y la re-auditoría al verificador (2026-07-31); y de B-9
+  // (2026-08-06) el fallback de busqueda y el retry del Selector antes de escalar.
   {
     const salidas = (n) => Object.values((wf.connections[n] || {}).main || [])
       .flat().map((c) => c.node);
@@ -701,7 +704,10 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
       // B-9: el fallback de busqueda re-entra a la resolucion. Ciclo ACOTADO: la
       // fallback no puede re-emitir busqueda_error (su error sale por un output
       // aparte directo a mail), asi que no gira sobre si mismo.
-      || (/Switch Motivo Vacío/.test(c) && /Buscar Candidatos \(fallback\)/.test(c));
+      || (/Switch Motivo Vacío/.test(c) && /Buscar Candidatos \(fallback\)/.test(c))
+      // B-9 Parte 3: retry del Selector en busqueda_vacia. Acotado por $runIndex
+      // de Prompt Reintento Selector (1 sola vuelta, despues mail).
+      || (/Prompt Reintento Selector/.test(c) && /Agente Selector/.test(c));
     const inesperados = [...encontrados].filter((c) => !permitido(c));
     if (inesperados.length) E('ciclo(s) inesperado(s) en el grafo: ' + inesperados.slice(0, 3).join(' ;; '));
     else OK('el reintento es el UNICO ciclo del grafo');
