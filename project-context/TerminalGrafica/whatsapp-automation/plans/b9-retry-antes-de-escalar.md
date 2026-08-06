@@ -71,10 +71,18 @@ que **partir en palabras y matchear cada una**:
   noten la diferencia.
 
 ### Rama `agente_no_eligio / idx_invalidos / salida_ilegible / confianza_baja`
-Los candidatos EXISTÍAN (Buscar trajo filas) pero Relevancia/el corte los
-descartó. No re-buscar. Re-entrar al **Agente Relevancia** con un nudge
-(su prompt ya dice "elegí siempre que puedas") y **bajar el UMBRAL** de confianza
-de Calcular Montos (0.4 → más bajo) para el 2º intento. 1 intento + contador.
+**IMPLEMENTADO distinto al plan original (Martin, 2026-08-06): sin retry, in-node.**
+En vez de re-correr el Relevancia, se resuelve dentro de **Calcular Montos** con una
+REGLA UNIFICADA: si el paso de Relevancia no dejó nada usable pero Buscar Candidatos
+SÍ trajo candidatos, se pasan todos en vez de escalar:
+- `confianza_baja` → los que el agente eligió (todos por debajo del UMBRAL 0.2).
+- `agente_no_eligio` / `idx_invalidos` / `salida_ilegible` (elegidos vacío) → TODOS
+  los candidatos de la búsqueda.
+El Compositor no está obligado a usarlos todos: elige o pregunta (flag
+`relevanciaFallo` con instrucción en el promptAgente: "el filtro no pudo elegir,
+elegí con criterio o preguntá para confirmar en vez de afirmar"). El Verificador
+sigue de red. Más simple que un loop y sin nodos nuevos. La rama `relevancia` del
+Switch queda como red residual (sigue cableada a Label Escalación).
 
 ## Invariante (no romper)
 Cualquier rama alternativa produce **candidatos** (filas del catálogo), nunca una
