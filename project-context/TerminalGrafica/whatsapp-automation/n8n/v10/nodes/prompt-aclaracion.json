@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// R5/B-1: arma el prompt del validador de repreguntas. El mensaje del cliente y la\n// conversacion van DELIMITADOS (recomendacion de Fable): input como dato, nunca\n// mezclado con las instrucciones del system message.\nconst d = $('Leer Selector').first().json;\nconst conv = Array.isArray(d.conversation) ? d.conversation : [];\nconst ultimos = conv.slice(-6)\n  .map((m) => (m.role === 'user' ? 'CLIENTE: ' : 'NOSOTROS: ') + String(m.content || ''))\n  .join('\\n');\nconst pregunta = String((d.seleccion || {}).pregunta || '');\nreturn [{ json: { ...d, promptAgente: [\n  '<conversacion>',\n  ultimos || '(sin historial)',\n  '</conversacion>',\n  '',\n  '<ultimo_mensaje>',\n  String(d.userMessage || ''),\n  '</ultimo_mensaje>',\n  '',\n  '<repregunta_selector>',\n  pregunta || '(el Selector no dejo una repregunta)',\n  '</repregunta_selector>',\n].join('\\n') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "name": "Prompt Aclaración"
+    }
+  ],
+  "connections": {}
+}
