@@ -228,7 +228,14 @@ for (const [nombre, esperado] of Object.entries(RUTEO)) {
   const nodo = N(nombre);
   if (!nodo) { E('falta el switch "' + nombre + '"'); continue; }
   const p = nodo.parameters || {};
-  const keys = (p.rules && p.rules.values ? p.rules.values : []).map((r, i) => r.outputKey || ('regla' + i));
+  const keys = (p.rules && p.rules.values ? p.rules.values : []).map((r, i) => {
+    if (r.outputKey) return r.outputKey;
+    // n8n puede dropear el outputKey al re-importar una regla editada (paso con
+    // 'info OR encargar' el 2026-08-06): se infiere del primer rightValue de la
+    // condicion. El ruteo real es por indice, esto es solo para el nombre.
+    const c0 = ((r.conditions || {}).conditions || [])[0];
+    return (c0 && c0.rightValue) || ('regla' + i);
+  });
   const opts = p.options || {};
   if (opts.fallbackOutput === 'extra') keys.push(opts.renameFallbackOutput || 'fallback');
   const salidas = (wf.connections[nombre] || {}).main || [];
@@ -503,7 +510,9 @@ console.log('\n8e. TOTALES — el codigo multiplica, el LLM copia');
   // mete en cada primer precio. No debe quedar rastro de avisoDado/avisoYaDado en
   // Calcular Montos. El "como encargar" sale ahora por la rama 'encargar' o por la
   // regla "Cuando nombrar el mail" del Compositor.
-  if (calc3 && /avisoDado|avisoYaDado/.test(calc3.parameters.jsCode)) {
+  // se ignoran los comentarios: el comentario que documenta el retiro nombra el flag a proposito
+  const calc3SinComs = calc3 ? calc3.parameters.jsCode.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n') : '';
+  if (calc3 && /avisoDado|avisoYaDado/.test(calc3SinComs)) {
     E('quedo logica de aviso de canal en Calcular Montos (B-10/B-11 lo retiro)');
   } else if (calc3) OK('aviso de canal retirado de Calcular Montos (B-10/B-11)');
 }
