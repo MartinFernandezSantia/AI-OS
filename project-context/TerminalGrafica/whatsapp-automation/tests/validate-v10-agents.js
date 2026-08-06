@@ -785,8 +785,10 @@ console.log('\n11. LA OFERTA POR CANTIDAD NO SE PIERDE (promo inmobiliarias, 202
 
   const sysVer = wf.nodes.find((n) => n.name === 'Agente Verificador')
     .parameters.options.systemMessage;
-  if (/NUNCA BORRES UNA OFERTA POR CANTIDAD/.test(sysVer)) OK('el prompt se lo prohibe explicito');
-  else E('el prompt del verificador no prohibe borrar ofertas');
+  // B-16 (2026-08-06): la regla se generalizo de "oferta por cantidad" a cualquier
+  // "alternativa que esta en los hechos Y en el mensaje" (axis-agnostica).
+  if (/NUNCA BORRES UNA ALTERNATIVA/.test(sysVer)) OK('el prompt se lo prohibe explicito');
+  else E('el prompt del verificador no prohibe borrar alternativas/ofertas');
 
   // ── LA LISTA DE PRECIOS (rifas, 2026-07-29) ──────────────────────────
   // "600 rifas" decia solo $10.000 y se callaba que 1000 salen $14.000;
