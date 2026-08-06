@@ -2650,7 +2650,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "leftValue": "={{ ($json.seleccion && $json.seleccion.necesitaAclaracion === true) && (($json.seleccion.terminos || []).length === 0) && (($json.seleccion.productos || []).length === 0) }}",
+              "leftValue": "={{ !!($json.seleccion && $json.seleccion.necesitaAclaracion === true) }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
