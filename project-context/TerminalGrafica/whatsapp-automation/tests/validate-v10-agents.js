@@ -251,7 +251,10 @@ for (const [nombre, esperado] of Object.entries(RUTEO)) {
 const IFS = {
   '¿Tiene Texto?': ['Wait — Debounce', 'Respuesta No-Texto'],
   '¿Violación Real Tier-2?': ['Strike Tier-2', 'Prompt Intención'],
-  '¿Hay Algo Que Decir?': ['Agente Compositor', 'Label Escalación'],
+  // B-9 (2026-08-06): el false ya NO va derecho a mail — pasa por Switch Motivo
+  // Vacío, que rutea por causa (busqueda_error->log+fallback; vacia/relevancia/
+  // resto->Label Escalación por ahora, hasta las Partes 3-4).
+  '¿Hay Algo Que Decir?': ['Agente Compositor', 'Switch Motivo Vacío'],
   // false NO va derecho a mail: pasa por DOS IFs en cadena antes de escalar.
   // Primero ¿Re-auditar? (¿la plata la metio el auditor al corregir? vuelve al
   // auditor), y si no, ¿Reintentar? (¿el borrador estaba mal? vuelve al
@@ -671,8 +674,9 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
     }
   }
 
-  // NO puede haber otro ciclo en el grafo. Son DOS los permitidos (2026-07-31):
-  // el reintento al compositor y la re-auditoría al verificador.
+  // NO puede haber otro ciclo en el grafo. Son TRES los permitidos: el reintento
+  // al compositor y la re-auditoría al verificador (2026-07-31), y el
+  // retry/fallback de busqueda antes de escalar (B-9, 2026-08-06).
   {
     const salidas = (n) => Object.values((wf.connections[n] || {}).main || [])
       .flat().map((c) => c.node);
@@ -693,7 +697,11 @@ console.log('\n9. LOOP DE REINTENTO — acotado a UNA vuelta');
       for (const c of ciclos) encontrados.add(c);
     }
     const permitido = (c) => (/Prompt Reintento/.test(c) && /Agente Compositor/.test(c))
-      || (/Prompt Re-auditoría/.test(c) && /Agente Verificador/.test(c));
+      || (/Prompt Re-auditoría/.test(c) && /Agente Verificador/.test(c))
+      // B-9: el fallback de busqueda re-entra a la resolucion. Ciclo ACOTADO: la
+      // fallback no puede re-emitir busqueda_error (su error sale por un output
+      // aparte directo a mail), asi que no gira sobre si mismo.
+      || (/Switch Motivo Vacío/.test(c) && /Buscar Candidatos \(fallback\)/.test(c));
     const inesperados = [...encontrados].filter((c) => !permitido(c));
     if (inesperados.length) E('ciclo(s) inesperado(s) en el grafo: ' + inesperados.slice(0, 3).join(' ;; '));
     else OK('el reintento es el UNICO ciclo del grafo');
