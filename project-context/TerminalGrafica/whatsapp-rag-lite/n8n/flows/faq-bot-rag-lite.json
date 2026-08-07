@@ -22,7 +22,7 @@
         "text": "={{ $json.chatInput }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una\ntool, buscar_catalogo, que busca productos en el catálogo real por significado.\n\n## Flujo: detectá la ETAPA y actuá\n\n1) SALUDO / INICIO — primer mensaje, saludo, o todavía no hay un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO llames la tool.\n\n2) PEDIDO CLARO — el cliente pide algo identificable.\n   → Llamá buscar_catalogo con una consulta que describa lo que quiere (aprovechá el historial\n     para enriquecerla). Recomendá 1 a 3 de los productos que devuelva la tool, cortito.\n\n3) FALTA INFO — el pedido es muy vago para buscar, o la tool volvió floja/vacía.\n   → Hacé UNA sola pregunta corta por el dato que falta (medida, cantidad, material, color…).\n     Mirá el historial: si el cliente ya lo dijo, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).\n   → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)\n     o al local.\n\n## Guard de nicho (blando)\nAlgunos productos son de un rubro específico (p.ej. \"medicina\", \"inmobiliarias\"). Recomendá un\nproducto de nicho SOLO si el cliente mencionó ese rubro; si no, ignoralo aunque aparezca en los\nresultados.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos.\n\n## Salida estructurada (además del mensaje)\nDevolvés SIEMPRE un objeto con tu respuesta MÁS los datos de tu decisión, para que otro\nproceso pueda auditarla. No alcanza con el texto; también:\n- respuesta: el texto tal cual le llega al cliente (lo ÚNICO que él ve).\n- etapa: en qué etapa actuaste (saludo / recomendacion / falta_info / seguimiento / otro).\n- productos_ofrecidos: uno por CADA producto que le mostraste al cliente. Por cada uno:\n    · nombre_catalogo: el nombre EXACTO como vino de buscar_catalogo, sin reformular\n      (aunque al cliente se lo digas con otras palabras).\n    · nombre_mostrado: cómo lo nombraste en tu respuesta.\n    · atributos: los atributos concretos que le afirmaste a ESE producto (medida, faz,\n      material, color, acabado). Cada atributo tiene que salir de la MISMA fila que\n      devolvió la búsqueda — NO mezcles atributos de dos resultados distintos.\n  Si no recomendaste ningún producto, va vacío ([]).\n- motivo: en una línea, por qué elegiste eso (o por qué preguntaste / no recomendaste).\n- afirmaciones: otras cosas concretas que afirmaste sobre el negocio o el producto y que\n  deberían poder corroborarse contra el catálogo. Solo lo verificable — nada de saludos,\n  cortesías ni relleno.\nRegla de oro: TODO lo que pongas en estos campos tiene que estar respaldado por lo que\ndevolvió la tool. Este bloque existe justamente para que se pueda comprobar que no inventaste."
+          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una\ntool, buscar_catalogo, que busca productos en el catálogo real por significado.\n\n## Flujo: detectá la ETAPA y actuá\n\n1) SALUDO / INICIO — primer mensaje, saludo, o todavía no hay un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO llames la tool.\n\n2) PEDIDO CLARO — el cliente pide algo identificable.\n   → Llamá buscar_catalogo con una consulta que describa lo que quiere (aprovechá el historial\n     para enriquecerla). Después:\n     - Si los resultados apuntan claro a un producto o variante, recomendalo. No hay tope fijo\n       de cuántos, pero sé concreto: mostrá lo que responde el pedido, no listes de más.\n     - Si el pedido abarca MUCHAS variantes porque el cliente no definió ejes clave (medida,\n       material, faz, color…), NO le vuelques todas: mejor preguntá para achicar (ver etapa 3).\n       Una respuesta concreta vale más que un catálogo entero.\n\n3) FALTA INFO — el pedido es vago, la tool volvió floja, o hay demasiadas variantes para elegir.\n   → Preguntá por los ejes que faltan para poder dar una respuesta concreta. REGLA CLAVE: de\n     todos los ejes que faltan, preguntá los MÁS decisivos, hasta 3 como máximo en un mensaje.\n     La idea es cerrar la info en la menor cantidad de mensajes sin abrumar. Mirá el historial:\n     lo que el cliente ya dijo, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).\n   → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)\n     o al local.\n\n## Guard de nicho (blando)\nAlgunos productos son de un rubro específico (p.ej. \"medicina\", \"inmobiliarias\"). Recomendá un\nproducto de nicho SOLO si el cliente mencionó ese rubro; si no, ignoralo aunque aparezca en los\nresultados.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos.\n- USÁ LAS PALABRAS DEL CLIENTE. Si preguntó por \"X\", contestale de \"X\" aunque en el catálogo se\n  llame distinto. El nombre del catálogo es para que VOS identifiques el producto, no para\n  leérselo. (En la salida estructurada igual va el nombre_catalogo exacto: eso es interno.)\n- LA CANTIDAD NO ELIGE EL PRODUCTO. Si el cliente dice \"200 tarjetas\", el 200 es cuánto va a\n  encargar, no un filtro de búsqueda. Elegí por producto y eje; la cantidad solo se registra.\n\n## Salida estructurada (además del mensaje)\nDevolvés SIEMPRE un objeto con tu respuesta MÁS los datos de tu decisión, para que otro\nproceso pueda auditarla. No alcanza con el texto; también:\n- respuesta: el texto tal cual le llega al cliente (lo ÚNICO que él ve).\n- etapa: en qué etapa actuaste (saludo / recomendacion / falta_info / seguimiento / otro).\n- productos_ofrecidos: uno por CADA producto que le mostraste al cliente. Por cada uno:\n    · nombre_catalogo: el nombre EXACTO como vino de buscar_catalogo, sin reformular\n      (aunque al cliente se lo digas con otras palabras).\n    · nombre_mostrado: cómo lo nombraste en tu respuesta.\n    · atributos: los atributos concretos que le afirmaste a ESE producto (medida, faz,\n      material, color, acabado). Cada atributo tiene que salir de la MISMA fila que\n      devolvió la búsqueda — NO mezcles atributos de dos resultados distintos.\n    · cantidad: la cantidad que el cliente pidió para ESE producto SI la mencionó; si no, null.\n  Si no recomendaste ningún producto, va vacío ([]).\n- motivo: en una línea, por qué elegiste eso (o por qué preguntaste / no recomendaste).\n- afirmaciones: otras cosas concretas que afirmaste sobre el negocio o el producto y que\n  deberían poder corroborarse contra el catálogo. Solo lo verificable — nada de saludos,\n  cortesías ni relleno.\nRegla de oro: TODO lo que pongas en estos campos tiene que estar respaldado por lo que\ndevolvió la tool. Este bloque existe justamente para que se pueda comprobar que no inventaste."
         }
       },
       "id": "rag-agente",
@@ -36,14 +36,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// Separa el mensaje visible de la auditoría.\nconst item = $input.first().json;\nconst o = item.output ?? item;            // el parser deja el objeto en .output\nconst audit = (o && typeof o === 'object') ? o : { respuesta: String(o ?? '') };\nreturn [{ json: { output: audit.respuesta ?? '', auditoria: audit } }];"
+        "jsCode": "// Referencia explícita a los dos agentes (este nodo va después del Verificador).\nconst a = $('Agente').first().json.output ?? {};\nconst audit = (a && typeof a === 'object') ? a : { respuesta: String(a ?? '') };\nlet verif = null;\ntry { verif = $('Agente Verificador').first().json.output ?? null; } catch (e) { verif = null; }\nreturn [{ json: { output: audit.respuesta ?? '', auditoria: audit, verificacion: verif } }];"
       },
       "id": "rag-preparar-respuesta",
       "name": "Preparar Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        560,
+        900,
         0
       ]
     },
@@ -132,7 +132,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"respuesta\",\n    \"etapa\",\n    \"productos_ofrecidos\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"el texto tal cual le llega al cliente por WhatsApp; lo único que él ve\"\n    },\n    \"etapa\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"saludo\",\n        \"recomendacion\",\n        \"falta_info\",\n        \"seguimiento\",\n        \"otro\"\n      ],\n      \"description\": \"la etapa del flujo en la que actuaste\"\n    },\n    \"productos_ofrecidos\": {\n      \"type\": \"array\",\n      \"description\": \"un item por producto que le mostraste al cliente; vacío si no recomendaste ninguno\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"nombre_catalogo\",\n          \"atributos\"\n        ],\n        \"properties\": {\n          \"nombre_catalogo\": {\n            \"type\": \"string\",\n            \"description\": \"el nombre EXACTO como vino de buscar_catalogo, sin reformular\"\n          },\n          \"nombre_mostrado\": {\n            \"type\": \"string\",\n            \"description\": \"cómo lo nombraste en tu respuesta al cliente (puede diferir del de catálogo)\"\n          },\n          \"atributos\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"string\"\n            },\n            \"description\": \"atributos concretos que le afirmaste a ESTE producto (medida, faz, material, color, acabado). Cada uno tiene que salir de la MISMA fila de la búsqueda\"\n          }\n        }\n      }\n    },\n    \"motivo\": {\n      \"type\": \"string\",\n      \"description\": \"en una línea, por qué elegiste esos productos / esa respuesta\"\n    },\n    \"afirmaciones\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"otras afirmaciones concretas sobre el negocio o el producto, corroborables contra el catálogo; sin saludos ni relleno\"\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"respuesta\",\n    \"etapa\",\n    \"productos_ofrecidos\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"el texto tal cual le llega al cliente por WhatsApp; lo único que él ve\"\n    },\n    \"etapa\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"saludo\",\n        \"recomendacion\",\n        \"falta_info\",\n        \"seguimiento\",\n        \"otro\"\n      ],\n      \"description\": \"la etapa del flujo en la que actuaste\"\n    },\n    \"productos_ofrecidos\": {\n      \"type\": \"array\",\n      \"description\": \"un item por producto que le mostraste al cliente; vacío si no recomendaste ninguno\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"nombre_catalogo\",\n          \"atributos\"\n        ],\n        \"properties\": {\n          \"nombre_catalogo\": {\n            \"type\": \"string\",\n            \"description\": \"el nombre EXACTO como vino de buscar_catalogo, sin reformular\"\n          },\n          \"nombre_mostrado\": {\n            \"type\": \"string\",\n            \"description\": \"cómo lo nombraste en tu respuesta al cliente (puede diferir del de catálogo)\"\n          },\n          \"atributos\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"string\"\n            },\n            \"description\": \"atributos concretos que le afirmaste a ESTE producto (medida, faz, material, color, acabado). Cada uno tiene que salir de la MISMA fila de la búsqueda\"\n          },\n          \"cantidad\": {\n            \"type\": [\n              \"number\",\n              \"null\"\n            ],\n            \"description\": \"cantidad que el cliente pidió para este producto, si la mencionó; sino null\"\n          }\n        }\n      }\n    },\n    \"motivo\": {\n      \"type\": \"string\",\n      \"description\": \"en una línea, por qué elegiste esos productos / esa respuesta\"\n    },\n    \"afirmaciones\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"otras afirmaciones concretas sobre el negocio o el producto, corroborables contra el catálogo; sin saludos ni relleno\"\n    }\n  }\n}"
       },
       "id": "rag-salida",
       "name": "Salida · Agente",
@@ -145,9 +145,89 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve un JSON con `respuesta` (lo que ve el cliente) + auditoría de su decisión: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila), `motivo` y `afirmaciones`. Sirve para que un Verificador cruce contra el catálogo y detecte alucinaciones.\n\n**Preparar Respuesta** (Code, último nodo): extrae `output.respuesta` → el chat muestra SOLO el mensaje limpio, mientras el objeto de auditoría completo queda en `auditoria` para el Verificador/log. Para ver la auditoría, abrí la ejecución del nodo Agente o de Preparar Respuesta.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado, si no consulta public y devuelve [] en verde), Column Names id/embedding/text/metadata, sin Metadata Filter. Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
-        "height": 460,
-        "width": 520
+        "promptType": "define",
+        "text": "=Pedido del cliente:\n{{ $('Cuando llega un mensaje').first().json.chatInput }}\n\nAuditoría del bot (revisala):\n{{ JSON.stringify($json.output, null, 2) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el auditor del bot RAG de Terminal Gráfica (imprenta). NO le hablás al\ncliente: revisás lo que el bot decidió y devolvés un veredicto para el log.\n\nTe paso el pedido del cliente y la AUDITORÍA del bot: qué respondió y, por cada producto que\nofreció, su nombre_catalogo (el nombre exacto que dijo haber sacado de la búsqueda), los\natributos que le afirmó y la cantidad. También sus afirmaciones sobre el negocio.\n\nTenés la tool consultar_catalogo_real: dado un nombre, te devuelve la fila REAL del catálogo (su\ntexto con variantes y atributos). Chequeá contra el dato real, NUNCA de memoria.\n\nRevisá y marcá FALLAS:\n\na) producto_inventado — un nombre_catalogo que no existe en el catálogo. Buscalo con la tool; si\n   no aparece nada razonablemente parecido, es inventado.\n\nb) fusion_variantes — LA MÁS IMPORTANTE. Para CADA producto: todos los atributos que el bot le\n   afirmó tienen que aparecer JUNTOS en la MISMA fila real. Si el bot combinó atributos que en el\n   catálogo viven en productos o variantes distintos (ej.: afirma \"A3 + medio corte\" cuando una\n   fila tiene A3 y otra el medio corte, pero ninguna las dos juntas), es una variante inventada.\n   Leé el texto real con la tool y compará atributo por atributo. OJO: el nombre puede estar\n   escrito distinto y eso está bien; lo que importa es si la COMBINACIÓN de atributos existe junta.\n\nc) no_trabajado — la imprenta NO hace ciertas cosas. Si el bot ofreció o afirmó que hacen algo de\n   esta lista, es falla, aunque la búsqueda haya traído algo parecido:\n     - fotocopias\n   (lista ampliable)\n\nd) dato_no_corroborable — una afirmación sobre el negocio (plazo, envío, stock, material) que no\n   puedas confirmar con el catálogo. Marcala blanda.\n\nSi no hay productos ni afirmaciones que revisar (ej.: un saludo), aprobado=true y listo.\nAnte la duda entre aprobar y marcar, marcá: este veredicto todavía no bloquea nada, solo alerta.\n\nDevolvés SIEMPRE el JSON del esquema: aprobado, fallas[] (tipo, producto, detalle), resumen."
+        }
+      },
+      "id": "rag-verificador",
+      "name": "Agente Verificador",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 700
+        }
+      },
+      "id": "rag-verif-modelo",
+      "name": "Modelo · Verificador",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        560,
+        620
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"aprobado\",\n    \"fallas\"\n  ],\n  \"properties\": {\n    \"aprobado\": {\n      \"type\": \"boolean\",\n      \"description\": \"true si no encontraste ninguna falla\"\n    },\n    \"fallas\": {\n      \"type\": \"array\",\n      \"description\": \"una por problema detectado; vacío si aprobado\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"tipo\",\n          \"detalle\"\n        ],\n        \"properties\": {\n          \"tipo\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"producto_inventado\",\n              \"fusion_variantes\",\n              \"no_trabajado\",\n              \"dato_no_corroborable\"\n            ]\n          },\n          \"producto\": {\n            \"type\": \"string\",\n            \"description\": \"el nombre_catalogo afectado, si aplica\"\n          },\n          \"detalle\": {\n            \"type\": \"string\",\n            \"description\": \"qué está mal, en una línea\"\n          }\n        }\n      }\n    },\n    \"resumen\": {\n      \"type\": \"string\",\n      \"description\": \"una línea para el log\"\n    }\n  }\n}"
+      },
+      "id": "rag-verif-salida",
+      "name": "Salida · Verificador",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        740,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Relee el catálogo real de la imprenta. Dado el nombre de un producto, devuelve su fila real (nombre canónico + texto con variantes y atributos). Usala para confirmar que un producto existe y que la combinación de atributos que se le afirmó es real, no inventada.",
+        "operation": "executeQuery",
+        "query": "select metadata->>'nombre_canonico' as nombre,\n       metadata->>'rubro'           as rubro,\n       metadata->>'nicho'           as nicho,\n       text\n  from bot.rag_catalogo\n where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$)\n       like $$%$$ || translate(lower($1), $$áéíóúñ$$, $$aeioun$$) || $$%$$\n limit 5",
+        "options": {
+          "queryReplacement": "={{ $fromAI('producto', 'nombre del producto tal como lo reportó el agente, para releerlo del catálogo', 'string') }}"
+        }
+      },
+      "id": "rag-verif-tool",
+      "name": "consultar_catalogo_real",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        920,
+        620
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` (lo que ve el cliente) + auditoría: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila + cantidad), `motivo` y `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita esa auditoría contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Marca fallas: producto_inventado, fusion_variantes (atributos que no viven juntos en una fila real), no_trabajado (lista: fotocopias…), dato_no_corroborable. Veredicto para el log; todavía NO bloquea.\n\n**Preparar Respuesta** (Code, último nodo): el chat muestra SOLO `respuesta`; `auditoria` (Agente) y `verificacion` (Verificador) quedan en el item, visibles en la ejecución.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "height": 560,
+        "width": 540
       },
       "id": "rag-nota",
       "name": "Nota",
@@ -172,6 +252,17 @@
       ]
     },
     "Agente": {
+      "main": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Verificador": {
       "main": [
         [
           {
@@ -232,6 +323,39 @@
           {
             "node": "Agente",
             "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo · Verificador": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Verificador": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_catalogo_real": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Verificador",
+            "type": "ai_tool",
             "index": 0
           }
         ]

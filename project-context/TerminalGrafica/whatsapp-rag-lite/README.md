@@ -12,7 +12,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 lib/catalog/       chunkRAG() + helpers autocontenidos (types, keys, effective, loader) + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta CLI)
 db/                rag-embeddings.sql (pgvector + tabla + RPC bot.match_productos)
-n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector tool + Embeddings + salida estructurada)
+n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector tool + Embeddings + salida estructurada + Verificador)
 plans/             el plan del experimento
 ```
 
@@ -57,10 +57,20 @@ y `DATABASE_URL` (`--apply`/consulta).
 - **Salida estructurada** (nodo `Salida · Agente`, `outputParserStructured`): el agente no
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
-  búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila). Es el insumo para un Verificador
-  futuro que cruce contra el catálogo y detecte alucinaciones (invención de producto, fusión de
-  variantes, dato inventado). Un Code final (**Preparar Respuesta**) extrae `output.respuesta` →
-  el chat muestra solo el mensaje limpio, y el objeto completo queda en `auditoria` para el
-  Verificador/log (visible en la ejecución del nodo).
+  búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila) + `cantidad` (si el cliente la dijo).
+- **Agente Verificador** (2º agente, `outputParserStructured` + tool `consultar_catalogo_real`
+  = `postgresTool` que relee `bot.rag_catalogo` por nombre): audita `productos_ofrecidos` contra
+  el catálogo real y marca fallas: `producto_inventado`, `fusion_variantes` (atributos que no
+  viven juntos en una fila real), `no_trabajado` (lista de cosas que la imprenta NO hace, arranca
+  con *fotocopias*, ampliable), `dato_no_corroborable`. Devuelve `{ aprobado, fallas[], resumen }`.
+  Veredicto para el log; **todavía no bloquea** (no re-rutea ni corrige, solo alerta).
+- **Preguntar para converger** (etapa "falta info"): sin tope fijo de recomendados; si el pedido
+  abarca muchas variantes, el agente pregunta por los ejes faltantes más decisivos, **máximo 3
+  por mensaje**, para cerrar la info en la menor cantidad de vueltas.
+- **Palabras del cliente**: el mensaje usa el término del cliente; el `nombre_catalogo` exacto va
+  solo en la salida estructurada (interno). La cantidad se registra pero no filtra la búsqueda.
+- Un Code final (**Preparar Respuesta**) extrae `output.respuesta` → el chat muestra solo el
+  mensaje limpio; `auditoria` (Agente) y `verificacion` (Verificador) quedan en el item, visibles
+  en la ejecución.
 - Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el agente decide cuándo
   invocar la tool.
