@@ -36,6 +36,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// Separa el mensaje visible de la auditoría.\nconst item = $input.first().json;\nconst o = item.output ?? item;            // el parser deja el objeto en .output\nconst audit = (o && typeof o === 'object') ? o : { respuesta: String(o ?? '') };\nreturn [{ json: { output: audit.respuesta ?? '', auditoria: audit } }];"
+      },
+      "id": "rag-preparar-respuesta",
+      "name": "Preparar Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
         "model": "google/gemini-3.1-flash-lite",
         "options": {
           "temperature": 0.3,
@@ -132,7 +145,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve un JSON con `respuesta` (lo que ve el cliente) + auditoría de su decisión: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila), `motivo` y `afirmaciones`. Sirve para que un Verificador cruce contra el catálogo y detecte alucinaciones. En el chat de test vas a ver el JSON entero; al cablearlo a salida real, un Code extrae `.respuesta`.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado, si no consulta public y devuelve [] en verde), Column Names id/embedding/text/metadata, sin Metadata Filter. Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve un JSON con `respuesta` (lo que ve el cliente) + auditoría de su decisión: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila), `motivo` y `afirmaciones`. Sirve para que un Verificador cruce contra el catálogo y detecte alucinaciones.\n\n**Preparar Respuesta** (Code, último nodo): extrae `output.respuesta` → el chat muestra SOLO el mensaje limpio, mientras el objeto de auditoría completo queda en `auditoria` para el Verificador/log. Para ver la auditoría, abrí la ejecución del nodo Agente o de Preparar Respuesta.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado, si no consulta public y devuelve [] en verde), Column Names id/embedding/text/metadata, sin Metadata Filter. Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 460,
         "width": 520
       },
@@ -152,6 +165,17 @@
         [
           {
             "node": "Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta",
             "type": "main",
             "index": 0
           }

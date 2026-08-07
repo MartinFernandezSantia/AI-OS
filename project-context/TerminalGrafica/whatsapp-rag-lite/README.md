@@ -59,7 +59,8 @@ y `DATABASE_URL` (`--apply`/consulta).
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
   búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila). Es el insumo para un Verificador
   futuro que cruce contra el catálogo y detecte alucinaciones (invención de producto, fusión de
-  variantes, dato inventado). En el chat de test se ve el JSON entero; en salida real un Code
-  extrae `.respuesta`.
+  variantes, dato inventado). Un Code final (**Preparar Respuesta**) extrae `output.respuesta` →
+  el chat muestra solo el mensaje limpio, y el objeto completo queda en `auditoria` para el
+  Verificador/log (visible en la ejecución del nodo).
 - Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el agente decide cuándo
   invocar la tool.
