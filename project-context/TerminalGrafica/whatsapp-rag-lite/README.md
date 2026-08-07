@@ -63,6 +63,11 @@ y `DATABASE_URL` (`--apply`/consulta).
   **valida** cualquier monto tipeado contra el catálogo (coincide → se acepta; no coincide → "a
   confirmar por mail"). Lógica en `lib/catalog/price-display.ts` (testeada); el Code de n8n inlinea
   una copia. Refrescar precios sin re-embeber: `pnpm rag:ingest --prices-only`.
+  - **Tramos**: cantidad que cae en un hueco entre packs redondea **hacia arriba** al pack que la
+    cubre (packs 100/500/1000, pide 300 → precio del de 500); por encima de todos, el más grande.
+  - **Unidad sin duplicar**: `{Pn}` ya trae la forma de cobro; el prompt le pide al agente no
+    repetirla, y el nodo terminal colapsa el eco por las dudas ("por trabajo por trabajo" →
+    "por trabajo"; "el pack de 100 unidades el pack de 100" → una sola vez).
 - **Memoria de decisiones** (`bot.rag_decisiones`, DDL en `db/rag-decisiones.sql`) — lazo cerrado
   escritura + lectura:
   - **Escritura** (`Log Decisión`, al final): por cada mensaje del bot guarda `session_id`, mensaje
@@ -78,13 +83,18 @@ y `DATABASE_URL` (`--apply`/consulta).
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
   búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila) + `cantidad` (si el cliente la dijo).
-- **Agente Verificador** (2º agente, `outputParserStructured` + tool `consultar_catalogo_real`
-  = `postgresTool` que relee `bot.rag_catalogo` por nombre): audita `productos_ofrecidos` contra
-  el catálogo real y marca fallas: `producto_inventado`, `fusion_variantes` (atributos que no
-  viven juntos en una fila real), `no_trabajado` (**Regla 0 autoritativa**: pisa la existencia en
-  catálogo, así un sinónimo tramposo —ej. *fotocopias*— no excusa ofrecerlo; lista ampliable),
-  `dato_no_corroborable`. Devuelve `{ aprobado, accion, fallas[], resumen }` con `accion` ∈
-  aprobar/corregir/regenerar. Prompt reescrito con Fable + skill `prompt-master`.
+- **Agente Verificador** (2º agente, `outputParserStructured`, **SIN tool**): audita
+  `productos_ofrecidos` contra el catálogo real y marca fallas: `producto_inventado`,
+  `fusion_variantes` (atributos que no viven juntos en una fila real), `no_trabajado` (**Regla 0
+  autoritativa**: pisa la existencia en catálogo, así un sinónimo tramposo —ej. *fotocopias*— no
+  excusa ofrecerlo; lista ampliable), `dato_no_corroborable`. Devuelve `{ aprobado, accion,
+  fallas[], resumen }` con `accion` ∈ aprobar/corregir/regenerar. Prompt con Fable + `prompt-master`.
+  - **Pre-fetch batch, sin loop agéntico**: en vez de una tool que el modelo llama producto por
+    producto (una inferencia nueva re-mandando todo el contexto cada vez, ~2k tok/producto), un
+    nodo **Traer Catálogo Real** (postgres) trae de UNA query las filas reales de TODOS los
+    productos afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita
+    en **UNA sola pasada**. N vueltas al modelo → 1, y no puede buscar el nombre equivocado ni
+    saltear un producto. Mismo patrón que `Buscar Precios`.
 - **Remediación** (`Leer Veredicto` → `Ruteo Acción` switch):
   - **aprobar** → sale directo.
   - **corregir** (fallas que se arreglan editando texto) → **Corrector** (agente LLM sin tools,
