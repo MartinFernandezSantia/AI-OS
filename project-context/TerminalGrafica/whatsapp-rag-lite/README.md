@@ -65,9 +65,11 @@ y `DATABASE_URL` (`--apply`/consulta).
   una copia. Refrescar precios sin re-embeber: `pnpm rag:ingest --prices-only`.
   - **Tramos**: cantidad que cae en un hueco entre packs redondea **hacia arriba** al pack que la
     cubre (packs 100/500/1000, pide 300 → precio del de 500); por encima de todos, el más grande.
-  - **Unidad sin duplicar**: `{Pn}` ya trae la forma de cobro; el prompt le pide al agente no
-    repetirla, y el nodo terminal colapsa el eco por las dudas ("por trabajo por trabajo" →
-    "por trabajo"; "el pack de 100 unidades el pack de 100" → una sola vez).
+  - **Unidad sin duplicar**: `{Pn}` inyecta **SOLO el monto** ("$15.000"); la forma de cobro
+    (el pack de N, por unidad, por m²…) la escribe el agente desde "Opciones:". Así su instinto de
+    etiquetar la línea ("Pack de 100 doble faz: {P1}") queda correcto en vez de duplicar
+    ("$15.000 el pack de 100 unidades el pack de 100"). El monto sigue siendo determinista/validado;
+    solo el texto de la unidad pasa al agente. El nodo terminal colapsa cualquier eco residual.
 - **Memoria de decisiones** (`bot.rag_decisiones`, DDL en `db/rag-decisiones.sql`) — lazo cerrado
   escritura + lectura:
   - **Escritura** (`Log Decisión`, al final): por cada mensaje del bot guarda `session_id`, mensaje

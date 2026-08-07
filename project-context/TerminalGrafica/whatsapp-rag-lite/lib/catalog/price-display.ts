@@ -83,10 +83,12 @@ export const fmtPrecio = (n: number): string => "$" + Math.round(Number(n)).toLo
 
 const rangoLabel = (t: RangoCantidad): string => (t.maxQty == null ? `${t.minQty}+` : `${t.minQty}-${t.maxQty}`);
 
-/** Elige el precio unitario a mostrar dada una cantidad. SIN totales/multiplicación.
- *  - simple → "$X <unidad>"
- *  - escalera + cantidad → "$Xtramo <unidad>"
- *  - escalera sin cantidad → "$Xmin <unidad> (varía según cantidad)" (tramo de menor minQty = techo por unidad)
+/** Monto a inyectar en el {Pn} del mensaje dada una cantidad. Devuelve SOLO el número (+ aviso si
+ *  varía): la UNIDAD/forma de cobro la escribe el agente desde "Opciones:", así no se duplica con su
+ *  prosa (bug: "Pack de 100 doble faz: $15.000 el pack de 100 unidades"). SIN totales/multiplicación.
+ *  - simple → "$X"
+ *  - escalera + cantidad → "$Xtramo"
+ *  - escalera sin cantidad → "$Xmin (varía según cantidad)" (tramo de menor minQty = techo por unidad)
  *  - no cobrable / sin monto → null (el llamador pone "a confirmar por mail"). */
 export function precioDisplay(pv: PrecioVariante, cantidad?: number | null): string | null {
   if (!pv.cobrable || !pv.unidad) return null;
@@ -110,7 +112,7 @@ export function precioDisplay(pv: PrecioVariante, cantidad?: number | null): str
     }
   }
   if (!(value > 0)) return null;
-  return `${fmtPrecio(value)} ${pv.unidad}${varia ? " (varía según cantidad)" : ""}`;
+  return `${fmtPrecio(value)}${varia ? " (varía según cantidad)" : ""}`;
 }
 
 /** Texto de precio CONTEXTO para el chunk (lo que lee el agente): muestra todos los tramos. */

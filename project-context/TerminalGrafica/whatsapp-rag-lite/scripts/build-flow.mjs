@@ -49,13 +49,13 @@ resultados.
 
 ## Precios (LEÉ ESTO)
 Podés informar precios. En "Opciones:" cada variante trae su precio y su forma de cobro (ej.
-"[v1] Doble Faz ($15.000 el pack)", "[v2] Imanes (por unidad: 1-3 $8.000, 4-10 $7.200)").
-PERO NUNCA ESCRIBAS UN NÚMERO DE PRECIO EN TU MENSAJE. Donde iría un precio, poné un marcador
-{P1}, {P2}, … (ej.: "las tarjetas doble faz salen {P1}"). Un proceso posterior reemplaza cada
-{Pn} por el precio real. Si tipeás un número, la respuesta se rehace.
-- El marcador {Pn} YA incluye el precio Y la forma de cobro (por unidad, el pack de N, por trabajo,
-  por m²…). NO repitas la unidad al lado del marcador: escribí "salen {P1}", NUNCA "salen {P1} el
-  pack" ni "{P1} por trabajo" (quedaría duplicado).
+"[v1] Doble Faz ($15.000 el pack de 100 unidades)", "[v2] Imanes (por unidad: 1-3 $8.000, 4-10 $7.200)").
+PERO NUNCA ESCRIBAS UN NÚMERO DE PRECIO EN TU MENSAJE. Donde iría el monto, poné un marcador
+{P1}, {P2}, … Un proceso posterior reemplaza cada {Pn} por el número real. Si tipeás un número, se rehace.
+- El marcador {Pn} es SOLO el monto (ej. queda "$15.000"). La FORMA DE COBRO (el pack de N, por
+  unidad, por m², por trabajo…) la escribís VOS, tomándola de "Opciones:". Ej.: "el pack de 100 sale
+  {P1}" → queda "el pack de 100 sale $15.000". SIEMPRE aclarás la forma de cobro: sin ella el precio
+  queda ambiguo. Pero decila UNA sola vez por línea, no la repitas.
 - Por cada {Pn} agregá una entrada a "precios_solicitados": ref (P1…), nombre_catalogo EXACTO,
   variante_ref = el token [vN] de esa opción, y cantidad si el cliente la dijo.
 - Solo poné {Pn} para una opción que en "Opciones:" muestra precio. Si una opción no trae precio
@@ -306,7 +306,7 @@ const insertarPreciosCode = [
   "    }",
   "  }",
   "  if (!(value > 0)) return null;",
-  "  return fmt(value) + ' ' + pv.unidad + (varia ? ' (varía según cantidad)' : '');",
+  "  return fmt(value) + (varia ? ' (varía según cantidad)' : '');   // SOLO el monto; la unidad la pone el agente",
   "}",
   "",
   "// 1) INYECCIÓN de {Pn}",
@@ -323,10 +323,10 @@ const insertarPreciosCode = [
   "}",
   "texto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos",
   "",
-  "// 1b) DEDUP DE UNIDAD: el disp inyectado ya trae la forma de cobro; si el LLM igual tipeó la",
-  "//     unidad al lado del marcador queda duplicada. Colapsar el eco inmediato.",
+  "// 1b) DEDUP DE UNIDAD (defensivo): {Pn} ahora inyecta SOLO el monto, la unidad la escribe el",
+  "//     agente. Si por su cuenta repite la forma de cobro adyacente, la colapsamos.",
   "texto = texto.replace(/(\\bpor\\s+[a-záéíóúñ0-9²]+)\\s+\\1\\b/gi, '$1');   // 'por trabajo por trabajo'",
-  "texto = texto.replace(/(\\bel pack(?:\\s+de\\s+\\d+\\s+unidades)?)\\s+el pack(?:\\s+de\\s+\\d+)?(?:\\s+unidades)?\\b/gi, '$1');   // 'el pack de 100 unidades el pack de 100'",
+  "texto = texto.replace(/(\\bel pack(?:\\s+de\\s+\\d+\\s+unidades)?)\\s+el pack(?:\\s+de\\s+\\d+)?(?:\\s+unidades)?\\b/gi, '$1');   // 'el pack ... el pack'",
   "",
   "// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real",
   "const cantidades = new Set();",

@@ -30,9 +30,9 @@ describe("pack simple (100 Tarjetas / Doble Faz)", () => {
     expect(pv.cobrable).toBe(true);
     expect(pv.pack_unidades).toBe(100);
   });
-  it("precioDisplay y contexto", () => {
+  it("precioDisplay = SOLO monto (la unidad la pone el agente); contexto = con unidad", () => {
     const pv = precioVariante(p, v, "v1");
-    expect(precioDisplay(pv)).toBe("$15.000 el pack de 100 unidades");
+    expect(precioDisplay(pv)).toBe("$15.000");
     expect(contextoPrecio(pv)).toBe("$15.000 el pack de 100 unidades");
   });
 });
@@ -53,13 +53,13 @@ describe("escalera por cantidad (Iman, precio_lista 0)", () => {
     expect(derivarUnidad(p, v)).toBe("por unidad");
     expect(precioVariante(p, v, "v1").cobrable).toBe(true);
   });
-  it("sin cantidad → tramo de menor minQty + aviso", () => {
-    expect(precioDisplay(precioVariante(p, v, "v1"))).toBe("$8.000 por unidad (varía según cantidad)");
+  it("sin cantidad → tramo de menor minQty + aviso (sin unidad)", () => {
+    expect(precioDisplay(precioVariante(p, v, "v1"))).toBe("$8.000 (varía según cantidad)");
   });
-  it("con cantidad → tramo correcto", () => {
+  it("con cantidad → tramo correcto (solo monto)", () => {
     const pv = precioVariante(p, v, "v1");
-    expect(precioDisplay(pv, 2)).toBe("$8.000 por unidad");
-    expect(precioDisplay(pv, 15)).toBe("$6.500 por unidad");
+    expect(precioDisplay(pv, 2)).toBe("$8.000");
+    expect(precioDisplay(pv, 15)).toBe("$6.500");
   });
   it("contexto muestra todos los tramos", () => {
     expect(contextoPrecio(precioVariante(p, v, "v1"))).toBe("por unidad: 1-3 $8.000, 4-10 $7.200, 11-20 $6.500");
@@ -83,19 +83,19 @@ describe("packs discretos con hueco → redondeo HACIA ARRIBA al que cubre la ca
   });
   const pv = precioVariante(p, v, "v1");
 
-  it("cantidad exacta de un pack → ese pack", () => {
-    expect(precioDisplay(pv, 100)).toBe("$15.000 el pack");
-    expect(precioDisplay(pv, 1000)).toBe("$100.000 el pack");
+  it("cantidad exacta de un pack → ese pack (solo monto)", () => {
+    expect(precioDisplay(pv, 100)).toBe("$15.000");
+    expect(precioDisplay(pv, 1000)).toBe("$100.000");
   });
   it("cantidad en el hueco → próximo pack que la cubre (300 → 500)", () => {
-    expect(precioDisplay(pv, 300)).toBe("$60.000 el pack");
-    expect(precioDisplay(pv, 600)).toBe("$100.000 el pack");
+    expect(precioDisplay(pv, 300)).toBe("$60.000");
+    expect(precioDisplay(pv, 600)).toBe("$100.000");
   });
   it("debajo del menor → el pack más chico", () => {
-    expect(precioDisplay(pv, 50)).toBe("$15.000 el pack");
+    expect(precioDisplay(pv, 50)).toBe("$15.000");
   });
   it("por encima de todos → el pack más grande (no hay mayor)", () => {
-    expect(precioDisplay(pv, 1500)).toBe("$100.000 el pack");
+    expect(precioDisplay(pv, 1500)).toBe("$100.000");
   });
 });
 
