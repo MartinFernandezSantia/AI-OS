@@ -11,42 +11,43 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.1,
       "position": [
-        -200,
+        0,
         0
       ],
       "webhookId": "rag-lite-chat"
     },
     {
       "parameters": {
-        "jsCode": "// Toma la pregunta del chat y calcula los flags de nicho (guard del RPC).\nconst texto = String($json.chatInput || '').trim();\nconst norm = (s) => s.normalize('NFC').toLowerCase()\n  .replace(/[áéíóúü]/g, (c) => ({ 'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u' }[c]))\n  .replace(/ñ/g, 'n');\nconst v = norm(texto);\nreturn [{ json: {\n  texto,\n  medicina: /medicin/.test(v),\n  inmobiliarias: /inmobiliari|inmueble/.test(v),\n} }];"
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una\ntool, buscar_catalogo, que busca productos en el catálogo real por significado.\n\n## Flujo: detectá la ETAPA y actuá\n\n1) SALUDO / INICIO — primer mensaje, saludo, o todavía no hay un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO llames la tool.\n\n2) PEDIDO CLARO — el cliente pide algo identificable.\n   → Llamá buscar_catalogo con una consulta que describa lo que quiere (aprovechá el historial\n     para enriquecerla). Recomendá 1 a 3 de los productos que devuelva la tool, cortito.\n\n3) FALTA INFO — el pedido es muy vago para buscar, o la tool volvió floja/vacía.\n   → Hacé UNA sola pregunta corta por el dato que falta (medida, cantidad, material, color…).\n     Mirá el historial: si el cliente ya lo dijo, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).\n   → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)\n     o al local.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos."
+        }
       },
-      "id": "rag-preparar",
-      "name": "Preparar",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "rag-agente",
+      "name": "Agente",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
       "position": [
-        20,
+        280,
         0
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/embeddings",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "openRouterApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'google/gemini-embedding-001', input: [$json.texto] }) }}",
-        "options": {}
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
       },
-      "id": "rag-embed",
-      "name": "Embed Query",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "rag-modelo",
+      "name": "Modelo",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
       "position": [
-        240,
-        0
+        140,
+        240
       ],
       "credentials": {
         "openRouterApi": {
@@ -54,73 +55,6 @@
           "name": "OpenRouter"
         }
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Trunca el embedding a 1536 dims (Matryoshka) y lo normaliza L2 → literal ::vector.\n// Igual que scripts/rag-ingest.ts, así query y documentos viven en el mismo espacio.\nconst emb = $json.data && $json.data[0] && $json.data[0].embedding;\nif (!Array.isArray(emb)) {\n  throw new Error('Respuesta de embeddings sin vector: ' + JSON.stringify($json).slice(0, 200));\n}\nconst DIMS = 1536;\nif (emb.length < DIMS) throw new Error('Embedding de ' + emb.length + ' dims (< ' + DIMS + ').');\nconst t = emb.slice(0, DIMS);\nconst norma = Math.sqrt(t.reduce((s, x) => s + x * x, 0)) || 1;\nconst vector = '[' + t.map((x) => x / norma).join(',') + ']';\nconst prep = $('Preparar').first().json;\nreturn [{ json: {\n  vector,\n  medicina: prep.medicina,\n  inmobiliarias: prep.inmobiliarias,\n  texto: prep.texto,\n} }];"
-      },
-      "id": "rag-vector",
-      "name": "Vector",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        460,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "select * from bot.match_productos($1::vector, 8, $2, $3)",
-        "options": {
-          "queryReplacement": "={{ [$json.vector, $json.medicina, $json.inmobiliarias] }}"
-        }
-      },
-      "id": "rag-match",
-      "name": "Match Productos",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        680,
-        0
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
-        }
-      },
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Junta las filas del match en un contexto numerado para el Compositor.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre_canonico);\nconst texto = $('Preparar').first().json.texto;\nconst lista = rows.map((r, i) =>\n  (i + 1) + '. ' + r.nombre_canonico + (r.rubro ? ' (rubro: ' + r.rubro + ')' : '') + '\\n' + r.chunk_text\n).join('\\n\\n');\nreturn [{ json: {\n  texto,\n  hayCandidatos: rows.length > 0,\n  contexto: rows.length ? lista : '(no se encontraron productos en el catálogo)',\n} }];"
-      },
-      "id": "rag-contexto",
-      "name": "Armar Contexto",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        900,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Preparar').first().json.texto }}",
-        "options": {
-          "systemMessage": "=Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación: leé el historial + el mensaje nuevo antes de responder.\n\n## Flujo: primero detectá en qué ETAPA está la charla, después actuá\n\n1) SALUDO / INICIO — es el primer mensaje, un saludo, o no hay todavía un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO recomiendes productos todavía.\n\n2) PEDIDO CLARO — el cliente pide algo identificable y en los CANDIDATOS hay algo que aplica.\n   → Recomendá 1 a 3 productos de la lista de candidatos, cortito, para que elija.\n\n3) FALTA INFO — el cliente pide algo pero falta un dato clave para acertar el producto o la\n   variante (medida, cantidad, material, color, faz, etc.), o los candidatos no aplican bien.\n   → Hacé UNA sola pregunta corta para conseguir ese dato. Mirá el historial: si el cliente ya\n     lo dijo antes, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente está respondiendo algo que vos le preguntaste antes (está en el\n   historial).\n   → Combiná lo que dijo antes con lo de ahora y recomendá el producto que corresponde.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar con un trabajo, derivalo al mail\n     (terminalgrafica@gmail.com) o al local.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Usá las palabras del cliente, no los nombres técnicos del catálogo (salvo que aclaren algo).\n- Recomendá SOLO productos que estén en la lista de CANDIDATOS. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos.\n\n---\nCANDIDATOS DEL CATÁLOGO PARA ESTE MENSAJE (usalos solo en las etapas 2 y 4):\n{{ $json.contexto }}"
-        }
-      },
-      "id": "rag-compositor",
-      "name": "Compositor",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.9,
-      "position": [
-        1120,
-        0
-      ]
     },
     {
       "parameters": {
@@ -133,46 +67,62 @@
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        1320,
-        420
+        320,
+        240
       ]
     },
     {
       "parameters": {
-        "model": "google/gemini-3.1-flash-lite",
-        "options": {
-          "temperature": 0.3,
-          "maxTokens": 500
+        "name": "buscar_catalogo",
+        "description": "Busca en el catálogo de la imprenta los productos más parecidos a una consulta en lenguaje natural (RAG semántico por embeddings). Devuelve candidatos con nombre, rubro y descripción. Usala cuando necesites recomendar o dar info de un producto. Pasá una consulta que incluya el contexto relevante de la conversación (no solo la última frase suelta).",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "tool-buscar-catalogo"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "consulta": "={{ $fromAI('consulta', 'consulta en lenguaje natural para buscar en el catálogo, incluyendo el contexto relevante de la charla', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "consulta",
+              "displayName": "consulta",
+              "required": false,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "display": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         }
       },
-      "id": "rag-modelo",
-      "name": "Modelo · Compositor",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
-      "typeVersion": 1,
+      "id": "rag-tool",
+      "name": "buscar_catalogo",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
       "position": [
-        1120,
-        220
-      ],
-      "credentials": {
-        "openRouterApi": {
-          "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter"
-        }
-      }
+        520,
+        240
+      ]
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite (experimento)\n\nPrueba interna del RAG por embeddings. Se dispara desde el chat de test de este Chat Trigger — no toca Chatwoot ni WhatsApp.\n\nCadena: Chat → Preparar (flags nicho) → Embed (OpenRouter) → Vector (trunca 1536 + L2) → Match (bot.match_productos) → Armar Contexto → Compositor (con Memoria).\n\n**Memoria + flujo por etapas:** el Compositor tiene una Memoria (últimos 10 turnos por sesión). Lee el historial + el mensaje nuevo, detecta la etapa (1 saludo · 2 pedido claro · 3 falta info → pregunta · 4 seguimiento · 5 otro/cierre) y responde acorde. Ver el system prompt del nodo Compositor.\n\n**Requisitos:** aplicar db/rag-embeddings.sql y poblar la tabla con scripts/rag-ingest.ts.\n\n**Limitaciones aceptadas:** sin firewall, y el guard de nicho + el embedding de búsqueda solo miran el mensaje actual (la Memoria da contexto al Compositor, no re-consulta el catálogo con el historial). Sin precios (v0).",
-        "height": 320,
-        "width": 420
+        "content": "## Bot RAG lite — agente + tool + memoria\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: modelo (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** (sub-workflow `tool-buscar-catalogo`, que hace el RAG: embed→match).\n\n**Flujo por etapas** (ver system prompt): saludo · pedido claro (llama la tool) · falta info→pregunta · seguimiento · otro/cierre. Sin montos.\n\n⚠️ IMPORTÁ PRIMERO `tool-buscar-catalogo` y después, en el nodo buscar_catalogo, SELECCIONÁ ese workflow (el workflowId queda vacío hasta que lo elijas en la UI).",
+        "height": 340,
+        "width": 460
       },
       "id": "rag-nota",
       "name": "Nota",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -200,
-        -360
+        0,
+        -380
       ]
     }
   ],
@@ -181,73 +131,18 @@
       "main": [
         [
           {
-            "node": "Preparar",
+            "node": "Agente",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar": {
-      "main": [
-        [
-          {
-            "node": "Embed Query",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Embed Query": {
-      "main": [
-        [
-          {
-            "node": "Vector",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Vector": {
-      "main": [
-        [
-          {
-            "node": "Match Productos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Match Productos": {
-      "main": [
-        [
-          {
-            "node": "Armar Contexto",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Armar Contexto": {
-      "main": [
-        [
-          {
-            "node": "Compositor",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Modelo · Compositor": {
+    "Modelo": {
       "ai_languageModel": [
         [
           {
-            "node": "Compositor",
+            "node": "Agente",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -258,8 +153,19 @@
       "ai_memory": [
         [
           {
-            "node": "Compositor",
+            "node": "Agente",
             "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_catalogo": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_tool",
             "index": 0
           }
         ]

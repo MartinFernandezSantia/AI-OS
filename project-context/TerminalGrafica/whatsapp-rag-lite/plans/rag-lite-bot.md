@@ -180,23 +180,31 @@ Sin webhook, sin HMAC, sin Chatwoot. Se prueba desde la ventana de chat integrad
 Nada de debounce, firewall, verificador ni log a `bot.decisiones`. Un sticky note en el flow
 documenta las limitaciones.
 
-### Actualización 2026-08-07 — Memoria + flujo por etapas
+### Actualización 2026-08-07 (v2) — Agente + tool + memoria (arquitectura RAG real)
 
-El Compositor ahora es un **Agent** (`@n8n/n8n-nodes-langchain.agent` v1.9) con una **Memoria
-simple** (`memoryBufferWindow`, últimos 10 turnos por `sessionId`) conectada por `ai_memory`.
-Detalles para no romper la memoria:
-- El `text` del turno = **solo el mensaje del cliente** (`$('Preparar').first().json.texto`), así
-  el historial que guarda la Memoria queda limpio.
-- Los **candidatos** del RAG van en el `systemMessage` (expresión con `{{ $json.contexto }}`), que
-  NO se persiste — así no ensucian el historial turno a turno.
-- El system prompt es un **flujo por etapas**: el bot lee historial + mensaje nuevo, detecta la
-  etapa y actúa: (1) saludo/inicio → saluda y pregunta; (2) pedido claro → recomienda de los
-  candidatos; (3) falta info → hace UNA pregunta corta (sin repetir lo que ya está en el
-  historial); (4) seguimiento → combina lo previo con lo nuevo; (5) otro/cierre → responde breve
-  o deriva a mail/local. Sin montos.
+Reemplaza el pipeline lineal de arriba. La idea de un RAG es que **el agente acceda al catálogo
+vía una tool**, no con un pre-fetch fijo. Ahora son **dos workflows**:
 
-Limitación conocida: la Memoria le da CONTEXTO al Compositor, pero el embedding de búsqueda y el
-guard de nicho siguen mirando solo el mensaje actual (no re-consultan el catálogo con el historial).
+**`faq-bot-rag-lite.json` (principal, 6 nodos):** `Chat Trigger → Agente`. El Agente
+(`@n8n/n8n-nodes-langchain.agent` v1.9) tiene conectados: **Modelo** (lmChatOpenRouter
+`gemini-3.1-flash-lite`), **Memoria** (`memoryBufferWindow`, 10 turnos por `sessionId`, `ai_memory`)
+y la **tool `buscar_catalogo`** (`toolWorkflow`, `ai_tool`). El `text` del turno = `{{ $json.chatInput }}`
+(memoria limpia). El system prompt es el **flujo por etapas**: (1) saludo → NO llama la tool;
+(2) pedido claro → llama `buscar_catalogo` y recomienda de lo que vuelva; (3) falta info → UNA
+pregunta corta (sin repetir lo del historial); (4) seguimiento → arma la consulta a la tool
+combinando historial + mensaje nuevo; (5) otro/cierre → breve o deriva. Sin montos.
+
+**`tool-buscar-catalogo.json` (sub-workflow, 7 nodos):** `Execute Workflow Trigger(consulta) →
+Preparar (flags nicho) → Embed Query (OpenRouter) → Vector (trunc 1536 + L2) → Match Productos
+(bot.match_productos) → Formatear Candidatos (texto en `response`)`. Es el RAG semántico
+encapsulado como tool.
+
+Ventaja sobre el pipeline lineal: el agente decide **cuándo** buscar (no busca en un saludo) y
+**qué** buscar, formulando la consulta con el contexto de la memoria (resuelve el caso "¿y en A3?").
+
+**Wiring manual (una vez, en la UI de n8n):** importar PRIMERO `tool-buscar-catalogo`, después el
+principal, y en el nodo `buscar_catalogo` seleccionar el workflow de la tool (el `workflowId` viaja
+vacío porque el id lo asigna n8n al importar).
 
 > Nota: n8n necesita la truncación a 1536 dims antes del nodo Postgres. Lo más simple es que el
 > Code `Preparar`/`Armar Contexto` recorte el array del embedding a los primeros 1536 y lo

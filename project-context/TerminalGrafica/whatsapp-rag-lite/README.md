@@ -12,7 +12,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 lib/catalog/       chunkRAG() + helpers autocontenidos (types, keys, effective, loader) + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta CLI)
 db/                rag-embeddings.sql (pgvector + tabla + RPC bot.match_productos)
-n8n/flows/         faq-bot-rag-lite.json (workflow con nodo Chat interno)
+n8n/flows/         faq-bot-rag-lite.json (agente + memoria + tool) · tool-buscar-catalogo.json (la tool RAG)
 plans/             el plan del experimento
 ```
 
@@ -31,8 +31,9 @@ Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABAS
    `pnpm rag:ingest --apply` upsertea directo. Reingesta = correr de nuevo (idempotente).
 3. **Consulta** — `pnpm rag:query "sirve para plotear un plano a1?"` (flags `--medicina` /
    `--inmobiliarias` para el guard de nicho).
-4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json` y probar desde el chat de test
-   del Chat Trigger (no toca Chatwoot ni WhatsApp).
+4. **Workflows** — importar PRIMERO `n8n/flows/tool-buscar-catalogo.json` (la tool RAG), después
+   `n8n/flows/faq-bot-rag-lite.json` (el agente), y en el nodo `buscar_catalogo` seleccionar el
+   workflow de la tool. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
 
 ## Tests
 
@@ -44,4 +45,5 @@ Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABAS
 - Embeddings a **1536 dims** (Matryoshka, truncado + L2-normalizado del lado del cliente).
 - Guard de nicho = **filtro duro** en la RPC (no similitud).
 - **Sin montos** en la respuesta (la tabla guarda el rango para activarlo después).
-- Sin firewall, sin memoria de conversación (responde a cada mensaje suelto).
+- Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el RAG es una **tool**
+  (`buscar_catalogo`) que el agente decide cuándo invocar.
