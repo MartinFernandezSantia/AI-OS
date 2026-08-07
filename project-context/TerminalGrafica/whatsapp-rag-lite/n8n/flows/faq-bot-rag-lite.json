@@ -32,7 +32,11 @@
       "position": [
         280,
         0
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -68,7 +72,8 @@
           "id": "vxRQvyIwYEqGpJqc",
           "name": "Bot Readonly DB"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -88,7 +93,7 @@
         "model": "google/gemini-3.1-flash-lite",
         "options": {
           "temperature": 0.3,
-          "maxTokens": 500
+          "maxTokens": 900
         }
       },
       "id": "rag-modelo",
@@ -195,7 +200,11 @@
       "position": [
         620,
         0
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -438,6 +447,32 @@
     },
     {
       "parameters": {
+        "jsCode": "return [{ json: {\n  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',\n  auditoria: null,\n  verificacion: null,\n  corregido: false,\n} }];"
+      },
+      "id": "rag-fallback-agente",
+      "name": "Fallback Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { output: {\n  aprobado: true,\n  accion: 'aprobar',\n  fallas: [],\n  resumen: 'auditor no disponible; se aprueba por defecto',\n} } }];"
+      },
+      "id": "rag-fallback-verif",
+      "name": "Fallback Verificador",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        260
+      ]
+    },
+    {
+      "parameters": {
         "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).\n\n**Preparar Respuesta** (punto único de convergencia): el chat muestra SOLO `respuesta`; `auditoria`, `verificacion` y `corregido` quedan en el item. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 560,
         "width": 540
@@ -472,10 +507,46 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Fallback Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Agente": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Agente Verificador": {
+      "main": [
+        [
+          {
+            "node": "Leer Veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Verificador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Verificador": {
       "main": [
         [
           {

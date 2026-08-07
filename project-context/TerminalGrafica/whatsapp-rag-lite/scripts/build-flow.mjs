@@ -371,6 +371,13 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.agent",
       typeVersion: 1.9,
       position: [280, 0],
+      // RESILIENCIA: reintenta ante output vacío/malformado transitorio (2 intentos); si aún así el
+      // parser de salida falla ("Model output doesn't fit required format"), enruta por la salida de
+      // ERROR (main[1]) → Fallback Agente, en vez de matar la ejecución y dejar al cliente sin nada.
+      retryOnFail: true,
+      maxTries: 2,
+      waitBetweenTries: 1000,
+      onError: "continueErrorOutput",
     },
     {
       // PUNTO ÚNICO DE CONVERGENCIA antes del chat. Todas las ramas terminales (aprobar /
@@ -416,6 +423,10 @@ const flow = {
       typeVersion: 2.6,
       position: [2000, 0],
       credentials: { postgres: BOT_DB },
+      // GARANTÍA DE ENTREGA: sin precios_solicitados la query da 0 filas y, sin esto, un nodo con
+      // 0 items NO dispara al siguiente → Insertar Precios (terminal) no corre y el mensaje no llega
+      // ("No item to return was found"). Con alwaysOutputData emite un item vacío igual y el tail sigue.
+      alwaysOutputData: true,
     },
     {
       // NODO TERMINAL + GARANTÍA. Inyecta los {Pn} con el precio real y valida cualquier monto que
@@ -432,7 +443,9 @@ const flow = {
       position: [2220, 0],
     },
     {
-      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.3, maxTokens: 500 } },
+      // maxTokens 900 (no 500): la salida estructurada (respuesta + productos_ofrecidos +
+      // precios_solicitados + afirmaciones) más el tool-call trunca el JSON a 500 y el parser lo rechaza.
+      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.3, maxTokens: 900 } },
       id: "rag-modelo",
       name: "Modelo",
       type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
@@ -518,6 +531,12 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.agent",
       typeVersion: 1.9,
       position: [620, 0],
+      // RESILIENCIA: si el auditor falla (parser o modelo), NO bloqueamos la respuesta del cliente:
+      // enruta por la salida de ERROR (main[1]) → Fallback Verificador, que aprueba por defecto.
+      retryOnFail: true,
+      maxTries: 2,
+      waitBetweenTries: 1000,
+      onError: "continueErrorOutput",
     },
     {
       parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.1, maxTokens: 700 } },
@@ -725,6 +744,45 @@ const flow = {
       position: [1560, -160],
     },
     {
+      // RED DE SEGURIDAD del Agente. Recibe la salida de ERROR del Agente (parser malformado/vacío o
+      // caída del modelo). Emite la forma canónica con un mensaje seguro → Preparar Respuesta (salta
+      // al Verificador). El cliente SIEMPRE recibe algo; la ejecución nunca muere por un parse-error.
+      parameters: {
+        jsCode: [
+          "return [{ json: {",
+          "  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',",
+          "  auditoria: null,",
+          "  verificacion: null,",
+          "  corregido: false,",
+          "} }];",
+        ].join("\n"),
+      },
+      id: "rag-fallback-agente",
+      name: "Fallback Agente",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [280, 260],
+    },
+    {
+      // RED DE SEGURIDAD del Verificador. Recibe su salida de ERROR y aprueba por defecto: entrega la
+      // MISMA forma { output: {...} } que espera Leer Veredicto, así el mensaje del bot sale igual.
+      parameters: {
+        jsCode: [
+          "return [{ json: { output: {",
+          "  aprobado: true,",
+          "  accion: 'aprobar',",
+          "  fallas: [],",
+          "  resumen: 'auditor no disponible; se aprueba por defecto',",
+          "} } }];",
+        ].join("\n"),
+      },
+      id: "rag-fallback-verif",
+      name: "Fallback Verificador",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [620, 260],
+    },
+    {
       parameters: {
         content: [
           "## Bot RAG lite — agente + PGVector (nativo)",
@@ -761,8 +819,22 @@ const flow = {
   ],
   connections: {
     "Cuando llega un mensaje": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
-    Agente: { main: [[{ node: "Agente Verificador", type: "main", index: 0 }]] },
-    "Agente Verificador": { main: [[{ node: "Leer Veredicto", type: "main", index: 0 }]] },
+    // Agente: main[0] = OK → Verificador; main[1] = ERROR → Fallback Agente (salta al Verificador).
+    Agente: {
+      main: [
+        [{ node: "Agente Verificador", type: "main", index: 0 }],
+        [{ node: "Fallback Agente", type: "main", index: 0 }],
+      ],
+    },
+    "Fallback Agente": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
+    // Verificador: main[0] = OK → Leer Veredicto; main[1] = ERROR → Fallback Verificador (aprueba).
+    "Agente Verificador": {
+      main: [
+        [{ node: "Leer Veredicto", type: "main", index: 0 }],
+        [{ node: "Fallback Verificador", type: "main", index: 0 }],
+      ],
+    },
+    "Fallback Verificador": { main: [[{ node: "Leer Veredicto", type: "main", index: 0 }]] },
     "Leer Veredicto": { main: [[{ node: "Ruteo Acción", type: "main", index: 0 }]] },
     // Switch: salida 0 = aprobar, 1 = regenerar, 2 (fallback) = corregir.
     "Ruteo Acción": {
