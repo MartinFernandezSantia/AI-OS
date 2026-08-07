@@ -285,6 +285,7 @@ comillas ni explicaciones.`;
 const insertarPreciosCode = [
   "const pr = $('Preparar Respuesta').first().json;   // ref segura (siempre ejecuta)",
   "let texto = String(pr.output || '');",
+  "texto = texto.split('\\\\r\\\\n').join('\\n').split('\\\\n').join('\\n');   // saltos escapados como texto → salto real",
   "const aud = pr.auditoria || {};",
   "const solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];",
   "",
@@ -716,7 +717,8 @@ const flow = {
       // → se le pasan al Verificador para marcarlos producto_inventado (nombre inexistente/mal escrito).
       parameters: {
         jsCode: [
-          "const ag = $('Agente').first().json.output ?? {};",
+          "let ag = $('Agente').first().json.output ?? {};",
+          "if (typeof ag === 'string') { try { ag = JSON.parse(ag); } catch (e) { ag = { respuesta: ag }; } }",
           "const aud = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "const cliente = $('Cuando llega un mensaje').first().json.chatInput || '';",
           "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
@@ -750,7 +752,8 @@ const flow = {
       // Agente (siempre ejecutó → ref segura) y el veredicto del Verificador (su input directo).
       parameters: {
         jsCode: [
-          "const ag = $('Agente').first().json.output ?? {};",
+          "let ag = $('Agente').first().json.output ?? {};",
+          "if (typeof ag === 'string') { try { ag = JSON.parse(ag); } catch (e) { ag = { respuesta: ag }; } }",
           "const audit = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "let ve = $input.first().json.output ?? $input.first().json ?? {};",
           "if (typeof ve === 'string') { try { ve = JSON.parse(ve); } catch (e) { ve = {}; } }",
