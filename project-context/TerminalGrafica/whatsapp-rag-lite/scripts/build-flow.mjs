@@ -656,11 +656,12 @@ const flow = {
       position: [740, 620],
     },
     {
-      // PRE-FETCH DETERMINISTA (reemplaza la tool agéntica del Verificador). Trae de UNA sola query
-      // las filas reales de TODOS los productos que el agente afirmó (match acento-insensible sobre
-      // nombre_canonico, igual patrón que la vieja tool pero en batch). El Verificador ya no elige
-      // qué buscar ni loopea: recibe todo servido. alwaysOutputData: sin productos (saludo) → 0 filas
-      // pero igual emite un item para que la cola no se corte.
+      // PRE-FETCH DETERMINISTA (reemplaza la tool agéntica del Verificador). Trae de UNA query las
+      // filas reales de los productos afirmados con match EXACTO acento-insensible sobre
+      // nombre_canonico (`= any`, no substring): trae SOLO lo necesario (nada de basura por LIKE) y,
+      // clave, un nombre que el Agente inventó/escribió mal NO trae fila → eso es la señal de
+      // producto_inventado, que Armar Verificación detecta. alwaysOutputData: sin productos (saludo)
+      // → 0 filas pero igual emite un item para que la cola no se corte.
       parameters: {
         operation: "executeQuery",
         query:
@@ -669,11 +670,9 @@ const flow = {
           "       metadata->>'nicho'           as nicho,\n" +
           "       text\n" +
           "  from bot.rag_catalogo\n" +
-          " where exists (\n" +
-          "   select 1 from jsonb_array_elements_text($1::jsonb) as x\n" +
-          "    where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$)\n" +
-          "          like $$%$$ || translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$) || $$%$$)\n" +
-          " limit 20",
+          " where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$) = any(\n" +
+          "   select translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$)\n" +
+          "     from jsonb_array_elements_text($1::jsonb) as x)",
         options: {
           // $1 = JSON array de nombres afirmados. null-safe: sin productos → [] → 0 filas.
           queryReplacement:
@@ -690,22 +689,32 @@ const flow = {
     },
     {
       // Arma el mensaje de usuario del Verificador: auditoría del Agente (ref segura) + las filas
-      // reales pre-consultadas ($input) inyectadas como texto. Una sola pasada, sin tool.
+      // reales pre-consultadas ($input) inyectadas como texto. Una sola pasada, sin tool. Además
+      // detecta FALTANTES: nombres afirmados por el Agente que NO trajeron fila (match exacto falló)
+      // → se le pasan al Verificador para marcarlos producto_inventado (nombre inexistente/mal escrito).
       parameters: {
         jsCode: [
           "const ag = $('Agente').first().json.output ?? {};",
           "const aud = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "const cliente = $('Cuando llega un mensaje').first().json.chatInput || '';",
           "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
+          "// normalizador espejo del translate(lower(...)) del SQL (mismos 6 caracteres)",
+          "const nk = (s) => String(s || '').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').trim();",
+          "const encontrados = new Set(rows.map((r) => nk(r.nombre)));",
+          "const pedidos = (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []).map((p) => p && p.nombre_catalogo).filter(Boolean);",
+          "const faltantes = [...new Set(pedidos.filter((n) => !encontrados.has(nk(n))))];",
           "const real = rows.length",
           "  ? rows.map((r) => '### ' + r.nombre + (r.nicho ? ' [nicho: ' + r.nicho + ']' : '') + '\\n' + (r.text || '')).join('\\n\\n')",
-          "  : '(no se encontró ninguna fila de catálogo para los productos ofrecidos)';",
-          "const prompt = [",
+          "  : '(ninguno de los productos ofrecidos existe en el catálogo)';",
+          "const partes = [",
           "  'Pedido del cliente:', cliente, '',",
           "  'Auditoría del bot (revisala):', JSON.stringify(aud, null, 2), '',",
           "  'DATOS REALES del catálogo (ya consultados; verificá SOLO contra esto):', real,",
-          "].join('\\n');",
-          "return [{ json: { prompt, auditoria: aud } }];",
+          "];",
+          "if (faltantes.length) {",
+          "  partes.push('', 'PRODUCTOS SIN COINCIDENCIA EXACTA EN EL CATÁLOGO — el bot afirmó estos nombres pero no existen tal cual. Marcá producto_inventado para cada uno:', faltantes.map((n) => '- ' + n).join('\\n'));",
+          "}",
+          "return [{ json: { prompt: partes.join('\\n'), auditoria: aud, faltantes } }];",
         ].join("\n"),
       },
       id: "rag-armar-verif",

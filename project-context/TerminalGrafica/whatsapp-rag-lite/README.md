@@ -91,10 +91,13 @@ y `DATABASE_URL` (`--apply`/consulta).
   fallas[], resumen }` con `accion` ∈ aprobar/corregir/regenerar. Prompt con Fable + `prompt-master`.
   - **Pre-fetch batch, sin loop agéntico**: en vez de una tool que el modelo llama producto por
     producto (una inferencia nueva re-mandando todo el contexto cada vez, ~2k tok/producto), un
-    nodo **Traer Catálogo Real** (postgres) trae de UNA query las filas reales de TODOS los
-    productos afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita
-    en **UNA sola pasada**. N vueltas al modelo → 1, y no puede buscar el nombre equivocado ni
-    saltear un producto. Mismo patrón que `Buscar Precios`.
+    nodo **Traer Catálogo Real** (postgres) trae de UNA query las filas reales de los productos
+    afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita en **UNA
+    sola pasada**. N vueltas al modelo → 1. Mismo patrón que `Buscar Precios`.
+  - **Match EXACTO (`= any`, no substring)**: trae SOLO las filas necesarias (nada de basura por
+    `LIKE`) y, clave, un nombre que el Agente inventó/escribió mal **no trae fila** → `Armar
+    Verificación` lo detecta (compara nombres afirmados vs filas devueltas) y se lo pasa al
+    Verificador como `producto_inventado`. El propio match hace de anti-alucinación de nombres.
 - **Remediación** (`Leer Veredicto` → `Ruteo Acción` switch):
   - **aprobar** → sale directo.
   - **corregir** (fallas que se arreglan editando texto) → **Corrector** (agente LLM sin tools,
