@@ -9,12 +9,14 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 ## Estructura
 
 ```
-lib/catalog/       chunkRAG() + helpers autocontenidos (types, keys, effective, loader) + tests
-scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta CLI)
-db/                rag-embeddings.sql (pgvector + tabla + RPC bot.match_productos)
-n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector + Verificador + remediación con loop)
-plans/             el plan del experimento
+lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + helpers + tests
+scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
+db/                rag-embeddings.sql (pgvector + tabla)
+n8n/flows/         faq-bot-rag-lite.json (GENERADO por build-flow.mjs — no editar a mano)
+plans/             los planes del experimento
 ```
+
+El flow se regenera con `pnpm flow:build` (fuente de verdad = `scripts/build-flow.mjs`).
 
 `lib/catalog` es una **copia autocontenida** de los helpers del repo `whatsapp-automation`
 (el dashboard de curación). El export del catálogo se lee, por defecto, del contexto
@@ -53,7 +55,14 @@ y `DATABASE_URL` (`--apply`/consulta).
   query por el nodo nativo Embeddings Google Gemini. Chat sigue en OpenRouter. Tabla formato
   LangChain (`text`/`metadata`/`embedding`).
 - Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
-- **Sin montos** en la respuesta.
+- **Precios por placeholders** (el LLM nunca fija un precio): el chunk trae los precios en
+  "Opciones:" como contexto (`[v1] Doble Faz ($15.000 el pack)`); el agente escribe `{P1}`,`{P2}` y
+  declara `precios_solicitados` ({Pn}→nombre + `variante_ref` [vN] + cantidad). El nodo **Buscar
+  Precios** (postgres) lee `metadata.precios` y **Insertar Precios** (Code terminal) reemplaza los
+  `{Pn}` por el precio real (`precioDisplay`: unidad + tramo por cantidad, **sin totales**) y
+  **valida** cualquier monto tipeado contra el catálogo (coincide → se acepta; no coincide → "a
+  confirmar por mail"). Lógica en `lib/catalog/price-display.ts` (testeada); el Code de n8n inlinea
+  una copia. Refrescar precios sin re-embeber: `pnpm rag:ingest --prices-only`.
 - **Salida estructurada** (nodo `Salida · Agente`, `outputParserStructured`): el agente no
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
