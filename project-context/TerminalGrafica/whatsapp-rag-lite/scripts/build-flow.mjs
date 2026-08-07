@@ -369,11 +369,59 @@ const flow = {
       webhookId: "rag-lite-chat",
     },
     {
+      // MEMORIA DE DECISIONES (lee lo que Log Decisión escribió): las últimas decisiones OK de esta
+      // conversación, para que el agente sepa QUÉ PRODUCTOS ya recomendó (no solo el texto previo).
+      // onError=continue: si la tabla no existe, no rompe el turno (contexto vacío).
+      parameters: {
+        operation: "executeQuery",
+        query:
+          "select productos, precios, mensaje\n" +
+          "  from bot.rag_decisiones\n" +
+          " where session_id = $1 and estado = 'ok' and jsonb_array_length(productos) > 0\n" +
+          " order by created_at desc\n" +
+          " limit 5",
+        options: { queryReplacement: "={{ [ String($json.sessionId || '') ] }}" },
+      },
+      id: "rag-leer-decisiones",
+      name: "Leer Decisiones",
+      type: "n8n-nodes-base.postgres",
+      typeVersion: 2.6,
+      position: [0, 200],
+      credentials: { postgres: BOT_DB },
+      onError: "continueRegularOutput",
+    },
+    {
+      // Arma el bloque de contexto estructurado y pasa el chatInput. Ref segura al Chat Trigger y a
+      // Leer Decisiones (ambos siempre ejecutan al inicio del turno).
+      parameters: {
+        jsCode: [
+          "const chatInput = $('Cuando llega un mensaje').first().json.chatInput;",
+          "let rows = [];",
+          "try { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.productos) && r.productos.length); } catch (e) { rows = []; }",
+          "let contextoPrevio = '';",
+          "if (rows.length) {",
+          "  const lineas = rows.slice().reverse().map((r) => {",
+          "    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
+          "    return '- ' + ps;",
+          "  });",
+          "  contextoPrevio = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';",
+          "}",
+          "return [{ json: { chatInput, contextoPrevio } }];",
+        ].join("\n"),
+      },
+      id: "rag-contexto-previo",
+      name: "Contexto Previo",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [160, 200],
+    },
+    {
       parameters: {
         promptType: "define",
         text: "={{ $json.chatInput }}",
         hasOutputParser: true,
-        options: { systemMessage: sistema },
+        // El systemMessage antepone el contexto de decisiones previas (expresión) al prompt estático.
+        options: { systemMessage: "={{ $('Contexto Previo').first().json.contextoPrevio }}" + sistema },
       },
       id: "rag-agente",
       name: "Agente",
@@ -845,7 +893,7 @@ const flow = {
           "",
           "**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).",
           "",
-          "**Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql): registra por turno qué productos recomendó el bot (session_id, mensaje final, estado, productos, precios, veredicto). Si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue (un fallo de log no rompe la respuesta). **Responder** re-emite el mensaje al chat.",
+          "**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.",
           "",
           "⚠️ VERIFICAR EN LA UI:",
           "1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
@@ -862,7 +910,9 @@ const flow = {
     },
   ],
   connections: {
-    "Cuando llega un mensaje": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
+    "Cuando llega un mensaje": { main: [[{ node: "Leer Decisiones", type: "main", index: 0 }]] },
+    "Leer Decisiones": { main: [[{ node: "Contexto Previo", type: "main", index: 0 }]] },
+    "Contexto Previo": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
     // Agente: main[0] = OK → Verificador; main[1] = ERROR → Fallback Agente (salta al Verificador).
     Agente: {
       main: [
