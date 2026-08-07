@@ -70,6 +70,35 @@ describe("escalera por cantidad (Iman, precio_lista 0)", () => {
   });
 });
 
+describe("packs discretos con hueco → redondeo HACIA ARRIBA al que cubre la cantidad", () => {
+  const p = prod({ por_pack: true, atributos: { unidad_venta: "pack" } });
+  const v = vari({
+    variante: "Pack", precio_lista: 0, n_reglas_cantidad: 1,
+    atributos: { unidad_venta: "pack" },
+    rangos_cantidad: [
+      { value: 15000, minQty: 100, maxQty: 100 },
+      { value: 60000, minQty: 500, maxQty: 500 },
+      { value: 100000, minQty: 1000, maxQty: 1000 },
+    ],
+  });
+  const pv = precioVariante(p, v, "v1");
+
+  it("cantidad exacta de un pack → ese pack", () => {
+    expect(precioDisplay(pv, 100)).toBe("$15.000 el pack");
+    expect(precioDisplay(pv, 1000)).toBe("$100.000 el pack");
+  });
+  it("cantidad en el hueco → próximo pack que la cubre (300 → 500)", () => {
+    expect(precioDisplay(pv, 300)).toBe("$60.000 el pack");
+    expect(precioDisplay(pv, 600)).toBe("$100.000 el pack");
+  });
+  it("debajo del menor → el pack más chico", () => {
+    expect(precioDisplay(pv, 50)).toBe("$15.000 el pack");
+  });
+  it("por encima de todos → el pack más grande (no hay mayor)", () => {
+    expect(precioDisplay(pv, 1500)).toBe("$100.000 el pack");
+  });
+});
+
 describe("sin unidad de cobro → no cobrable → a mail", () => {
   const p = prod();
   const v = vari({ variante: "X", precio_lista: 500, atributos: {} }); // sin unidad_venta

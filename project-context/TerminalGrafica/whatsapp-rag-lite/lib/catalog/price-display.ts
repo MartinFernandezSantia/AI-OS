@@ -96,9 +96,13 @@ export function precioDisplay(pv: PrecioVariante, cantidad?: number | null): str
   if (tramos.length) {
     const c = Number(cantidad);
     if (Number.isFinite(c) && c > 0) {
-      const exacto = tramos.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));
-      const inferior = [...tramos].sort((a, b) => a.minQty - b.minQty).filter((x) => x.minQty <= c).pop();
-      const t = exacto || inferior;
+      const orden = [...tramos].sort((a, b) => a.minQty - b.minQty);
+      const exacto = orden.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));
+      // Sin tramo exacto (cae en un hueco entre packs o debajo del menor): redondear HACIA ARRIBA al
+      // próximo tramo que cubra la cantidad (packs 100/500/1000, pide 300 → el de 500). Si supera a
+      // todos (no hay tramo mayor), usar el más alto (extrapola el último precio de la escalera).
+      const arriba = orden.find((x) => x.minQty > c);
+      const t = exacto || arriba || orden[orden.length - 1];
       if (t) value = t.value;
     } else {
       value = [...tramos].sort((a, b) => a.minQty - b.minQty)[0].value;

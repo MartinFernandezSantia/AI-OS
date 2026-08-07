@@ -53,6 +53,9 @@ Podés informar precios. En "Opciones:" cada variante trae su precio y su forma 
 PERO NUNCA ESCRIBAS UN NÚMERO DE PRECIO EN TU MENSAJE. Donde iría un precio, poné un marcador
 {P1}, {P2}, … (ej.: "las tarjetas doble faz salen {P1}"). Un proceso posterior reemplaza cada
 {Pn} por el precio real. Si tipeás un número, la respuesta se rehace.
+- El marcador {Pn} YA incluye el precio Y la forma de cobro (por unidad, el pack de N, por trabajo,
+  por m²…). NO repitas la unidad al lado del marcador: escribí "salen {P1}", NUNCA "salen {P1} el
+  pack" ni "{P1} por trabajo" (quedaría duplicado).
 - Por cada {Pn} agregá una entrada a "precios_solicitados": ref (P1…), nombre_catalogo EXACTO,
   variante_ref = el token [vN] de esa opción, y cantidad si el cliente la dijo.
 - Solo poné {Pn} para una opción que en "Opciones:" muestra precio. Si una opción no trae precio
@@ -64,8 +67,13 @@ PERO NUNCA ESCRIBAS UN NÚMERO DE PRECIO EN TU MENSAJE. Donde iría un precio, p
 - Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.
 - Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.
 - Este canal solo INFORMA: no tomes pedidos ni pidas archivos.
-- NO TRABAJAMOS: fotocopias. Si el cliente lo pide, aclarale que eso no lo hacemos, aunque la
-  búsqueda traiga algo parecido por sinónimo. No lo ofrezcas como si lo hiciéramos.
+- NO CIERRES la charla vos ni asumas que terminó. Después de informar, ofrecé seguir ayudando
+  ("¿necesitás algo más?", "¿querés que veamos otra opción?"). Derivá al mail
+  (terminalgrafica@gmail.com) SOLO si el cliente dice explícitamente que quiere hacer el pedido o
+  avanzar. NUNCA pidas archivos ni digas "mandá el PDF" por tu cuenta.
+- NO TRABAJAMOS: fotocopias. SOLO mencionalo si el cliente pregunta por fotocopias: ahí aclarale
+  que eso no lo hacemos, aunque la búsqueda traiga algo parecido por sinónimo. Si el cliente NO las
+  nombró, NO lo traigas vos — no cierres con "no hacemos fotocopias" porque sí.
 - USÁ LAS PALABRAS DEL CLIENTE. Si preguntó por "X", contestale de "X" aunque en el catálogo se
   llame distinto. El nombre del catálogo es para que VOS identifiques el producto, no para
   leérselo. (En la salida estructurada igual va el nombre_catalogo exacto: eso es interno.)
@@ -294,9 +302,10 @@ const insertarPreciosCode = [
   "  if (tramos.length) {",
   "    const c = Number(cantidad);",
   "    if (Number.isFinite(c) && c > 0) {",
-  "      const exacto = tramos.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));",
-  "      const inferior = tramos.slice().sort((a, b) => a.minQty - b.minQty).filter((x) => x.minQty <= c).pop();",
-  "      const t = exacto || inferior;",
+  "      const orden = tramos.slice().sort((a, b) => a.minQty - b.minQty);",
+  "      const exacto = orden.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));",
+  "      const arriba = orden.find((x) => x.minQty > c);   // hueco/debajo → próximo pack que cubra",
+  "      const t = exacto || arriba || orden[orden.length - 1];",
   "      if (t) value = t.value;",
   "    } else {",
   "      value = tramos.slice().sort((a, b) => a.minQty - b.minQty)[0].value;",
@@ -320,6 +329,11 @@ const insertarPreciosCode = [
   "  texto = texto.split(token).join(disp || 'a confirmar por mail');",
   "}",
   "texto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos",
+  "",
+  "// 1b) DEDUP DE UNIDAD: el disp inyectado ya trae la forma de cobro; si el LLM igual tipeó la",
+  "//     unidad al lado del marcador queda duplicada. Colapsar el eco inmediato.",
+  "texto = texto.replace(/(\\bpor\\s+[a-záéíóúñ0-9²]+)\\s+\\1\\b/gi, '$1');   // 'por trabajo por trabajo'",
+  "texto = texto.replace(/(\\bel pack(?:\\s+de\\s+\\d+\\s+unidades)?)\\s+el pack(?:\\s+de\\s+\\d+)?(?:\\s+unidades)?\\b/gi, '$1');   // 'el pack de 100 unidades el pack de 100'",
   "",
   "// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real",
   "const cantidades = new Set();",
