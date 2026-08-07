@@ -211,8 +211,8 @@ Ante la duda, marcá en vez de aprobar.
 
 ## Acción (decidí qué hacer con la respuesta)
 - aprobar — no hay fallas.
-- corregir — las fallas se arreglan SACANDO o REFORMULANDO texto sin cambiar de producto: ofreció algo no_trabajado (se saca la afirmación), un dato no corroborable (se saca), o una fusión que se resuelve quitando el atributo de más. Un nodo barato edita el mensaje.
-- regenerar — SOLO casos GRAVES que NO se arreglan editando: la respuesta es incorrecta, habla de un producto equivocado o de productos no relacionados con lo que pidió el cliente. Rehacer es CARO (vuelve al agente principal), así que reservalo: si con sacar o reformular alcanza, es corregir, NO regenerar.
+- corregir — las fallas se arreglan SACANDO o REFORMULANDO texto sin cambiar de producto: ofreció algo no_trabajado (se saca la afirmación), un dato no corroborable (se saca), o una fusión que se resuelve quitando el atributo de más. Un nodo barato edita el mensaje. También va acá un producto_inventado que era UNO de varios y con sacarlo la respuesta sigue teniendo sentido.
+- regenerar — SOLO casos GRAVES que NO se arreglan editando: la respuesta habla de un producto equivocado o no relacionado con lo que pidió el cliente, o el producto_inventado era el ÚNICO/principal que ofreciste (sacarlo dejaría la respuesta vacía o inútil: no hay edición que arregle recomendar algo inexistente). Rehacer es CARO (vuelve al agente principal): si con sacar o reformular alcanza, es corregir, NO regenerar.
 
 ## Salida (formato obligatorio)
 Devolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:
@@ -276,7 +276,6 @@ const insertarPreciosCode = [
   "let texto = String(pr.output || '');",
   "const aud = pr.auditoria || {};",
   "const solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];",
-  "const productos = Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : [];",
   "",
   "const nk = (s) => String(s || '').toLowerCase()",
   "  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').trim();",
@@ -321,17 +320,16 @@ const insertarPreciosCode = [
   "  if (disp) inyectados.push(disp);",
   "  texto = texto.split(token).join(disp || 'a confirmar por mail');",
   "}",
-  "texto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos",
+  "texto = texto.replace(/\\{P\\d+\\}/gi, 'a confirmar por mail');   // {Pn} huérfanos (incl. minúscula)",
   "",
   "// 1b) DEDUP DE UNIDAD (defensivo): {Pn} ahora inyecta SOLO el monto, la unidad la escribe el",
   "//     agente. Si por su cuenta repite la forma de cobro adyacente, la colapsamos.",
   "texto = texto.replace(/(\\bpor\\s+[a-záéíóúñ0-9²]+)\\s+\\1\\b/gi, '$1');   // 'por trabajo por trabajo'",
   "texto = texto.replace(/(\\bel pack(?:\\s+de\\s+\\d+\\s+unidades)?)\\s+el pack(?:\\s+de\\s+\\d+)?(?:\\s+unidades)?\\b/gi, '$1');   // 'el pack ... el pack'",
   "",
-  "// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real",
-  "const cantidades = new Set();",
-  "for (const p of productos) if (p && p.cantidad != null) cantidades.add(Number(p.cantidad));",
-  "for (const s of solic) if (s && s.cantidad != null) cantidades.add(Number(s.cantidad));",
+  "// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real. NO se blanquea por",
+  "//    'coincide con una cantidad declarada': un precio alucinado que iguala a la cantidad (ej.",
+  "//    '1000 volantes' → tipea '$1.000') pasaría. Solo se acepta lo inyectado o un precio REAL.",
   "const preciosReales = new Set();",
   "for (const s of solic) {",
   "  for (const pv of (byName.get(nk(s.nombre_catalogo)) || [])) {",
@@ -341,7 +339,6 @@ const insertarPreciosCode = [
   "}",
   "const validar = (m, n) => {",
   "  if (inyectados.some((iv) => iv.indexOf(m.trim()) !== -1)) return m;   // lo inyectamos nosotros",
-  "  if (cantidades.has(n)) return m;                                      // es una cantidad",
   "  if (preciosReales.has(n)) return m;                                   // coincide con catálogo",
   "  return 'a confirmar por mail';                                        // no verificable → reparar",
   "};",
@@ -396,6 +393,10 @@ const flow = {
       position: [0, 200],
       credentials: { postgres: BOT_DB },
       onError: "continueRegularOutput",
+      // CRÍTICO: sesión nueva / tabla vacía → 0 filas → 0 items → Contexto Previo y el Agente NO
+      // ejecutan → el PRIMER mensaje de toda conversación muere sin respuesta. alwaysOutputData
+      // emite un item igual (Contexto Previo ya filtra el vacío). Mismo footgun que Buscar Precios.
+      alwaysOutputData: true,
     },
     {
       // Arma el bloque de contexto estructurado y pasa el chatInput. Ref segura al Chat Trigger y a
@@ -451,8 +452,12 @@ const flow = {
       parameters: {
         jsCode: [
           "const j = $input.first().json;",
+          "// GUARD contra mensaje vacío: si el Corrector sacó el único contenido (o una rama devolvió",
+          "// respuesta vacía), el cliente recibiría un mensaje en blanco. Caemos a un texto seguro.",
+          "let output = String(j.respuesta ?? '').trim();",
+          "if (!output) output = 'Disculpá, no pude terminar de armar esa respuesta. ¿Me lo repetís o querés que lo veamos por mail (terminalgrafica@gmail.com)?';",
           "return [{ json: {",
-          "  output: j.respuesta ?? '',",
+          "  output,",
           "  auditoria: j.auditoria ?? null,",
           "  verificacion: j.verificacion ?? null,",
           "  corregido: j.corregido ?? false,",
@@ -526,6 +531,9 @@ const flow = {
       position: [2440, 0],
       credentials: { postgres: BOT_DB },
       onError: "continueRegularOutput",
+      // Defensivo: Responder depende de que salga un item. El INSERT ya emite uno, pero el flag
+      // cubre cualquier variante donde el driver no devuelva filas.
+      alwaysOutputData: true,
     },
     {
       // Nodo terminal REAL: re-emite el mensaje para el chat (el output de Log Decisión es el
@@ -636,7 +644,10 @@ const flow = {
       onError: "continueErrorOutput",
     },
     {
-      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.1, maxTokens: 700 } },
+      // maxTokens 1200 (no 700): con varias fallas el veredicto JSON crece y truncaba → parser falla
+      // → Fallback aprueba por defecto (falla-abierto justo en las respuestas más rotas). El veredicto
+      // es barato, así que damos aire.
+      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.1, maxTokens: 1200 } },
       id: "rag-verif-modelo",
       name: "Modelo · Verificador",
       type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
@@ -847,6 +858,13 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.agent",
       typeVersion: 1.9,
       position: [1340, -160],
+      // RESILIENCIA: el Corrector NO tenía red y encima es el destino del fallback (veredicto
+      // ilegible + loop agotado caen acá). Un 500/timeout de OpenRouter mataba la ejecución. Ahora
+      // reintenta y, si falla, enruta por ERROR (main[1]) → Fallback Corrector (pasa el original).
+      retryOnFail: true,
+      maxTries: 2,
+      waitBetweenTries: 1000,
+      onError: "continueErrorOutput",
     },
     {
       parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.2, maxTokens: 400 } },
@@ -879,6 +897,27 @@ const flow = {
       type: "n8n-nodes-base.code",
       typeVersion: 2,
       position: [1560, -160],
+    },
+    {
+      // RED DE SEGURIDAD del Corrector. Recibe su salida de ERROR y pasa la respuesta ORIGINAL sin
+      // corregir (mejor un mensaje con una observación menor que silencio). corregido=true → el log
+      // blanquea productos (no es fiable qué sobrevivió). Ref segura a Leer Veredicto (siempre ejecutó).
+      parameters: {
+        jsCode: [
+          "const lv = $('Leer Veredicto').first().json;",
+          "return [{ json: {",
+          "  respuesta: lv.respuesta ?? '',",
+          "  auditoria: lv.auditoria ?? null,",
+          "  verificacion: lv.verificacion ?? null,",
+          "  corregido: true,",
+          "} }];",
+        ].join("\n"),
+      },
+      id: "rag-fallback-corrector",
+      name: "Fallback Corrector",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [1560, -320],
     },
     {
       // RED DE SEGURIDAD del Agente. Recibe la salida de ERROR del Agente (parser malformado/vacío o
@@ -995,8 +1034,15 @@ const flow = {
       ],
     },
     "Feedback Reintento": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
-    Corrector: { main: [[{ node: "Aplicar Corrección", type: "main", index: 0 }]] },
+    // Corrector: main[0] = OK → Aplicar Corrección; main[1] = ERROR → Fallback Corrector (pasa el original).
+    Corrector: {
+      main: [
+        [{ node: "Aplicar Corrección", type: "main", index: 0 }],
+        [{ node: "Fallback Corrector", type: "main", index: 0 }],
+      ],
+    },
     "Aplicar Corrección": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
+    "Fallback Corrector": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
     // Cola de precios + log: Preparar Respuesta → Buscar Precios → Insertar Precios → Log Decisión → Responder.
     "Preparar Respuesta": { main: [[{ node: "Buscar Precios", type: "main", index: 0 }]] },
     "Buscar Precios": { main: [[{ node: "Insertar Precios", type: "main", index: 0 }]] },

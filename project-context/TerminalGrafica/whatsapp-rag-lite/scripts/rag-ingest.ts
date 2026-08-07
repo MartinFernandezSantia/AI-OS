@@ -6,7 +6,8 @@
 //
 // El vector se guarda con la dimensión NATIVA del modelo (sin truncar): la query en n8n usa el
 // MISMO modelo (google/gemini-embedding-001), así los vectores son comparables. Reingesta =
-// truncate + insert. Env: OPENROUTER_API_KEY (salvo --dry), DATABASE_URL (solo --apply).
+// truncate + insert. Env: GEMINI_API_KEY (API key de Google AI Studio, salvo --dry), DATABASE_URL
+// (solo --apply). NO OpenRouter: los embeddings van por la API de Google (mismo modelo que el nodo).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
