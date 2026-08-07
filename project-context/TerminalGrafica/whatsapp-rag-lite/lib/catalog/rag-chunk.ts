@@ -4,8 +4,9 @@
 // rubro padre y atributos textualizados. Función PURA y browser-safe (sin node:crypto):
 // el hash de contenido lo calcula el script de ingesta, no acá.
 
-import type { Producto, Rubro, Variante } from "./types";
+import type { Producto, PrecioVariante, Rubro, Variante } from "./types";
 import { marca } from "./effective";
+import { contextoPrecio, precioVariante } from "./price-display";
 
 export interface RagChunkMeta {
   producto_id: string;
@@ -16,6 +17,7 @@ export interface RagChunkMeta {
   precio_desde: number | null; // solo variantes "limpias" (precio simple, sin reglas/override)
   precio_hasta: number | null;
   precio_confiable: boolean; // hay al menos una variante con precio confiable
+  precios: PrecioVariante[]; // una por variante visible; ref matchea el [vN] de "Opciones:"
 }
 
 export interface RagChunk {
@@ -80,13 +82,24 @@ function rangoPrecios(p: Producto): { desde: number | null; hasta: number | null
   return { desde: Math.min(...precios), hasta: Math.max(...precios), confiable: true };
 }
 
-/** Nombres de las variantes visibles (para el texto del chunk). */
-function opcionesTexto(p: Producto): string {
-  const ops = p.variantes
-    .filter((v) => !v.oculto)
-    .map((v) => (v.variante || v.display_variante || v.nombre_vivo || "").trim())
-    .filter(Boolean);
-  return ops.join(", ");
+/** Variantes visibles con ref [vN] y su precio horneado (mismo orden en texto y en meta.precios). */
+function opcionesConPrecio(p: Producto): { ref: string; pv: PrecioVariante }[] {
+  return p.variantes
+    .filter((v) => !v.oculto && (v.variante || v.display_variante || v.nombre_vivo || "").trim())
+    .map((v, i) => {
+      const ref = `v${i + 1}`;
+      return { ref, pv: precioVariante(p, v, ref) };
+    });
+}
+
+/** Línea "Opciones:" con token + precio de contexto, ej. "[v1] Doble Faz ($15.000 el pack de 100 unidades)". */
+function opcionesTexto(items: { ref: string; pv: PrecioVariante }[]): string {
+  return items
+    .map(({ ref, pv }) => {
+      const ctx = contextoPrecio(pv);
+      return `[${ref}] ${pv.variante}${ctx ? ` (${ctx})` : ""}`;
+    })
+    .join("; ");
 }
 
 /** Arma el chunk RAG de un producto. Asume esChunkeable(p) === true. */
@@ -96,7 +109,8 @@ export function chunkRAG(p: Producto, rubrosById: Map<string, Rubro>): RagChunk 
   const sinonimos = (p.sinonimos_efectivos || p.sinonimos || []).map((s) => s.trim()).filter(Boolean);
   const casos = (p.casos_de_uso || []).map((s) => s.trim()).filter(Boolean);
   const attrs = atributosTexto(p);
-  const ops = opcionesTexto(p);
+  const items = opcionesConPrecio(p);
+  const ops = opcionesTexto(items);
 
   const lineas: string[] = [];
   lineas.push(rubro ? `${nombre} — rubro: ${rubro}.` : `${nombre}.`);
@@ -118,6 +132,7 @@ export function chunkRAG(p: Producto, rubrosById: Map<string, Rubro>): RagChunk 
       precio_desde: rango.desde,
       precio_hasta: rango.hasta,
       precio_confiable: rango.confiable,
+      precios: items.map((i) => i.pv),
     },
   };
 }

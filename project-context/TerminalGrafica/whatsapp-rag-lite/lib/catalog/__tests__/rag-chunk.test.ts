@@ -42,6 +42,12 @@ describe("chunkRAG sobre producto de nicho (inmobiliarias)", () => {
     expect(c.meta.precio_desde).toBe(15000);
     expect(c.meta.precio_hasta).toBe(15000);
   });
+  it("meta.precios: una por variante visible, con ref [vN] bien formado", () => {
+    expect(c.meta.precios.length).toBeGreaterThan(0);
+    c.meta.precios.forEach((pv, i) => expect(pv.ref).toBe(`v${i + 1}`));
+    // el texto de Opciones muestra el mismo token
+    expect(c.texto).toContain("Opciones: [v1]");
+  });
   it("materializa atributos de señal (material)", () => {
     expect(c.texto.toLowerCase()).toContain("material: plastico corrugado");
   });
@@ -89,8 +95,9 @@ describe("bordes", () => {
       ],
     });
     const c = chunkRAG(p, emptyIdx);
-    expect(c.texto).toContain("Opciones: A3.");
+    expect(c.texto).toContain("Opciones: [v1] A3.");
     expect(c.texto).not.toContain("SECRETA");
+    expect(c.meta.precios).toHaveLength(1); // la oculta no genera precio
   });
 
   it("sin variantes limpias (override / reglas) → precio no confiable, rango null", () => {

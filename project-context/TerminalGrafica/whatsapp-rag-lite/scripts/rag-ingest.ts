@@ -83,6 +83,7 @@ const metaObj = (c: RagChunk) => ({
   precio_desde: c.meta.precio_desde,
   precio_hasta: c.meta.precio_hasta,
   precio_confiable: c.meta.precio_confiable,
+  precios: c.meta.precios,
 });
 
 function generarSql(chunks: RagChunk[], vecs: number[][]): string {
@@ -124,12 +125,41 @@ async function upsert(chunks: RagChunk[], vecs: number[][]): Promise<void> {
   }
 }
 
+/** Refresca text + metadata (incluye precios) SIN re-embeber. Los dígitos de precio no mueven la
+ *  semántica del vector, así que un cambio de precios se aplica barato con esto. Match por producto_id. */
+async function pricesOnly(chunks: RagChunk[]): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Falta DATABASE_URL para --prices-only.");
+  const { Client } = await import("pg");
+  const local = /localhost|127\.0\.0\.1/.test(url);
+  const cli = new Client({ connectionString: url, ssl: local ? undefined : { rejectUnauthorized: false } });
+  await cli.connect();
+  try {
+    let n = 0;
+    for (const c of chunks) {
+      const r = await cli.query(
+        `update ${TABLE} set text = $1, metadata = $2::jsonb where metadata->>'producto_id' = $3`,
+        [c.texto, JSON.stringify(metaObj(c)), c.meta.producto_id],
+      );
+      n += r.rowCount || 0;
+    }
+    console.error(`--prices-only: ${n} filas actualizadas (text+metadata, sin re-embeber).`);
+  } finally {
+    await cli.end();
+  }
+}
+
 async function main() {
   const chunks = cargarChunks();
 
   if (has("--dry")) {
     for (const c of chunks) console.log(`\n### ${c.title}\n${c.texto}\n  meta: ${JSON.stringify(c.meta)}`);
     console.error(`\n--dry: ${chunks.length} chunks impresos, sin API ni DB.`);
+    return;
+  }
+
+  if (has("--prices-only")) {
+    await pricesOnly(chunks);
     return;
   }
 

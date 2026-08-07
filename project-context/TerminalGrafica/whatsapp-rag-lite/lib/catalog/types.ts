@@ -17,6 +17,25 @@ export interface Regla {
   origen?: string; // 'producto' | 'variante' | 'categoría: <name>'
 }
 
+/** Un tramo de la escalera por cantidad. maxQty null = sin tope (∞). */
+export interface RangoCantidad {
+  value: number;
+  minQty: number;
+  maxQty: number | null;
+}
+
+/** Precio de una variante, horneado en el chunk (metadata.precios) para la inyección determinista.
+ *  `ref` ("v1","v2"…) es local al producto y matchea el [vN] que se muestra en "Opciones:". */
+export interface PrecioVariante {
+  ref: string;
+  variante: string;
+  unidad: string | null; // "por unidad" | "el pack de N unidades" | … | null (no cobrable)
+  cobrable: boolean;
+  precio_lista: number; // precio del PRIMER tramo (puede ser 0 si el precio vive en la escalera)
+  tramos: RangoCantidad[];
+  pack_unidades: number | null;
+}
+
 export interface Variante {
   variante_id: string;
   nombre_vivo: string;
@@ -34,7 +53,8 @@ export interface Variante {
   n_reglas_cantidad: number | null;
   atributos?: Record<string, unknown>;
   atributos_propios?: Record<string, unknown>;
-  rangos_cantidad?: unknown;
+  /** escalera por cantidad; puede venir como array o como string (driver pg). */
+  rangos_cantidad?: RangoCantidad[] | string | null;
   /** reglas que apuntan sólo a esta variante (export v3) */
   reglas?: Regla[];
 }
