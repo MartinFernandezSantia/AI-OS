@@ -1,0 +1,22 @@
+{
+  "name": "whatsapp-rag-lite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bot WhatsApp de TerminalGrafica — variante RAG lite (embeddings + pgvector), experimento paralelo al v10.",
+  "scripts": {
+    "test": "vitest run",
+    "rag:ingest": "tsx scripts/rag-ingest.ts",
+    "rag:query": "tsx scripts/rag-query.ts"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.20.4",
+    "tsx": "^4.23.8",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  },
+  "packageManager": "pnpm@11.6.0"
+}
