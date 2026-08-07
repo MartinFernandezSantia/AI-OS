@@ -100,7 +100,10 @@ async function upsert(chunks: RagChunk[], vecs: number[][]): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Falta DATABASE_URL para --apply.");
   const { Client } = await import("pg");
-  const cli = new Client({ connectionString: url });
+  // Supabase (pooler o directo) exige SSL; en local no. Usá el connection string del
+  // POOLER (aws-0-...pooler.supabase.com:5432) — el directo db.<ref>.supabase.co es IPv6-only.
+  const local = /localhost|127\.0\.0\.1/.test(url);
+  const cli = new Client({ connectionString: url, ssl: local ? undefined : { rejectUnauthorized: false } });
   await cli.connect();
   try {
     await cli.query("begin");

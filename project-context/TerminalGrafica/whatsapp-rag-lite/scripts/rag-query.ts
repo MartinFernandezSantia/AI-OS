@@ -37,7 +37,8 @@ async function main() {
 
   const vec = await embed(pregunta);
   const { Client } = await import("pg");
-  const cli = new Client({ connectionString: url });
+  const local = /localhost|127\.0\.0\.1/.test(url);
+  const cli = new Client({ connectionString: url, ssl: local ? undefined : { rejectUnauthorized: false } });
   await cli.connect();
   try {
     // Guard de nicho blando (solo para testing local): un producto de nicho solo aparece si se
