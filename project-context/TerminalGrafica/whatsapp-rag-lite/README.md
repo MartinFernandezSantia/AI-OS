@@ -12,7 +12,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 lib/catalog/       chunkRAG() + helpers autocontenidos (types, keys, effective, loader) + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta CLI)
 db/                rag-embeddings.sql (pgvector + tabla + RPC bot.match_productos)
-n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector como tool + Embeddings)
+n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector tool + Embeddings + salida estructurada)
 plans/             el plan del experimento
 ```
 
@@ -54,5 +54,12 @@ y `DATABASE_URL` (`--apply`/consulta).
   LangChain (`text`/`metadata`/`embedding`).
 - Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
 - **Sin montos** en la respuesta.
+- **Salida estructurada** (nodo `Salida · Agente`, `outputParserStructured`): el agente no
+  devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
+  afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
+  búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila). Es el insumo para un Verificador
+  futuro que cruce contra el catálogo y detecte alucinaciones (invención de producto, fusión de
+  variantes, dato inventado). En el chat de test se ve el JSON entero; en salida real un Code
+  extrae `.respuesta`.
 - Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el agente decide cuándo
   invocar la tool.
