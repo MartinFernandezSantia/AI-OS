@@ -47,9 +47,21 @@ Algunos productos son de un rubro específico (p.ej. "medicina", "inmobiliarias"
 producto de nicho SOLO si el cliente mencionó ese rubro; si no, ignoralo aunque aparezca en los
 resultados.
 
+## Precios (LEÉ ESTO)
+Podés informar precios. En "Opciones:" cada variante trae su precio y su forma de cobro (ej.
+"[v1] Doble Faz ($15.000 el pack)", "[v2] Imanes (por unidad: 1-3 $8.000, 4-10 $7.200)").
+PERO NUNCA ESCRIBAS UN NÚMERO DE PRECIO EN TU MENSAJE. Donde iría un precio, poné un marcador
+{P1}, {P2}, … (ej.: "las tarjetas doble faz salen {P1}"). Un proceso posterior reemplaza cada
+{Pn} por el precio real. Si tipeás un número, la respuesta se rehace.
+- Por cada {Pn} agregá una entrada a "precios_solicitados": ref (P1…), nombre_catalogo EXACTO,
+  variante_ref = el token [vN] de esa opción, y cantidad si el cliente la dijo.
+- Solo poné {Pn} para una opción que en "Opciones:" muestra precio. Si una opción no trae precio
+  (dice a confirmar o no aparece), ofrecé cotizar por mail, SIN marcador.
+- NUNCA calcules ni des totales ("en total", "por los N te sale"): informás precio por unidad o
+  por tramo, no la multiplicación. Si preguntan el total, decí el unitario y que se cierra por mail.
+
 ## Reglas siempre
 - Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.
-- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.
 - Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.
 - Este canal solo INFORMA: no tomes pedidos ni pidas archivos.
 - NO TRABAJAMOS: fotocopias. Si el cliente lo pide, aclarale que eso no lo hacemos, aunque la
@@ -78,6 +90,12 @@ proceso pueda auditarla. No alcanza con el texto; también:
 - afirmaciones: otras cosas concretas que afirmaste sobre el negocio o el producto y que
   deberían poder corroborarse contra el catálogo. Solo lo verificable — nada de saludos,
   cortesías ni relleno.
+- precios_solicitados: uno por CADA marcador {Pn} que usaste en la respuesta. Por cada uno:
+    · ref: el marcador, ej. "P1".
+    · nombre_catalogo: el nombre EXACTO del producto (como en buscar_catalogo).
+    · variante_ref: el token [vN] de la opción que estás cotizando (ej. "v1").
+    · cantidad: la que pidió el cliente para ese precio, o null.
+  Si no pusiste ningún {Pn}, va vacío ([]).
 Regla de oro: TODO lo que pongas en estos campos tiene que estar respaldado por lo que
 devolvió la tool. Este bloque existe justamente para que se pueda comprobar que no inventaste.`;
 
@@ -142,6 +160,20 @@ const esquemaSalida = {
       items: { type: "string" },
       description:
         "otras afirmaciones concretas sobre el negocio o el producto, corroborables contra el catálogo; sin saludos ni relleno",
+    },
+    precios_solicitados: {
+      type: "array",
+      description: "uno por marcador {Pn} usado en la respuesta; vacío si no usaste precios",
+      items: {
+        type: "object",
+        required: ["ref", "nombre_catalogo", "variante_ref"],
+        properties: {
+          ref: { type: "string", description: "el marcador, ej. 'P1'" },
+          nombre_catalogo: { type: "string", description: "nombre EXACTO del producto" },
+          variante_ref: { type: "string", description: "el token [vN] de la opción cotizada, ej. 'v1'" },
+          cantidad: { type: ["number", "null"], description: "cantidad pedida para este precio, o null" },
+        },
+      },
     },
   },
 };
@@ -230,8 +262,90 @@ Si el auditor marcó que ofreciste algo que NO se trabaja (ej. fotocopias), sac�
 si corresponde, aclarale al cliente que eso no lo hacemos. Si marcó una variante inventada
 (atributos mezclados), quitá el atributo que sobra.
 
+El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: copialos TAL CUAL, no los
+reescribas ni los borres ni pongas un número. Si sacás un producto entero, sacá también su {Pn}.
+
 Castellano rioplatense, 2 a 5 líneas, sin emojis. Devolvé SOLO el mensaje para el cliente, sin
 comillas ni explicaciones.`;
+
+// ───────────────────────── INSERTAR PRECIOS (nodo terminal) ─────────────────────────
+// Copia inline de lib/catalog/price-display.ts (n8n no importa TS). Mantener en sync.
+const insertarPreciosCode = [
+  "const pr = $('Preparar Respuesta').first().json;   // ref segura (siempre ejecuta)",
+  "let texto = String(pr.output || '');",
+  "const aud = pr.auditoria || {};",
+  "const solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];",
+  "const productos = Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : [];",
+  "",
+  "const nk = (s) => String(s || '').toLowerCase()",
+  "  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').trim();",
+  "const asArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch (e) { return []; } })() : []);",
+  "const fmt = (n) => '$' + Math.round(Number(n)).toLocaleString('es-AR');",
+  "const normNum = (t) => Number(String(t).replace(/[^0-9]/g, ''));",
+  "",
+  "const byName = new Map();",
+  "for (const it of $input.all()) byName.set(nk(it.json.nombre), asArr(it.json.precios));",
+  "",
+  "function display(pv, cantidad) {",
+  "  if (!pv || !pv.cobrable || !pv.unidad) return null;",
+  "  const tramos = (pv.tramos || []).map((t) => ({ value: Number(t.value), minQty: Number(t.minQty) || 1, maxQty: t.maxQty == null ? null : Number(t.maxQty) })).filter((t) => t.value > 0);",
+  "  let value = Number(pv.precio_lista) > 0 ? Number(pv.precio_lista) : 0;",
+  "  let varia = false;",
+  "  if (tramos.length) {",
+  "    const c = Number(cantidad);",
+  "    if (Number.isFinite(c) && c > 0) {",
+  "      const exacto = tramos.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));",
+  "      const inferior = tramos.slice().sort((a, b) => a.minQty - b.minQty).filter((x) => x.minQty <= c).pop();",
+  "      const t = exacto || inferior;",
+  "      if (t) value = t.value;",
+  "    } else {",
+  "      value = tramos.slice().sort((a, b) => a.minQty - b.minQty)[0].value;",
+  "      varia = true;",
+  "    }",
+  "  }",
+  "  if (!(value > 0)) return null;",
+  "  return fmt(value) + ' ' + pv.unidad + (varia ? ' (varía según cantidad)' : '');",
+  "}",
+  "",
+  "// 1) INYECCIÓN de {Pn}",
+  "const inyectados = [];",
+  "for (const s of solic) {",
+  "  const token = '{' + String(s.ref || '') + '}';",
+  "  if (!s.ref || texto.indexOf(token) === -1) continue;",
+  "  const precios = byName.get(nk(s.nombre_catalogo)) || [];",
+  "  let pv = precios.find((p) => String(p.ref) === String(s.variante_ref));",
+  "  if (!pv && precios.length === 1) pv = precios[0];",
+  "  const disp = display(pv, s.cantidad);",
+  "  if (disp) inyectados.push(disp);",
+  "  texto = texto.split(token).join(disp || 'a confirmar por mail');",
+  "}",
+  "texto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos",
+  "",
+  "// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real",
+  "const cantidades = new Set();",
+  "for (const p of productos) if (p && p.cantidad != null) cantidades.add(Number(p.cantidad));",
+  "for (const s of solic) if (s && s.cantidad != null) cantidades.add(Number(s.cantidad));",
+  "const preciosReales = new Set();",
+  "for (const s of solic) {",
+  "  for (const pv of (byName.get(nk(s.nombre_catalogo)) || [])) {",
+  "    if (Number(pv.precio_lista) > 0) preciosReales.add(Math.round(Number(pv.precio_lista)));",
+  "    for (const t of (pv.tramos || [])) if (Number(t.value) > 0) preciosReales.add(Math.round(Number(t.value)));",
+  "  }",
+  "}",
+  "const validar = (m, n) => {",
+  "  if (inyectados.some((iv) => iv.indexOf(m.trim()) !== -1)) return m;   // lo inyectamos nosotros",
+  "  if (cantidades.has(n)) return m;                                      // es una cantidad",
+  "  if (preciosReales.has(n)) return m;                                   // coincide con catálogo",
+  "  return 'a confirmar por mail';                                        // no verificable → reparar",
+  "};",
+  "texto = texto.replace(/\\$\\s?\\d[\\d.]*/g, (m) => validar(m, normNum(m)));",
+  "texto = texto.replace(/\\b(\\d[\\d.]*)\\s*pesos\\b/gi, (m, num) => validar(m, normNum(num)));",
+  "",
+  "// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió",
+  "texto = texto.replace(/\\s+en total\\b/gi, '');",
+  "",
+  "return [{ json: { ...pr, output: texto } }];",
+].join("\n");
 
 const flow = {
   name: "faq-bot-rag-lite",
@@ -279,6 +393,43 @@ const flow = {
       type: "n8n-nodes-base.code",
       typeVersion: 2,
       position: [1780, 0],
+    },
+    {
+      // Trae metadata.precios de los productos que el agente cotizó (por nombre, acento-insensible).
+      parameters: {
+        operation: "executeQuery",
+        query:
+          "select metadata->>'nombre_canonico' as nombre, metadata->'precios' as precios\n" +
+          "  from bot.rag_catalogo\n" +
+          " where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$) = any(\n" +
+          "   select translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$)\n" +
+          "     from jsonb_array_elements_text($1::jsonb) as x)",
+        options: {
+          // $1 = JSON array de nombres. null-safe: sin precios_solicitados → [] → 0 filas.
+          queryReplacement:
+            "={{ [ JSON.stringify((((($json.auditoria)||{}).precios_solicitados)||[]).map(p => p.nombre_catalogo)) ] }}",
+        },
+      },
+      id: "rag-buscar-precios",
+      name: "Buscar Precios",
+      type: "n8n-nodes-base.postgres",
+      typeVersion: 2.6,
+      position: [2000, 0],
+      credentials: { postgres: BOT_DB },
+    },
+    {
+      // NODO TERMINAL + GARANTÍA. Inyecta los {Pn} con el precio real y valida cualquier monto que
+      // el LLM haya tipeado contra el catálogo (whitelist de lo inyectado + cantidades declaradas).
+      // Monto que no coincide con un precio real → "a confirmar por mail". Copia inline de la lógica
+      // de lib/catalog/price-display.ts (n8n no importa TS): si tocás una, actualizá la otra.
+      parameters: {
+        jsCode: insertarPreciosCode,
+      },
+      id: "rag-insertar-precios",
+      name: "Insertar Precios",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [2220, 0],
     },
     {
       parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.3, maxTokens: 500 } },
@@ -582,9 +733,11 @@ const flow = {
           "",
           "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.",
           "",
-          "**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.",
+          "**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).",
           "",
-          "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` (lo que ve el cliente) + auditoría: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila + cantidad), `motivo` y `afirmaciones`.",
+          "**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.",
+          "",
+          "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
           "**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.",
           "",
@@ -629,6 +782,9 @@ const flow = {
     "Feedback Reintento": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
     Corrector: { main: [[{ node: "Aplicar Corrección", type: "main", index: 0 }]] },
     "Aplicar Corrección": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
+    // Cola de precios: Preparar Respuesta → Buscar Precios → Insertar Precios (terminal).
+    "Preparar Respuesta": { main: [[{ node: "Buscar Precios", type: "main", index: 0 }]] },
+    "Buscar Precios": { main: [[{ node: "Insertar Precios", type: "main", index: 0 }]] },
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
