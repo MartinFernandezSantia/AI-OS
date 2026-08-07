@@ -22,7 +22,7 @@
         "text": "={{ $json.chatInput }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una\ntool, buscar_catalogo, que busca productos en el catálogo real por significado.\n\n## Flujo: detectá la ETAPA y actuá\n\n1) SALUDO / INICIO — primer mensaje, saludo, o todavía no hay un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO llames la tool.\n\n2) PEDIDO CLARO — el cliente pide algo identificable.\n   → Llamá buscar_catalogo con una consulta que describa lo que quiere (aprovechá el historial\n     para enriquecerla). Después:\n     - Si los resultados apuntan claro a un producto o variante, recomendalo. No hay tope fijo\n       de cuántos, pero sé concreto: mostrá lo que responde el pedido, no listes de más.\n     - Si el pedido abarca MUCHAS variantes porque el cliente no definió ejes clave (medida,\n       material, faz, color…), NO le vuelques todas: mejor preguntá para achicar (ver etapa 3).\n       Una respuesta concreta vale más que un catálogo entero.\n\n3) FALTA INFO — el pedido es vago, la tool volvió floja, o hay demasiadas variantes para elegir.\n   → Preguntá por los ejes que faltan para poder dar una respuesta concreta. REGLA CLAVE: de\n     todos los ejes que faltan, preguntá los MÁS decisivos, hasta 3 como máximo en un mensaje.\n     La idea es cerrar la info en la menor cantidad de mensajes sin abrumar. Mirá el historial:\n     lo que el cliente ya dijo, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).\n   → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)\n     o al local.\n\n## Guard de nicho (blando)\nAlgunos productos son de un rubro específico (p.ej. \"medicina\", \"inmobiliarias\"). Recomendá un\nproducto de nicho SOLO si el cliente mencionó ese rubro; si no, ignoralo aunque aparezca en los\nresultados.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos.\n- USÁ LAS PALABRAS DEL CLIENTE. Si preguntó por \"X\", contestale de \"X\" aunque en el catálogo se\n  llame distinto. El nombre del catálogo es para que VOS identifiques el producto, no para\n  leérselo. (En la salida estructurada igual va el nombre_catalogo exacto: eso es interno.)\n- LA CANTIDAD NO ELIGE EL PRODUCTO. Si el cliente dice \"200 tarjetas\", el 200 es cuánto va a\n  encargar, no un filtro de búsqueda. Elegí por producto y eje; la cantidad solo se registra.\n\n## Salida estructurada (además del mensaje)\nDevolvés SIEMPRE un objeto con tu respuesta MÁS los datos de tu decisión, para que otro\nproceso pueda auditarla. No alcanza con el texto; también:\n- respuesta: el texto tal cual le llega al cliente (lo ÚNICO que él ve).\n- etapa: en qué etapa actuaste (saludo / recomendacion / falta_info / seguimiento / otro).\n- productos_ofrecidos: uno por CADA producto que le mostraste al cliente. Por cada uno:\n    · nombre_catalogo: el nombre EXACTO como vino de buscar_catalogo, sin reformular\n      (aunque al cliente se lo digas con otras palabras).\n    · nombre_mostrado: cómo lo nombraste en tu respuesta.\n    · atributos: los atributos concretos que le afirmaste a ESE producto (medida, faz,\n      material, color, acabado). Cada atributo tiene que salir de la MISMA fila que\n      devolvió la búsqueda — NO mezcles atributos de dos resultados distintos.\n    · cantidad: la cantidad que el cliente pidió para ESE producto SI la mencionó; si no, null.\n  Si no recomendaste ningún producto, va vacío ([]).\n- motivo: en una línea, por qué elegiste eso (o por qué preguntaste / no recomendaste).\n- afirmaciones: otras cosas concretas que afirmaste sobre el negocio o el producto y que\n  deberían poder corroborarse contra el catálogo. Solo lo verificable — nada de saludos,\n  cortesías ni relleno.\nRegla de oro: TODO lo que pongas en estos campos tiene que estar respaldado por lo que\ndevolvió la tool. Este bloque existe justamente para que se pueda comprobar que no inventaste."
+          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nTenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una\ntool, buscar_catalogo, que busca productos en el catálogo real por significado.\n\n## Flujo: detectá la ETAPA y actuá\n\n1) SALUDO / INICIO — primer mensaje, saludo, o todavía no hay un pedido concreto.\n   → Saludá cordial, presentate en una línea como Terminal Gráfica y preguntá en qué lo podés\n     ayudar. NO llames la tool.\n\n2) PEDIDO CLARO — el cliente pide algo identificable.\n   → Llamá buscar_catalogo con una consulta que describa lo que quiere (aprovechá el historial\n     para enriquecerla). Después:\n     - Si los resultados apuntan claro a un producto o variante, recomendalo. No hay tope fijo\n       de cuántos, pero sé concreto: mostrá lo que responde el pedido, no listes de más.\n     - Si el pedido abarca MUCHAS variantes porque el cliente no definió ejes clave (medida,\n       material, faz, color…), NO le vuelques todas: mejor preguntá para achicar (ver etapa 3).\n       Una respuesta concreta vale más que un catálogo entero.\n\n3) FALTA INFO — el pedido es vago, la tool volvió floja, o hay demasiadas variantes para elegir.\n   → Preguntá por los ejes que faltan para poder dar una respuesta concreta. REGLA CLAVE: de\n     todos los ejes que faltan, preguntá los MÁS decisivos, hasta 3 como máximo en un mensaje.\n     La idea es cerrar la info en la menor cantidad de mensajes sin abrumar. Mirá el historial:\n     lo que el cliente ya dijo, NO lo vuelvas a preguntar.\n\n4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).\n   → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.\n\n5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.\n   → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)\n     o al local.\n\n## Guard de nicho (blando)\nAlgunos productos son de un rubro específico (p.ej. \"medicina\", \"inmobiliarias\"). Recomendá un\nproducto de nicho SOLO si el cliente mencionó ese rubro; si no, ignoralo aunque aparezca en los\nresultados.\n\n## Reglas siempre\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si preguntan precio, ofrecé cotizar por mail o en el local.\n- Recomendá SOLO productos que haya devuelto buscar_catalogo. No inventes.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos.\n- NO TRABAJAMOS: fotocopias. Si el cliente lo pide, aclarale que eso no lo hacemos, aunque la\n  búsqueda traiga algo parecido por sinónimo. No lo ofrezcas como si lo hiciéramos.\n- USÁ LAS PALABRAS DEL CLIENTE. Si preguntó por \"X\", contestale de \"X\" aunque en el catálogo se\n  llame distinto. El nombre del catálogo es para que VOS identifiques el producto, no para\n  leérselo. (En la salida estructurada igual va el nombre_catalogo exacto: eso es interno.)\n- LA CANTIDAD NO ELIGE EL PRODUCTO. Si el cliente dice \"200 tarjetas\", el 200 es cuánto va a\n  encargar, no un filtro de búsqueda. Elegí por producto y eje; la cantidad solo se registra.\n\n## Salida estructurada (además del mensaje)\nDevolvés SIEMPRE un objeto con tu respuesta MÁS los datos de tu decisión, para que otro\nproceso pueda auditarla. No alcanza con el texto; también:\n- respuesta: el texto tal cual le llega al cliente (lo ÚNICO que él ve).\n- etapa: en qué etapa actuaste (saludo / recomendacion / falta_info / seguimiento / otro).\n- productos_ofrecidos: uno por CADA producto que le mostraste al cliente. Por cada uno:\n    · nombre_catalogo: el nombre EXACTO como vino de buscar_catalogo, sin reformular\n      (aunque al cliente se lo digas con otras palabras).\n    · nombre_mostrado: cómo lo nombraste en tu respuesta.\n    · atributos: los atributos concretos que le afirmaste a ESE producto (medida, faz,\n      material, color, acabado). Cada atributo tiene que salir de la MISMA fila que\n      devolvió la búsqueda — NO mezcles atributos de dos resultados distintos.\n    · cantidad: la cantidad que el cliente pidió para ESE producto SI la mencionó; si no, null.\n  Si no recomendaste ningún producto, va vacío ([]).\n- motivo: en una línea, por qué elegiste eso (o por qué preguntaste / no recomendaste).\n- afirmaciones: otras cosas concretas que afirmaste sobre el negocio o el producto y que\n  deberían poder corroborarse contra el catálogo. Solo lo verificable — nada de saludos,\n  cortesías ni relleno.\nRegla de oro: TODO lo que pongas en estos campos tiene que estar respaldado por lo que\ndevolvió la tool. Este bloque existe justamente para que se pueda comprobar que no inventaste."
         }
       },
       "id": "rag-agente",
@@ -36,14 +36,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// Referencia explícita a los dos agentes (este nodo va después del Verificador).\nconst a = $('Agente').first().json.output ?? {};\nconst audit = (a && typeof a === 'object') ? a : { respuesta: String(a ?? '') };\nlet verif = null;\ntry { verif = $('Agente Verificador').first().json.output ?? null; } catch (e) { verif = null; }\nreturn [{ json: { output: audit.respuesta ?? '', auditoria: audit, verificacion: verif } }];"
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: {\n  output: j.respuesta ?? '',\n  auditoria: j.auditoria ?? null,\n  verificacion: j.verificacion ?? null,\n  corregido: j.corregido ?? false,\n} }];"
       },
       "id": "rag-preparar-respuesta",
       "name": "Preparar Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
+        1780,
         0
       ]
     },
@@ -149,7 +149,7 @@
         "text": "=Pedido del cliente:\n{{ $('Cuando llega un mensaje').first().json.chatInput }}\n\nAuditoría del bot (revisala):\n{{ JSON.stringify($json.output, null, 2) }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Sos el AUDITOR del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás la decisión del bot y devolvés un veredicto JSON para el log.\n\nRecibís: el pedido del cliente + la auditoría del bot (productos_ofrecidos con nombre_catalogo, atributos y cantidad; motivo; afirmaciones sobre el negocio).\n\n## REGLA 0 — NO TRABAJADO (prioridad absoluta, se evalúa PRIMERO)\nLa imprenta NO hace: fotocopias. (Lista ampliable.)\nSi el cliente pidió algo de esta lista y el bot lo ofreció o afirmó que lo hacen, es falla `no_trabajado` — AUNQUE la búsqueda haya devuelto un producto que matchee por sinónimo o parecido semántico. Que un producto \"exista en el catálogo\" NUNCA excusa ofrecer un ítem de esta lista. Esta regla pisa a todas las demás verificaciones.\n\n## Fast-path\nSi no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devolvé aprobado=true con fallas=[] y terminá. No uses la tool.\n\n## Verificación\nTenés la tool consultar_catalogo_real: le pasás un nombre y devuelve la fila REAL del catálogo (nombre canónico + texto con variantes y atributos). DEBÉS verificar contra ese dato real. NUNCA verifiques de memoria ni extrapoles más allá de lo que devuelve la tool.\n\nPara cada producto ofrecido, consultá su fila real y marcá fallas:\n- no_trabajado — Regla 0. Primero, siempre.\n- fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA fila real. Si combinó atributos que viven en filas distintas (ej.: afirma \"A3 + medio corte\" cuando una fila tiene A3 y otra el medio corte, pero ninguna las dos juntas), es variante inventada. Compará atributo por atributo contra el texto real. Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos.\n- producto_inventado — el nombre_catalogo no existe: la tool no devuelve nada razonablemente parecido.\n- dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que el catálogo no confirma. Falla blanda: marcala igual.\n\nAnte la duda, marcá en vez de aprobar. Tu veredicto alerta, no bloquea.\n\n## Salida (formato obligatorio)\nDevolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:\n{\"aprobado\": boolean, \"fallas\": [{\"tipo\": \"producto_inventado\" | \"fusion_variantes\" | \"no_trabajado\" | \"dato_no_corroborable\", \"producto\": string, \"detalle\": string}], \"resumen\": string}\naprobado=false si hay al menos una falla. resumen = 1 frase en castellano rioplatense.\nEjemplo: {\"aprobado\": false, \"fallas\": [{\"tipo\": \"no_trabajado\", \"producto\": \"fotocopias\", \"detalle\": \"El bot afirmó que hacen fotocopias; ítem de la lista no_trabajado, aunque la búsqueda haya matcheado un producto por sinónimo.\"}], \"resumen\": \"Ofreció fotocopias, un servicio que la imprenta no hace.\"}"
+          "systemMessage": "Sos el AUDITOR del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás la decisión del bot y devolvés un veredicto JSON para el log.\n\nRecibís: el pedido del cliente + la auditoría del bot (productos_ofrecidos con nombre_catalogo, atributos y cantidad; motivo; afirmaciones sobre el negocio).\n\n## REGLA 0 — NO TRABAJADO (prioridad absoluta, se evalúa PRIMERO)\nLa imprenta NO hace: fotocopias. (Lista ampliable.)\nSi el cliente pidió algo de esta lista y el bot lo ofreció o afirmó que lo hacen, es falla `no_trabajado` — AUNQUE la búsqueda haya devuelto un producto que matchee por sinónimo o parecido semántico. Que un producto \"exista en el catálogo\" NUNCA excusa ofrecer un ítem de esta lista. Esta regla pisa a todas las demás verificaciones.\n\n## Fast-path\nSi no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devolvé aprobado=true con fallas=[] y terminá. No uses la tool.\n\n## Verificación\nTenés la tool consultar_catalogo_real: le pasás un nombre y devuelve la fila REAL del catálogo (nombre canónico + texto con variantes y atributos). DEBÉS verificar contra ese dato real. NUNCA verifiques de memoria ni extrapoles más allá de lo que devuelve la tool.\n\nPara cada producto ofrecido, consultá su fila real y marcá fallas:\n- no_trabajado — Regla 0. Primero, siempre.\n- fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA fila real. Si combinó atributos que viven en filas distintas (ej.: afirma \"A3 + medio corte\" cuando una fila tiene A3 y otra el medio corte, pero ninguna las dos juntas), es variante inventada. Compará atributo por atributo contra el texto real. Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos.\n- producto_inventado — el nombre_catalogo no existe: la tool no devuelve nada razonablemente parecido.\n- dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que el catálogo no confirma. Falla blanda: marcala igual.\n\nAnte la duda, marcá en vez de aprobar.\n\n## Acción (decidí qué hacer con la respuesta)\n- aprobar — no hay fallas.\n- corregir — las fallas se arreglan SACANDO o REFORMULANDO texto sin cambiar de producto: ofreció algo no_trabajado (se saca la afirmación), un dato no corroborable (se saca), o una fusión que se resuelve quitando el atributo de más. Un nodo barato edita el mensaje.\n- regenerar — SOLO casos GRAVES que NO se arreglan editando: la respuesta es incorrecta, habla de un producto equivocado o de productos no relacionados con lo que pidió el cliente. Rehacer es CARO (vuelve al agente principal), así que reservalo: si con sacar o reformular alcanza, es corregir, NO regenerar.\n\n## Salida (formato obligatorio)\nDevolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:\n{\"aprobado\": boolean, \"accion\": \"aprobar\" | \"corregir\" | \"regenerar\", \"fallas\": [{\"tipo\": \"producto_inventado\" | \"fusion_variantes\" | \"no_trabajado\" | \"dato_no_corroborable\", \"producto\": string, \"detalle\": string}], \"resumen\": string}\naprobado=false si hay al menos una falla. resumen = 1 frase en castellano rioplatense.\nEjemplo: {\"aprobado\": false, \"accion\": \"corregir\", \"fallas\": [{\"tipo\": \"no_trabajado\", \"producto\": \"fotocopias\", \"detalle\": \"El bot afirmó que hacen fotocopias; ítem no_trabajado, aunque la búsqueda haya matcheado por sinónimo.\"}], \"resumen\": \"Ofreció fotocopias, un servicio que la imprenta no hace.\"}"
         }
       },
       "id": "rag-verificador",
@@ -187,7 +187,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"aprobado\",\n    \"fallas\"\n  ],\n  \"properties\": {\n    \"aprobado\": {\n      \"type\": \"boolean\",\n      \"description\": \"true si no encontraste ninguna falla\"\n    },\n    \"fallas\": {\n      \"type\": \"array\",\n      \"description\": \"una por problema detectado; vacío si aprobado\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"tipo\",\n          \"detalle\"\n        ],\n        \"properties\": {\n          \"tipo\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"producto_inventado\",\n              \"fusion_variantes\",\n              \"no_trabajado\",\n              \"dato_no_corroborable\"\n            ]\n          },\n          \"producto\": {\n            \"type\": \"string\",\n            \"description\": \"el nombre_catalogo afectado, si aplica\"\n          },\n          \"detalle\": {\n            \"type\": \"string\",\n            \"description\": \"qué está mal, en una línea\"\n          }\n        }\n      }\n    },\n    \"resumen\": {\n      \"type\": \"string\",\n      \"description\": \"una línea para el log\"\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"aprobado\",\n    \"fallas\",\n    \"accion\"\n  ],\n  \"properties\": {\n    \"aprobado\": {\n      \"type\": \"boolean\",\n      \"description\": \"true si no encontraste ninguna falla\"\n    },\n    \"accion\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"aprobar\",\n        \"corregir\",\n        \"regenerar\"\n      ],\n      \"description\": \"qué hacer con la respuesta: aprobar (sin fallas) / corregir (se arregla sacando o reformulando texto) / regenerar (grave: producto equivocado o no relacionado, hay que rehacerla desde cero)\"\n    },\n    \"fallas\": {\n      \"type\": \"array\",\n      \"description\": \"una por problema detectado; vacío si aprobado\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"tipo\",\n          \"detalle\"\n        ],\n        \"properties\": {\n          \"tipo\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"producto_inventado\",\n              \"fusion_variantes\",\n              \"no_trabajado\",\n              \"dato_no_corroborable\"\n            ]\n          },\n          \"producto\": {\n            \"type\": \"string\",\n            \"description\": \"el nombre_catalogo afectado, si aplica\"\n          },\n          \"detalle\": {\n            \"type\": \"string\",\n            \"description\": \"qué está mal, en una línea\"\n          }\n        }\n      }\n    },\n    \"resumen\": {\n      \"type\": \"string\",\n      \"description\": \"una línea para el log\"\n    }\n  }\n}"
       },
       "id": "rag-verif-salida",
       "name": "Salida · Verificador",
@@ -225,7 +225,184 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` (lo que ve el cliente) + auditoría: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila + cantidad), `motivo` y `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita esa auditoría contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Marca fallas: producto_inventado, fusion_variantes (atributos que no viven juntos en una fila real), no_trabajado (lista: fotocopias…), dato_no_corroborable. Veredicto para el log; todavía NO bloquea.\n\n**Preparar Respuesta** (Code, último nodo): el chat muestra SOLO `respuesta`; `auditoria` (Agente) y `verificacion` (Verificador) quedan en el item, visibles en la ejecución.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "jsCode": "const ag = $('Agente').first().json.output ?? {};\nconst audit = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };\nlet ve = $input.first().json.output ?? $input.first().json ?? {};\nif (typeof ve === 'string') { try { ve = JSON.parse(ve); } catch (e) { ve = {}; } }\nconst accion = ve.accion || (ve.aprobado === true ? 'aprobar' : 'corregir');\nreturn [{ json: {\n  respuesta: audit.respuesta ?? '',\n  auditoria: audit,\n  verificacion: ve,\n  accion,\n} }];"
+      },
+      "id": "rag-leer-veredicto",
+      "name": "Leer Veredicto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "aprobar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "aprobar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "regenerar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "regenerar"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "corregir"
+        }
+      },
+      "id": "rag-switch-accion",
+      "name": "Ruteo Acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "rag-reintentar",
+      "name": "¿Reintentar? (máx 3)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1340,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lv = $('Leer Veredicto').first().json;\nconst fallas = (lv.verificacion && lv.verificacion.fallas ? lv.verificacion.fallas : [])\n  .map(f => '- ' + f.tipo + (f.producto ? ' (' + f.producto + ')' : '') + ': ' + f.detalle).join('\\n');\nconst feedback = [\n  'REVISIÓN INTERNA — el auditor observó tu respuesta anterior. Regenerala corrigiendo esto.',\n  '',\n  'Tu respuesta anterior:',\n  '\"\"\"' + (lv.respuesta || '') + '\"\"\"',\n  '',\n  'Problemas graves detectados:',\n  fallas,\n  '',\n  'Respondé de nuevo al cliente corrigiendo estos problemas. Usá buscar_catalogo si necesitás reconfirmar. No inventes ni ofrezcas lo que no se trabaja.',\n].join('\\n');\nreturn [{ json: { chatInput: feedback } }];"
+      },
+      "id": "rag-feedback-reintento",
+      "name": "Feedback Reintento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Mensaje original:\n\"\"\"{{ $json.respuesta }}\"\"\"\n\nObservaciones del auditor a corregir:\n{{ ($json.verificacion.fallas || []).map(f => '- ' + f.tipo + (f.producto ? ' (' + f.producto + ')' : '') + ': ' + f.detalle).join('\\n') }}",
+        "options": {
+          "systemMessage": "Sos el editor final del bot de WhatsApp de Terminal Gráfica (imprenta).\nRecibís un mensaje ya redactado y las observaciones de un auditor. Tu ÚNICO trabajo: devolver el\nmensaje corregido SACANDO o REFORMULANDO lo observado.\n\nNUNCA agregues productos, precios ni información nueva. No inventes. No cambies de producto.\nSi el auditor marcó que ofreciste algo que NO se trabaja (ej. fotocopias), sacá esa afirmación y,\nsi corresponde, aclarale al cliente que eso no lo hacemos. Si marcó una variante inventada\n(atributos mezclados), quitá el atributo que sobra.\n\nCastellano rioplatense, 2 a 5 líneas, sin emojis. Devolvé SOLO el mensaje para el cliente, sin\ncomillas ni explicaciones."
+        }
+      },
+      "id": "rag-corrector",
+      "name": "Corrector",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        1340,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 400
+        }
+      },
+      "id": "rag-corrector-modelo",
+      "name": "Modelo · Corrector",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        40
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst corr = raw.output ?? raw.text ?? '';\nconst texto = (typeof corr === 'string' ? corr : (corr.respuesta ?? '')).trim();\nconst lv = $('Leer Veredicto').first().json;\nreturn [{ json: {\n  respuesta: texto,\n  auditoria: lv.auditoria,\n  verificacion: lv.verificacion,\n  corregido: true,\n} }];"
+      },
+      "id": "rag-aplicar-correccion",
+      "name": "Aplicar Corrección",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` (lo que ve el cliente) + auditoría: `productos_ofrecidos` (nombre_catalogo tal cual la búsqueda + nombre_mostrado + atributos de UNA fila + cantidad), `motivo` y `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).\n\n**Preparar Respuesta** (punto único de convergencia): el chat muestra SOLO `respuesta`; `auditoria`, `verificacion` y `corregido` quedan en el item. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 560,
         "width": 540
       },
@@ -263,6 +440,93 @@
       ]
     },
     "Agente Verificador": {
+      "main": [
+        [
+          {
+            "node": "Leer Veredicto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Veredicto": {
+      "main": [
+        [
+          {
+            "node": "Ruteo Acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ruteo Acción": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Reintentar? (máx 3)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Corrector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Reintentar? (máx 3)": {
+      "main": [
+        [
+          {
+            "node": "Feedback Reintento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Corrector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feedback Reintento": {
+      "main": [
+        [
+          {
+            "node": "Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corrector": {
+      "main": [
+        [
+          {
+            "node": "Aplicar Corrección",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aplicar Corrección": {
       "main": [
         [
           {
@@ -356,6 +620,17 @@
           {
             "node": "Agente Verificador",
             "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo · Corrector": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Corrector",
+            "type": "ai_languageModel",
             "index": 0
           }
         ]
