@@ -1,0 +1,246 @@
+{
+  "name": "faq-bot-rag-lite",
+  "nodes": [
+    {
+      "parameters": {
+        "public": false,
+        "options": {}
+      },
+      "id": "rag-chat-trigger",
+      "name": "Cuando llega un mensaje",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        0
+      ],
+      "webhookId": "rag-lite-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toma la pregunta del chat y calcula los flags de nicho (guard del RPC).\nconst texto = String($json.chatInput || '').trim();\nconst norm = (s) => s.normalize('NFC').toLowerCase()\n  .replace(/[áéíóúü]/g, (c) => ({ 'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u' }[c]))\n  .replace(/ñ/g, 'n');\nconst v = norm(texto);\nreturn [{ json: {\n  texto,\n  medicina: /medicin/.test(v),\n  inmobiliarias: /inmobiliari|inmueble/.test(v),\n} }];"
+      },
+      "id": "rag-preparar",
+      "name": "Preparar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'google/gemini-embedding-001', input: [$json.texto] }) }}",
+        "options": {}
+      },
+      "id": "rag-embed",
+      "name": "Embed Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trunca el embedding a 1536 dims (Matryoshka) y lo normaliza L2 → literal ::vector.\n// Igual que scripts/rag-ingest.ts, así query y documentos viven en el mismo espacio.\nconst emb = $json.data && $json.data[0] && $json.data[0].embedding;\nif (!Array.isArray(emb)) {\n  throw new Error('Respuesta de embeddings sin vector: ' + JSON.stringify($json).slice(0, 200));\n}\nconst DIMS = 1536;\nif (emb.length < DIMS) throw new Error('Embedding de ' + emb.length + ' dims (< ' + DIMS + ').');\nconst t = emb.slice(0, DIMS);\nconst norma = Math.sqrt(t.reduce((s, x) => s + x * x, 0)) || 1;\nconst vector = '[' + t.map((x) => x / norma).join(',') + ']';\nconst prep = $('Preparar').first().json;\nreturn [{ json: {\n  vector,\n  medicina: prep.medicina,\n  inmobiliarias: prep.inmobiliarias,\n  texto: prep.texto,\n} }];"
+      },
+      "id": "rag-vector",
+      "name": "Vector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from bot.match_productos($1::vector, 8, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.vector, $json.medicina, $json.inmobiliarias] }}"
+        }
+      },
+      "id": "rag-match",
+      "name": "Match Productos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        680,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta las filas del match en un contexto numerado para el Compositor.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre_canonico);\nconst texto = $('Preparar').first().json.texto;\nconst lista = rows.map((r, i) =>\n  (i + 1) + '. ' + r.nombre_canonico + (r.rubro ? ' (rubro: ' + r.rubro + ')' : '') + '\\n' + r.chunk_text\n).join('\\n\\n');\nreturn [{ json: {\n  texto,\n  hayCandidatos: rows.length > 0,\n  contexto: rows.length ? lista : '(no se encontraron productos en el catálogo)',\n} }];"
+      },
+      "id": "rag-contexto",
+      "name": "Armar Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Pregunta del cliente: ' + $json.texto + '\\n\\nProductos candidatos del catálogo:\\n' + $json.contexto }}",
+        "options": {
+          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.\nA partir de la pregunta del cliente y una lista de productos candidatos del catálogo,\nrecomendá 1 a 3 productos que mejor respondan lo que pide.\n\nREGLAS:\n- Castellano rioplatense (vos, no tú). Cordial y directo. Es WhatsApp: 2 a 5 líneas. Sin emojis.\n- NO menciones precios ni montos. Si el cliente pregunta el precio, ofrecé preparar la\n  cotización por mail (terminalgrafica@gmail.com) o en el local.\n- Usá las palabras del cliente, no los nombres técnicos del catálogo (salvo que aclaren algo).\n- Recomendá SOLO productos que estén en la lista de candidatos. No inventes.\n- Si ningún candidato aplica de verdad, decilo con honestidad y pedile que reformule o\n  que consulte por mail. Mejor eso que forzar una recomendación que no sirve.\n- Este canal solo INFORMA: no tomes pedidos ni pidas archivos."
+        }
+      },
+      "id": "rag-compositor",
+      "name": "Compositor",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "rag-modelo",
+      "name": "Modelo · Compositor",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        220
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "widAoSc9Weo8PxAN",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Bot RAG lite (experimento)\n\nPrueba interna del RAG por embeddings. Se dispara desde el chat de test de este Chat Trigger — no toca Chatwoot ni WhatsApp.\n\nCadena: Chat → Preparar (flags nicho) → Embed (OpenRouter) → Vector (trunca 1536 + L2) → Match (bot.match_productos) → Armar Contexto → Compositor.\n\n**Requisitos:** aplicar db/rag-embeddings.sql y poblar la tabla con scripts/rag-ingest.ts.\n\n**Limitaciones aceptadas:** sin firewall, sin memoria de conversación (responde a cada mensaje suelto), y el guard de nicho solo mira el mensaje actual. Sin precios (v0).",
+        "height": 320,
+        "width": 420
+      },
+      "id": "rag-nota",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "Cuando llega un mensaje": {
+      "main": [
+        [
+          {
+            "node": "Preparar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar": {
+      "main": [
+        [
+          {
+            "node": "Embed Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector": {
+      "main": [
+        [
+          {
+            "node": "Match Productos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Productos": {
+      "main": [
+        [
+          {
+            "node": "Armar Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Contexto": {
+      "main": [
+        [
+          {
+            "node": "Compositor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo · Compositor": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Compositor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
