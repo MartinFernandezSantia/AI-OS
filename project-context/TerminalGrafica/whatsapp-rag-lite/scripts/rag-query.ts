@@ -1,25 +1,18 @@
-// Consulta RAG desde la terminal — "dispararle preguntas" sin Chatwoot (plan rag-lite-bot).
+// Consulta RAG desde la terminal — "dispararle preguntas" sin n8n (plan rag-lite-bot).
 //
-//   pnpm tsx scripts/rag-query.ts "sirve para plotear un plano a1?"
-//   pnpm tsx scripts/rag-query.ts --inmobiliarias "cartel para vender una casa"
-//   pnpm tsx scripts/rag-query.ts --medicina "recetarios"
+//   pnpm rag:query "sirve para plotear un plano a1?"
+//   pnpm rag:query --inmobiliarias "cartel para vender una casa"
 //
-// Embebe la pregunta (misma truncación L2 a 1536 que la ingesta) y llama a bot.match_productos.
-// Env: OPENROUTER_API_KEY, DATABASE_URL.
+// Embebe la pregunta con el MISMO modelo que la ingesta (gemini-embedding-001) y hace KNN coseno
+// sobre bot.rag_catalogo. Los flags de nicho son solo para PROBAR el guard blando localmente
+// (en el bot real el nicho lo maneja el prompt del agente). Env: OPENROUTER_API_KEY, DATABASE_URL.
 
 const MODELO = "google/gemini-embedding-001";
-const DIMS = 1536;
 const EMBED_URL = "https://openrouter.ai/api/v1/embeddings";
+const TABLE = "bot.rag_catalogo";
 
 const has = (flag: string) => process.argv.includes(flag);
 const pregunta = process.argv.slice(2).filter((a) => !a.startsWith("--")).join(" ").trim();
-
-function truncarNormalizar(v: number[]): number[] {
-  if (v.length < DIMS) throw new Error(`El embedding tiene ${v.length} dims (< ${DIMS}).`);
-  const t = v.slice(0, DIMS);
-  const norma = Math.sqrt(t.reduce((s, x) => s + x * x, 0)) || 1;
-  return t.map((x) => x / norma);
-}
 
 async function embed(texto: string): Promise<number[]> {
   const key = process.env.OPENROUTER_API_KEY;
@@ -31,12 +24,12 @@ async function embed(texto: string): Promise<number[]> {
   });
   if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { data: { embedding: number[] }[] };
-  return truncarNormalizar(json.data[0].embedding);
+  return json.data[0].embedding;
 }
 
 async function main() {
   if (!pregunta) {
-    console.error('Uso: pnpm tsx scripts/rag-query.ts [--medicina|--inmobiliarias] "tu pregunta"');
+    console.error('Uso: pnpm rag:query [--medicina|--inmobiliarias] "tu pregunta"');
     process.exit(1);
   }
   const url = process.env.DATABASE_URL;
@@ -47,22 +40,31 @@ async function main() {
   const cli = new Client({ connectionString: url });
   await cli.connect();
   try {
+    // Guard de nicho blando (solo para testing local): un producto de nicho solo aparece si se
+    // pasó el flag correspondiente. En el bot real esto lo decide el agente por prompt.
     const { rows } = await cli.query(
-      "select nombre_canonico, rubro, nicho, precio_desde, precio_hasta, precio_confiable, " +
-        "round(similitud::numeric, 4) as sim, chunk_text " +
-        "from bot.match_productos($1::vector, 8, $2, $3)",
+      `select metadata->>'nombre_canonico' as nombre,
+              metadata->>'rubro'           as rubro,
+              metadata->>'nicho'           as nicho,
+              round((1 - (embedding <=> $1::vector))::numeric, 4) as sim,
+              text
+         from ${TABLE}
+        where metadata->>'nicho' is null
+           or (metadata->>'nicho' = 'medicina'      and $2)
+           or (metadata->>'nicho' = 'inmobiliarias' and $3)
+        order by embedding <=> $1::vector
+        limit 8`,
       [`[${vec.join(",")}]`, has("--medicina"), has("--inmobiliarias")],
     );
     console.log(`\nPregunta: ${pregunta}`);
     console.log(`Flags nicho: medicina=${has("--medicina")} inmobiliarias=${has("--inmobiliarias")}\n`);
     if (!rows.length) {
-      console.log("(sin candidatos — revisá que la tabla esté poblada)");
+      console.log("(sin candidatos — ¿la tabla está poblada? corré rag:ingest)");
       return;
     }
-    rows.forEach((r, i) => {
-      const precio = r.precio_confiable ? ` — $${r.precio_desde}${r.precio_hasta !== r.precio_desde ? `–${r.precio_hasta}` : ""}` : "";
-      console.log(`${i + 1}. [${r.sim}] ${r.nombre_canonico}  (${r.rubro || "s/rubro"}${r.nicho ? `, nicho:${r.nicho}` : ""})${precio}`);
-    });
+    rows.forEach((r, i) =>
+      console.log(`${i + 1}. [${r.sim}] ${r.nombre}  (${r.rubro || "s/rubro"}${r.nicho ? `, nicho:${r.nicho}` : ""})`),
+    );
   } finally {
     await cli.end();
   }

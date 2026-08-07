@@ -180,37 +180,41 @@ Sin webhook, sin HMAC, sin Chatwoot. Se prueba desde la ventana de chat integrad
 Nada de debounce, firewall, verificador ni log a `bot.decisiones`. Un sticky note en el flow
 documenta las limitaciones.
 
-### Actualización 2026-08-07 (v2) — Agente + tool + memoria (arquitectura RAG real)
+### Actualización 2026-08-07 (v3) — Enfoque NATIVO de n8n (supersede v1 y v2)
 
-Reemplaza el pipeline lineal de arriba. La idea de un RAG es que **el agente acceda al catálogo
-vía una tool**, no con un pre-fetch fijo. Ahora son **dos workflows**:
+Corrección de Martin: para RAG en n8n NO se usa un nodo HTTP para embeddings; lo idiomático es el
+nodo nativo **PGVector Vector Store** como tool del agente, con un sub-nodo **Embeddings**. Se
+verificó con la doc de n8n (Context7). Esto elimina el HTTP, el sub-workflow y el bug de plumbing
+del `toolWorkflow`. **Constraint clave de Martin:** el modelo de embeddings de la ingesta y el de
+la query DEBEN ser el mismo (misma familia) — los dos usan `google/gemini-embedding-001`.
 
-**`faq-bot-rag-lite.json` (principal, 6 nodos):** `Chat Trigger → Agente`. El Agente
-(`@n8n/n8n-nodes-langchain.agent` v1.9) tiene conectados: **Modelo** (lmChatOpenRouter
-`gemini-3.1-flash-lite`), **Memoria** (`memoryBufferWindow`, 10 turnos por `sessionId`, `ai_memory`)
-y la **tool `buscar_catalogo`** (`toolWorkflow`, `ai_tool`). El `text` del turno = `{{ $json.chatInput }}`
-(memoria limpia). El system prompt es el **flujo por etapas**: (1) saludo → NO llama la tool;
-(2) pedido claro → llama `buscar_catalogo` y recomienda de lo que vuelva; (3) falta info → UNA
-pregunta corta (sin repetir lo del historial); (4) seguimiento → arma la consulta a la tool
-combinando historial + mensaje nuevo; (5) otro/cierre → breve o deriva. Sin montos.
+**Un solo workflow `faq-bot-rag-lite.json` (7 nodos):** `Chat Trigger → Agente`. El Agente
+(`@n8n/n8n-nodes-langchain.agent` v1.9) tiene: **Modelo** (`lmChatOpenRouter` gemini-3.1-flash-lite),
+**Memoria** (`memoryBufferWindow` 10 turnos/sesión, `ai_memory`), y la tool **buscar_catalogo** =
+nodo **PGVector Vector Store** (`vectorStorePGVector`, modo *retrieve-as-tool*, `ai_tool`) con el
+sub-nodo **Embeddings (OpenRouter)** (`embeddingsOpenAi` con `baseURL=https://openrouter.ai/api/v1`,
+`ai_embedding`). El nodo PGVector embebe la consulta y hace el KNN — no hay HTTP ni Code de vector.
+`text` del turno = `{{ $json.chatInput }}` (memoria limpia). System prompt = flujo por etapas
+(saludo / pedido claro→tool / falta info→pregunta / seguimiento / otro) + **guard de nicho blando**
+(el agente ignora productos de nicho salvo que el cliente mencione el rubro). Sin montos.
 
-**`tool-buscar-catalogo.json` (sub-workflow, 7 nodos):** `Execute Workflow Trigger(consulta) →
-Preparar (flags nicho) → Embed Query (OpenRouter) → Vector (trunc 1536 + L2) → Match Productos
-(bot.match_productos) → Formatear Candidatos (texto en `response`)`. Es el RAG semántico
-encapsulado como tool.
+**Tabla (LangChain/PGVector):** `bot.rag_catalogo(id, text, metadata jsonb, embedding vector)` —
+`db/rag-embeddings.sql`. Sin dimensión fija (la del modelo), sin índice (catálogo chico). Se dropea
+la RPC `bot.match_productos` y el guard de nicho duro. Ingesta: `scripts/rag-ingest.ts` escribe
+`text` + `metadata` + `embedding` (dim nativa, SIN truncar) con `gemini-embedding-001`; consulta
+CLI: `scripts/rag-query.ts` hace KNN directo sobre la tabla.
 
-Ventaja sobre el pipeline lineal: el agente decide **cuándo** buscar (no busca en un saludo) y
-**qué** buscar, formulando la consulta con el contexto de la memoria (resuelve el caso "¿y en A3?").
+**Wiring manual en la UI de n8n (una vez):** (1) en **Embeddings (OpenRouter)** crear/elegir una
+credencial tipo **OpenAI** con API key = key de OpenRouter y Base URL = `https://openrouter.ai/api/v1`,
+modelo `google/gemini-embedding-001` (el MISMO que la ingesta); (2) en **buscar_catalogo** (PGVector)
+confirmar Table `rag_catalogo`, Schema `bot` y los Column Names (id/embedding/text/metadata). Los
+type/version exactos de estos cluster-nodes pueden variar según la versión de n8n — si algún campo
+no matchea al importar, se ajusta en la UI (son nodos estándar).
 
-**Wiring manual (una vez, en la UI de n8n):** importar PRIMERO `tool-buscar-catalogo`, después el
-principal, y en el nodo `buscar_catalogo` seleccionar el workflow de la tool (el `workflowId` viaja
-vacío porque el id lo asigna n8n al importar).
+Tradeoffs vs v2: se pierde el guard de nicho DURO (ahora es por prompt) y la RPC custom; a cambio,
+arquitectura idiomática, sin HTTP ni sub-workflow, y consistencia de modelo garantizada.
 
-> Nota: n8n necesita la truncación a 1536 dims antes del nodo Postgres. Lo más simple es que el
-> Code `Preparar`/`Armar Contexto` recorte el array del embedding a los primeros 1536 y lo
-> re-normalice L2 (misma lógica que el script de ingesta), así el `$1::vector` matchea la columna.
-
-## Nota OpenRouter (embeddings)
+## Nota OpenRouter (embeddings) — histórico v1/v2
 
 El endpoint `/embeddings` de OpenRouter es OpenAI-shaped, así que hay incertidumbre sobre el
 passthrough de `taskType` y `outputDimensionality`. Mitigaciones que van en el código:

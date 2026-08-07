@@ -12,7 +12,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 lib/catalog/       chunkRAG() + helpers autocontenidos (types, keys, effective, loader) + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta CLI)
 db/                rag-embeddings.sql (pgvector + tabla + RPC bot.match_productos)
-n8n/flows/         faq-bot-rag-lite.json (agente + memoria + tool) · tool-buscar-catalogo.json (la tool RAG)
+n8n/flows/         faq-bot-rag-lite.json (agente + memoria + PGVector como tool + Embeddings)
 plans/             el plan del experimento
 ```
 
@@ -31,9 +31,11 @@ Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABAS
    `pnpm rag:ingest --apply` upsertea directo. Reingesta = correr de nuevo (idempotente).
 3. **Consulta** — `pnpm rag:query "sirve para plotear un plano a1?"` (flags `--medicina` /
    `--inmobiliarias` para el guard de nicho).
-4. **Workflows** — importar PRIMERO `n8n/flows/tool-buscar-catalogo.json` (la tool RAG), después
-   `n8n/flows/faq-bot-rag-lite.json` (el agente), y en el nodo `buscar_catalogo` seleccionar el
-   workflow de la tool. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
+4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **Embeddings
+   (OpenRouter)** elegir una credencial tipo **OpenAI** con API key = tu key de OpenRouter y Base
+   URL `https://openrouter.ai/api/v1`, modelo `google/gemini-embedding-001` (el MISMO de la ingesta);
+   (b) en **buscar_catalogo** (PGVector) confirmar Table `rag_catalogo`, Schema `bot` y los Column
+   Names. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
 
 ## Tests
 
@@ -42,8 +44,11 @@ Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABAS
 ## Decisiones (v0)
 
 - Chunk **atómico por producto** (nombre + sinónimos + casos de uso + rubro + variantes).
-- Embeddings a **1536 dims** (Matryoshka, truncado + L2-normalizado del lado del cliente).
-- Guard de nicho = **filtro duro** en la RPC (no similitud).
-- **Sin montos** en la respuesta (la tabla guarda el rango para activarlo después).
-- Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el RAG es una **tool**
-  (`buscar_catalogo`) que el agente decide cuándo invocar.
+- Enfoque **nativo n8n**: el RAG es el nodo **PGVector Vector Store** como tool del agente, con un
+  sub-nodo **Embeddings** — sin HTTP ni sub-workflow.
+- Embeddings `google/gemini-embedding-001` (dim nativa, **el mismo modelo en ingesta y query** — si
+  difieren, los vectores no son comparables). Tabla formato LangChain (`text`/`metadata`/`embedding`).
+- Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
+- **Sin montos** en la respuesta.
+- Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el agente decide cuándo
+  invocar la tool.
