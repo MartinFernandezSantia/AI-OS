@@ -191,23 +191,21 @@ const esquemaSalida = {
 // No habla con el cliente: relee el catálogo real (tool) y devuelve un veredicto para el log.
 const sistemaVerif = `Sos el AUDITOR del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás la decisión del bot y devolvés un veredicto JSON para el log.
 
-Recibís: el pedido del cliente + la auditoría del bot (productos_ofrecidos con nombre_catalogo, atributos y cantidad; motivo; afirmaciones sobre el negocio).
+Recibís TODO lo que necesitás en un solo mensaje: el pedido del cliente + la auditoría del bot (productos_ofrecidos con nombre_catalogo, atributos y cantidad; motivo; afirmaciones) + los DATOS REALES del catálogo de esos productos, ya consultados por vos. NO tenés que buscar nada: verificá SOLO contra esos datos reales, en una sola pasada.
 
 ## REGLA 0 — NO TRABAJADO (prioridad absoluta, se evalúa PRIMERO)
 La imprenta NO hace: fotocopias. (Lista ampliable.)
-Si el cliente pidió algo de esta lista y el bot lo ofreció o afirmó que lo hacen, es falla \`no_trabajado\` — AUNQUE la búsqueda haya devuelto un producto que matchee por sinónimo o parecido semántico. Que un producto "exista en el catálogo" NUNCA excusa ofrecer un ítem de esta lista. Esta regla pisa a todas las demás verificaciones.
+Si el cliente pidió algo de esta lista y el bot lo ofreció o afirmó que lo hacen, es falla \`no_trabajado\` — AUNQUE los datos reales traigan un producto que matchee por sinónimo o parecido semántico. Que un producto "exista en el catálogo" NUNCA excusa ofrecer un ítem de esta lista. Esta regla pisa a todas las demás verificaciones.
 
 ## Fast-path
-Si no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devolvé aprobado=true con fallas=[] y terminá. No uses la tool.
+Si no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devolvé aprobado=true con fallas=[] y terminá.
 
-## Verificación
-Tenés la tool consultar_catalogo_real: le pasás un nombre y devuelve la fila REAL del catálogo (nombre canónico + texto con variantes y atributos). DEBÉS verificar contra ese dato real. NUNCA verifiques de memoria ni extrapoles más allá de lo que devuelve la tool.
-
-Para cada producto ofrecido, consultá su fila real y marcá fallas:
+## Verificación (contra los DATOS REALES que te paso; nunca de memoria)
+Para cada producto ofrecido, buscá su fila real entre los datos que te di y marcá fallas:
 - no_trabajado — Regla 0. Primero, siempre.
 - fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA fila real. Si combinó atributos que viven en filas distintas (ej.: afirma "A3 + medio corte" cuando una fila tiene A3 y otra el medio corte, pero ninguna las dos juntas), es variante inventada. Compará atributo por atributo contra el texto real. Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos.
-- producto_inventado — el nombre_catalogo no existe: la tool no devuelve nada razonablemente parecido.
-- dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que el catálogo no confirma. Falla blanda: marcala igual.
+- producto_inventado — el nombre_catalogo no aparece: no hay ninguna fila real razonablemente parecida.
+- dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que los datos reales no confirman. Falla blanda: marcala igual.
 
 Ante la duda, marcá en vez de aprobar.
 
@@ -221,11 +219,6 @@ Devolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:
 {"aprobado": boolean, "accion": "aprobar" | "corregir" | "regenerar", "fallas": [{"tipo": "producto_inventado" | "fusion_variantes" | "no_trabajado" | "dato_no_corroborable", "producto": string, "detalle": string}], "resumen": string}
 aprobado=false si hay al menos una falla. resumen = 1 frase en castellano rioplatense.
 Ejemplo: {"aprobado": false, "accion": "corregir", "fallas": [{"tipo": "no_trabajado", "producto": "fotocopias", "detalle": "El bot afirmó que hacen fotocopias; ítem no_trabajado, aunque la búsqueda haya matcheado por sinónimo."}], "resumen": "Ofreció fotocopias, un servicio que la imprenta no hace."}`;
-
-const toolDescVerif =
-  "Relee el catálogo real de la imprenta. Dado el nombre de un producto, devuelve su fila real " +
-  "(nombre canónico + texto con variantes y atributos). Usala para confirmar que un producto " +
-  "existe y que la combinación de atributos que se le afirmó es real, no inventada.";
 
 const esquemaVerif = {
   type: "object",
@@ -624,9 +617,9 @@ const flow = {
       // Segundo agente: audita la decisión del Agente principal contra el catálogo real.
       parameters: {
         promptType: "define",
-        text:
-          "=Pedido del cliente:\n{{ $('Cuando llega un mensaje').first().json.chatInput }}\n\n" +
-          "Auditoría del bot (revisala):\n{{ JSON.stringify($json.output, null, 2) }}",
+        // Prompt pre-armado por "Armar Verificación": auditoría + datos reales ya inyectados. El
+        // Verificador NO tiene tool: audita en UNA sola inferencia (antes: loop agéntico ~2k tok/producto).
+        text: "={{ $json.prompt }}",
         hasOutputParser: true,
         options: { systemMessage: sistemaVerif },
       },
@@ -634,7 +627,7 @@ const flow = {
       name: "Agente Verificador",
       type: "@n8n/n8n-nodes-langchain.agent",
       typeVersion: 1.9,
-      position: [620, 0],
+      position: [740, 0],
       // RESILIENCIA: si el auditor falla (parser o modelo), NO bloqueamos la respuesta del cliente:
       // enruta por la salida de ERROR (main[1]) → Fallback Verificador, que aprueba por defecto.
       retryOnFail: true,
@@ -663,11 +656,12 @@ const flow = {
       position: [740, 620],
     },
     {
-      // Tool del Verificador: relee la fila REAL del catálogo (bot.rag_catalogo) por nombre.
-      // Match acento-insensible sobre metadata->>'nombre_canonico' (mismo patrón que el v10).
+      // PRE-FETCH DETERMINISTA (reemplaza la tool agéntica del Verificador). Trae de UNA sola query
+      // las filas reales de TODOS los productos que el agente afirmó (match acento-insensible sobre
+      // nombre_canonico, igual patrón que la vieja tool pero en batch). El Verificador ya no elige
+      // qué buscar ni loopea: recibe todo servido. alwaysOutputData: sin productos (saludo) → 0 filas
+      // pero igual emite un item para que la cola no se corte.
       parameters: {
-        descriptionType: "manual",
-        toolDescription: toolDescVerif,
         operation: "executeQuery",
         query:
           "select metadata->>'nombre_canonico' as nombre,\n" +
@@ -675,20 +669,50 @@ const flow = {
           "       metadata->>'nicho'           as nicho,\n" +
           "       text\n" +
           "  from bot.rag_catalogo\n" +
-          " where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$)\n" +
-          "       like $$%$$ || translate(lower($1), $$áéíóúñ$$, $$aeioun$$) || $$%$$\n" +
-          " limit 5",
+          " where exists (\n" +
+          "   select 1 from jsonb_array_elements_text($1::jsonb) as x\n" +
+          "    where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$)\n" +
+          "          like $$%$$ || translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$) || $$%$$)\n" +
+          " limit 20",
         options: {
+          // $1 = JSON array de nombres afirmados. null-safe: sin productos → [] → 0 filas.
           queryReplacement:
-            "={{ $fromAI('producto', 'nombre del producto tal como lo reportó el agente, para releerlo del catálogo', 'string') }}",
+            "={{ [ JSON.stringify((((($('Agente').first().json.output)||{}).productos_ofrecidos)||[]).map(p => p.nombre_catalogo)) ] }}",
         },
       },
-      id: "rag-verif-tool",
-      name: "consultar_catalogo_real",
-      type: "n8n-nodes-base.postgresTool",
+      id: "rag-traer-catalogo",
+      name: "Traer Catálogo Real",
+      type: "n8n-nodes-base.postgres",
       typeVersion: 2.6,
-      position: [920, 620],
+      position: [420, 180],
       credentials: { postgres: BOT_DB },
+      alwaysOutputData: true,
+    },
+    {
+      // Arma el mensaje de usuario del Verificador: auditoría del Agente (ref segura) + las filas
+      // reales pre-consultadas ($input) inyectadas como texto. Una sola pasada, sin tool.
+      parameters: {
+        jsCode: [
+          "const ag = $('Agente').first().json.output ?? {};",
+          "const aud = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
+          "const cliente = $('Cuando llega un mensaje').first().json.chatInput || '';",
+          "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
+          "const real = rows.length",
+          "  ? rows.map((r) => '### ' + r.nombre + (r.nicho ? ' [nicho: ' + r.nicho + ']' : '') + '\\n' + (r.text || '')).join('\\n\\n')",
+          "  : '(no se encontró ninguna fila de catálogo para los productos ofrecidos)';",
+          "const prompt = [",
+          "  'Pedido del cliente:', cliente, '',",
+          "  'Auditoría del bot (revisala):', JSON.stringify(aud, null, 2), '',",
+          "  'DATOS REALES del catálogo (ya consultados; verificá SOLO contra esto):', real,",
+          "].join('\\n');",
+          "return [{ json: { prompt, auditoria: aud } }];",
+        ].join("\n"),
+      },
+      id: "rag-armar-verif",
+      name: "Armar Verificación",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [580, 0],
     },
     {
       // Unifica en un solo item lo que las ramas de abajo necesitan: la respuesta + auditoría del
@@ -901,7 +925,7 @@ const flow = {
           "",
           "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
-          "**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.",
+          "**Agente Verificador** (2º agente, SIN tool): **Traer Catálogo Real** (postgres) pre-consulta de una sola query las filas reales de todos los productos afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita en UNA pasada (antes: loop agéntico ~2k tok/producto). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.",
           "",
           "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).",
           "",
@@ -911,7 +935,7 @@ const flow = {
           "",
           "⚠️ VERIFICAR EN LA UI:",
           "1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
-          "2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+          "2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
         ].join("\n"),
         height: 560,
         width: 540,
@@ -927,13 +951,15 @@ const flow = {
     "Cuando llega un mensaje": { main: [[{ node: "Leer Decisiones", type: "main", index: 0 }]] },
     "Leer Decisiones": { main: [[{ node: "Contexto Previo", type: "main", index: 0 }]] },
     "Contexto Previo": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
-    // Agente: main[0] = OK → Verificador; main[1] = ERROR → Fallback Agente (salta al Verificador).
+    // Agente: main[0] = OK → pre-fetch del catálogo → Verificador; main[1] = ERROR → Fallback Agente.
     Agente: {
       main: [
-        [{ node: "Agente Verificador", type: "main", index: 0 }],
+        [{ node: "Traer Catálogo Real", type: "main", index: 0 }],
         [{ node: "Fallback Agente", type: "main", index: 0 }],
       ],
     },
+    "Traer Catálogo Real": { main: [[{ node: "Armar Verificación", type: "main", index: 0 }]] },
+    "Armar Verificación": { main: [[{ node: "Agente Verificador", type: "main", index: 0 }]] },
     "Fallback Agente": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
     // Verificador: main[0] = OK → Leer Veredicto; main[1] = ERROR → Fallback Verificador (aprueba).
     "Agente Verificador": {
@@ -974,7 +1000,6 @@ const flow = {
     "Salida · Agente": { ai_outputParser: [[{ node: "Agente", type: "ai_outputParser", index: 0 }]] },
     "Modelo · Verificador": { ai_languageModel: [[{ node: "Agente Verificador", type: "ai_languageModel", index: 0 }]] },
     "Salida · Verificador": { ai_outputParser: [[{ node: "Agente Verificador", type: "ai_outputParser", index: 0 }]] },
-    consultar_catalogo_real: { ai_tool: [[{ node: "Agente Verificador", type: "ai_tool", index: 0 }]] },
     "Modelo · Corrector": { ai_languageModel: [[{ node: "Corrector", type: "ai_languageModel", index: 0 }]] },
   },
   settings: { executionOrder: "v1" },
