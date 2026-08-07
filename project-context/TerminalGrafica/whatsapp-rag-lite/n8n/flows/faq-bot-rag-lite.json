@@ -76,10 +76,9 @@
         "mode": "retrieve-as-tool",
         "toolName": "buscar_catalogo",
         "toolDescription": "Busca en el catálogo de la imprenta los productos más parecidos a una consulta en lenguaje natural (RAG semántico). Devuelve candidatos con su descripción. Usala cuando necesites recomendar o dar info de un producto. Pasá una consulta que incluya el contexto relevante de la conversación (no solo la última frase suelta).",
-        "tableName": "rag_catalogo",
+        "tableName": "bot.rag_catalogo",
         "topK": 8,
         "options": {
-          "schemaName": "bot",
           "columnNames": {
             "idColumnName": "id",
             "vectorColumnName": "embedding",
@@ -118,7 +117,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): confirmar Table = rag_catalogo, Schema = bot, y los Column Names (id/embedding/text/metadata). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado, si no consulta public y devuelve [] en verde), Column Names id/embedding/text/metadata, sin Metadata Filter. Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 460,
         "width": 520
       },

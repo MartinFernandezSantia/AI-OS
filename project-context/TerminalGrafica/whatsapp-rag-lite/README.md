@@ -35,8 +35,9 @@ y `DATABASE_URL` (`--apply`/consulta).
 4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **Embeddings
    (Google Gemini)** elegir la credencial **Google Gemini(PaLM) API** con tu key de Google AI
    Studio, modelo `models/gemini-embedding-001` (el MISMO de la ingesta); (b) en **buscar_catalogo**
-   (PGVector) confirmar Table `rag_catalogo`, Schema `bot` y los Column Names. El chat sigue en
-   OpenRouter. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
+   (PGVector) el Table Name va **schema-cualificado: `bot.rag_catalogo`** (si va solo `rag_catalogo`
+   consulta `public` y devuelve `[]` en verde), Column Names id/embedding/text/metadata, sin
+   Metadata Filter. El chat sigue en OpenRouter. Probar desde el chat de test del Chat Trigger.
 
 ## Tests
 

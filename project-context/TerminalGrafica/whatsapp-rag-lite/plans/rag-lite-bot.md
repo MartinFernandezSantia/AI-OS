@@ -210,7 +210,9 @@ CLI: `scripts/rag-query.ts` hace KNN directo sobre la tabla.
 
 **Wiring manual en la UI de n8n (una vez):** (1) en **Embeddings (Google Gemini)** elegir la
 credencial **Google Gemini(PaLM) API** con la API key de Google AI Studio, modelo
-`models/gemini-embedding-001` (el MISMO que la ingesta); (2) en **buscar_catalogo** (PGVector)
+`models/gemini-embedding-001` (el MISMO que la ingesta); (2) en **buscar_catalogo** (PGVector) el
+**Table Name va schema-cualificado: `bot.rag_catalogo`** (el nodo no aplica un schema aparte; si va
+solo `rag_catalogo` consulta `public` y devuelve `[]` en verde, sin error — así se debuggeó);
 confirmar Table `rag_catalogo`, Schema `bot` y los Column Names (id/embedding/text/metadata). Los
 type/version exactos de estos cluster-nodes pueden variar según la versión de n8n — si algún campo
 no matchea al importar, se ajusta en la UI (son nodos estándar).
