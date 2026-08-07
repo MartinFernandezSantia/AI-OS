@@ -77,7 +77,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const pr = $('Preparar Respuesta').first().json;   // ref segura (siempre ejecuta)\nlet texto = String(pr.output || '');\nconst aud = pr.auditoria || {};\nconst solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];\nconst productos = Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : [];\n\nconst nk = (s) => String(s || '').toLowerCase()\n  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').trim();\nconst asArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch (e) { return []; } })() : []);\nconst fmt = (n) => '$' + Math.round(Number(n)).toLocaleString('es-AR');\nconst normNum = (t) => Number(String(t).replace(/[^0-9]/g, ''));\n\nconst byName = new Map();\nfor (const it of $input.all()) byName.set(nk(it.json.nombre), asArr(it.json.precios));\n\nfunction display(pv, cantidad) {\n  if (!pv || !pv.cobrable || !pv.unidad) return null;\n  const tramos = (pv.tramos || []).map((t) => ({ value: Number(t.value), minQty: Number(t.minQty) || 1, maxQty: t.maxQty == null ? null : Number(t.maxQty) })).filter((t) => t.value > 0);\n  let value = Number(pv.precio_lista) > 0 ? Number(pv.precio_lista) : 0;\n  let varia = false;\n  if (tramos.length) {\n    const c = Number(cantidad);\n    if (Number.isFinite(c) && c > 0) {\n      const exacto = tramos.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));\n      const inferior = tramos.slice().sort((a, b) => a.minQty - b.minQty).filter((x) => x.minQty <= c).pop();\n      const t = exacto || inferior;\n      if (t) value = t.value;\n    } else {\n      value = tramos.slice().sort((a, b) => a.minQty - b.minQty)[0].value;\n      varia = true;\n    }\n  }\n  if (!(value > 0)) return null;\n  return fmt(value) + ' ' + pv.unidad + (varia ? ' (varía según cantidad)' : '');\n}\n\n// 1) INYECCIÓN de {Pn}\nconst inyectados = [];\nfor (const s of solic) {\n  const token = '{' + String(s.ref || '') + '}';\n  if (!s.ref || texto.indexOf(token) === -1) continue;\n  const precios = byName.get(nk(s.nombre_catalogo)) || [];\n  let pv = precios.find((p) => String(p.ref) === String(s.variante_ref));\n  if (!pv && precios.length === 1) pv = precios[0];\n  const disp = display(pv, s.cantidad);\n  if (disp) inyectados.push(disp);\n  texto = texto.split(token).join(disp || 'a confirmar por mail');\n}\ntexto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos\n\n// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real\nconst cantidades = new Set();\nfor (const p of productos) if (p && p.cantidad != null) cantidades.add(Number(p.cantidad));\nfor (const s of solic) if (s && s.cantidad != null) cantidades.add(Number(s.cantidad));\nconst preciosReales = new Set();\nfor (const s of solic) {\n  for (const pv of (byName.get(nk(s.nombre_catalogo)) || [])) {\n    if (Number(pv.precio_lista) > 0) preciosReales.add(Math.round(Number(pv.precio_lista)));\n    for (const t of (pv.tramos || [])) if (Number(t.value) > 0) preciosReales.add(Math.round(Number(t.value)));\n  }\n}\nconst validar = (m, n) => {\n  if (inyectados.some((iv) => iv.indexOf(m.trim()) !== -1)) return m;   // lo inyectamos nosotros\n  if (cantidades.has(n)) return m;                                      // es una cantidad\n  if (preciosReales.has(n)) return m;                                   // coincide con catálogo\n  return 'a confirmar por mail';                                        // no verificable → reparar\n};\ntexto = texto.replace(/\\$\\s?\\d[\\d.]*/g, (m) => validar(m, normNum(m)));\ntexto = texto.replace(/\\b(\\d[\\d.]*)\\s*pesos\\b/gi, (m, num) => validar(m, normNum(num)));\n\n// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió\ntexto = texto.replace(/\\s+en total\\b/gi, '');\n\nreturn [{ json: { ...pr, output: texto } }];"
+        "jsCode": "const pr = $('Preparar Respuesta').first().json;   // ref segura (siempre ejecuta)\nlet texto = String(pr.output || '');\nconst aud = pr.auditoria || {};\nconst solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];\nconst productos = Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : [];\n\nconst nk = (s) => String(s || '').toLowerCase()\n  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').trim();\nconst asArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch (e) { return []; } })() : []);\nconst fmt = (n) => '$' + Math.round(Number(n)).toLocaleString('es-AR');\nconst normNum = (t) => Number(String(t).replace(/[^0-9]/g, ''));\n\nconst byName = new Map();\nfor (const it of $input.all()) byName.set(nk(it.json.nombre), asArr(it.json.precios));\n\nfunction display(pv, cantidad) {\n  if (!pv || !pv.cobrable || !pv.unidad) return null;\n  const tramos = (pv.tramos || []).map((t) => ({ value: Number(t.value), minQty: Number(t.minQty) || 1, maxQty: t.maxQty == null ? null : Number(t.maxQty) })).filter((t) => t.value > 0);\n  let value = Number(pv.precio_lista) > 0 ? Number(pv.precio_lista) : 0;\n  let varia = false;\n  if (tramos.length) {\n    const c = Number(cantidad);\n    if (Number.isFinite(c) && c > 0) {\n      const exacto = tramos.find((x) => c >= x.minQty && (x.maxQty == null || c <= x.maxQty));\n      const inferior = tramos.slice().sort((a, b) => a.minQty - b.minQty).filter((x) => x.minQty <= c).pop();\n      const t = exacto || inferior;\n      if (t) value = t.value;\n    } else {\n      value = tramos.slice().sort((a, b) => a.minQty - b.minQty)[0].value;\n      varia = true;\n    }\n  }\n  if (!(value > 0)) return null;\n  return fmt(value) + ' ' + pv.unidad + (varia ? ' (varía según cantidad)' : '');\n}\n\n// 1) INYECCIÓN de {Pn}\nconst inyectados = [];\nfor (const s of solic) {\n  const token = '{' + String(s.ref || '') + '}';\n  if (!s.ref || texto.indexOf(token) === -1) continue;\n  const precios = byName.get(nk(s.nombre_catalogo)) || [];\n  let pv = precios.find((p) => String(p.ref) === String(s.variante_ref));\n  if (!pv && precios.length === 1) pv = precios[0];\n  const disp = display(pv, s.cantidad);\n  if (disp) inyectados.push(disp);\n  texto = texto.split(token).join(disp || 'a confirmar por mail');\n}\ntexto = texto.replace(/\\{P\\d+\\}/g, 'a confirmar por mail');   // {Pn} huérfanos\n\n// 2) VALIDAR-Y-REPARAR: montos tipeados por el LLM contra el catálogo real\nconst cantidades = new Set();\nfor (const p of productos) if (p && p.cantidad != null) cantidades.add(Number(p.cantidad));\nfor (const s of solic) if (s && s.cantidad != null) cantidades.add(Number(s.cantidad));\nconst preciosReales = new Set();\nfor (const s of solic) {\n  for (const pv of (byName.get(nk(s.nombre_catalogo)) || [])) {\n    if (Number(pv.precio_lista) > 0) preciosReales.add(Math.round(Number(pv.precio_lista)));\n    for (const t of (pv.tramos || [])) if (Number(t.value) > 0) preciosReales.add(Math.round(Number(t.value)));\n  }\n}\nconst validar = (m, n) => {\n  if (inyectados.some((iv) => iv.indexOf(m.trim()) !== -1)) return m;   // lo inyectamos nosotros\n  if (cantidades.has(n)) return m;                                      // es una cantidad\n  if (preciosReales.has(n)) return m;                                   // coincide con catálogo\n  return 'a confirmar por mail';                                        // no verificable → reparar\n};\ntexto = texto.replace(/\\$\\s?\\d[\\d.]*/g, (m) => validar(m, normNum(m)));\ntexto = texto.replace(/\\b(\\d[\\d.]*)\\s*pesos\\b/gi, (m, num) => validar(m, normNum(num)));\n\n// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió\ntexto = texto.replace(/\\s+en total\\b/gi, '');\n\n// 4) REGISTRO DE DECISIÓN (bot.rag_decisiones). Si el Verificador MODIFICÓ el mensaje,\n//    el registro de productos queda EN BLANCO: no es fiable qué producto sobrevivió a la edición.\nconst _decision = {\n  estado: pr.corregido ? 'corregido' : 'ok',\n  productos: pr.corregido ? [] : (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []),\n  precios: pr.corregido ? [] : (Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []),\n  verificacion: pr.verificacion || null,\n};\n\nreturn [{ json: { ...pr, output: texto, _decision } }];"
       },
       "id": "rag-insertar-precios",
       "name": "Insertar Precios",
@@ -85,6 +85,43 @@
       "typeVersion": 2,
       "position": [
         2220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.rag_decisiones (session_id, mensaje, estado, productos, precios, verificacion)\nvalues ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)",
+        "options": {
+          "queryReplacement": "={{ (() => { const d = $json._decision || {}; return [ String($('Cuando llega un mensaje').first().json.sessionId || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null) ]; })() }}"
+        }
+      },
+      "id": "rag-log-decision",
+      "name": "Log Decisión",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2440,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { output: $('Insertar Precios').first().json.output } }];"
+      },
+      "id": "rag-responder",
+      "name": "Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
         0
       ]
     },
@@ -473,7 +510,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).\n\n**Preparar Respuesta** (punto único de convergencia): el chat muestra SOLO `respuesta`; `auditoria`, `verificacion` y `corregido` quedan en el item. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente): audita contra el catálogo real con la tool **consultar_catalogo_real** (relee bot.rag_catalogo por nombre). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql): registra por turno qué productos recomendó el bot (session_id, mensaje final, estado, productos, precios, veredicto). Si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue (un fallo de log no rompe la respuesta). **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo y consultar_catalogo_real: Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 560,
         "width": 540
       },
@@ -660,6 +697,28 @@
         [
           {
             "node": "Insertar Precios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insertar Precios": {
+      "main": [
+        [
+          {
+            "node": "Log Decisión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Decisión": {
+      "main": [
+        [
+          {
+            "node": "Responder",
             "type": "main",
             "index": 0
           }

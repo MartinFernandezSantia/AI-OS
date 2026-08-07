@@ -11,7 +11,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 ```
 lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + helpers + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
-db/                rag-embeddings.sql (pgvector + tabla)
+db/                rag-embeddings.sql (pgvector + tabla) · rag-decisiones.sql (log de decisiones)
 n8n/flows/         faq-bot-rag-lite.json (GENERADO por build-flow.mjs — no editar a mano)
 plans/             los planes del experimento
 ```
@@ -63,6 +63,14 @@ y `DATABASE_URL` (`--apply`/consulta).
   **valida** cualquier monto tipeado contra el catálogo (coincide → se acepta; no coincide → "a
   confirmar por mail"). Lógica en `lib/catalog/price-display.ts` (testeada); el Code de n8n inlinea
   una copia. Refrescar precios sin re-embeber: `pnpm rag:ingest --prices-only`.
+- **Registro de decisiones** (`bot.rag_decisiones`, DDL en `db/rag-decisiones.sql`): por cada
+  mensaje del bot, el nodo **Log Decisión** guarda `session_id`, mensaje final, `estado`,
+  `productos` recomendados, `precios` y el veredicto — un rastro durable de qué decidió el bot en
+  cada turno (sobrevive aunque después se use Chatwoot). **Si el Verificador modificó el mensaje,
+  `productos`/`precios` quedan EN BLANCO** (no es fiable qué sobrevivió a la edición). El INSERT
+  tiene `onError=continue` (un fallo de log no rompe la respuesta); **Responder** re-emite el
+  mensaje. Requiere aplicar el DDL + que el rol del bot tenga INSERT (mismo rol que escribe
+  `bot.decisiones` en el v10).
 - **Salida estructurada** (nodo `Salida · Agente`, `outputParserStructured`): el agente no
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la

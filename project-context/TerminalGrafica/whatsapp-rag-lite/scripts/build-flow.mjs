@@ -344,7 +344,16 @@ const insertarPreciosCode = [
   "// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió",
   "texto = texto.replace(/\\s+en total\\b/gi, '');",
   "",
-  "return [{ json: { ...pr, output: texto } }];",
+  "// 4) REGISTRO DE DECISIÓN (bot.rag_decisiones). Si el Verificador MODIFICÓ el mensaje,",
+  "//    el registro de productos queda EN BLANCO: no es fiable qué producto sobrevivió a la edición.",
+  "const _decision = {",
+  "  estado: pr.corregido ? 'corregido' : 'ok',",
+  "  productos: pr.corregido ? [] : (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []),",
+  "  precios: pr.corregido ? [] : (Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []),",
+  "  verificacion: pr.verificacion || null,",
+  "};",
+  "",
+  "return [{ json: { ...pr, output: texto, _decision } }];",
 ].join("\n");
 
 const flow = {
@@ -441,6 +450,39 @@ const flow = {
       type: "n8n-nodes-base.code",
       typeVersion: 2,
       position: [2220, 0],
+    },
+    {
+      // Registro durable de la decisión del turno (bot.rag_decisiones). onError=continue: si el log
+      // falla (permiso/tabla), NO rompe la respuesta al cliente. session_id del Chat Trigger.
+      parameters: {
+        operation: "executeQuery",
+        query:
+          "insert into bot.rag_decisiones (session_id, mensaje, estado, productos, precios, verificacion)\n" +
+          "values ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)",
+        options: {
+          queryReplacement:
+            "={{ (() => { const d = $json._decision || {}; return [ String($('Cuando llega un mensaje').first().json.sessionId || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null) ]; })() }}",
+        },
+      },
+      id: "rag-log-decision",
+      name: "Log Decisión",
+      type: "n8n-nodes-base.postgres",
+      typeVersion: 2.6,
+      position: [2440, 0],
+      credentials: { postgres: BOT_DB },
+      onError: "continueRegularOutput",
+    },
+    {
+      // Nodo terminal REAL: re-emite el mensaje para el chat (el output de Log Decisión es el
+      // resultado del INSERT, no el mensaje). Ref segura a Insertar Precios (siempre ejecuta).
+      parameters: {
+        jsCode: "return [{ json: { output: $('Insertar Precios').first().json.output } }];",
+      },
+      id: "rag-responder",
+      name: "Responder",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [2660, 0],
     },
     {
       // maxTokens 900 (no 500): la salida estructurada (respuesta + productos_ofrecidos +
@@ -801,7 +843,9 @@ const flow = {
           "",
           "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).",
           "",
-          "**Preparar Respuesta** (punto único de convergencia): el chat muestra SOLO `respuesta`; `auditoria`, `verificacion` y `corregido` quedan en el item. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).",
+          "**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).",
+          "",
+          "**Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql): registra por turno qué productos recomendó el bot (session_id, mensaje final, estado, productos, precios, veredicto). Si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue (un fallo de log no rompe la respuesta). **Responder** re-emite el mensaje al chat.",
           "",
           "⚠️ VERIFICAR EN LA UI:",
           "1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
@@ -854,9 +898,11 @@ const flow = {
     "Feedback Reintento": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
     Corrector: { main: [[{ node: "Aplicar Corrección", type: "main", index: 0 }]] },
     "Aplicar Corrección": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
-    // Cola de precios: Preparar Respuesta → Buscar Precios → Insertar Precios (terminal).
+    // Cola de precios + log: Preparar Respuesta → Buscar Precios → Insertar Precios → Log Decisión → Responder.
     "Preparar Respuesta": { main: [[{ node: "Buscar Precios", type: "main", index: 0 }]] },
     "Buscar Precios": { main: [[{ node: "Insertar Precios", type: "main", index: 0 }]] },
+    "Insertar Precios": { main: [[{ node: "Log Decisión", type: "main", index: 0 }]] },
+    "Log Decisión": { main: [[{ node: "Responder", type: "main", index: 0 }]] },
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
