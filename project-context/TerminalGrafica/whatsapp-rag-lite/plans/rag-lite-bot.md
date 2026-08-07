@@ -177,9 +177,26 @@ Sin webhook, sin HMAC, sin Chatwoot. Se prueba desde la ventana de chat integrad
 | 5 | Code `Armar Contexto` (~10 líneas: numera candidatos con `chunk_text`) | nuevo |
 | 6 | **Basic LLM Chain** Compositor (lmChatOpenRouter `gemini-3.1-flash-lite`; prompt: recomendá 1-3 productos de la lista, español rioplatense, **SIN montos**, si nada aplica decilo y ofrecé derivar a cotización) | modelo copiado de v10; su salida vuelve al chat automáticamente |
 
-Nada de debounce, historial, firewall, verificador ni log a `bot.decisiones`. Un sticky note en
-el flow documenta las limitaciones: responde a cada mensaje suelto, sin memoria de conversación,
-y el guard de nicho solo mira el mensaje actual.
+Nada de debounce, firewall, verificador ni log a `bot.decisiones`. Un sticky note en el flow
+documenta las limitaciones.
+
+### Actualización 2026-08-07 — Memoria + flujo por etapas
+
+El Compositor ahora es un **Agent** (`@n8n/n8n-nodes-langchain.agent` v1.9) con una **Memoria
+simple** (`memoryBufferWindow`, últimos 10 turnos por `sessionId`) conectada por `ai_memory`.
+Detalles para no romper la memoria:
+- El `text` del turno = **solo el mensaje del cliente** (`$('Preparar').first().json.texto`), así
+  el historial que guarda la Memoria queda limpio.
+- Los **candidatos** del RAG van en el `systemMessage` (expresión con `{{ $json.contexto }}`), que
+  NO se persiste — así no ensucian el historial turno a turno.
+- El system prompt es un **flujo por etapas**: el bot lee historial + mensaje nuevo, detecta la
+  etapa y actúa: (1) saludo/inicio → saluda y pregunta; (2) pedido claro → recomienda de los
+  candidatos; (3) falta info → hace UNA pregunta corta (sin repetir lo que ya está en el
+  historial); (4) seguimiento → combina lo previo con lo nuevo; (5) otro/cierre → responde breve
+  o deriva a mail/local. Sin montos.
+
+Limitación conocida: la Memoria le da CONTEXTO al Compositor, pero el embedding de búsqueda y el
+guard de nicho siguen mirando solo el mensaje actual (no re-consultan el catálogo con el historial).
 
 > Nota: n8n necesita la truncación a 1536 dims antes del nodo Postgres. Lo más simple es que el
 > Code `Preparar`/`Armar Contexto` recorte el array del embedding a los primeros 1536 y lo
