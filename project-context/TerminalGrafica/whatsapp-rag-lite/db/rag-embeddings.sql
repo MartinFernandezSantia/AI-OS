@@ -2,9 +2,10 @@
 -- Plan: plans/rag-lite-bot.md
 --
 -- El retrieval lo hace el nodo nativo "PGVector Vector Store" de n8n (modo tool del agente),
--- con un sub-nodo "Embeddings OpenAI" apuntando a OpenRouter (google/gemini-embedding-001).
+-- con el sub-nodo "Embeddings Google Gemini" (API de Google AI Studio, gemini-embedding-001).
 -- IMPORTANTE: el modelo de embeddings de la INGESTA y el de la QUERY tienen que ser el MISMO
--- (misma familia), si no los vectores no son comparables. Los dos usan gemini-embedding-001.
+-- (misma familia), si no los vectores no son comparables. Los dos usan gemini-embedding-001 de
+-- Google (la ingesta por la API de Google AI Studio; la query por el nodo Embeddings Google Gemini).
 --
 -- Idempotente. Aplicar en el SQL Editor. NO usa RPC ni guard de nicho duro (el nicho va en
 -- metadata y lo maneja el prompt del agente — guard blando). Reversible: drop abajo.

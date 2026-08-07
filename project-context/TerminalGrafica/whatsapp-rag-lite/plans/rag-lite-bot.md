@@ -186,13 +186,17 @@ Corrección de Martin: para RAG en n8n NO se usa un nodo HTTP para embeddings; l
 nodo nativo **PGVector Vector Store** como tool del agente, con un sub-nodo **Embeddings**. Se
 verificó con la doc de n8n (Context7). Esto elimina el HTTP, el sub-workflow y el bug de plumbing
 del `toolWorkflow`. **Constraint clave de Martin:** el modelo de embeddings de la ingesta y el de
-la query DEBEN ser el mismo (misma familia) — los dos usan `google/gemini-embedding-001`.
+la query DEBEN ser el mismo (misma familia) — los dos usan `gemini-embedding-001` de Google.
+**Por qué Google y no OpenRouter para embeddings:** n8n NO tiene sub-nodo "Embeddings OpenRouter",
+y el sub-nodo "Embeddings OpenAI" rechaza el modelo de OpenRouter ("is not supported" en la UI).
+El nodo PGVector exige un sub-nodo de embeddings soportado → para Gemini es "Embeddings Google
+Gemini" (API key gratis de Google AI Studio). El chat del agente sigue en OpenRouter.
 
 **Un solo workflow `faq-bot-rag-lite.json` (7 nodos):** `Chat Trigger → Agente`. El Agente
 (`@n8n/n8n-nodes-langchain.agent` v1.9) tiene: **Modelo** (`lmChatOpenRouter` gemini-3.1-flash-lite),
 **Memoria** (`memoryBufferWindow` 10 turnos/sesión, `ai_memory`), y la tool **buscar_catalogo** =
 nodo **PGVector Vector Store** (`vectorStorePGVector`, modo *retrieve-as-tool*, `ai_tool`) con el
-sub-nodo **Embeddings (OpenRouter)** (`embeddingsOpenAi` con `baseURL=https://openrouter.ai/api/v1`,
+sub-nodo **Embeddings Google Gemini** (`embeddingsGoogleGemini`, `models/gemini-embedding-001`,
 `ai_embedding`). El nodo PGVector embebe la consulta y hace el KNN — no hay HTTP ni Code de vector.
 `text` del turno = `{{ $json.chatInput }}` (memoria limpia). System prompt = flujo por etapas
 (saludo / pedido claro→tool / falta info→pregunta / seguimiento / otro) + **guard de nicho blando**
@@ -204,9 +208,9 @@ la RPC `bot.match_productos` y el guard de nicho duro. Ingesta: `scripts/rag-ing
 `text` + `metadata` + `embedding` (dim nativa, SIN truncar) con `gemini-embedding-001`; consulta
 CLI: `scripts/rag-query.ts` hace KNN directo sobre la tabla.
 
-**Wiring manual en la UI de n8n (una vez):** (1) en **Embeddings (OpenRouter)** crear/elegir una
-credencial tipo **OpenAI** con API key = key de OpenRouter y Base URL = `https://openrouter.ai/api/v1`,
-modelo `google/gemini-embedding-001` (el MISMO que la ingesta); (2) en **buscar_catalogo** (PGVector)
+**Wiring manual en la UI de n8n (una vez):** (1) en **Embeddings (Google Gemini)** elegir la
+credencial **Google Gemini(PaLM) API** con la API key de Google AI Studio, modelo
+`models/gemini-embedding-001` (el MISMO que la ingesta); (2) en **buscar_catalogo** (PGVector)
 confirmar Table `rag_catalogo`, Schema `bot` y los Column Names (id/embedding/text/metadata). Los
 type/version exactos de estos cluster-nodes pueden variar según la versión de n8n — si algún campo
 no matchea al importar, se ajusta en la UI (son nodos estándar).

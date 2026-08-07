@@ -15,8 +15,10 @@ import { parseExport } from "../lib/catalog/loader";
 import { chunksDeExport, type RagChunk } from "../lib/catalog/rag-chunk";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const MODELO = "google/gemini-embedding-001";
-const EMBED_URL = "https://openrouter.ai/api/v1/embeddings";
+// Embeddings vía API de Google AI Studio (Gemini) — MISMO proveedor/modelo que el nodo
+// "Embeddings Google Gemini" de n8n (así los vectores de ingesta y query son comparables).
+const MODELO = "models/gemini-embedding-001";
+const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:batchEmbedContents`;
 const BATCH = 100;
 const TABLE = "bot.rag_catalogo";
 
@@ -39,18 +41,21 @@ function cargarChunks(): RagChunk[] {
 }
 
 async function embedBatch(textos: string[]): Promise<number[][]> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("Falta OPENROUTER_API_KEY en el entorno.");
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!key) throw new Error("Falta GEMINI_API_KEY (API key de Google AI Studio) en el entorno.");
   const res = await fetch(EMBED_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODELO, input: textos }),
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requests: textos.map((t) => ({ model: MODELO, content: { parts: [{ text: t }] } })),
+    }),
   });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
-  const json = (await res.json()) as { data: { embedding: number[]; index: number }[] };
-  const out: number[][] = new Array(textos.length);
-  for (const d of json.data) out[d.index] = d.embedding; // dim nativa, SIN truncar
-  if (out.some((x) => !x)) throw new Error("La respuesta de embeddings no cubrió todos los inputs.");
+  if (!res.ok) throw new Error(`Google embeddings ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { embeddings: { values: number[] }[] };
+  const out = (json.embeddings || []).map((e) => e.values); // orden = orden de requests; dim nativa
+  if (out.length !== textos.length || out.some((x) => !x)) {
+    throw new Error("La respuesta de embeddings no cubrió todos los inputs.");
+  }
   return out;
 }
 

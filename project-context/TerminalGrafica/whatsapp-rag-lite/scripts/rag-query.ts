@@ -7,24 +7,24 @@
 // sobre bot.rag_catalogo. Los flags de nicho son solo para PROBAR el guard blando localmente
 // (en el bot real el nicho lo maneja el prompt del agente). Env: OPENROUTER_API_KEY, DATABASE_URL.
 
-const MODELO = "google/gemini-embedding-001";
-const EMBED_URL = "https://openrouter.ai/api/v1/embeddings";
+const MODELO = "models/gemini-embedding-001";
+const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:embedContent`;
 const TABLE = "bot.rag_catalogo";
 
 const has = (flag: string) => process.argv.includes(flag);
 const pregunta = process.argv.slice(2).filter((a) => !a.startsWith("--")).join(" ").trim();
 
 async function embed(texto: string): Promise<number[]> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("Falta OPENROUTER_API_KEY.");
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!key) throw new Error("Falta GEMINI_API_KEY (API key de Google AI Studio).");
   const res = await fetch(EMBED_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODELO, input: [texto] }),
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: MODELO, content: { parts: [{ text: texto }] } }),
   });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
-  const json = (await res.json()) as { data: { embedding: number[] }[] };
-  return json.data[0].embedding;
+  if (!res.ok) throw new Error(`Google embeddings ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { embedding: { values: number[] } };
+  return json.embedding.values;
 }
 
 async function main() {

@@ -22,20 +22,21 @@ compartido `../whatsapp-automation/db/export-actualizado-catalogo.json` (overrid
 
 ## Cómo se usa
 
-Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABASE_URL` (`--apply`/consulta).
+Requiere `pnpm install`. Env: `GEMINI_API_KEY` (API key de Google AI Studio, para ingesta/consulta)
+y `DATABASE_URL` (`--apply`/consulta).
 
 1. **DDL** — aplicar `db/rag-embeddings.sql` en el SQL Editor de Supabase (extensión vector +
-   tabla `bot.producto_embeddings` + RPC `bot.match_productos`).
+   tabla `bot.rag_catalogo` en formato LangChain).
 2. **Ingesta** — `pnpm rag:ingest --dry` (imprime los chunks, sin API/DB) para revisarlos;
    `pnpm rag:ingest` genera `rag-embeddings-data.sql` (truncate+insert) para aplicar; o
    `pnpm rag:ingest --apply` upsertea directo. Reingesta = correr de nuevo (idempotente).
 3. **Consulta** — `pnpm rag:query "sirve para plotear un plano a1?"` (flags `--medicina` /
    `--inmobiliarias` para el guard de nicho).
 4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **Embeddings
-   (OpenRouter)** elegir una credencial tipo **OpenAI** con API key = tu key de OpenRouter y Base
-   URL `https://openrouter.ai/api/v1`, modelo `google/gemini-embedding-001` (el MISMO de la ingesta);
-   (b) en **buscar_catalogo** (PGVector) confirmar Table `rag_catalogo`, Schema `bot` y los Column
-   Names. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
+   (Google Gemini)** elegir la credencial **Google Gemini(PaLM) API** con tu key de Google AI
+   Studio, modelo `models/gemini-embedding-001` (el MISMO de la ingesta); (b) en **buscar_catalogo**
+   (PGVector) confirmar Table `rag_catalogo`, Schema `bot` y los Column Names. El chat sigue en
+   OpenRouter. Probar desde el chat de test del Chat Trigger (no toca Chatwoot ni WhatsApp).
 
 ## Tests
 
@@ -46,8 +47,10 @@ Requiere `pnpm install`. Env: `OPENROUTER_API_KEY` (ingesta/consulta) y `DATABAS
 - Chunk **atómico por producto** (nombre + sinónimos + casos de uso + rubro + variantes).
 - Enfoque **nativo n8n**: el RAG es el nodo **PGVector Vector Store** como tool del agente, con un
   sub-nodo **Embeddings** — sin HTTP ni sub-workflow.
-- Embeddings `google/gemini-embedding-001` (dim nativa, **el mismo modelo en ingesta y query** — si
-  difieren, los vectores no son comparables). Tabla formato LangChain (`text`/`metadata`/`embedding`).
+- Embeddings `gemini-embedding-001` de **Google AI Studio** (dim nativa, **el mismo modelo en
+  ingesta y query** — si difieren, los vectores no son comparables). Ingesta por la API de Google;
+  query por el nodo nativo Embeddings Google Gemini. Chat sigue en OpenRouter. Tabla formato
+  LangChain (`text`/`metadata`/`embedding`).
 - Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
 - **Sin montos** en la respuesta.
 - Sin firewall. **Con memoria** (10 turnos/sesión) y flujo por etapas; el agente decide cuándo

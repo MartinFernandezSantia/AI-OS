@@ -105,15 +105,12 @@
     },
     {
       "parameters": {
-        "model": "google/gemini-embedding-001",
-        "options": {
-          "baseURL": "https://openrouter.ai/api/v1"
-        }
+        "modelName": "models/gemini-embedding-001"
       },
       "id": "rag-embeddings",
-      "name": "Embeddings (OpenRouter)",
-      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
-      "typeVersion": 1.2,
+      "name": "Embeddings (Google Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
       "position": [
         700,
         420
@@ -121,7 +118,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings (OpenRouter)**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (OpenRouter): crear/elegir una credencial tipo **OpenAI** con API key = tu key de OpenRouter y Base URL = https://openrouter.ai/api/v1. Modelo: google/gemini-embedding-001 (el MISMO que la ingesta).\n2) buscar_catalogo (PGVector): confirmar Table = rag_catalogo, Schema = bot, y los Column Names (id/embedding/text/metadata). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt). Sin montos.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): elegir la credencial **Google Gemini(PaLM) API** con tu API key de Google AI Studio. Modelo: models/gemini-embedding-001 (el MISMO que la ingesta). El chat sigue en OpenRouter; solo los embeddings usan Google.\n2) buscar_catalogo (PGVector): confirmar Table = rag_catalogo, Schema = bot, y los Column Names (id/embedding/text/metadata). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
         "height": 460,
         "width": 520
       },
@@ -180,7 +177,7 @@
         ]
       ]
     },
-    "Embeddings (OpenRouter)": {
+    "Embeddings (Google Gemini)": {
       "ai_embedding": [
         [
           {
