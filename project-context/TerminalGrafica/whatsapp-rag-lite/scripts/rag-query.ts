@@ -45,7 +45,7 @@ async function main() {
     // pasó el flag correspondiente. En el bot real esto lo decide el agente por prompt.
     const { rows } = await cli.query(
       `select metadata->>'nombre_canonico' as nombre,
-              metadata->>'rubro'           as rubro,
+              metadata->>'familia'         as familia,
               metadata->>'nicho'           as nicho,
               round((1 - (embedding <=> $1::vector))::numeric, 4) as sim,
               text
@@ -64,7 +64,7 @@ async function main() {
       return;
     }
     rows.forEach((r, i) =>
-      console.log(`${i + 1}. [${r.sim}] ${r.nombre}  (${r.rubro || "s/rubro"}${r.nicho ? `, nicho:${r.nicho}` : ""})`),
+      console.log(`${i + 1}. [${r.sim}] ${r.nombre}  (${r.familia || "s/familia"}${r.nicho ? `, nicho:${r.nicho}` : ""})`),
     );
   } finally {
     await cli.end();

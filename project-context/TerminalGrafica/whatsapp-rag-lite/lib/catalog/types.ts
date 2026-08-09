@@ -28,6 +28,9 @@ export interface RangoCantidad {
  *  `ref` ("v1","v2"…) es local al producto y matchea el [vN] que se muestra en "Opciones:". */
 export interface PrecioVariante {
   ref: string;
+  /** variante_id (v4): para auditoría/freshness/--prices-only. NO es clave de match (el flujo
+   *  matchea por nombre del chunk + [vN]); va DENTRO de metadata.precios. */
+  variante_id?: string;
   variante: string;
   unidad: string | null; // "por unidad" | "el pack de N unidades" | … | null (no cobrable)
   cobrable: boolean;
@@ -89,6 +92,58 @@ export interface CatalogExport {
   schema_version?: number;
   rubros: Rubro[];
   productos: Producto[];
+}
+
+// ---- export v4: modelo PRODUCTO-BOT (db/curador-export-v4.sql) ----
+// La unidad es el producto-bot (N variantes de public). El contexto de cobro viene POR ITEM,
+// así price-display funciona aunque un producto-bot agrupe variantes de varios productos public.
+
+export interface FamiliaExport {
+  clave: string;
+  nombre: string;
+  nota: string | null; // se hornea al embedding (ej. libreria: "se venden sueltos…")
+}
+
+/** Una variante de public que cuelga de un producto-bot, con su contexto de cobro resuelto. */
+export interface ItemBot {
+  variante_id: string;
+  nombre_variante_bot: string; // ya resuelto: coalesce(item, display_variante, nombre vivo)
+  variante_origen?: string;
+  color: string | null;
+  unidad: string | null; // public.unit — MIENTE (94/165), no se usa para cobro
+  precio_lista: number | null;
+  precio_actualizado?: string | null;
+  // flags/atributos de cobro POR ITEM (lo que price-display necesita)
+  por_pagina: boolean;
+  por_pack: boolean;
+  atributos?: Record<string, unknown>; // efectivos (unidad_venta, pack_unidades, tamano, …)
+  rangos_cantidad?: RangoCantidad[] | string | null;
+  mostrable: boolean | null;
+  tiene_override: boolean | null;
+  solo_descuentos: boolean | null;
+  n_reglas_cantidad: number | null;
+}
+
+export interface ProductoBot {
+  producto_id: string; // = clave natural (NO uuid) — clave de metadata
+  clave: string;
+  nombre_bot: string;
+  familia: string | null;
+  familia_nota?: string | null;
+  sinonimos: string[];
+  casos_de_uso: string[];
+  nicho: string | null;
+  nota: string | null;
+  peso?: number;
+  oculto: boolean;
+  items: ItemBot[];
+}
+
+export interface CatalogExportV4 {
+  exportado: string;
+  schema_version: number; // 4
+  familias: FamiliaExport[];
+  productos: ProductoBot[];
 }
 
 // ---- estado de curación (editable, se persiste en localStorage) ----

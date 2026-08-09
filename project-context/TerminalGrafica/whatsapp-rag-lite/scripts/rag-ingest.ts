@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseExport } from "../lib/catalog/loader";
+import { parseExportV4 } from "../lib/catalog/loader";
 import { chunksDeExport, type RagChunk } from "../lib/catalog/rag-chunk";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -23,8 +23,8 @@ const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:ba
 const BATCH = 100;
 const TABLE = "bot.rag_catalogo";
 
-// Export del catálogo (fuente compartida en el contexto de whatsapp-automation, al lado).
-const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo.json");
+// Export del catálogo v4 (modelo producto-bot; curador-export-v4.sql). Fuente compartida al lado.
+const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v4.json");
 const OUT_SQL = join(HERE, "..", "rag-embeddings-data.sql");
 
 const argVal = (flag: string) => {
@@ -35,9 +35,9 @@ const has = (flag: string) => process.argv.includes(flag);
 
 function cargarChunks(): RagChunk[] {
   const path = argVal("--export") || DEFAULT_EXPORT;
-  const { data } = parseExport(readFileSync(path, "utf8"));
-  const chunks = chunksDeExport(data.productos, data.rubros);
-  console.error(`Export: ${path}\nProductos: ${data.productos.length} → chunks: ${chunks.length} (excluye ocultos)`);
+  const { data } = parseExportV4(readFileSync(path, "utf8"));
+  const chunks = chunksDeExport(data.productos);
+  console.error(`Export v4: ${path}\nProducto-bot: ${data.productos.length} → chunks: ${chunks.length} (excluye ocultos)`);
   return chunks;
 }
 
@@ -76,15 +76,14 @@ async function embedTodos(chunks: RagChunk[]): Promise<number[][]> {
 const vecLiteral = (v: number[]) => `[${v.join(",")}]`;
 const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const metaObj = (c: RagChunk) => ({
-  producto_id: c.meta.producto_id,
-  nombre_canonico: c.meta.nombre_canonico,
-  rubro: c.meta.rubro,
+  producto_id: c.meta.producto_id, // clave natural (estable testing↔prod)
+  nombre_canonico: c.meta.nombre_canonico, // = nombre_bot (clave de match del flujo de precios)
+  familia: c.meta.familia,
   nicho: c.meta.nicho,
-  familias: c.meta.familias,
   precio_desde: c.meta.precio_desde,
   precio_hasta: c.meta.precio_hasta,
   precio_confiable: c.meta.precio_confiable,
-  precios: c.meta.precios,
+  precios: c.meta.precios, // cada uno lleva variante_id (auditoría/--prices-only)
 });
 
 function generarSql(chunks: RagChunk[], vecs: number[][]): string {

@@ -2,7 +2,7 @@
 // ([{"export": {...}}]) y repara mojibake (UTF-8 leído como latin1/win-1252), porque
 // de esos strings salen las claves naturales del SQL — si vienen rotos, no matchean.
 
-import type { CatalogExport } from "./types";
+import type { CatalogExport, CatalogExportV4 } from "./types";
 
 /** Desenvuelve [{"export": {...}}] y variantes de un solo valor. */
 export function desenvolver(j: unknown): unknown {
@@ -55,5 +55,22 @@ export function parseExport(texto: string): ParseResult {
   }
   const data = j as CatalogExport;
   if (!Array.isArray(data.rubros)) data.rubros = [];
+  return { data, reparado };
+}
+
+export interface ParseResultV4 {
+  data: CatalogExportV4;
+  reparado: boolean;
+}
+
+/** Parsea el export v4 (modelo producto-bot). Misma envoltura/reparación; valida productos. */
+export function parseExportV4(texto: string): ParseResultV4 {
+  const { texto: fixed, reparado } = repararMojibake(texto);
+  const j = desenvolver(JSON.parse(fixed));
+  if (!j || typeof j !== "object" || !("productos" in j) || !("exportado" in j)) {
+    throw new Error("Ese JSON no parece un export v4 del catálogo (falta productos/exportado).");
+  }
+  const data = j as CatalogExportV4;
+  if (!Array.isArray(data.familias)) data.familias = [];
   return { data, reparado };
 }

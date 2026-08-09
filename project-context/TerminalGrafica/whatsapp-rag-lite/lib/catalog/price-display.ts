@@ -1,11 +1,16 @@
 // Derivación de precio POR UNIDAD para el bot RAG lite. Porteo del subconjunto SIN totales de
 // `Armar Candidatos` + `Calcular Montos` del v10 (nunca multiplica, nunca totaliza, sin CAP).
 //
+// v4 (modelo producto-bot): las funciones operan POR ITEM. Un producto-bot puede agrupar variantes
+// de VARIOS productos public con formas de cobro distintas, así que el contexto de cobro
+// (por_pagina/por_pack/atributos efectivos) viene en cada `ItemBot`, no en un "producto" común.
+//
 // Función PURA y testeada: es la lógica que le habla de plata al cliente, así que va con tests
 // (memoria "los fixtures mienten"). El nodo Code "Insertar Precios" de n8n inlinea una COPIA de
-// `precioDisplay` (n8n no importa TS) — si tocás la lógica, actualizá las dos.
+// `precioDisplay` (opera sobre PrecioVariante ya horneado, NO cambió con v4) — si tocás esa
+// función, actualizá las dos. `derivarUnidad`/`precioVariante` corren sólo en la ingesta.
 
-import type { Producto, Variante, RangoCantidad, PrecioVariante } from "./types";
+import type { ItemBot, RangoCantidad, PrecioVariante } from "./types";
 
 // unidad_venta → texto que ve el cliente. NUNCA se usa la columna `unidad` (miente en 94/165).
 const COBRO: Record<string, string> = {
@@ -17,17 +22,15 @@ const COBRO: Record<string, string> = {
   metro: "por metro",
 };
 
-/** Lee un atributo de la variante, cayendo al del producto. */
-function attr(p: Producto, v: Variante, key: string): unknown {
-  const va = (v.atributos as Record<string, unknown>) || {};
-  if (va[key] != null) return va[key];
-  const pa = (p.atributos as Record<string, unknown>) || {};
-  return pa[key];
+/** Lee un atributo EFECTIVO del item (en v4 el export ya mergeó producto||variante). */
+function attrItem(item: ItemBot, key: string): unknown {
+  const a = (item.atributos as Record<string, unknown>) || {};
+  return a[key];
 }
 
 /** rangos_cantidad normalizado (puede venir string del driver pg). */
-export function asRangos(v: Variante): RangoCantidad[] {
-  let r: unknown = v.rangos_cantidad;
+export function asRangos(item: Pick<ItemBot, "rangos_cantidad">): RangoCantidad[] {
+  let r: unknown = item.rangos_cantidad;
   if (typeof r === "string") {
     try {
       r = JSON.parse(r);
@@ -49,28 +52,29 @@ export function asRangos(v: Variante): RangoCantidad[] {
 }
 
 /** Unidad de cobro mostrable. Cascada exacta del v10; null = no se sabe cómo se cobra → mail. */
-export function derivarUnidad(p: Producto, v: Variante): string | null {
-  const tramos = asRangos(v);
-  const packUnidades = Number(attr(p, v, "pack_unidades")) || 0;
-  if (p.por_pagina) return "por pagina";
+export function derivarUnidad(item: ItemBot): string | null {
+  const tramos = asRangos(item);
+  const packUnidades = Number(attrItem(item, "pack_unidades")) || 0;
+  if (item.por_pagina) return "por pagina";
   // Con escalera, la cantidad la manda el tramo → el pack se calla ("tramoPisaPack").
   if (packUnidades > 0 && tramos.length === 0) return `el pack de ${packUnidades} unidades`;
-  if (p.por_pack) return "el pack";
-  const uv = String(attr(p, v, "unidad_venta") || "").toLowerCase().trim();
+  if (item.por_pack) return "el pack";
+  const uv = String(attrItem(item, "unidad_venta") || "").toLowerCase().trim();
   if (uv && COBRO[uv]) return COBRO[uv];
   return null;
 }
 
-/** Arma la forma horneada del precio de una variante (va a metadata.precios). */
-export function precioVariante(p: Producto, v: Variante, ref: string): PrecioVariante {
-  const unidad = derivarUnidad(p, v);
-  const tramos = asRangos(v);
-  const precioLista = Number(v.precio_lista) || 0;
+/** Arma la forma horneada del precio de un item (va a metadata.precios). */
+export function precioVariante(item: ItemBot, ref: string): PrecioVariante {
+  const unidad = derivarUnidad(item);
+  const tramos = asRangos(item);
+  const precioLista = Number(item.precio_lista) || 0;
   const hayTramo = tramos.some((t) => t.value > 0);
-  const packUnidades = Number(attr(p, v, "pack_unidades")) || null;
+  const packUnidades = Number(attrItem(item, "pack_unidades")) || null;
   return {
     ref,
-    variante: (v.variante || v.display_variante || v.nombre_vivo || "").trim(),
+    variante_id: item.variante_id,
+    variante: (item.nombre_variante_bot || item.variante_origen || "").trim(),
     unidad,
     cobrable: unidad != null && (precioLista > 0 || hayTramo),
     precio_lista: precioLista,
