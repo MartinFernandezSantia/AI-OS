@@ -5,6 +5,7 @@
 // el hash de contenido lo calcula el script de ingesta, no acá.
 
 import type { ItemBot, PrecioVariante, ProductoBot } from "./types";
+import { marca } from "./effective";
 import { contextoPrecio, precioVariante } from "./price-display";
 
 export interface RagChunkMeta {
@@ -27,35 +28,34 @@ export interface RagChunk {
 /** ¿Este producto-bot entra al RAG? Se excluyen los ocultos. */
 export const esChunkeable = (p: ProductoBot): boolean => !p.oculto;
 
-/** Marca de la escalera de precio de un item: '' override/qr>1/$0 · '**' 1 regla qr · '*' resto. */
-function marcaItem(it: ItemBot): string {
-  if (it.tiene_override) return "";
-  if ((it.n_reglas_cantidad || 0) > 1) return "";
-  if ((it.n_reglas_cantidad || 0) === 1) return "**";
-  if (!(Number(it.precio_lista) > 0)) return "";
-  return "*";
+/** ¿El item tiene precio confiable? Precio simple, sin override ni reglas de cantidad.
+ *  Reusa `marca()` (misma cascada que el curador) para no driftear. */
+const itemPrecioConfiable = (it: ItemBot): boolean =>
+  it.mostrable !== false && marca(it) === "*" && Number(it.precio_lista) > 0;
+
+/** Atributo string COMÚN a todos los items (mismo valor en todos). null si difiere o falta en alguno. */
+function comun(items: ItemBot[], key: string): string | null {
+  if (!items.length) return null;
+  let val: string | null = null;
+  for (const it of items) {
+    const v = (it.atributos || {})[key];
+    const s = typeof v === "string" && v ? v : null;
+    if (s == null) return null; // no todos lo tienen
+    if (val == null) val = s;
+    else if (val !== s) return null; // difieren entre items
+  }
+  return val;
 }
 
-/** ¿El item tiene precio confiable? Precio simple, sin override ni reglas de cantidad. */
-const itemPrecioConfiable = (it: ItemBot): boolean =>
-  it.mostrable !== false && marcaItem(it) === "*" && Number(it.precio_lista) > 0;
-
-/** Atributos que aportan señal al embedding, agregados sobre los items (material/tecnología únicos,
- *  tamaños en unión). Se omiten flags internos. */
+/** Atributos de señal al embedding: SÓLO los comunes a todos los items (evita fusionar señal
+ *  engañosa en un grupo heterogéneo — ej. "Material: obra, plastico" sobre productos distintos).
+ *  Los que difieren (tamaño por variante) quedan en los nombres de opción [vN] de "Opciones:". */
 function atributosTexto(items: ItemBot[]): string {
-  const materiales = new Set<string>();
-  const tecnologias = new Set<string>();
-  const tamanos = new Set<string>();
-  for (const it of items) {
-    const a = it.atributos || {};
-    if (typeof a.material === "string" && a.material) materiales.add(a.material.replace(/_/g, " "));
-    if (typeof a.tecnologia === "string" && a.tecnologia) tecnologias.add(a.tecnologia);
-    if (Array.isArray(a.tamano)) for (const t of a.tamano) if (t) tamanos.add(String(t));
-  }
   const partes: string[] = [];
-  if (materiales.size) partes.push(`Material: ${[...materiales].join(", ")}.`);
-  if (tecnologias.size) partes.push(`Tecnología: ${[...tecnologias].join(", ")}.`);
-  if (tamanos.size) partes.push(`Tamaños: ${[...tamanos].join(", ")}.`);
+  const material = comun(items, "material");
+  const tecnologia = comun(items, "tecnologia");
+  if (material) partes.push(`Material: ${material.replace(/_/g, " ")}.`);
+  if (tecnologia) partes.push(`Tecnología: ${tecnologia}.`);
   return partes.join(" ");
 }
 

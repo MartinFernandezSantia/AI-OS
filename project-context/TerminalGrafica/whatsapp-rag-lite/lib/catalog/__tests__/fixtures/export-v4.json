@@ -148,6 +148,36 @@
       ]
     },
     {
+      "producto_id": "servicio a confirmar|otro",
+      "clave": "servicio a confirmar|otro",
+      "nombre_bot": "Servicio a confirmar",
+      "familia": "otro",
+      "familia_nota": null,
+      "sinonimos": [],
+      "casos_de_uso": [],
+      "nicho": null,
+      "nota": null,
+      "peso": 1.0,
+      "oculto": false,
+      "items": [
+        {
+          "variante_id": "v-sinprecio",
+          "nombre_variante_bot": "Único",
+          "color": null,
+          "unidad": "Unidad",
+          "precio_lista": null,
+          "por_pagina": false,
+          "por_pack": false,
+          "atributos": {},
+          "rangos_cantidad": null,
+          "mostrable": true,
+          "tiene_override": false,
+          "solo_descuentos": false,
+          "n_reglas_cantidad": 0
+        }
+      ]
+    },
+    {
       "producto_id": "oculto-x",
       "clave": "oculto-x",
       "nombre_bot": "Producto oculto",

@@ -135,15 +135,28 @@ async function pricesOnly(chunks: RagChunk[]): Promise<void> {
   const cli = new Client({ connectionString: url, ssl: local ? undefined : { rejectUnauthorized: false } });
   await cli.connect();
   try {
+    await cli.query("begin");
     let n = 0;
+    const misses: string[] = [];
     for (const c of chunks) {
       const r = await cli.query(
         `update ${TABLE} set text = $1, metadata = $2::jsonb where metadata->>'producto_id' = $3`,
         [c.texto, JSON.stringify(metaObj(c)), c.meta.producto_id],
       );
-      n += r.rowCount || 0;
+      const rc = r.rowCount || 0;
+      n += rc;
+      if (rc === 0) misses.push(c.meta.producto_id);
     }
+    await cli.query("commit");
     console.error(`--prices-only: ${n} filas actualizadas (text+metadata, sin re-embeber).`);
+    if (misses.length) {
+      console.error(
+        `⚠️ ${misses.length} producto-bot sin fila en la tabla (requieren INGEST FULL, no --prices-only): ${misses.join(", ")}`,
+      );
+    }
+  } catch (e) {
+    await cli.query("rollback");
+    throw e;
   } finally {
     await cli.end();
   }

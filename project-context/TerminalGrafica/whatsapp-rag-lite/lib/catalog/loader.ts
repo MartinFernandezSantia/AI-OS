@@ -2,7 +2,7 @@
 // ([{"export": {...}}]) y repara mojibake (UTF-8 leído como latin1/win-1252), porque
 // de esos strings salen las claves naturales del SQL — si vienen rotos, no matchean.
 
-import type { CatalogExport, CatalogExportV4 } from "./types";
+import type { CatalogExport, CatalogExportV4, ProductoBot } from "./types";
 
 /** Desenvuelve [{"export": {...}}] y variantes de un solo valor. */
 export function desenvolver(j: unknown): unknown {
@@ -63,14 +63,24 @@ export interface ParseResultV4 {
   reparado: boolean;
 }
 
-/** Parsea el export v4 (modelo producto-bot). Misma envoltura/reparación; valida productos. */
+/** Parsea el export v4 (modelo producto-bot). Misma envoltura/reparación; EXIGE schema_version 4
+ *  y productos con `items` — así un v2/v3 guardado por error NO se ingesta como basura (truncaría
+ *  la tabla y la llenaría de chunks vacíos). */
 export function parseExportV4(texto: string): ParseResultV4 {
   const { texto: fixed, reparado } = repararMojibake(texto);
   const j = desenvolver(JSON.parse(fixed));
-  if (!j || typeof j !== "object" || !("productos" in j) || !("exportado" in j)) {
-    throw new Error("Ese JSON no parece un export v4 del catálogo (falta productos/exportado).");
+  if (!j || typeof j !== "object" || !("productos" in j) || !Array.isArray((j as CatalogExportV4).productos)) {
+    throw new Error("Ese JSON no parece un export del catálogo (falta productos).");
   }
   const data = j as CatalogExportV4;
+  if (data.schema_version !== 4) {
+    throw new Error(
+      `Export v4 esperado (schema_version 4); vino ${data.schema_version ?? "sin versión"}. ¿Guardaste el v3 por error?`,
+    );
+  }
+  if (!data.productos.every((p) => Array.isArray((p as ProductoBot).items))) {
+    throw new Error("Export v4 inválido: hay productos sin 'items' (¿es un export v2/v3?).");
+  }
   if (!Array.isArray(data.familias)) data.familias = [];
   return { data, reparado };
 }

@@ -16,7 +16,16 @@ describe("chunksDeExport (v4)", () => {
     const ocultos = data.productos.filter((p) => p.oculto).length;
     const chunks = chunksDeExport(data.productos);
     expect(chunks.length).toBe(data.productos.length - ocultos);
-    expect(chunks.length).toBe(4); // 5 - 1 oculto
+    expect(chunks.length).toBe(5); // 6 - 1 oculto
+  });
+});
+
+describe("item sin precio real (bv-null en el export) degrada a mail", () => {
+  it("aparece en Opciones sin monto y no cobrable, no rompe", () => {
+    const c = chunkRAG(data.productos.find((p) => p.producto_id === "servicio a confirmar|otro")!);
+    expect(c.texto).toContain("Opciones: [v1] Único.");
+    expect(c.meta.precios[0].cobrable).toBe(false);
+    expect(c.meta.precio_confiable).toBe(false);
   });
 });
 

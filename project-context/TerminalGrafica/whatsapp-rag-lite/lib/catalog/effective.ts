@@ -39,8 +39,9 @@ export function sinonimosEf(p: Producto, s: ProdState): string[] {
   return out;
 }
 
-/** Marca de la escalera de precio: '' override/qr>1/$0 · '**' 1 regla qr · '*' resto con precio. */
-export function marca(v: Variante): string {
+/** Marca de la escalera de precio: '' override/qr>1/$0 · '**' 1 regla qr · '*' resto con precio.
+ *  Pick sobre los 3 campos → sirve tanto para Variante (curador) como para ItemBot (RAG v4). */
+export function marca(v: Pick<Variante, "tiene_override" | "n_reglas_cantidad" | "precio_lista">): string {
   if (v.tiene_override) return "";
   if ((v.n_reglas_cantidad || 0) > 1) return "";
   if ((v.n_reglas_cantidad || 0) === 1) return "**";
