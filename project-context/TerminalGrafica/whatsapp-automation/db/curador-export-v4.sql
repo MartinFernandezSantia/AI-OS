@@ -55,7 +55,7 @@ select json_build_object(
               'nombre_variante_bot', coalesce(pi.nombre_variante_bot, vm.display_variante, v.name),
               'variante_origen',    v.name,
               'color',              v.color,
-              'unidad',             bv.unidad,
+              'unidad',             coalesce(bv.unidad, v.unit),
               'precio_lista',       bv.precio_lista,
               'precio_actualizado', bv.precio_actualizado,
               -- flags/atributos de cobro POR ITEM (lo que price-display necesita)
@@ -69,16 +69,25 @@ select json_build_object(
               'solo_descuentos',    bv.solo_descuentos,
               'n_reglas_cantidad',  bv.n_reglas_cantidad
             ) order by coalesce(pi.nombre_variante_bot, vm.display_variante, v.name)), '[]'::json)
+          -- INNER join a bot.variantes: un item cuya variante no está en la vista de precios
+          -- (oculta/inactiva) NO se exporta — evita hornear cobro inventado (false ≠ desconocido).
           from bot.producto_item pi
           join public.product_variants v on v.id = pi.variante_id and v.is_active
+          join bot.variantes bv          on bv.variante_id = v.id
           left join bot.variante_meta vm on vm.variante_id = v.id
-          left join bot.variantes bv     on bv.variante_id = v.id
           where pi.producto_id = p.id and not pi.oculto
         )
       ) as prod
       from bot.producto p
       left join bot.familia f on f.clave = p.familia
       where not p.oculto
+        -- no emitir un producto-bot que quedaría sin items exportables (chunk degenerado)
+        and exists (
+          select 1 from bot.producto_item pi
+          join public.product_variants v on v.id = pi.variante_id and v.is_active
+          join bot.variantes bv          on bv.variante_id = v.id
+          where pi.producto_id = p.id and not pi.oculto
+        )
     ) s
   )
 ) as export;

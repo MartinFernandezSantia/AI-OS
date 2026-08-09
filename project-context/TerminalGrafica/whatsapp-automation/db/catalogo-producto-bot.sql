@@ -98,4 +98,17 @@ create index if not exists bot_producto_item_producto_idx on bot.producto_item(p
 -- El control de relevancia va por bot.producto.peso (ajusta el RANKING del retrieval),
 -- no por un orden de presentación.
 
+-- Grants condicionales (mismo patrón que el resto de la capa bot). Los va a necesitar la RPC
+-- de re-ranking por `peso` (Fase 4) y cualquier lector read-only.
+do $g$
+begin
+  if exists (select 1 from pg_roles where rolname = 'bot_readonly') then
+    grant usage on schema bot to bot_readonly;
+    grant select on bot.familia, bot.producto, bot.producto_item to bot_readonly;
+    raise notice 'Grants de bot.familia/producto/producto_item otorgados a bot_readonly.';
+  else
+    raise notice 'Rol bot_readonly no existe: sin grants (n8n como owner ya accede).';
+  end if;
+end $g$;
+
 -- Después de aplicar cambios: regenerar el export v4 y re-ingestar los embeddings.
