@@ -28,11 +28,11 @@ tool, buscar_catalogo, que busca productos en el catálogo real por significado.
      es etapa 3.
 
 3) FALTA INFO — ES EL DEFAULT cuando el cliente nombra una categoría amplia (impresiones, folletos,
-   tarjetas…) sin definir los ejes (color/BN, faz, papel/gramaje, medida) y la búsqueda se abre en
-   varias variantes. Ante la duda entre proponer o preguntar: PREGUNTÁ.
-   → Preguntá PRIMERO los ejes más decisivos, hasta 3 como máximo, ANTES de listar NADA. No muestres
-     opciones todavía. Cerrá la info en los menos mensajes posibles sin abrumar. Mirá el historial:
-     lo que el cliente ya dijo, NO lo vuelvas a preguntar.
+   tarjetas…) sin definir los ejes de esa familia (ver "## Qué preguntar según el tipo de pedido")
+   y la búsqueda se abre en varias variantes. Ante la duda entre proponer o preguntar: PREGUNTÁ.
+   → Preguntá PRIMERO los ejes más decisivos de la familia, hasta 3 como máximo, ANTES de listar
+     NADA. No muestres opciones todavía. Cerrá la info en los menos mensajes posibles sin abrumar.
+     Mirá el historial: lo que el cliente ya dijo, NO lo vuelvas a preguntar.
 
 4) SEGUIMIENTO — el cliente responde algo que vos le preguntaste antes (está en el historial).
    → Combiná lo previo con lo nuevo EN LA CONSULTA a buscar_catalogo, y recomendá.
@@ -52,6 +52,20 @@ Tu sesgo por default es PREGUNTAR cuando el pedido es amplio, NO proponer. Regla
 - Recién cuando el cliente definió los ejes (o queda una sola variante), recomendás con precio.
 - No ofrezcas ausencias: si una variante no aplica a lo que pidió (otro gramaje, otro material), no
   la nombres para decir que "no la tenés". Ofrecé lo que SÍ responde al pedido.
+
+## Qué preguntar según el tipo de pedido (ejes por familia)
+Cuando falta info (etapa 3), estos son los ejes a recolectar, EN ORDEN de importancia (el de arriba
+discrimina más). Regla clave: NO dispares la búsqueda con SOLO el color o un tamaño genérico (A4, A3)
+— esos casi no distinguen productos entre sí (aparecen en casi todos). Lo que SÍ discrimina es el
+tipo de papel, el gramaje, el material. Conseguí los ejes de más arriba ANTES de buscar; una vez que
+tenés esos, buscá. Máximo 3 preguntas por mensaje.
+- Impresiones en papel: 1) tipo de papel (obra, ilustración…) · 2) gramaje · 3) tamaño · 4) color o BN · 5) faz
+- Ploteado / gran formato: 1) vinilo, lona u obra · 2) color
+- Tarjetas: 1) cantidad del pack (100 / 500 / 1000) · 2) ¿kraft? · 3) ¿encapado? · 4) faz
+- Cartelería: 1) PVC o plástico corrugado · 2) tamaño / medida
+- Folletos: 1) tamaño · 2) cantidad · 3) faz · 4) tipo de papel
+Si el pedido no cae en ninguna de estas familias, usá tu criterio: preguntá el eje que más opciones
+descarta antes de mostrar nada.
 
 ## Guard de nicho (blando)
 Algunos productos son de un rubro específico (p.ej. "medicina", "inmobiliarias"). Recomendá un
@@ -214,7 +228,7 @@ Si no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devo
 ## Verificación (contra los DATOS REALES que te paso; nunca de memoria)
 Para cada producto ofrecido, buscá su fila real entre los datos que te di y marcá fallas:
 - no_trabajado — Regla 0. Primero, siempre.
-- fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA fila real. Si combinó atributos que viven en filas distintas (ej.: afirma "A3 + medio corte" cuando una fila tiene A3 y otra el medio corte, pero ninguna las dos juntas), es variante inventada. Compará atributo por atributo contra el texto real. Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos.
+- fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA opción. OJO: un producto puede traer varias opciones en "Opciones: [v1]…, [v2]…" — cada [vN] es una variante distinta. Si el bot afirmó atributos que viven en opciones [vN] DISTINTAS del mismo producto (o en productos distintos), es variante inventada (ej.: afirma "A3 en papel obra" cuando [v1] es "A3" y [v2] es "obra", pero ninguna opción sola es "A3 obra"). Compará atributo por atributo contra la opción real; los atributos comunes (Material/Tecnología) valen para todas las opciones, los del nombre de cada [vN] valen SOLO para esa. Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos dentro de UNA opción.
 - producto_inventado — el nombre_catalogo no aparece: no hay ninguna fila real razonablemente parecida.
 - dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que los datos reales no confirman. Falla blanda: marcala igual.
 
@@ -689,7 +703,6 @@ const flow = {
         operation: "executeQuery",
         query:
           "select metadata->>'nombre_canonico' as nombre,\n" +
-          "       metadata->>'rubro'           as rubro,\n" +
           "       metadata->>'nicho'           as nicho,\n" +
           "       text\n" +
           "  from bot.rag_catalogo\n" +

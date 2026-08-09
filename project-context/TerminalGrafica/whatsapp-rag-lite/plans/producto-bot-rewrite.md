@@ -177,3 +177,30 @@ create table bot.producto_item (
 ## Fuera de alcance
 - `public`, la capa de precios (`bot.variantes`, reglas de cantidad), firewall/decisiones/enums.
 - Derivar los ejes del slot-filling desde tabla (quedan en el prompt, a discreción del bot).
+
+## Estado de implementación (2026-08-09)
+- **Fase 1 CONSTRUIDA + verificada (Fable)** — `whatsapp-automation/db/`: `catalogo-producto-bot.sql`,
+  `migracion-producto-bot.sql`, `curador-export-v4.sql`. Commits `4b3c165` + `b355a54` (correcciones).
+- **Fase 2 CONSTRUIDA + verificada (Fable)** — `whatsapp-rag-lite/lib/catalog/` + `scripts/rag-ingest.ts`.
+  29 tests verdes. Commits `71aee29` + `f3fe8a0` (correcciones).
+- **Fase 3 CONSTRUIDA** — `scripts/build-flow.mjs`: slot-filling por familia en el prompt, Verificador
+  por `[vN]`, pre-fetch sin `rubro`. Flow regenerado (30 nodos). En verificación con Fable.
+
+### Decisiones de implementación (además del plan)
+- **`familia` NO va al texto del chunk** (sí a metadata): la clave de familia es genérica y no
+  discrimina entre productos de la misma familia. La señal de categoría la dan nombre_bot +
+  sinónimos + casos + `familia.nota` (solo librería la tiene hoy). Se limpió `metadata->>'rubro'`
+  del pre-fetch del Verificador (cable pelado).
+- **`atributosTexto` = solo atributos COMUNES a todos los items** (no unión): en un grupo
+  heterogéneo la unión fusionaba señal ("Material: obra, plastico"). Los que difieren (tamaño por
+  variante) quedan en los nombres de opción `[vN]`.
+- **Ejes de "folletos" inferidos** (Martin dio ejes para 4 familias, folletos quedó como familia
+  propia sin ejes): tamaño/cantidad/faz/papel — a confirmar/ajustar con Martin.
+- Verificado FALSO el hallazgo "bot.variantes sin columna atributos" (la vigente es `curacion-e0`,
+  con `atributos` = merge producto‖variante).
+
+### Pendiente de Martin (Claude no tiene DB)
+Aplicar en orden en Supabase: `catalogo-producto-bot.sql` → `nombres-bot-2026-08-09.sql` →
+`grupos-bot-2026-08-09.sql` (ambos en Downloads) → `migracion-producto-bot.sql` (pasar los NOTICEs /
+el resumen seleccionable) → `curador-export-v4.sql` (guardar como `export-actualizado-catalogo-v4.json`
+y pasarlo) → `pnpm rag:ingest --apply` + importar el flow regenerado (deploy + ingest JUNTOS).
