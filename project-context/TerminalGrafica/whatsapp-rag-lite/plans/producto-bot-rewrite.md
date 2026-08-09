@@ -194,10 +194,26 @@ create table bot.producto_item (
 - **`atributosTexto` = solo atributos COMUNES a todos los items** (no unión): en un grupo
   heterogéneo la unión fusionaba señal ("Material: obra, plastico"). Los que difieren (tamaño por
   variante) quedan en los nombres de opción `[vN]`.
-- **Ejes de "folletos" inferidos** (Martin dio ejes para 4 familias, folletos quedó como familia
-  propia sin ejes): tamaño/cantidad/faz/papel — a confirmar/ajustar con Martin.
+- **Folletos SIN ejes propios en el prompt** → cae a "buscá directo con lo que dijo" (Fable: los
+  ejes inferidos eran inventados, se auto-contradecían con la regla de "cantidad/tamaño no
+  discriminan" y rompían el caso e2e). Si Martin quiere ejes de folletos, definirlos con las
+  variantes reales.
+- **Tarjetas**: el eje 1 es "tamaño del pack (100/500/1000) — eje del PRODUCTO", explícitamente
+  distinto de la cantidad a encargar (evita chocar con "la cantidad no elige el producto").
+- **Etapas 2/3 gatean por el TEXTO del cliente** (ejes top definidos o no), no por el resultado de
+  la búsqueda (que era circular: definía la etapa por buscar, pero prohibía buscar). Umbral: con los
+  2 ejes top de la familia, buscar.
+- **Agente y Verificador alineados en "misma opción [vN]"** (antes el Agente decía "misma fila" y el
+  Verificador "misma opción" → habría marcado fusión siempre en chunks multi-opción, que ahora son
+  la mayoría). El Verificador además cruza el `variante_ref` cotizado con la opción descrita.
 - Verificado FALSO el hallazgo "bot.variantes sin columna atributos" (la vigente es `curacion-e0`,
   con `atributos` = merge producto‖variante).
+
+### Nota de cutover (deploy)
+`bot.rag_decisiones` y la Memoria (10 turnos) guardan nombres de producto PRE-v4. Tras el deploy,
+"Contexto Previo" puede inyectar nombres que ya no existen → match exacto falla → churn en
+conversaciones vivas que crucen el cutover. Aceptar como degradación transitoria, o filtrar "Leer
+Decisiones" por `created_at > fecha de deploy` (follow-up menor).
 
 ### Pendiente de Martin (Claude no tiene DB)
 Aplicar en orden en Supabase: `catalogo-producto-bot.sql` → `nombres-bot-2026-08-09.sql` →
