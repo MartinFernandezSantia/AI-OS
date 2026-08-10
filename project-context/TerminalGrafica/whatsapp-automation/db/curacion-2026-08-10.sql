@@ -108,7 +108,7 @@ end $$;
 do $$
 declare n int;
 begin
-  update bot.producto set nota = 'El montado sobre cartón NO incluye la impresión. La impresión se hace en papel encapado y se cobra aparte.'
+  update bot.producto set nota = 'El montado sobre cartón NO incluye la impresión: la impresión va en papel encapado (gran formato) y se cobra aparte, por m² según la cobertura.'
     where clave = 'montado sobre carton|encartonado';
   get diagnostics n = row_count;
   if n = 0 then raise notice 'SKIPPED 8: no se encontró montado sobre carton'; end if;
