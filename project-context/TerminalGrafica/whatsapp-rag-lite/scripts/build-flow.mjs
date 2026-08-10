@@ -6,9 +6,17 @@
 import { writeFileSync } from "node:fs";
 
 const OUT_MAIN = process.argv[2] || "n8n/flows/faq-bot-rag-lite.json";
+const OUT_CHATWOOT = process.argv[3] || OUT_MAIN.replace(/\.json$/, "-chatwoot.json");
 
 const OPENROUTER = { id: "widAoSc9Weo8PxAN", name: "OpenRouter" };
 const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
+
+// --- Chatwoot (variante conectada). EDITAR ANTES DE USAR ---
+// baseUrl: URL de tu instancia de Chatwoot, sin barra final (la usa la API de salida).
+// CHATWOOT_CRED: credencial "Header Auth" de n8n con header `api_access_token` = un Access Token de
+// Chatwoot (perfil de agente o, mejor, un Agent Bot). Creala en la UI y pegá su id acá.
+const CHATWOOT_BASE_URL = "https://chatwoot.TU-INSTANCIA.com";
+const CHATWOOT_CRED = { id: "REEMPLAZAR", name: "Chatwoot API Token" };
 
 const sistema = `Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.
 Tenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una
@@ -1089,7 +1097,111 @@ const flow = {
   settings: { executionOrder: "v1" },
 };
 
-const json = JSON.stringify(flow, null, 2);
-JSON.parse(json);
-writeFileSync(OUT_MAIN, json + "\n");
-console.error(`OK: ${OUT_MAIN} (${flow.nodes.length} nodos)`);
+// =====================================================================
+// VARIANTE CHATWOOT — mismo "medio" que el flow de chat; solo cambian los EXTREMOS.
+// Se deriva por copia profunda del `flow` de arriba: así cualquier cambio de prompt/lógica
+// (Agente, Verificador, precios, log) va a los DOS canales sin duplicar nada.
+//
+// Entrada: Webhook Chatwoot (POST, responde 200 al toque) -> "Cuando llega un mensaje" (nodo Code
+//   que CONSERVA el nombre del Chat Trigger: filtra el ruido de Chatwoot y emite {sessionId,chatInput}
+//   con la MISMA forma, así todo el downstream que hace $('Cuando llega un mensaje')… sigue igual).
+// Salida: Responder -> Enviar a Chatwoot (POST a la API de la conversación; la respuesta NO viaja por
+//   el HTTP response del webhook, sale out-of-band por la API → sin timeouts de Chatwoot).
+// =====================================================================
+const webhookChatwoot = {
+  parameters: { httpMethod: "POST", path: "rag-lite-chatwoot", responseMode: "onReceived", options: {} },
+  id: "rag-webhook-chatwoot",
+  name: "Webhook Chatwoot",
+  type: "n8n-nodes-base.webhook",
+  typeVersion: 2,
+  position: [-260, 0],
+  webhookId: "rag-lite-chatwoot",
+};
+
+const normalizarChatwoot = {
+  // Reemplaza al Chat Trigger conservando su NOMBRE. Chatwoot dispara webhooks para MUCHOS eventos y
+  // para mensajes entrantes Y salientes; acá dejamos pasar SOLO el mensaje entrante del contacto:
+  //  - event === 'message_created' (ignora conversation_updated, etc.)
+  //  - message_type entrante ('incoming' o 0 según versión) → descarta las respuestas del propio bot
+  //    (salientes) = SIN LOOPS; y descarta notas privadas.
+  // Si no aplica, devuelve [] → el flujo corta limpio (el webhook ya respondió 200).
+  // sessionId = conversation.id → memoria por conversación de Chatwoot.
+  parameters: {
+    jsCode: [
+      "const p = $json.body ?? $json;",
+      "const evt = p.event;",
+      "const mt = p.message_type;",
+      "const isIncoming = mt === 'incoming' || mt === 0;",
+      "const isPrivate = p.private === true;",
+      "const content = (p.content == null ? '' : String(p.content)).trim();",
+      "const conv = p.conversation || {};",
+      "const acc = p.account || {};",
+      "const conversationId = conv.id ?? p.conversation_id ?? null;",
+      "const accountId = acc.id ?? p.account_id ?? null;",
+      "if (evt !== 'message_created' || !isIncoming || isPrivate || !content || conversationId == null) { return []; }",
+      "return [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];",
+    ].join("\n"),
+  },
+  id: "rag-normalizar-chatwoot",
+  name: "Cuando llega un mensaje",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [0, 0],
+};
+
+const enviarChatwoot = {
+  // Publica la respuesta en la conversación de Chatwoot. Canal-agnóstico: si la conversación es de
+  // WhatsApp, sale por WhatsApp. accountId/conversationId salen del normalizador (siempre ejecutó).
+  parameters: {
+    method: "POST",
+    url:
+      "=" + CHATWOOT_BASE_URL +
+      "/api/v1/accounts/{{ $('Cuando llega un mensaje').first().json._chatwoot.accountId }}" +
+      "/conversations/{{ $('Cuando llega un mensaje').first().json._chatwoot.conversationId }}/messages",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ JSON.stringify({ content: $json.output, message_type: 'outgoing' }) }}",
+    options: {},
+  },
+  id: "rag-enviar-chatwoot",
+  name: "Enviar a Chatwoot",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [2880, 0],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  retryOnFail: true,
+  maxTries: 2,
+  waitBetweenTries: 1000,
+};
+
+const flowCw = JSON.parse(JSON.stringify(flow));
+flowCw.name = "faq-bot-rag-lite-chatwoot";
+flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-chat-trigger");
+flowCw.nodes.unshift(webhookChatwoot, normalizarChatwoot);
+flowCw.nodes.push(enviarChatwoot);
+// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Agrego los dos extremos nuevos:
+flowCw.connections["Webhook Chatwoot"] = { main: [[{ node: "Cuando llega un mensaje", type: "main", index: 0 }]] };
+flowCw.connections["Responder"] = { main: [[{ node: "Enviar a Chatwoot", type: "main", index: 0 }]] };
+
+// Actualizar la nota (sticky) para reflejar el canal.
+const notaCw = flowCw.nodes.find((n) => n.id === "rag-nota");
+if (notaCw) {
+  notaCw.parameters.content =
+    notaCw.parameters.content.replace(
+      "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
+      "Conectado por **Chatwoot** (canal-agnóstico: WhatsApp, web, etc.). Entrada: **Webhook Chatwoot** → **Cuando llega un mensaje** (Code que filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
+    ) +
+    "\n\n⚙️ CHATWOOT (setup): 1) editá CHATWOOT_BASE_URL en scripts/build-flow.mjs; 2) creá una credencial n8n **Header Auth** (header `api_access_token`, valor = un Access Token de Chatwoot) y poné su id en CHATWOOT_CRED; 3) en Chatwoot → Configuración → Integraciones → **Webhooks**, apuntá al *Production URL* del nodo **Webhook Chatwoot** con el evento `message_created`.";
+}
+
+for (const [f, out] of [
+  [flow, OUT_MAIN],
+  [flowCw, OUT_CHATWOOT],
+]) {
+  const j = JSON.stringify(f, null, 2);
+  JSON.parse(j);
+  writeFileSync(out, j + "\n");
+  console.error(`OK: ${out} (${f.nodes.length} nodos)`);
+}
