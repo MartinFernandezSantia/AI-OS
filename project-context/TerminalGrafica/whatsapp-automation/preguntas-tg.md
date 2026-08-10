@@ -252,6 +252,25 @@ Dos datos de catálogo que la corrida real dejó abiertos. Detalle completo en
     cerrado". Se deja como está hasta que TG decida. Aplica a todo producto con escalera que
     termine en un tope (imanes y los demás que coticen por rangos de cantidad).
 
+## 16. Curación RAG-lite — correcciones del empleado (2026-08-10)
+
+80. **Cocodrilo: ¿es un broche cocodrilo (gancho/brochesito) para sujetar?** — El empleado lo
+    describió como "un brochesito". Hoy el producto se llama `Cocodrilo` a secas y sus casos de uso
+    dicen "encuadernar documentos / tesis / trabajos escolares". Se renombró a **"Broche cocodrilo"**.
+    ¿Es correcto? ¿Sigue sirviendo para encuadernar/sujetar o es otra cosa? Si no es un broche, se revierte.
+
+81. **Carpetas de presentación: ¿de qué familia son?** — Están en la familia **librería**, cuya nota
+    dice "se venden sueltos, listos: no son un trabajo de impresión a medida". Pero el empleado
+    confirmó que **son personalizadas: las imprime la gráfica** con el diseño del cliente. Se agregó
+    esa nota al producto, pero contradice la nota de la familia. ¿Las movemos a `impresiones_papel`
+    (o a otra familia), o dejamos la nota del producto como aclaración?
+
+82. **Encartonado (montado sobre cartón) + encapado: ¿wording y precio?** — Se aclaró que el montado
+    **NO incluye la impresión**: se cobra aparte, en papel encapado. (a) ¿El texto "La impresión se
+    hace en papel encapado y se cobra aparte" es correcto? (b) ¿Cómo se compone el precio final
+    (montado + impresión encapada) para que el bot lo pueda cotizar? — esto último es el que necesita
+    lógica nueva (Workstream C).
+
 ## 8. Rediseño de resolución (consejo 2026-07-24)
 
 46. **Léxico de papeles especiales → producto real** — ¿Cómo mapea cada nombre que dice
