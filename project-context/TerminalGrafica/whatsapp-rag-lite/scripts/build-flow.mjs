@@ -326,7 +326,7 @@ const insertarPreciosCode = [
   "const solic = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : [];",
   "",
   "const nk = (s) => String(s || '').toLowerCase()",
-  "  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').trim();",
+  "  .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n').replace(/[^a-z0-9]+/g,' ').trim();",
   "const asArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch (e) { return []; } })() : []);",
   "const fmt = (n) => '$' + Math.round(Number(n)).toLocaleString('es-AR');",
   "const normNum = (t) => Number(String(t).replace(/[^0-9]/g, ''));",
@@ -519,14 +519,15 @@ const flow = {
       position: [1780, 0],
     },
     {
-      // Trae metadata.precios de los productos que el agente cotizó (por nombre, acento-insensible).
+      // Trae metadata.precios de los productos que el agente cotizó (por nombre, normalizado:
+      // acentos + puntuación/espacios colapsados, así "…75 gr." matchea el canónico "…75 gr").
       parameters: {
         operation: "executeQuery",
         query:
           "select metadata->>'nombre_canonico' as nombre, metadata->'precios' as precios\n" +
           "  from bot.rag_catalogo\n" +
-          " where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$) = any(\n" +
-          "   select translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$)\n" +
+          " where trim(regexp_replace(translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g')) = any(\n" +
+          "   select trim(regexp_replace(translate(lower(x), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g'))\n" +
           "     from jsonb_array_elements_text($1::jsonb) as x)",
         options: {
           // $1 = JSON array de nombres. null-safe: sin precios_solicitados → [] → 0 filas.
@@ -716,10 +717,11 @@ const flow = {
     },
     {
       // PRE-FETCH DETERMINISTA (reemplaza la tool agéntica del Verificador). Trae de UNA query las
-      // filas reales de los productos afirmados con match EXACTO acento-insensible sobre
-      // nombre_canonico (`= any`, no substring): trae SOLO lo necesario (nada de basura por LIKE) y,
-      // clave, un nombre que el Agente inventó/escribió mal NO trae fila → eso es la señal de
-      // producto_inventado, que Armar Verificación detecta. alwaysOutputData: sin productos (saludo)
+      // filas reales de los productos afirmados con match sobre nombre_canonico normalizado (acentos +
+      // puntuación/espacios colapsados: el chunk muestra el nombre con un punto final "…gr." y el LLM
+      // lo copia con el punto, pero el canónico no lo tiene → sin esto daba 0 filas). `= any`, no LIKE:
+      // trae SOLO lo necesario y un nombre realmente inventado igual NO trae fila → señal de
+      // producto_inventado que Armar Verificación detecta. alwaysOutputData: sin productos (saludo)
       // → 0 filas pero igual emite un item para que la cola no se corte.
       parameters: {
         operation: "executeQuery",
@@ -728,8 +730,8 @@ const flow = {
           "       metadata->>'nicho'           as nicho,\n" +
           "       text\n" +
           "  from bot.rag_catalogo\n" +
-          " where translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$) = any(\n" +
-          "   select translate(lower(trim(x)), $$áéíóúñ$$, $$aeioun$$)\n" +
+          " where trim(regexp_replace(translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g')) = any(\n" +
+          "   select trim(regexp_replace(translate(lower(x), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g'))\n" +
           "     from jsonb_array_elements_text($1::jsonb) as x)",
         options: {
           // $1 = JSON array de nombres afirmados. null-safe: sin productos → [] → 0 filas.
@@ -759,8 +761,8 @@ const flow = {
           "const etapa = String(aud.etapa || '');",
           "const conCatalogo = etapa === 'recomendacion' || etapa === 'seguimiento';",
           "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
-          "// normalizador espejo del translate(lower(...)) del SQL (mismos 6 caracteres)",
-          "const nk = (s) => String(s || '').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').trim();",
+          "// normalizador espejo del SQL: acentos + colapsa puntuación/espacios (matchea 'gr.' con 'gr')",
+          "const nk = (s) => String(s || '').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').replace(/[^a-z0-9]+/g,' ').trim();",
           "const encontrados = new Set(rows.map((r) => nk(r.nombre)));",
           "const pedidos = (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []).map((p) => p && p.nombre_catalogo).filter(Boolean);",
           "const faltantes = [...new Set(pedidos.filter((n) => !encontrados.has(nk(n))))];",
