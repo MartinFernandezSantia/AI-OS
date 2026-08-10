@@ -216,38 +216,39 @@ const esquemaSalida = {
 };
 
 // ─────────────────────────────── VERIFICADOR ───────────────────────────────
-// Segundo agente que audita la decisión del Agente principal apalancándose en `productos_ofrecidos`.
-// No habla con el cliente: relee el catálogo real (tool) y devuelve un veredicto para el log.
-const sistemaVerif = `Sos el AUDITOR del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás la decisión del bot y devolvés un veredicto JSON para el log.
+// Guardrail de política SIEMPRE (checks de negocio/rol) + veredicto comparativo de producto GATEADO
+// por etapa (solo recomendacion/seguimiento, cuando Armar Verificación le pasa el catálogo real).
+// No habla con el cliente: devuelve un veredicto JSON para el log y la remediación. Nunca regenera.
+const sistemaVerif = `Sos el GUARDRAIL del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás su respuesta y devolvés un veredicto JSON para el log y la remediación.
 
-Recibís TODO lo que necesitás en un solo mensaje: el pedido del cliente + la auditoría del bot (productos_ofrecidos con nombre_catalogo, atributos y cantidad; motivo; afirmaciones) + los DATOS REALES del catálogo de esos productos, ya consultados por vos. NO tenés que buscar nada: verificá SOLO contra esos datos reales, en una sola pasada.
+Recibís en un solo mensaje: el pedido del cliente + la respuesta del bot + la auditoría del bot (etapa; productos_ofrecidos con nombre_catalogo, atributos y cantidad; afirmaciones; precios_solicitados). A VECES (solo cuando el bot ofreció productos) también recibís los DATOS REALES del catálogo de esos productos. Verificá en UNA sola pasada.
 
-## REGLA 0 — NO TRABAJADO (prioridad absoluta, se evalúa PRIMERO)
-La imprenta NO hace: fotocopias. (Lista ampliable.)
-Si el cliente pidió algo de esta lista y el bot lo ofreció o afirmó que lo hacen, es falla \`no_trabajado\` — AUNQUE los datos reales traigan un producto que matchee por sinónimo o parecido semántico. Que un producto "exista en el catálogo" NUNCA excusa ofrecer un ítem de esta lista. Esta regla pisa a todas las demás verificaciones.
+SESGO: marcá SOLO violaciones claras. Ante la duda, APROBÁ. Un falso positivo hace que un nodo edite una respuesta que estaba bien.
 
 ## Fast-path
-Si no hay productos ofrecidos ni afirmaciones que revisar (ej.: un saludo), devolvé aprobado=true con fallas=[] y terminá.
+Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no promete nada y no pide nada, devolvé aprobado=true con fallas=[] y terminá.
 
-## Verificación (contra los DATOS REALES que te paso; nunca de memoria)
-Para cada producto ofrecido, buscá su fila real entre los datos que te di y marcá fallas:
-- no_trabajado — Regla 0. Primero, siempre.
-- fusion_variantes — EL CHEQUEO CENTRAL. Todos los atributos que el bot afirmó de un producto DEBEN existir JUNTOS en UNA MISMA opción. OJO: un producto puede traer varias opciones en "Opciones: [v1]…, [v2]…" — cada [vN] es una variante distinta. Qué vale para TODAS las opciones de un producto: los atributos que están en el NOMBRE del producto, en su descripción ("Sirve para", notas) y en las líneas Material/Tecnología. Qué vale para UNA sola opción: lo que está en el nombre de ESE [vN]. Es fusión inventada si el bot combinó atributos que viven en opciones [vN] DISTINTAS (ej.: afirma "brillo y mate a la vez" cuando [v1] es brillo y [v2] es mate; o el tamaño de [v1] con el acabado de [v2]). Nombre escrito distinto está OK; lo que se audita es la COMBINACIÓN de atributos. TAMBIÉN es fusion_variantes: si hay precios_solicitados, el [vN] cotizado (variante_ref) tiene que ser la MISMA opción cuyos atributos afirmó para ese producto — cotizar el precio de otra opción distinta de la que describió es cruzar variante.
-- producto_inventado — el nombre_catalogo no aparece: no hay ninguna fila real razonablemente parecida.
-- dato_no_corroborable — afirmación sobre el negocio (plazo, envío, stock, material) que los datos reales no confirman. Falla blanda: marcala igual.
+## A) CHECKS DE POLÍTICA — SIEMPRE, en toda respuesta (con o sin catálogo)
+- no_trabajado — REGLA 0, se evalúa PRIMERO. La imprenta NO hace: fotocopias. (Lista ampliable.) Si el bot ofreció o afirmó que hacen algo de esta lista, marcá no_trabajado — aunque exista un producto parecido por sinónimo. Que "exista en el catálogo" no lo excusa.
+- info_no_permitida — el bot prometió o afirmó plazos, tiempos de entrega, envíos, stock, o toma/estado de pedidos. SOLO esas categorías. NO audites acá atributos de producto, precios ni formas de cobro: esos los cubre otro proceso y NO son info_no_permitida.
+- derivacion_prematura — el bot empujó al cliente al mail ANTES de que el cliente pidiera avanzar. Marcá SOLO si la respuesta cierra mandando al mail Y en el mensaje del cliente NO hay ninguna señal de querer avanzar o hacer el pedido; si es ambiguo, APROBÁ. NO es derivación: ofrecer "cotizar por mail" cuando una opción no tiene precio, ni decir que "el total se cierra por mail" — son parte del guion normal del bot.
+- pedido_o_archivo_por_canal — el bot tomó el pedido o pidió archivos para gestionarlos POR EL CHAT (ej.: "mandame el PDF por acá", "te anoto el pedido"). MATIZ: indicarle al cliente que mande el archivo y el pedido AL MAIL (terminalgrafica@gmail.com) está BIEN → NO lo marques.
+- fuera_de_rol — el bot respondió algo ajeno al negocio o a su rol (temas que no son la imprenta, opiniones, tareas que no le tocan, salirse del personaje).
 
-Ante la duda, marcá en vez de aprobar.
+## B) COMPARACIÓN DE PRODUCTO — SOLO si te pasé los DATOS REALES del catálogo
+Si NO te pasé catálogo, SALTÁ este bloque entero. Si te lo pasé, para cada producto ofrecido buscá su fila real y marcá:
+- fusion_variantes — el bot afirmó JUNTOS atributos que no conviven en una misma opción. Un producto puede traer varias opciones "Opciones: [v1]…, [v2]…"; cada [vN] es una variante distinta. Vale para TODAS las opciones: lo que está en el nombre del producto, su descripción ("Sirve para", notas) y las líneas Material/Tecnología. Vale para UNA sola opción: lo que está en el nombre de ESE [vN]. Es fusión si combinó atributos de opciones [vN] DISTINTAS (ej.: "brillo y mate a la vez" cuando [v1] es brillo y [v2] es mate; o el tamaño de [v1] con el acabado de [v2]). También: si hay precios_solicitados, el [vN] cotizado (variante_ref) tiene que ser la MISMA opción cuyos atributos describió.
+- producto_inventado — el nombre_catalogo afirmado no aparece: no hay fila real razonablemente parecida (te aviso aparte los nombres sin coincidencia exacta).
 
-## Acción (decidí qué hacer con la respuesta)
+## Acción
 - aprobar — no hay fallas.
-- corregir — las fallas se arreglan SACANDO o REFORMULANDO texto sin cambiar de producto: ofreció algo no_trabajado (se saca la afirmación), un dato no corroborable (se saca), o una fusión que se resuelve quitando el atributo de más. Un nodo barato edita el mensaje. También va acá un producto_inventado que era UNO de varios y con sacarlo la respuesta sigue teniendo sentido.
-- regenerar — SOLO casos GRAVES que NO se arreglan editando: la respuesta habla de un producto equivocado o no relacionado con lo que pidió el cliente, o el producto_inventado era el ÚNICO/principal que ofreciste (sacarlo dejaría la respuesta vacía o inútil: no hay edición que arregle recomendar algo inexistente). Rehacer es CARO (vuelve al agente principal): si con sacar o reformular alcanza, es corregir, NO regenerar.
+- corregir — SIEMPRE que haya al menos una falla. Un nodo barato edita el mensaje sacando o reformulando lo observado (saca la afirmación no permitida, quita el atributo de más de una fusión, saca el producto inventado). Es la ÚNICA remediación: la respuesta NUNCA se rehace desde cero.
 
 ## Salida (formato obligatorio)
 Devolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:
-{"aprobado": boolean, "accion": "aprobar" | "corregir" | "regenerar", "fallas": [{"tipo": "producto_inventado" | "fusion_variantes" | "no_trabajado" | "dato_no_corroborable", "producto": string, "detalle": string}], "resumen": string}
-aprobado=false si hay al menos una falla. resumen = 1 frase en castellano rioplatense.
-Ejemplo: {"aprobado": false, "accion": "corregir", "fallas": [{"tipo": "no_trabajado", "producto": "fotocopias", "detalle": "El bot afirmó que hacen fotocopias; ítem no_trabajado, aunque la búsqueda haya matcheado por sinónimo."}], "resumen": "Ofreció fotocopias, un servicio que la imprenta no hace."}`;
+{"aprobado": boolean, "accion": "aprobar" | "corregir", "fallas": [{"tipo": "no_trabajado" | "info_no_permitida" | "derivacion_prematura" | "pedido_o_archivo_por_canal" | "fuera_de_rol" | "fusion_variantes" | "producto_inventado", "producto": string, "detalle": string}], "resumen": string}
+aprobado=false si hay al menos una falla; en ese caso accion="corregir". resumen = 1 frase en castellano rioplatense.
+Ejemplo: {"aprobado": false, "accion": "corregir", "fallas": [{"tipo": "no_trabajado", "producto": "fotocopias", "detalle": "El bot ofreció fotocopias, un servicio que la imprenta no hace."}], "resumen": "Ofreció fotocopias, que no se trabajan."}`;
 
 const esquemaVerif = {
   type: "object",
@@ -256,9 +257,9 @@ const esquemaVerif = {
     aprobado: { type: "boolean", description: "true si no encontraste ninguna falla" },
     accion: {
       type: "string",
-      enum: ["aprobar", "corregir", "regenerar"],
+      enum: ["aprobar", "corregir"],
       description:
-        "qué hacer con la respuesta: aprobar (sin fallas) / corregir (se arregla sacando o reformulando texto) / regenerar (grave: producto equivocado o no relacionado, hay que rehacerla desde cero)",
+        "qué hacer con la respuesta: aprobar (sin fallas) / corregir (hay al menos una falla; un nodo barato saca o reformula lo observado). No existe regenerar.",
     },
     fallas: {
       type: "array",
@@ -269,7 +270,15 @@ const esquemaVerif = {
         properties: {
           tipo: {
             type: "string",
-            enum: ["producto_inventado", "fusion_variantes", "no_trabajado", "dato_no_corroborable"],
+            enum: [
+              "no_trabajado",
+              "info_no_permitida",
+              "derivacion_prematura",
+              "pedido_o_archivo_por_canal",
+              "fuera_de_rol",
+              "fusion_variantes",
+              "producto_inventado",
+            ],
           },
           producto: { type: "string", description: "el nombre_catalogo afectado, si aplica" },
           detalle: { type: "string", description: "qué está mal, en una línea" },
@@ -287,13 +296,22 @@ const sistemaCorrector = `Sos el editor final del bot de WhatsApp de Terminal Gr
 Recibís un mensaje ya redactado y las observaciones de un auditor. Tu ÚNICO trabajo: devolver el
 mensaje corregido SACANDO o REFORMULANDO lo observado.
 
-NUNCA agregues productos, precios ni información nueva. No inventes. No cambies de producto.
-Si el auditor marcó que ofreciste algo que NO se trabaja (ej. fotocopias), sacá esa afirmación y,
-si corresponde, aclarale al cliente que eso no lo hacemos. Si marcó una variante inventada
-(atributos mezclados), quitá el atributo que sobra.
+BLINDAJE: si NO encontrás en el mensaje lo que el auditor observa, devolvé el mensaje TAL CUAL, sin
+cambios. El auditor puede equivocarse; nunca inventes un problema para "arreglarlo".
 
-El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: copialos TAL CUAL, no los
-reescribas ni los borres ni pongas un número. Si sacás un producto entero, sacá también su {Pn}.
+NUNCA agregues productos, precios ni información nueva. No inventes. No cambies de producto. Según lo
+que marque el auditor:
+- no_trabajado (ej. fotocopias): sacá esa afirmación y, si corresponde, aclarale que eso no lo hacemos.
+- info_no_permitida (plazos, envíos, tiempos, stock, toma de pedidos): sacá la promesa/afirmación.
+- derivacion_prematura: sacá el empujón al mail y ofrecé seguir ayudando por acá.
+- pedido_o_archivo_por_canal: sacá la toma de pedido / pedido de archivo por el chat (podés dejar que,
+  para avanzar, manden el archivo y el pedido al mail terminalgrafica@gmail.com).
+- fuera_de_rol: sacá lo ajeno al negocio.
+- fusion_variantes: quitá el atributo que sobra. producto_inventado: sacá ese producto.
+
+El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: son PLACEHOLDERS legítimos,
+copialos TAL CUAL, no los reescribas ni los borres ni pongas un número. Si sacás un producto entero,
+sacá también su {Pn}.
 
 Castellano rioplatense, 2 a 5 líneas, sin emojis. Devolvé SOLO el mensaje para el cliente, sin
 comillas ni explicaciones.`;
@@ -652,11 +670,11 @@ const flow = {
       position: [480, 420],
     },
     {
-      // Segundo agente: audita la decisión del Agente principal contra el catálogo real.
+      // Segundo agente = guardrail de política (siempre) + comparación de producto (gateada por etapa).
       parameters: {
         promptType: "define",
-        // Prompt pre-armado por "Armar Verificación": auditoría + datos reales ya inyectados. El
-        // Verificador NO tiene tool: audita en UNA sola inferencia (antes: loop agéntico ~2k tok/producto).
+        // Prompt pre-armado por "Armar Verificación": pedido + respuesta + auditoría siempre; los datos
+        // reales del catálogo solo si etapa ∈ {recomendacion, seguimiento}. Sin tool, una sola inferencia.
         text: "={{ $json.prompt }}",
         hasOutputParser: true,
         options: { systemMessage: sistemaVerif },
@@ -728,34 +746,39 @@ const flow = {
       alwaysOutputData: true,
     },
     {
-      // Arma el mensaje de usuario del Verificador: auditoría del Agente (ref segura) + las filas
-      // reales pre-consultadas ($input) inyectadas como texto. Una sola pasada, sin tool. Además
-      // detecta FALTANTES: nombres afirmados por el Agente que NO trajeron fila (match exacto falló)
-      // → se le pasan al Verificador para marcarlos producto_inventado (nombre inexistente/mal escrito).
+      // Arma el mensaje de usuario del Verificador. Los CHECKS DE POLÍTICA corren SIEMPRE (pedido +
+      // respuesta + auditoría). La COMPARACIÓN DE PRODUCTO (fusion/inventado) es gateada por etapa: solo
+      // si etapa ∈ {recomendacion, seguimiento} se inyectan las filas reales ($input) y los faltantes.
+      // FALTANTES (nombres afirmados sin fila exacta) se computan SIEMPRE → observabilidad en el log.
       parameters: {
         jsCode: [
           "let ag = $('Agente').first().json.output ?? {};",
           "if (typeof ag === 'string') { try { ag = JSON.parse(ag); } catch (e) { ag = { respuesta: ag }; } }",
           "const aud = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "const cliente = $('Cuando llega un mensaje').first().json.chatInput || '';",
+          "const etapa = String(aud.etapa || '');",
+          "const conCatalogo = etapa === 'recomendacion' || etapa === 'seguimiento';",
           "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
           "// normalizador espejo del translate(lower(...)) del SQL (mismos 6 caracteres)",
           "const nk = (s) => String(s || '').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').trim();",
           "const encontrados = new Set(rows.map((r) => nk(r.nombre)));",
           "const pedidos = (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []).map((p) => p && p.nombre_catalogo).filter(Boolean);",
           "const faltantes = [...new Set(pedidos.filter((n) => !encontrados.has(nk(n))))];",
-          "const real = rows.length",
-          "  ? rows.map((r) => '### ' + r.nombre + (r.nicho ? ' [nicho: ' + r.nicho + ']' : '') + '\\n' + (r.text || '')).join('\\n\\n')",
-          "  : '(ninguno de los productos ofrecidos existe en el catálogo)';",
           "const partes = [",
           "  'Pedido del cliente:', cliente, '',",
-          "  'Auditoría del bot (revisala):', JSON.stringify(aud, null, 2), '',",
-          "  'DATOS REALES del catálogo (ya consultados; verificá SOLO contra esto):', real,",
+          "  'Respuesta del bot (revisala):', String(aud.respuesta || ''), '',",
+          "  'Auditoría del bot:', JSON.stringify(aud, null, 2),",
           "];",
-          "if (faltantes.length) {",
-          "  partes.push('', 'PRODUCTOS SIN COINCIDENCIA EXACTA EN EL CATÁLOGO — el bot afirmó estos nombres pero no existen tal cual. Marcá producto_inventado para cada uno:', faltantes.map((n) => '- ' + n).join('\\n'));",
+          "if (conCatalogo) {",
+          "  const real = rows.length",
+          "    ? rows.map((r) => '### ' + r.nombre + (r.nicho ? ' [nicho: ' + r.nicho + ']' : '') + '\\n' + (r.text || '')).join('\\n\\n')",
+          "    : '(ninguno de los productos ofrecidos existe en el catálogo)';",
+          "  partes.push('', 'DATOS REALES del catálogo (hacé la comparación de producto SOLO contra esto):', real);",
+          "  if (faltantes.length) {",
+          "    partes.push('', 'PRODUCTOS SIN COINCIDENCIA EXACTA EN EL CATÁLOGO — el bot afirmó estos nombres pero no existen tal cual. Marcá producto_inventado para cada uno:', faltantes.map((n) => '- ' + n).join('\\n'));",
+          "  }",
           "}",
-          "return [{ json: { prompt: partes.join('\\n'), auditoria: aud, faltantes } }];",
+          "return [{ json: { prompt: partes.join('\\n'), auditoria: aud, etapa, faltantes, conCatalogo } }];",
         ].join("\n"),
       },
       id: "rag-armar-verif",
@@ -767,6 +790,8 @@ const flow = {
     {
       // Unifica en un solo item lo que las ramas de abajo necesitan: la respuesta + auditoría del
       // Agente (siempre ejecutó → ref segura) y el veredicto del Verificador (su input directo).
+      // Adjunta los `faltantes` de Armar Verificación (siempre ejecutó en las ramas que llegan acá)
+      // al objeto verificacion → viajan a la columna verificacion del log (observabilidad, sin plumbing).
       parameters: {
         jsCode: [
           "let ag = $('Agente').first().json.output ?? {};",
@@ -774,7 +799,11 @@ const flow = {
           "const audit = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "let ve = $input.first().json.output ?? $input.first().json ?? {};",
           "if (typeof ve === 'string') { try { ve = JSON.parse(ve); } catch (e) { ve = {}; } }",
-          "const accion = ve.accion || (ve.aprobado === true ? 'aprobar' : 'corregir');",
+          "// Regenerar ya no existe: cualquier acción que no sea 'aprobar' cae a 'corregir'.",
+          "const accion = (ve.accion ? ve.accion === 'aprobar' : ve.aprobado === true) ? 'aprobar' : 'corregir';",
+          "let faltantes = [];",
+          "try { faltantes = $('Armar Verificación').first().json.faltantes || []; } catch (e) { faltantes = []; }",
+          "if (ve && typeof ve === 'object') ve.faltantes = faltantes;",
           "return [{ json: {",
           "  respuesta: audit.respuesta ?? '',",
           "  auditoria: audit,",
@@ -805,20 +834,9 @@ const flow = {
               renameOutput: true,
               outputKey: "aprobar",
             },
-            {
-              conditions: {
-                options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 3 },
-                combinator: "and",
-                conditions: [
-                  { leftValue: "={{ $json.accion }}", rightValue: "regenerar", operator: { type: "string", operation: "equals" } },
-                ],
-              },
-              renameOutput: true,
-              outputKey: "regenerar",
-            },
           ],
         },
-        // Fallback = corregir (cualquier cosa que no sea aprobar/regenerar cae acá).
+        // Fallback = corregir (cualquier cosa que no sea aprobar cae acá). Regenerar ya no existe.
         options: { fallbackOutput: "extra", renameFallbackOutput: "corregir" },
       },
       id: "rag-switch-accion",
@@ -826,53 +844,6 @@ const flow = {
       type: "n8n-nodes-base.switch",
       typeVersion: 3.4,
       position: [1120, 0],
-    },
-    {
-      // Loop-cap: $runIndex de ESTE nodo cuenta cuántas veces se pasó por acá en esta ejecución.
-      // 0,1,2 → reintenta (3 regeneraciones máx); en la 4ª (índice 3) corta y manda a corregir.
-      parameters: {
-        conditions: {
-          options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 2 },
-          combinator: "and",
-          conditions: [
-            { leftValue: "={{ $runIndex }}", rightValue: 3, operator: { type: "number", operation: "lt" } },
-          ],
-        },
-        options: {},
-      },
-      id: "rag-reintentar",
-      name: "¿Reintentar? (máx 3)",
-      type: "n8n-nodes-base.if",
-      typeVersion: 2.2,
-      position: [1340, 120],
-    },
-    {
-      // Arma el feedback y lo manda de vuelta al Agente principal como nuevo chatInput.
-      // Lee de Leer Veredicto (siempre ejecutó en esta rama → ref segura).
-      parameters: {
-        jsCode: [
-          "const lv = $('Leer Veredicto').first().json;",
-          "const fallas = (lv.verificacion && lv.verificacion.fallas ? lv.verificacion.fallas : [])",
-          "  .map(f => '- ' + f.tipo + (f.producto ? ' (' + f.producto + ')' : '') + ': ' + f.detalle).join('\\n');",
-          "const feedback = [",
-          "  'REVISIÓN INTERNA — el auditor observó tu respuesta anterior. Regenerala corrigiendo esto.',",
-          "  '',",
-          "  'Tu respuesta anterior:',",
-          "  '\"\"\"' + (lv.respuesta || '') + '\"\"\"',",
-          "  '',",
-          "  'Problemas graves detectados:',",
-          "  fallas,",
-          "  '',",
-          "  'Respondé de nuevo al cliente corrigiendo estos problemas. Usá buscar_catalogo si necesitás reconfirmar. No inventes ni ofrezcas lo que no se trabaja.',",
-          "].join('\\n');",
-          "return [{ json: { chatInput: feedback } }];",
-        ].join("\n"),
-      },
-      id: "rag-feedback-reintento",
-      name: "Feedback Reintento",
-      type: "n8n-nodes-base.code",
-      typeVersion: 2,
-      position: [1560, 240],
     },
     {
       // Corrector: LLM sin tools que edita el mensaje según las fallas. Barato (una sola pasada).
@@ -1004,9 +975,9 @@ const flow = {
           "",
           "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
-          "**Agente Verificador** (2º agente, SIN tool): **Traer Catálogo Real** (postgres) pre-consulta de una sola query las filas reales de todos los productos afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita en UNA pasada (antes: loop agéntico ~2k tok/producto). Fallas: producto_inventado, fusion_variantes, no_trabajado (Regla 0, autoritativa: fotocopias…), dato_no_corroborable. Decide una **acción**: aprobar / corregir / regenerar.",
+          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
           "",
-          "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar) · regenerar→(solo casos graves) vuelve al **Agente** con feedback y rehace, **loop máx 3** (¿Reintentar? corta por $runIndex; en el 4º intento cae a Corrector).",
+          "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.",
           "",
           "**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).",
           "",
@@ -1049,22 +1020,13 @@ const flow = {
     },
     "Fallback Verificador": { main: [[{ node: "Leer Veredicto", type: "main", index: 0 }]] },
     "Leer Veredicto": { main: [[{ node: "Ruteo Acción", type: "main", index: 0 }]] },
-    // Switch: salida 0 = aprobar, 1 = regenerar, 2 (fallback) = corregir.
+    // Switch: salida 0 = aprobar → sale directo; salida 1 (fallback) = corregir → Corrector.
     "Ruteo Acción": {
       main: [
         [{ node: "Preparar Respuesta", type: "main", index: 0 }],
-        [{ node: "¿Reintentar? (máx 3)", type: "main", index: 0 }],
         [{ node: "Corrector", type: "main", index: 0 }],
       ],
     },
-    // Reintentar: true (0) = feedback→Agente; false (1) = se agota, cae a Corrector.
-    "¿Reintentar? (máx 3)": {
-      main: [
-        [{ node: "Feedback Reintento", type: "main", index: 0 }],
-        [{ node: "Corrector", type: "main", index: 0 }],
-      ],
-    },
-    "Feedback Reintento": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
     // Corrector: main[0] = OK → Aplicar Corrección; main[1] = ERROR → Fallback Corrector (pasa el original).
     Corrector: {
       main: [
