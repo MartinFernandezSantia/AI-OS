@@ -49,6 +49,17 @@ Resultado: tope duro de tokens (sin regeneraciones), menos superficie de falso p
 - `pnpm flow:build` → OK (28 nodos). `pnpm test` → 29/29 verdes.
 - Pendiente en vivo (n8n, nodo Chat interno): saludo→aprobado; pedido real en recomendacion→aprobado sin regeneración; fusión forzada→corregir; fotocopias→no_trabajado; promesa de plazo→info_no_permitida; off-topic→fuera_de_rol; archivo por chat→corregir vs archivo al mail→aprobado; opción sin precio→"cotizar por mail" aprobado. Medir tokens en la vista de ejecuciones (Claude no las ve; Martin pasa el dato). `estado='corregido'` = proxy de falsos positivos.
 
+## Ampliación (2026-08-10) — fix multi-producto + alucinación de atributos
+
+Test de Martin: a "quiero cotizar tarjetas y unos folletos" el bot buscó SOLO tarjetas y de folletos escribió atributos de memoria (papel/gramaje/tamaño inventados; folletos reales existen pero solo en 10x15). Doble falla: el Agente inventó en la fuente, y el Verificador quedó ciego (audita `productos_ofrecidos`, que el Agente no declaró para folletos). Solución (Fable, 3 piezas, 0 nodos nuevos, 0 LLM calls nuevas, 0 regeneración):
+
+- **A) Anclaje por afirmación** (`sistema`, reemplaza "recomendá solo lo que devolvió buscar_catalogo"): todo dato de catálogo que el bot escriba tiene que salir de un `buscar_catalogo` de ESTE turno para ESE pedido; si no buscó, la pregunta va limpia (sin enumerar opciones); si buscó y nada se parece, no afirma → deriva a mail. + corrige la licencia de la línea 70.
+- **B) Multi-producto** (`sistema`, sección nueva): cada pedido distinto que nombra el cliente (familia o producto suelto) se trata por separado, una búsqueda por pedido (nunca mezclada); la regla "no listar Y preguntar" se acota a DENTRO de un mismo pedido.
+- **C) `producto_no_declarado`** (bloque A del Verificador, corre siempre sin catálogo, ~120 tok, vía `corregir`): la respuesta afirma datos de catálogo de un producto que NO está en `productos_ofrecidos`; las preguntas no cuentan. Cierra el punto ciego sin depender de la auto-declaración. + enum en `esquemaVerif` + línea en `sistemaCorrector`.
+- **Schema:** solo se afina la descripción de `productos_ofrecidos` ("uno por CADA producto del que AFIRMASTE algo"); sin campos nuevos. Descartado: obligar a declarar lo solo-preguntado (reintroduce FP) y cruzar `afirmaciones` (mismo punto ciego + costo).
+
+`pnpm flow:build` OK (28 nodos), 29 tests verdes. Pendiente de Martin: re-importar el flow y re-testear el caso multi-producto.
+
 ## Notas para después
 - Cohesividad con historial al integrar Chatwoot.
 - Const `POLITICA` compartida entre los 3 prompts (elimina el sync manual de mail/`no_trabajado`).
