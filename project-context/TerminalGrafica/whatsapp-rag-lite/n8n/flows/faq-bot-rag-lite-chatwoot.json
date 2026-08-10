@@ -4,23 +4,37 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "rag-lite-chatwoot",
-        "responseMode": "onReceived",
-        "options": {}
+        "path": "chatwoot",
+        "options": {
+          "rawBody": true
+        }
       },
       "id": "rag-webhook-chatwoot",
-      "name": "Webhook Chatwoot",
+      "name": "Chatwoot Webhook",
       "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ],
+      "webhookId": "chatwoot-tg-va"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n"
+      },
+      "id": "rag-verificar-hmac",
+      "name": "Verificar HMAC",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         -260,
         0
-      ],
-      "webhookId": "rag-lite-chatwoot"
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const p = $json.body ?? $json;\nconst evt = p.event;\nconst mt = p.message_type;\nconst isIncoming = mt === 'incoming' || mt === 0;\nconst isPrivate = p.private === true;\nconst content = (p.content == null ? '' : String(p.content)).trim();\nconst conv = p.conversation || {};\nconst acc = p.account || {};\nconst conversationId = conv.id ?? p.conversation_id ?? null;\nconst accountId = acc.id ?? p.account_id ?? null;\nif (evt !== 'message_created' || !isIncoming || isPrivate || !content || conversationId == null) { return []; }\nreturn [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];"
+        "jsCode": "const hmacOk = ($json._hmac && $json._hmac.ok) === true;\nconst p = $json.body ?? $json;\nconst mt = p.message_type;\nconst isIncoming = mt === 'incoming' || mt === 0;\nconst isPrivate = p.private === true;\nconst content = (p.content == null ? '' : String(p.content)).trim().normalize('NFC');\nconst conv = p.conversation || {};\nconst acc = p.account || {};\nconst conversationId = conv.id ?? p.conversation_id ?? null;\nconst accountId = acc.id ?? p.account_id ?? null;\nif (!hmacOk || !isIncoming || isPrivate || !content || conversationId == null) { return []; }\nreturn [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];"
       },
       "id": "rag-normalizar-chatwoot",
       "name": "Cuando llega un mensaje",
@@ -525,7 +539,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** (canal-agnóstico: WhatsApp, web, etc.). Entrada: **Webhook Chatwoot** → **Cuando llega un mensaje** (Code que filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ CHATWOOT (setup): 1) editá CHATWOOT_BASE_URL en scripts/build-flow.mjs; 2) creá una credencial n8n **Header Auth** (header `api_access_token`, valor = un Access Token de Chatwoot) y poné su id en CHATWOOT_CRED; 3) en Chatwoot → Configuración → Integraciones → **Webhooks**, apuntá al *Production URL* del nodo **Webhook Chatwoot** con el evento `message_created`.",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** con la MISMA config que el v10 (canal-agnóstico: WhatsApp, etc.). Entrada: **Chatwoot Webhook** (rawBody) → **Verificar HMAC** → **Cuando llega un mensaje** (Code que valida la firma y filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).",
         "height": 560,
         "width": 540
       },
@@ -541,12 +555,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://chatwoot.TU-INSTANCIA.com/api/v1/accounts/{{ $('Cuando llega un mensaje').first().json._chatwoot.accountId }}/conversations/{{ $('Cuando llega un mensaje').first().json._chatwoot.conversationId }}/messages",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Cuando llega un mensaje').first().json._chatwoot.accountId + '/conversations/' + $('Cuando llega un mensaje').first().json._chatwoot.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ content: $json.output, message_type: 'outgoing' }) }}",
+        "jsonBody": "={{ ({ content: $json.output, message_type: 'outgoing', content_type: 'text', private: false }) }}",
         "options": {}
       },
       "id": "rag-enviar-chatwoot",
@@ -559,13 +573,15 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REEMPLAZAR",
+          "id": "KxbAlYAWQ95ZZKQ5",
           "name": "Chatwoot API Token"
         }
       },
+      "onError": "continueRegularOutput",
       "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -883,7 +899,18 @@
         ]
       ]
     },
-    "Webhook Chatwoot": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verificar HMAC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar HMAC": {
       "main": [
         [
           {

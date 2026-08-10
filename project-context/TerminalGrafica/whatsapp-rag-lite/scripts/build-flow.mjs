@@ -11,12 +11,13 @@ const OUT_CHATWOOT = process.argv[3] || OUT_MAIN.replace(/\.json$/, "-chatwoot.j
 const OPENROUTER = { id: "widAoSc9Weo8PxAN", name: "OpenRouter" };
 const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
 
-// --- Chatwoot (variante conectada). EDITAR ANTES DE USAR ---
-// baseUrl: URL de tu instancia de Chatwoot, sin barra final (la usa la API de salida).
-// CHATWOOT_CRED: credencial "Header Auth" de n8n con header `api_access_token` = un Access Token de
-// Chatwoot (perfil de agente o, mejor, un Agent Bot). Creala en la UI y pegá su id acá.
-const CHATWOOT_BASE_URL = "https://chatwoot.TU-INSTANCIA.com";
-const CHATWOOT_CRED = { id: "REEMPLAZAR", name: "Chatwoot API Token" };
+// --- Chatwoot (variante conectada). MISMA CONFIG QUE EL v10 (faq-bot-v10-live) ---
+// baseUrl + credencial + secret HMAC son EXACTAMENTE los del v10, así no hay setup nuevo del lado
+// Chatwoot ni credenciales nuevas. El webhook usa el MISMO path que el v10 → por eso los dos NO
+// pueden estar ACTIVOS a la vez en el mismo n8n (Chatwoot entrega a un solo workflow por path):
+// para probar este, desactivá el v10 (y viceversa). El secret HMAC viaja por $env.CHATWOOT_WEBHOOK_SECRET.
+const CHATWOOT_BASE_URL = "https://chatwoot.silvercoastwebagency.com";
+const CHATWOOT_CRED = { id: "KxbAlYAWQ95ZZKQ5", name: "Chatwoot API Token" };
 
 const sistema = `Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.
 Tenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una
@@ -1102,43 +1103,60 @@ const flow = {
 // Se deriva por copia profunda del `flow` de arriba: así cualquier cambio de prompt/lógica
 // (Agente, Verificador, precios, log) va a los DOS canales sin duplicar nada.
 //
-// Entrada: Webhook Chatwoot (POST, responde 200 al toque) -> "Cuando llega un mensaje" (nodo Code
-//   que CONSERVA el nombre del Chat Trigger: filtra el ruido de Chatwoot y emite {sessionId,chatInput}
-//   con la MISMA forma, así todo el downstream que hace $('Cuando llega un mensaje')… sigue igual).
-// Salida: Responder -> Enviar a Chatwoot (POST a la API de la conversación; la respuesta NO viaja por
-//   el HTTP response del webhook, sale out-of-band por la API → sin timeouts de Chatwoot).
+// Entrada: Chatwoot Webhook (POST, rawBody) -> Verificar HMAC (firma x-chatwoot-signature, igual que
+//   el v10) -> "Cuando llega un mensaje" (Code que CONSERVA el nombre del Chat Trigger: valida el HMAC,
+//   filtra a mensajes ENTRANTES del contacto y emite {sessionId,chatInput} con la MISMA forma, así todo
+//   el downstream que hace $('Cuando llega un mensaje')… sigue igual). El payload viene bajo `.body`.
+// Salida: Responder -> Enviar a Chatwoot (POST a la API de la conversación; la respuesta sale por la
+//   API, no por el HTTP response del webhook → sin timeouts de Chatwoot).
 // =====================================================================
 const webhookChatwoot = {
-  parameters: { httpMethod: "POST", path: "rag-lite-chatwoot", responseMode: "onReceived", options: {} },
+  // MISMO path/webhookId que el v10 (chatwoot / chatwoot-tg-va): Chatwoot ya entrega ahí, sin config
+  // nueva. rawBody: guarda el cuerpo crudo (binario 'data') que necesita el HMAC.
+  parameters: { httpMethod: "POST", path: "chatwoot", options: { rawBody: true } },
   id: "rag-webhook-chatwoot",
-  name: "Webhook Chatwoot",
+  name: "Chatwoot Webhook",
   type: "n8n-nodes-base.webhook",
   typeVersion: 2,
+  position: [-520, 0],
+  webhookId: "chatwoot-tg-va",
+};
+
+const verificarHmac = {
+  // Copia EXACTA del nodo del v10: valida la firma de Chatwoot (sha256 de `${timestamp}.` + body crudo
+  // con $env.CHATWOOT_WEBHOOK_SECRET). Deja pasar todo con `_hmac.ok`; el filtro lo hace el normalizador.
+  parameters: {
+    jsCode:
+      "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n",
+  },
+  id: "rag-verificar-hmac",
+  name: "Verificar HMAC",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
   position: [-260, 0],
-  webhookId: "rag-lite-chatwoot",
 };
 
 const normalizarChatwoot = {
-  // Reemplaza al Chat Trigger conservando su NOMBRE. Chatwoot dispara webhooks para MUCHOS eventos y
-  // para mensajes entrantes Y salientes; acá dejamos pasar SOLO el mensaje entrante del contacto:
-  //  - event === 'message_created' (ignora conversation_updated, etc.)
-  //  - message_type entrante ('incoming' o 0 según versión) → descarta las respuestas del propio bot
-  //    (salientes) = SIN LOOPS; y descarta notas privadas.
-  // Si no aplica, devuelve [] → el flujo corta limpio (el webhook ya respondió 200).
-  // sessionId = conversation.id → memoria por conversación de Chatwoot.
+  // Reemplaza al Chat Trigger conservando su NOMBRE. El payload de Chatwoot está bajo `.body` (igual
+  // que en el v10: body.conversation.id, body.account.id, body.message_type, body.content). Deja pasar
+  // SOLO el mensaje ENTRANTE del contacto con firma HMAC válida:
+  //  - _hmac.ok (rechaza lo que no viene firmado por Chatwoot)
+  //  - message_type entrante ('incoming' o 0) → descarta las salientes del propio bot = SIN LOOPS
+  //  - no privada, con texto.
+  // Si no aplica, devuelve [] → el flujo corta limpio. sessionId = conversation.id (memoria por conversación).
   parameters: {
     jsCode: [
+      "const hmacOk = ($json._hmac && $json._hmac.ok) === true;",
       "const p = $json.body ?? $json;",
-      "const evt = p.event;",
       "const mt = p.message_type;",
       "const isIncoming = mt === 'incoming' || mt === 0;",
       "const isPrivate = p.private === true;",
-      "const content = (p.content == null ? '' : String(p.content)).trim();",
+      "const content = (p.content == null ? '' : String(p.content)).trim().normalize('NFC');",
       "const conv = p.conversation || {};",
       "const acc = p.account || {};",
       "const conversationId = conv.id ?? p.conversation_id ?? null;",
       "const accountId = acc.id ?? p.account_id ?? null;",
-      "if (evt !== 'message_created' || !isIncoming || isPrivate || !content || conversationId == null) { return []; }",
+      "if (!hmacOk || !isIncoming || isPrivate || !content || conversationId == null) { return []; }",
       "return [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];",
     ].join("\n"),
   },
@@ -1150,19 +1168,18 @@ const normalizarChatwoot = {
 };
 
 const enviarChatwoot = {
-  // Publica la respuesta en la conversación de Chatwoot. Canal-agnóstico: si la conversación es de
-  // WhatsApp, sale por WhatsApp. accountId/conversationId salen del normalizador (siempre ejecutó).
+  // Publica la respuesta en la conversación de Chatwoot (canal-agnóstico: si la conversación es de
+  // WhatsApp, sale por WhatsApp). MISMA forma de body y retry que el v10; content = $json.output.
+  // accountId/conversationId salen del normalizador (siempre ejecutó).
   parameters: {
     method: "POST",
     url:
-      "=" + CHATWOOT_BASE_URL +
-      "/api/v1/accounts/{{ $('Cuando llega un mensaje').first().json._chatwoot.accountId }}" +
-      "/conversations/{{ $('Cuando llega un mensaje').first().json._chatwoot.conversationId }}/messages",
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Cuando llega un mensaje').first().json._chatwoot.accountId + '/conversations/' + $('Cuando llega un mensaje').first().json._chatwoot.conversationId + '/messages' }}",
     authentication: "genericCredentialType",
     genericAuthType: "httpHeaderAuth",
     sendBody: true,
     specifyBody: "json",
-    jsonBody: "={{ JSON.stringify({ content: $json.output, message_type: 'outgoing' }) }}",
+    jsonBody: "={{ ({ content: $json.output, message_type: 'outgoing', content_type: 'text', private: false }) }}",
     options: {},
   },
   id: "rag-enviar-chatwoot",
@@ -1171,18 +1188,21 @@ const enviarChatwoot = {
   typeVersion: 4.2,
   position: [2880, 0],
   credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
   retryOnFail: true,
-  maxTries: 2,
-  waitBetweenTries: 1000,
+  maxTries: 3,
+  waitBetweenTries: 3000,
+  alwaysOutputData: true,
 };
 
 const flowCw = JSON.parse(JSON.stringify(flow));
 flowCw.name = "faq-bot-rag-lite-chatwoot";
 flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-chat-trigger");
-flowCw.nodes.unshift(webhookChatwoot, normalizarChatwoot);
+flowCw.nodes.unshift(webhookChatwoot, verificarHmac, normalizarChatwoot);
 flowCw.nodes.push(enviarChatwoot);
-// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Agrego los dos extremos nuevos:
-flowCw.connections["Webhook Chatwoot"] = { main: [[{ node: "Cuando llega un mensaje", type: "main", index: 0 }]] };
+// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Agrego los extremos nuevos:
+flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
+flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Cuando llega un mensaje", type: "main", index: 0 }]] };
 flowCw.connections["Responder"] = { main: [[{ node: "Enviar a Chatwoot", type: "main", index: 0 }]] };
 
 // Actualizar la nota (sticky) para reflejar el canal.
@@ -1191,9 +1211,9 @@ if (notaCw) {
   notaCw.parameters.content =
     notaCw.parameters.content.replace(
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
-      "Conectado por **Chatwoot** (canal-agnóstico: WhatsApp, web, etc.). Entrada: **Webhook Chatwoot** → **Cuando llega un mensaje** (Code que filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
+      "Conectado por **Chatwoot** con la MISMA config que el v10 (canal-agnóstico: WhatsApp, etc.). Entrada: **Chatwoot Webhook** (rawBody) → **Verificar HMAC** → **Cuando llega un mensaje** (Code que valida la firma y filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
     ) +
-    "\n\n⚙️ CHATWOOT (setup): 1) editá CHATWOOT_BASE_URL en scripts/build-flow.mjs; 2) creá una credencial n8n **Header Auth** (header `api_access_token`, valor = un Access Token de Chatwoot) y poné su id en CHATWOOT_CRED; 3) en Chatwoot → Configuración → Integraciones → **Webhooks**, apuntá al *Production URL* del nodo **Webhook Chatwoot** con el evento `message_created`.";
+    "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }
 
 for (const [f, out] of [
