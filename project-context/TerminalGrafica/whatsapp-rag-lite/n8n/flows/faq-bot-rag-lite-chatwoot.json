@@ -906,7 +906,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Decidir').first().json;\nconst chatInput = String(d.userMessage || '').trim();\nconst conversationId = d.conversationId;\nconst accountId = d.accountId;\n// d.conversation = [turnos previos..., {role:'user', content: mergedUser}] → el último es el mensaje\n// nuevo (ya va como chatInput); los previos son el historial real de la conversación.\nconst conv = Array.isArray(d.conversation) ? d.conversation : [];\nconst previos = conv.slice(0, -1).filter((m) => m && m.content);\nlet historialTexto = '';\nif (previos.length) {\n  const lineas = previos.map((m) => (m.role === 'assistant' ? 'Vos' : 'Cliente') + ': ' + String(m.content));\n  historialTexto = 'HISTORIAL DE ESTA CONVERSACIÓN (ya dicho; el mensaje nuevo del cliente va en el turno actual, no lo repitas):\\n' + lineas.join('\\n') + '\\n\\n';\n}\nreturn [{ json: { sessionId: String(conversationId), chatInput, _chatwoot: { accountId, conversationId }, historialTexto } }];"
+        "jsCode": "const d = $('Decidir').first().json;\nconst chatInput = String(d.userMessage || '').trim();\nconst conversationId = d.conversationId;\nconst accountId = d.accountId;\n// d.conversation = [turnos previos..., {role:'user', content: mergedUser}] → el último es el mensaje\n// nuevo (ya va como chatInput); los previos son el historial real de la conversación.\nconst conv = Array.isArray(d.conversation) ? d.conversation : [];\nconst previos = conv.slice(0, -1).filter((m) => m && m.content);\nlet historialTexto = '';\nif (previos.length) {\n  const lineas = previos.map((m) => (m.role === 'assistant' ? 'Vos' : 'Cliente') + ': ' + String(m.content));\n  historialTexto = 'HISTORIAL DE ESTA CONVERSACIÓN (ya dicho; el mensaje nuevo del cliente va en el turno actual, no lo repitas):\\n' + lineas.join('\\n') + '\\n\\n';\n}\n// _t0: arranque del procesamiento REAL (post-debounce). Log Turno lo resta a Date.now() →\n// latencia_ms = tiempo cerebro+entrega, sin el Wait 3s fijo. Sirve para cazar turnos lentos.\nreturn [{ json: { sessionId: String(conversationId), chatInput, _chatwoot: { accountId, conversationId }, historialTexto, _t0: Date.now() } }];"
       },
       "id": "rag-normalizar-chatwoot",
       "name": "Cuando llega un mensaje",
@@ -1547,7 +1547,8 @@
             "notas": "={{ $('Chequear Envio').first().json.notas }}",
             "final": "={{ $('Chequear Envio').first().json.final }}",
             "execution_id": "={{ $execution.id || '' }}",
-            "senales": "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}"
+            "senales": "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}",
+            "latencia_ms": "={{ (() => { const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); return t0 > 0 ? Date.now() - t0 : null; })() }}"
           },
           "matchingColumns": [],
           "schema": []
