@@ -65,8 +65,8 @@ describe("escalera por cantidad (Iman, precio_lista 0)", () => {
     expect(derivarUnidad(v)).toBe("por unidad");
     expect(precioVariante(v, "v1").cobrable).toBe(true);
   });
-  it("sin cantidad → tramo de menor minQty + aviso (sin unidad)", () => {
-    expect(precioDisplay(precioVariante(v, "v1"))).toBe("$8.000 (varía según cantidad)");
+  it("sin cantidad → tramo de menor minQty, SOLO monto (la variación la dice el agente)", () => {
+    expect(precioDisplay(precioVariante(v, "v1"))).toBe("$8.000");
   });
   it("con cantidad → tramo correcto (solo monto)", () => {
     const pv = precioVariante(v, "v1");

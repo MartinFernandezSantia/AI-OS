@@ -92,13 +92,14 @@ const rangoLabel = (t: RangoCantidad): string => (t.maxQty == null ? `${t.minQty
  *  prosa (bug: "Pack de 100 doble faz: $15.000 el pack de 100 unidades"). SIN totales/multiplicación.
  *  - simple → "$X"
  *  - escalera + cantidad → "$Xtramo"
- *  - escalera sin cantidad → "$Xmin (varía según cantidad)" (tramo de menor minQty = techo por unidad)
+ *  - escalera sin cantidad → "$Xmin" (tramo de menor minQty = techo por unidad). SOLO el monto: la
+ *    variación por cantidad la expresa el agente en palabras (ve la escalera entera en "Opciones:"),
+ *    no va pegada al número — si no, cae en medio de la frase ("$2.800 (varía…) por hoja").
  *  - no cobrable / sin monto → null (el llamador pone "a confirmar por mail"). */
 export function precioDisplay(pv: PrecioVariante, cantidad?: number | null): string | null {
   if (!pv.cobrable || !pv.unidad) return null;
   const tramos = pv.tramos.filter((t) => t.value > 0);
   let value = pv.precio_lista > 0 ? pv.precio_lista : 0;
-  let varia = false;
   if (tramos.length) {
     const c = Number(cantidad);
     if (Number.isFinite(c) && c > 0) {
@@ -112,11 +113,10 @@ export function precioDisplay(pv: PrecioVariante, cantidad?: number | null): str
       if (t) value = t.value;
     } else {
       value = [...tramos].sort((a, b) => a.minQty - b.minQty)[0].value;
-      varia = true;
     }
   }
   if (!(value > 0)) return null;
-  return `${fmtPrecio(value)}${varia ? " (varía según cantidad)" : ""}`;
+  return fmtPrecio(value);
 }
 
 /** Texto de precio CONTEXTO para el chunk (lo que lee el agente): muestra todos los tramos. */
