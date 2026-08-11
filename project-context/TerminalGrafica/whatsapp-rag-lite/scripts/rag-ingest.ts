@@ -4,6 +4,11 @@
 //   pnpm rag:ingest           # --sql (default): genera rag-embeddings-data.sql (truncate+insert)
 //   pnpm rag:ingest --apply   # upsert directo vía pg (necesita DATABASE_URL admin)
 //
+// INFO DEL NEGOCIO (segunda tool consultar_info_negocio; fuente = tabla bot.info_negocio):
+//   pnpm rag:ingest --info --dry     # imprime las filas de bot.info_negocio (necesita DATABASE_URL)
+//   pnpm rag:ingest --info           # genera rag-info-negocio-data.sql (truncate+insert)
+//   pnpm rag:ingest --info --apply   # upsert directo a bot.rag_info_negocio
+//
 // El vector se guarda con la dimensión NATIVA del modelo (sin truncar): la query en n8n usa el
 // MISMO modelo (google/gemini-embedding-001), así los vectores son comparables. Reingesta =
 // truncate + insert. Env: GEMINI_API_KEY (API key de Google AI Studio, salvo --dry), DATABASE_URL
@@ -22,10 +27,15 @@ const MODELO = "models/gemini-embedding-001";
 const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:batchEmbedContents`;
 const BATCH = 100;
 const TABLE = "bot.rag_catalogo";
+// Índice vectorial de la info del negocio (segunda tool consultar_info_negocio). Fuente de verdad de
+// los DATOS: bot.info_negocio (pares clave/valor curados). --info lee de ahí y embebe en TABLE_INFO.
+const TABLE_INFO = "bot.rag_info_negocio";
+const INFO_SOURCE = "bot.info_negocio";
 
 // Export del catálogo v4 (modelo producto-bot; curador-export-v4.sql). Fuente compartida al lado.
 const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v4.json");
 const OUT_SQL = join(HERE, "..", "rag-embeddings-data.sql");
+const OUT_SQL_INFO = join(HERE, "..", "rag-info-negocio-data.sql");
 
 const argVal = (flag: string) => {
   const i = process.argv.indexOf(flag);
@@ -60,12 +70,12 @@ async function embedBatch(textos: string[]): Promise<number[][]> {
   return out;
 }
 
-async function embedTodos(chunks: RagChunk[]): Promise<number[][]> {
+async function embedTodos(textos: string[]): Promise<number[][]> {
   const res: number[][] = [];
-  for (let i = 0; i < chunks.length; i += BATCH) {
-    const lote = chunks.slice(i, i + BATCH);
-    console.error(`Embediando ${i + 1}–${i + lote.length} de ${chunks.length}…`);
-    res.push(...(await embedBatch(lote.map((c) => c.texto))));
+  for (let i = 0; i < textos.length; i += BATCH) {
+    const lote = textos.slice(i, i + BATCH);
+    console.error(`Embediando ${i + 1}–${i + lote.length} de ${textos.length}…`);
+    res.push(...(await embedBatch(lote)));
   }
   const dims = new Set(res.map((v) => v.length));
   console.error(`Dimensión de los embeddings: ${[...dims].join("/")} (todas deben coincidir).`);
@@ -162,7 +172,96 @@ async function pricesOnly(chunks: RagChunk[]): Promise<void> {
   }
 }
 
+// ─────────────────────────── INFO DEL NEGOCIO (--info) ───────────────────────────
+// Segunda tool del agente (consultar_info_negocio). La fuente de verdad de los DATOS es la tabla
+// bot.info_negocio (pares clave/valor curados a mano). --info la lee, embebe cada `valor` y llena
+// bot.rag_info_negocio. Requiere DATABASE_URL (la fuente vive en la DB, no en un JSON como el catálogo).
+type InfoRow = { clave: string; texto: string };
+const metaInfo = (r: InfoRow) => ({ clave: r.clave });
+
+/** Client de pg con SSL a lo Supabase (pooler/directo); en local sin SSL. Igual criterio que upsert(). */
+async function pgConnect(url: string) {
+  const { Client } = await import("pg");
+  const local = /localhost|127\.0\.0\.1/.test(url);
+  const cli = new Client({ connectionString: url, ssl: local ? undefined : { rejectUnauthorized: false } });
+  await cli.connect();
+  return cli;
+}
+
+/** Lee bot.info_negocio como filas {clave, texto}. Excluye las filas placeholder ('COMPLETAR…'). */
+async function cargarInfoNegocio(): Promise<InfoRow[]> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error(`Falta DATABASE_URL: --info lee los datos de ${INFO_SOURCE}.`);
+  const cli = await pgConnect(url);
+  try {
+    const r = await cli.query(`select clave, valor from ${INFO_SOURCE} where valor not ilike 'COMPLETAR%' order by clave`);
+    const rows: InfoRow[] = r.rows.map((x: { clave: string; valor: string }) => ({ clave: String(x.clave), texto: String(x.valor) }));
+    console.error(`${INFO_SOURCE}: ${rows.length} filas (excluye placeholders 'COMPLETAR').`);
+    if (!rows.length) throw new Error(`${INFO_SOURCE} vacía o inexistente: aplicá ../whatsapp-automation/db/info-negocio.sql primero.`);
+    return rows;
+  } finally {
+    await cli.end();
+  }
+}
+
+function generarSqlInfo(rows: InfoRow[], vecs: number[][]): string {
+  const filas = rows
+    .map((r, i) => `  (${sqlStr(r.texto)}, ${sqlStr(JSON.stringify(metaInfo(r)))}::jsonb, ${sqlStr(vecLiteral(vecs[i]))}::vector)`)
+    .join(",\n");
+  return (
+    `-- Generado por scripts/rag-ingest.ts --info — NO commitear (ruido de vectores).\n` +
+    `-- Reingesta idempotente. Aplicar tras rag-info-negocio.sql (como owner/admin).\n` +
+    `begin;\ntruncate ${TABLE_INFO};\ninsert into ${TABLE_INFO} (text, metadata, embedding)\nvalues\n${filas};\ncommit;\n`
+  );
+}
+
+async function upsertInfo(rows: InfoRow[], vecs: number[][]): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Falta DATABASE_URL para --info --apply.");
+  const cli = await pgConnect(url);
+  try {
+    await cli.query("begin");
+    await cli.query(`truncate ${TABLE_INFO}`);
+    for (let i = 0; i < rows.length; i++) {
+      await cli.query(`insert into ${TABLE_INFO} (text, metadata, embedding) values ($1, $2::jsonb, $3::vector)`, [
+        rows[i].texto,
+        JSON.stringify(metaInfo(rows[i])),
+        vecLiteral(vecs[i]),
+      ]);
+    }
+    await cli.query("commit");
+    console.error(`Upsert OK: ${rows.length} filas en ${TABLE_INFO}.`);
+  } catch (e) {
+    await cli.query("rollback");
+    throw e;
+  } finally {
+    await cli.end();
+  }
+}
+
+async function ingestInfo(): Promise<void> {
+  const rows = await cargarInfoNegocio();
+  if (has("--dry")) {
+    for (const r of rows) console.log(`\n### ${r.clave}\n${r.texto}`);
+    console.error(`\n--info --dry: ${rows.length} filas impresas, sin API ni escritura.`);
+    return;
+  }
+  const vecs = await embedTodos(rows.map((r) => r.texto));
+  if (has("--apply")) {
+    await upsertInfo(rows, vecs);
+  } else {
+    writeFileSync(OUT_SQL_INFO, generarSqlInfo(rows, vecs), "utf8");
+    console.error(`SQL escrito en ${OUT_SQL_INFO} (${rows.length} filas). Aplicar como owner/admin.`);
+  }
+}
+
 async function main() {
+  // --info: rama independiente (fuente = bot.info_negocio en la DB, no el export del catálogo).
+  if (has("--info")) {
+    await ingestInfo();
+    return;
+  }
+
   const chunks = cargarChunks();
 
   if (has("--dry")) {
@@ -176,7 +275,7 @@ async function main() {
     return;
   }
 
-  const vecs = await embedTodos(chunks);
+  const vecs = await embedTodos(chunks.map((c) => c.texto));
 
   if (has("--apply")) {
     await upsert(chunks, vecs);

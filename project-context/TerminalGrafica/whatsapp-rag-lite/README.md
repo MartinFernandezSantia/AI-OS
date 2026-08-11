@@ -10,8 +10,8 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 
 ```
 lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + helpers + tests
-scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
-db/                rag-embeddings.sql (pgvector + tabla) · rag-decisiones.sql (log de decisiones)
+scripts/           rag-ingest.ts (ingesta catálogo + --info) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
+db/                rag-embeddings.sql (pgvector + catálogo) · rag-info-negocio.sql (info del negocio) · rag-decisiones.sql (log)
 n8n/flows/         faq-bot-rag-lite.json + -chatwoot.json (GENERADOS por build-flow.mjs — no editar a mano)
 plans/             los planes del experimento
 ```
@@ -27,19 +27,25 @@ compartido `../whatsapp-automation/db/export-actualizado-catalogo.json` (overrid
 Requiere `pnpm install`. Env: `GEMINI_API_KEY` (API key de Google AI Studio, para ingesta/consulta)
 y `DATABASE_URL` (`--apply`/consulta).
 
-1. **DDL** — aplicar `db/rag-embeddings.sql` en el SQL Editor de Supabase (extensión vector +
-   tabla `bot.rag_catalogo` en formato LangChain).
-2. **Ingesta** — `pnpm rag:ingest --dry` (imprime los chunks, sin API/DB) para revisarlos;
+1. **DDL** — aplicar `db/rag-embeddings.sql` (catálogo, `bot.rag_catalogo`) y `db/rag-info-negocio.sql`
+   (info del negocio, `bot.rag_info_negocio`) en el SQL Editor de Supabase (extensión vector + tablas
+   en formato LangChain). La info del negocio además necesita `bot.info_negocio` poblada — es la fuente
+   de verdad de los datos (ver `../whatsapp-automation/db/info-negocio.sql`).
+2. **Ingesta** — catálogo: `pnpm rag:ingest --dry` (imprime los chunks, sin API/DB) para revisarlos;
    `pnpm rag:ingest` genera `rag-embeddings-data.sql` (truncate+insert) para aplicar; o
-   `pnpm rag:ingest --apply` upsertea directo. Reingesta = correr de nuevo (idempotente).
+   `pnpm rag:ingest --apply` upsertea directo. Info del negocio: `pnpm rag:ingest:info --apply` lee
+   `bot.info_negocio` y llena `bot.rag_info_negocio` (o sin `--apply` genera `rag-info-negocio-data.sql`).
+   Reingesta = correr de nuevo (idempotente). Editaste `bot.info_negocio` → re-corré `rag:ingest:info`.
 3. **Consulta** — `pnpm rag:query "sirve para plotear un plano a1?"` (flags `--medicina` /
    `--inmobiliarias` para el guard de nicho).
-4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **Embeddings
-   (Google Gemini)** elegir la credencial **Google Gemini(PaLM) API** con tu key de Google AI
-   Studio, modelo `models/gemini-embedding-001` (el MISMO de la ingesta); (b) en **buscar_catalogo**
-   (PGVector) el Table Name va **schema-cualificado: `bot.rag_catalogo`** (si va solo `rag_catalogo`
-   consulta `public` y devuelve `[]` en verde), Column Names id/embedding/text/metadata, sin
-   Metadata Filter. El chat sigue en OpenRouter. Probar desde el chat de test del Chat Trigger.
+4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **AMBOS** sub-nodos
+   **Embeddings (Google Gemini)** —el de `buscar_catalogo` y el de `consultar_info_negocio`— elegir la
+   credencial **Google Gemini(PaLM) API** con tu key de Google AI Studio, modelo
+   `models/gemini-embedding-001` (el MISMO de la ingesta); (b) en **buscar_catalogo** (PGVector) el
+   Table Name va **schema-cualificado: `bot.rag_catalogo`** (si va solo `rag_catalogo` consulta `public`
+   y devuelve `[]` en verde), Column Names id/embedding/text/metadata, sin Metadata Filter; (c) en
+   **consultar_info_negocio** lo mismo con Table Name `bot.rag_info_negocio`. El chat sigue en
+   OpenRouter. Probar desde el chat de test del Chat Trigger.
 
 ## Tests
 
@@ -55,6 +61,15 @@ y `DATABASE_URL` (`--apply`/consulta).
   query por el nodo nativo Embeddings Google Gemini. Chat sigue en OpenRouter. Tabla formato
   LangChain (`text`/`metadata`/`embedding`).
 - Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
+- **Info del negocio = segunda tool RAG** (`consultar_info_negocio`, tabla `bot.rag_info_negocio`).
+  Datos operativos (horario, dirección, estacionamiento, pago/seña, envíos/retiro, plazos, urgentes,
+  contacto, facturación, redes). Fuente de verdad = `bot.info_negocio` (pares clave/valor curados a
+  mano, compartida con el v10); `rag:ingest:info` la vectoriza. Es info **autoritativa**: el agente la
+  afirma sin anclar en `buscar_catalogo`. El Verificador NO marca la política oficial (no hay envíos /
+  plazo por mail / urgentes coordinados) como `info_no_permitida`; sí marca plazos concretos inventados.
+  La fila `factura` sigue en `COMPLETAR` → se excluye de la ingesta hasta que TG defina si facturan.
+- **Estilo WhatsApp reforzado**: respuestas **< 200 caracteres** salvo cuando se listan opciones, y
+  **máximo 2 párrafos** (un solo renglón en blanco) por mensaje.
 - **Precios por placeholders** (el LLM nunca fija un precio): el chunk trae los precios en
   "Opciones:" como contexto (`[v1] Doble Faz ($15.000 el pack)`); el agente escribe `{P1}`,`{P2}` y
   declara `precios_solicitados` ({Pn}→nombre + `variante_ref` [vN] + cantidad). El nodo **Buscar

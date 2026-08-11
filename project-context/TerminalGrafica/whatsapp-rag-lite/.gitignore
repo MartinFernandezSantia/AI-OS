@@ -1,3 +1,4 @@
 node_modules/
 # SQL de datos generado por rag-ingest.ts (vectores) — se regenera, no se versiona.
 rag-embeddings-data.sql
+rag-info-negocio-data.sql

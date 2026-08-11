@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "rag:ingest": "tsx scripts/rag-ingest.ts",
+    "rag:ingest:info": "tsx scripts/rag-ingest.ts --info",
     "rag:query": "tsx scripts/rag-query.ts",
     "flow:build": "node scripts/build-flow.mjs n8n/flows/faq-bot-rag-lite.json"
   },

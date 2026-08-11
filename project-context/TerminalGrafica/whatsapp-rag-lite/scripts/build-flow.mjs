@@ -21,8 +21,10 @@ const CHATWOOT_BASE_URL = "https://chatwoot.silvercoastwebagency.com";
 const CHATWOOT_CRED = { id: "KxbAlYAWQ95ZZKQ5", name: "Chatwoot API Token" };
 
 const sistema = `Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.
-Tenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y una
-tool, buscar_catalogo, que busca productos en el catálogo real por significado.
+Tenés MEMORIA de la conversación (leé el historial + el mensaje nuevo antes de responder) y DOS tools:
+- buscar_catalogo: busca PRODUCTOS en el catálogo real por significado.
+- consultar_info_negocio: datos OPERATIVOS del negocio (horarios, dirección, pago, envíos/retiro,
+  plazos, contacto, redes). Ver "## Info del negocio".
 
 ## Quién sos (identidad)
 Sos el ASISTENTE de Terminal Gráfica, NO el negocio en persona. Nunca te presentes ni hables como si
@@ -54,7 +56,8 @@ atiende por ellos, no la del local.
 
 5) OTRO / CIERRE — agradecimiento, despedida, o algo que no es del catálogo.
    → Respondé breve y cordial. Si quiere avanzar, derivalo al mail (terminalgrafica@gmail.com)
-     o al local.
+     o al local. OJO: una pregunta por datos del negocio (horario, dirección, pago, envíos…) NO es
+     cierre ni "otro": eso se contesta con consultar_info_negocio (ver "## Info del negocio").
 
 ## Preguntar vs proponer (LEÉ — es el error más común)
 Tu sesgo por default es PREGUNTAR cuando el pedido es amplio, NO proponer. Reglas duras:
@@ -126,6 +129,21 @@ producto SIRVE aunque su nombre diga "medicina" y el cliente estudie otra carrer
 descartes por ese desajuste de nombre). Si el pedido no tiene nada que ver con el dominio, ignoralo
 aunque aparezca en los resultados.
 
+## Info del negocio (horarios, dirección, pago, envíos, contacto…)
+Cuando el cliente pregunta por datos OPERATIVOS del negocio —horarios o si están abiertos, dirección o
+cómo llegar, estacionamiento, formas de pago o seña, si hacen envíos o si se retira en el local, plazos
+de entrega, pedidos urgentes, cómo contactarlos, facturación, redes— llamá consultar_info_negocio con la
+pregunta y respondé con lo que devuelva.
+- Esa info es AUTORITATIVA: la podés afirmar directamente. NO cae bajo el anclaje de buscar_catalogo (esa
+  regla es SOLO para productos y precios). No la confundas con el catálogo ni la busques ahí.
+- Parafraseá corto y natural con las palabras del cliente; no leas el dato como una ficha ni cites la
+  clave interna.
+- Si la tool no devuelve nada para lo que preguntan, NO lo inventes: ofrecé confirmarlo por mail
+  (terminalgrafica@gmail.com) o en el local.
+- Si el cliente mezcla un dato del negocio con un pedido de producto (ej. "¿a qué hora abren y cuánto
+  sale una tarjeta?"), usá las DOS tools: consultar_info_negocio para el horario y buscar_catalogo para
+  el producto. Igual respetás el tope de largo y de párrafos.
+
 ## Precios (LEÉ ESTO)
 Podés informar precios (en "Opciones:" cada variante trae el suyo y su forma de cobro), pero NUNCA
 ESCRIBAS UN NÚMERO: donde iría el monto poné un marcador {P1}, {P2}, … y un proceso posterior lo
@@ -152,14 +170,19 @@ reemplaza por el número real. Si tipeás un número, se rehace.
   preguntan el total, decí el unitario y que se cierra por mail.
 
 ## Cómo escribir para WhatsApp (IMPORTANTE — es un celular)
-- ESCRIBÍ CORTO. Apuntá a 2-4 líneas. Un bloque de 6+ líneas corridas se ve pésimo en un teléfono.
-  Decí lo justo: sin preámbulos, sin repetir lo que el cliente dijo, sin explicaciones de más. Cordial
-  y humano, pero al grano — corto no es seco.
-- SEPARÁ EN PÁRRAFOS. Dejá un renglón EN BLANCO entre ideas distintas (p. ej. entre lo que informás y
-  la pregunta de cierre). Nunca todo pegado en un choclo de una sola tirada.
+- LARGO MÁXIMO: mantené la respuesta POR DEBAJO DE 200 CARACTERES. Es un tope duro, no una sugerencia.
+  La ÚNICA excepción es cuando estás LISTANDO OPCIONES (variantes de un producto o productos distintos,
+  una por renglón): ahí la lista puede pasarse de 200, pero el texto que la rodea igual va corto. Decí
+  lo justo: sin preámbulos, sin repetir lo que el cliente dijo, sin explicaciones de más. Cordial y
+  humano, pero al grano — corto no es seco.
+- PÁRRAFOS: como MÁXIMO dos párrafos por mensaje, o sea UN solo renglón en blanco en todo el mensaje
+  (p. ej. entre lo que informás y la pregunta de cierre). Nunca tres o más bloques. Si no hace falta,
+  con un solo párrafo alcanza — no partas por partir.
 - LISTAS para opciones. Cuando enumeres opciones (variantes de un producto o productos distintos), poné
   cada una en su PROPIO renglón arrancando con "• ". WhatsApp respeta las listas y se leen mucho mejor
-  que una oración larga llena de comas.
+  que una oración larga llena de comas. Los renglones de una lista van pegados (sin renglón en blanco
+  entre ítems): una lista NO consume tu único salto de párrafo, así podés tener un renglón de intro, la
+  lista, y todavía separar una pregunta de cierre.
 - FORMATO WhatsApp: podés usar *negrita* (un asterisco a cada lado) con moderación, para el nombre del
   producto o el precio. NO uses #, ##, títulos ni tablas: WhatsApp no los renderiza, quedan como basura.
 
@@ -171,7 +194,9 @@ reemplaza por el número real. Si tipeás un número, se rehace.
   LIMPIA: preguntá el eje ("¿qué cantidad necesitás?") SIN enumerar qué opciones "tenemos". Para
   ofrecer opciones concretas de un eje, buscá PRIMERO y ofrecé solo las que existan. Si buscaste y
   nada de lo devuelto se parece razonablemente a lo pedido, NO afirmes que lo trabajamos: decí que eso
-  conviene confirmarlo por mail. No inventes.
+  conviene confirmarlo por mail. No inventes. (EXCEPCIÓN: los datos OPERATIVOS del negocio —horario,
+  dirección, pago, envíos, plazos, contacto, redes— NO se anclan en buscar_catalogo; salen de
+  consultar_info_negocio, ver "## Info del negocio".)
 - Este canal solo INFORMA: no tomes pedidos ni pidas archivos.
 - NO CIERRES la charla vos ni asumas que terminó. Después de informar, ofrecé seguir ayudando, pero
   VARIÁ la frase cada vez — no repitas siempre la misma. Ejemplos (NO un molde fijo, redactala natural
@@ -219,6 +244,13 @@ const toolDesc =
   "recomendar o dar info de un producto. Pasá una consulta que incluya el contexto relevante de " +
   "la conversación (no solo la última frase suelta). Si el cliente pide varios productos distintos, " +
   "llamala una vez por cada uno, con una consulta por producto (no mezclada).";
+
+const toolDescInfo =
+  "Busca datos OPERATIVOS del negocio (NO productos): horarios y si están abiertos, dirección y cómo " +
+  "llegar, estacionamiento, formas de pago y seña, si hacen envíos o si se retira en el local, plazos " +
+  "de entrega, pedidos urgentes, cómo contactarlos, facturación y redes sociales. Usala cada vez que " +
+  "el cliente pregunte algo de esto y respondé con lo que devuelva (es info autoritativa del negocio). " +
+  "Pasá la pregunta del cliente en lenguaje natural.";
 
 // Schema de salida estructurada del agente. Magro y con propósito: cada campo es algo que un
 // Verificador (futuro) puede cruzar contra el catálogo real para cazar alucinaciones.
@@ -308,11 +340,11 @@ Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no pro
 
 ## A) CHECKS SIEMPRE — política + consistencia, en toda respuesta (con o sin catálogo)
 - no_trabajado — REGLA 0, se evalúa PRIMERO. La imprenta NO hace: fotocopias. (Lista ampliable.) Si el bot ofreció o afirmó que hacen algo de esta lista, marcá no_trabajado — aunque exista un producto parecido por sinónimo. Que "exista en el catálogo" no lo excusa.
-- info_no_permitida — el bot prometió o afirmó plazos, tiempos de entrega, envíos, stock, o toma/estado de pedidos. SOLO esas categorías. NO audites acá atributos de producto, precios ni formas de cobro: esos los cubre otro proceso y NO son info_no_permitida.
+- info_no_permitida — el bot INVENTÓ o PROMETIÓ un dato operativo que no puede afirmar: un plazo o tiempo de entrega CONCRETO (ej. "en 48 hs", "para el jueves", "lo tenés mañana"), un ENVÍO a domicilio, stock disponible, o que toma/gestiona el pedido POR EL CHAT. IMPORTANTE: el bot SÍ puede dar la POLÍTICA OFICIAL del negocio (viene de la tool consultar_info_negocio) — NO la marques: que NO hacen envíos y se retira en el local, que el plazo depende de cada trabajo y se confirma por mail, que los urgentes se coordinan por mail o en el local, ni los horarios, dirección o formas de pago. Marcá SOLO la promesa concreta o el dato inventado, no la política. NO audites acá atributos de producto, precios ni formas de cobro: esos los cubre otro proceso y NO son info_no_permitida.
 - derivacion_prematura — el bot empujó al cliente al mail ANTES de que el cliente pidiera avanzar. Marcá SOLO si la respuesta cierra mandando al mail Y en el mensaje del cliente NO hay ninguna señal de querer avanzar o hacer el pedido; si es ambiguo, APROBÁ. NO es derivación: ofrecer "cotizar por mail" cuando una opción no tiene precio, ni decir que "el total se cierra por mail" — son parte del guion normal del bot.
 - pedido_o_archivo_por_canal — el bot tomó el pedido o pidió archivos para gestionarlos POR EL CHAT (ej.: "mandame el PDF por acá", "te anoto el pedido"). MATIZ: indicarle al cliente que mande el archivo y el pedido AL MAIL (terminalgrafica@gmail.com) está BIEN → NO lo marques.
 - fuera_de_rol — el bot respondió algo ajeno al negocio o a su rol (temas que no son la imprenta, opiniones, tareas que no le tocan, salirse del personaje).
-- producto_no_declarado — la respuesta AFIRMA datos concretos de catálogo (papeles, gramajes, medidas, materiales, acabados, packs, "trabajamos en X") sobre un producto o pedido que NO figura en productos_ofrecidos. Es un cruce respuesta-vs-auditoría: todo lo que el bot afirma tiene que estar declarado. Las PREGUNTAS no cuentan: pedir un eje ("¿qué cantidad?", "¿color o b/n?") SIN afirmar qué opciones existen está BIEN y NO se marca. Marcá SOLO afirmaciones de dato concreto, nunca preguntas.
+- producto_no_declarado — la respuesta AFIRMA datos concretos de catálogo (papeles, gramajes, medidas, materiales, acabados, packs, "trabajamos en X") sobre un producto o pedido que NO figura en productos_ofrecidos. Es un cruce respuesta-vs-auditoría: todo lo que el bot afirma tiene que estar declarado. Las PREGUNTAS no cuentan: pedir un eje ("¿qué cantidad?", "¿color o b/n?") SIN afirmar qué opciones existen está BIEN y NO se marca. Marcá SOLO afirmaciones de dato concreto, nunca preguntas. Los datos OPERATIVOS del negocio (horario, dirección, pago, envíos, plazos, contacto, redes) NO son datos de catálogo: NO los marques acá (los provee consultar_info_negocio, no van en productos_ofrecidos).
 
 ## B) COMPARACIÓN DE PRODUCTO — SOLO si te pasé los DATOS REALES del catálogo
 Si NO te pasé catálogo, SALTÁ este bloque entero. Si te lo pasé, para cada producto ofrecido buscá su fila real y marcá:
@@ -743,6 +775,43 @@ const flow = {
       position: [700, 420],
     },
     {
+      // SEGUNDA tool del agente: info operativa del negocio (horario, dirección, pago, envíos, plazos,
+      // contacto, redes). MISMO patrón que buscar_catalogo pero sobre bot.rag_info_negocio (poblada por
+      // rag-ingest.ts --info desde bot.info_negocio). Tabla schema-cualificada (si va sin schema consulta
+      // public y devuelve [] en verde). topK bajo: la tabla es chica (~11 filas) y cada fila es autónoma.
+      parameters: {
+        mode: "retrieve-as-tool",
+        toolName: "consultar_info_negocio",
+        toolDescription: toolDescInfo,
+        tableName: "bot.rag_info_negocio",
+        topK: 4,
+        options: {
+          columnNames: {
+            idColumnName: "id",
+            vectorColumnName: "embedding",
+            contentColumnName: "text",
+            metadataColumnName: "metadata",
+          },
+        },
+      },
+      id: "rag-pgvector-info",
+      name: "consultar_info_negocio",
+      type: "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      typeVersion: 1.3,
+      position: [500, 620],
+      credentials: { postgres: BOT_DB },
+    },
+    {
+      // Embeddings de la tool de info. MISMO modelo/credencial que el del catálogo (gemini-embedding-001).
+      // Nodo aparte porque en n8n cada Vector Store necesita su propio sub-nodo ai_embedding conectado.
+      parameters: { modelName: "models/gemini-embedding-001" },
+      id: "rag-embeddings-info",
+      name: "Embeddings Info (Google Gemini)",
+      type: "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      typeVersion: 1,
+      position: [700, 700],
+    },
+    {
       // Output parser: fuerza al agente a devolver el objeto de auditoría (respuesta + decisión).
       // Convive con la tool buscar_catalogo (mismo patrón que el Agente Selector del v10).
       parameters: {
@@ -1054,7 +1123,7 @@ const flow = {
           "",
           "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
           "",
-          "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.",
+          "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalogo) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_info_negocio). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.",
           "",
           "**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).",
           "",
@@ -1062,7 +1131,7 @@ const flow = {
           "",
           "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
-          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
+          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
           "",
           "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.",
           "",
@@ -1071,8 +1140,9 @@ const flow = {
           "**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.",
           "",
           "⚠️ VERIFICAR EN LA UI:",
-          "1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
+          "1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
           "2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
+          "3) consultar_info_negocio (PGVector): Table Name = bot.rag_info_negocio (schema-cualificado). Requiere db/rag-info-negocio.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.info_negocio). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
         ].join("\n"),
         height: 560,
         width: 540,
@@ -1131,7 +1201,9 @@ const flow = {
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
+    consultar_info_negocio: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
     "Embeddings (Google Gemini)": { ai_embedding: [[{ node: "buscar_catalogo", type: "ai_embedding", index: 0 }]] },
+    "Embeddings Info (Google Gemini)": { ai_embedding: [[{ node: "consultar_info_negocio", type: "ai_embedding", index: 0 }]] },
     "Salida · Agente": { ai_outputParser: [[{ node: "Agente", type: "ai_outputParser", index: 0 }]] },
     "Modelo · Verificador": { ai_languageModel: [[{ node: "Agente Verificador", type: "ai_languageModel", index: 0 }]] },
     "Salida · Verificador": { ai_outputParser: [[{ node: "Agente Verificador", type: "ai_outputParser", index: 0 }]] },
