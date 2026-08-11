@@ -1411,7 +1411,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $json.output;\nconst trig = $('Cuando llega un mensaje').first().json;\nconst cw = trig._chatwoot || {};\nlet etapa = '';\ntry { etapa = (($('Preparar Respuesta').first().json.auditoria) || {}).etapa || ''; } catch (e) {}\nconst accion = etapa === 'falta_info' ? 'repregunto' : (etapa === 'otro' ? 'otro' : 'info');\nreturn [{ json: {\n  accountId: cw.accountId,\n  conversationId: cw.conversationId,\n  final: output,\n  userMessage: trig.chatInput,\n  accion,\n  notas: '',\n  senales: { etapa },\n} }];"
+        "jsCode": "const output = $json.output;\nconst trig = $('Cuando llega un mensaje').first().json;\nconst cw = trig._chatwoot || {};\nlet etapa = '', precios = [];\ntry { const aud = ($('Preparar Respuesta').first().json.auditoria) || {}; etapa = aud.etapa || ''; precios = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []; } catch (e) {}\nconst accion = etapa === 'falta_info' ? 'repregunto' : (precios.length > 0 ? 'informo_precio' : 'informo_capacidad');\nreturn [{ json: {\n  accountId: cw.accountId,\n  conversationId: cw.conversationId,\n  final: output,\n  userMessage: trig.chatInput,\n  accion,\n  notas: '',\n  senales: { etapa },\n} }];"
       },
       "id": "rag-preparar-envio",
       "name": "Preparar Envio",

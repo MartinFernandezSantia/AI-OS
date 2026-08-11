@@ -1194,16 +1194,17 @@ const normalizarChatwoot = {
 //   que el v10, así las refs transcritas ($('Preparar Envio'), $('Chequear Envio')) resuelven sin editar.
 const prepararEnvio = {
   // Punto único antes de enviar: arma el "sobre" FLAT que Enviar Mensaje / Chequear Envio / Log Turno
-  // esperan. `accion` = valor VÁLIDO del enum bot.accion derivado de la etapa del Agente
-  // (falta_info→repregunto, otro→otro, resto→info); Chequear Envio la pisa con 'envio_fallido' si no llegó.
+  // esperan. `accion` = valor VÁLIDO del enum bot.accion (¡el enum NO tiene 'info'/'otro'!): falta_info
+  // →repregunto, turno que cotizó (precios_solicitados)→informo_precio, resto→informo_capacidad.
+  // La etapa fina viaja en senales.etapa. Chequear Envio pisa accion con 'envio_fallido' si no llegó.
   parameters: {
     jsCode: [
       "const output = $json.output;",
       "const trig = $('Cuando llega un mensaje').first().json;",
       "const cw = trig._chatwoot || {};",
-      "let etapa = '';",
-      "try { etapa = (($('Preparar Respuesta').first().json.auditoria) || {}).etapa || ''; } catch (e) {}",
-      "const accion = etapa === 'falta_info' ? 'repregunto' : (etapa === 'otro' ? 'otro' : 'info');",
+      "let etapa = '', precios = [];",
+      "try { const aud = ($('Preparar Respuesta').first().json.auditoria) || {}; etapa = aud.etapa || ''; precios = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []; } catch (e) {}",
+      "const accion = etapa === 'falta_info' ? 'repregunto' : (precios.length > 0 ? 'informo_precio' : 'informo_capacidad');",
       "return [{ json: {",
       "  accountId: cw.accountId,",
       "  conversationId: cw.conversationId,",
