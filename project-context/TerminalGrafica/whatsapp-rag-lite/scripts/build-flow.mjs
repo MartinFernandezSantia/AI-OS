@@ -1103,10 +1103,11 @@ const flow = {
 // Se deriva por copia profunda del `flow` de arriba: así cualquier cambio de prompt/lógica
 // (Agente, Verificador, precios, log) va a los DOS canales sin duplicar nada.
 //
-// Entrada: Chatwoot Webhook (POST, rawBody) -> Verificar HMAC (firma x-chatwoot-signature, igual que
-//   el v10) -> "Cuando llega un mensaje" (Code que CONSERVA el nombre del Chat Trigger: valida el HMAC,
-//   filtra a mensajes ENTRANTES del contacto y emite {sessionId,chatInput} con la MISMA forma, así todo
-//   el downstream que hace $('Cuando llega un mensaje')… sigue igual). El payload viene bajo `.body`.
+// Entrada (INGRESO ENDURECIDO = F1 del port del caparazón v10): Chatwoot Webhook (rawBody) ->
+//   Verificar HMAC -> Filtro Ingreso (solo WhatsApp entrante, firma válida, SIN agente humano asignado)
+//   -> Firewall Tier-1 (SQL bot.firewall_check: injection/rate/strikes) -> Switch (pass/refusal/rate/drop)
+//   -> ¿Tiene Texto? (audio/archivo -> enlatado) -> "Cuando llega un mensaje" (adaptador que CONSERVA el
+//   nombre del Chat Trigger y emite {sessionId,chatInput,_chatwoot} para no tocar el medio).
 // Salida: Responder -> Enviar a Chatwoot (POST a la API de la conversación; la respuesta sale por la
 //   API, no por el HTTP response del webhook → sin timeouts de Chatwoot).
 // =====================================================================
@@ -1137,26 +1138,18 @@ const verificarHmac = {
 };
 
 const normalizarChatwoot = {
-  // Reemplaza al Chat Trigger conservando su NOMBRE. El payload de Chatwoot está bajo `.body` (igual
-  // que en el v10: body.conversation.id, body.account.id, body.message_type, body.content). Deja pasar
-  // SOLO el mensaje ENTRANTE del contacto con firma HMAC válida:
-  //  - _hmac.ok (rechaza lo que no viene firmado por Chatwoot)
-  //  - message_type entrante ('incoming' o 0) → descarta las salientes del propio bot = SIN LOOPS
-  //  - no privada, con texto.
-  // Si no aplica, devuelve [] → el flujo corta limpio. sessionId = conversation.id (memoria por conversación).
+  // Adaptador de entrada: CONSERVA el nombre del Chat Trigger para no tocar el medio. Todo el filtrado
+  // (HMAC/entrante/canal/assignee y texto) ya lo hicieron Filtro Ingreso + ¿Tiene Texto? aguas arriba
+  // (F1), así que acá SOLO se EXTRAE. OJO: lee de $('Chatwoot Webhook') porque Firewall Tier-1 (postgres)
+  // y el Switch ya reemplazaron $json por la fila del firewall. Emite {sessionId, chatInput, _chatwoot}.
   parameters: {
     jsCode: [
-      "const hmacOk = ($json._hmac && $json._hmac.ok) === true;",
-      "const p = $json.body ?? $json;",
-      "const mt = p.message_type;",
-      "const isIncoming = mt === 'incoming' || mt === 0;",
-      "const isPrivate = p.private === true;",
+      "const p = $('Chatwoot Webhook').first().json.body || {};",
       "const content = (p.content == null ? '' : String(p.content)).trim().normalize('NFC');",
       "const conv = p.conversation || {};",
       "const acc = p.account || {};",
       "const conversationId = conv.id ?? p.conversation_id ?? null;",
       "const accountId = acc.id ?? p.account_id ?? null;",
-      "if (!hmacOk || !isIncoming || isPrivate || !content || conversationId == null) { return []; }",
       "return [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];",
     ].join("\n"),
   },
@@ -1164,7 +1157,7 @@ const normalizarChatwoot = {
   name: "Cuando llega un mensaje",
   type: "n8n-nodes-base.code",
   typeVersion: 2,
-  position: [0, 0],
+  position: [120, 40],
 };
 
 const enviarChatwoot = {
@@ -1195,14 +1188,165 @@ const enviarChatwoot = {
   alwaysOutputData: true,
 };
 
+// ---------- F1: ENDURECIMIENTO DE INGRESO (nodos transcritos del v10) ----------
+// Helper para los mensajes ENLATADOS de Chatwoot (refusal / rate / no-texto): POST a la conversación,
+// leyendo account/conversation del webhook (siempre ejecutó). Mismo patrón que el v10.
+const cannedChatwoot = (id, name, position, texto) => ({
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ content: " + JSON.stringify(texto) + ", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    options: {},
+  },
+  id,
+  name,
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position,
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+});
+
+const filtroIngreso = {
+  // Copia del v10: descarta lo que no sea mensaje ENTRANTE de WhatsApp, con firma válida y SIN agente
+  // humano asignado (si un humano tomó la conversación, el bot no interviene). Item que no matchea → no
+  // pasa → el flujo corta sin responder. typeValidation loose (assignee puede venir undefined).
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 3 },
+      conditions: [
+        { id: "cond-hmac", leftValue: "={{ $json._hmac.ok }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } },
+        { id: "cond-event", leftValue: "={{ $json.body.event }}", rightValue: "message_created", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-incoming", leftValue: "={{ $json.body.message_type }}", rightValue: "incoming", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-channel", leftValue: "={{ $json.body.conversation.channel }}", rightValue: "Channel::Whatsapp", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-assignee", leftValue: "={{ !$json.body.conversation.meta?.assignee }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } },
+      ],
+      combinator: "and",
+    },
+    looseTypeValidation: true,
+    options: {},
+  },
+  id: "rag-filtro-ingreso",
+  name: "Filtro Ingreso",
+  type: "n8n-nodes-base.filter",
+  typeVersion: 2.3,
+  position: [-520, 220],
+};
+
+const firewallTier1 = {
+  // Copia del v10: la lógica (regex injection + rate-limit por sender + strikes) vive en la función SQL
+  // bot.firewall_check → devuelve una fila con `action` ∈ pass/refusal/silence/drop. onError=continue:
+  // si la función falla, no rompe el turno (el Switch cae al fallback = pass, fail-open).
+  parameters: {
+    operation: "executeQuery",
+    query: "select * from bot.firewall_check($1, $2, $3)",
+    options: {
+      queryReplacement:
+        "={{ (() => { const b = $('Chatwoot Webhook').first().json.body; const sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? ''; return [ String(sid), b.content || '', b.conversation.id ]; })() }}",
+    },
+  },
+  id: "rag-firewall-tier1",
+  name: "Firewall Tier-1",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [-520, 400],
+  credentials: { postgres: BOT_DB },
+  onError: "continueRegularOutput",
+};
+
+const mkRule = (id, val, key) => ({
+  conditions: {
+    options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 3 },
+    conditions: [{ id, leftValue: "={{ $json.action }}", rightValue: val, operator: { type: "string", operation: "equals" } }],
+    combinator: "and",
+  },
+  renameOutput: true,
+  outputKey: key,
+});
+const switchFirewall = {
+  // Rutea por `action` del firewall. 4 salidas + fallback (extra). El fallback = pass (fail-open).
+  parameters: {
+    rules: { values: [mkRule("fw-pass", "pass", "pass"), mkRule("fw-refusal", "refusal", "refusal"), mkRule("fw-silence", "silence", "silence"), mkRule("fw-drop", "drop", "drop")] },
+    options: { fallbackOutput: "extra" },
+  },
+  id: "rag-switch-firewall",
+  name: "Switch Firewall",
+  type: "n8n-nodes-base.switch",
+  typeVersion: 3.4,
+  position: [-300, 400],
+};
+
+const tieneTexto = {
+  // Rechaza audio/imagen/archivo: si el mensaje entrante no tiene texto, out1 → Respuesta No-Texto.
+  parameters: {
+    conditions: {
+      options: { caseSensitive: false, leftValue: "", typeValidation: "loose", version: 1 },
+      conditions: [{ id: "cond-content", leftValue: "={{ $('Chatwoot Webhook').first().json.body.content }}", operator: { type: "string", operation: "notEmpty" } }],
+      combinator: "and",
+    },
+    options: {},
+  },
+  id: "rag-tiene-texto",
+  name: "¿Tiene Texto?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2,
+  position: [-80, 220],
+};
+
+const respuestaNoTexto = cannedChatwoot("rag-resp-no-texto", "Respuesta No-Texto", [-80, 460], "No puedo procesar archivos ni mensajes de voz. Escribime tu consulta y te ayudo con gusto.");
+const mensajeFirewallRefusal = cannedChatwoot("rag-fw-refusal", "Mensaje Firewall Refusal", [-300, 600], "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?");
+const avisoRateFirewall = cannedChatwoot("rag-fw-rate", "Aviso Rate Firewall", [-120, 600], "Perdoná, nos están entrando muchos mensajes juntos y necesitamos un minuto para ordenarnos. Esperanos un momentito y seguimos por acá. Si es urgente, escribinos a terminalgrafica@gmail.com o pasá por el local.");
+const descartarFirewall = {
+  parameters: {},
+  id: "rag-descartar-firewall",
+  name: "Descartar Firewall (drop)",
+  type: "n8n-nodes-base.noOp",
+  typeVersion: 1,
+  position: [-300, 760],
+};
+
 const flowCw = JSON.parse(JSON.stringify(flow));
 flowCw.name = "faq-bot-rag-lite-chatwoot";
 flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-chat-trigger");
-flowCw.nodes.unshift(webhookChatwoot, verificarHmac, normalizarChatwoot);
+flowCw.nodes.unshift(
+  webhookChatwoot,
+  verificarHmac,
+  filtroIngreso,
+  firewallTier1,
+  switchFirewall,
+  tieneTexto,
+  respuestaNoTexto,
+  mensajeFirewallRefusal,
+  avisoRateFirewall,
+  descartarFirewall,
+  normalizarChatwoot,
+);
 flowCw.nodes.push(enviarChatwoot);
-// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Agrego los extremos nuevos:
+// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + extremos:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
-flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Cuando llega un mensaje", type: "main", index: 0 }]] };
+flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] };
+flowCw.connections["Filtro Ingreso"] = { main: [[{ node: "Firewall Tier-1", type: "main", index: 0 }]] };
+flowCw.connections["Firewall Tier-1"] = { main: [[{ node: "Switch Firewall", type: "main", index: 0 }]] };
+flowCw.connections["Switch Firewall"] = {
+  main: [
+    [{ node: "¿Tiene Texto?", type: "main", index: 0 }], // 0 pass
+    [{ node: "Mensaje Firewall Refusal", type: "main", index: 0 }], // 1 refusal
+    [{ node: "Aviso Rate Firewall", type: "main", index: 0 }], // 2 silence
+    [{ node: "Descartar Firewall (drop)", type: "main", index: 0 }], // 3 drop
+    [{ node: "¿Tiene Texto?", type: "main", index: 0 }], // 4 fallback = pass (fail-open)
+  ],
+};
+flowCw.connections["¿Tiene Texto?"] = {
+  main: [
+    [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 0 true = hay texto
+    [{ node: "Respuesta No-Texto", type: "main", index: 0 }], // 1 false = no-texto (enlatado)
+  ],
+};
 flowCw.connections["Responder"] = { main: [[{ node: "Enviar a Chatwoot", type: "main", index: 0 }]] };
 
 // Actualizar la nota (sticky) para reflejar el canal.
@@ -1211,7 +1355,7 @@ if (notaCw) {
   notaCw.parameters.content =
     notaCw.parameters.content.replace(
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
-      "Conectado por **Chatwoot** con la MISMA config que el v10 (canal-agnóstico: WhatsApp, etc.). Entrada: **Chatwoot Webhook** (rawBody) → **Verificar HMAC** → **Cuando llega un mensaje** (Code que valida la firma y filtra: solo mensajes ENTRANTES del contacto, ni salientes del bot ni notas privadas → sin loops). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
+      "Conectado por **Chatwoot** con la config del v10. **Ingreso endurecido (F1):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check: injection/rate/strikes) → **Switch** (pass / refusal / rate / drop, con enlatados) → **¿Tiene Texto?** (audio/archivo → enlatado no-texto) → **Cuando llega un mensaje** (adaptador que extrae {sessionId, chatInput}). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
     ) +
     "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }
