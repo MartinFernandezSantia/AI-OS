@@ -8,15 +8,16 @@
 --   · latencia_ms — cuánto tardó el procesamiento (cerebro + entrega), SIN el
 --     debounce fijo de 3s. Lo estampa el adaptador ("Cuando llega un mensaje",
 --     campo _t0) y lo cierra Log Turno con Date.now() - _t0.
---   · uso_llm    — tokens del turno (jsonb {llamadas, tokens_in, tokens_out,
---     nodos{}}). NO se llena en el hot-path: los sub-nodos ai_languageModel de n8n
---     NO son referenciables desde el flujo principal ($('Modelo') no resuelve;
---     confirmado por la comunidad, único camino = la API de ejecuciones). Se
---     enriquece en BATCH keyed por execution_id: un job posterior consulta
---     GET /api/v1/executions/{id}?includeData=true, suma el tokenUsage del runData
---     de cada nodo de modelo y hace UPDATE ... WHERE execution_id = X. Sin costo
---     USD (los nodos langchain sólo dan conteo); se estima por tarifa. PENDIENTE
---     de construir (ver auditoria-rag-lite.sql §D). La columna se crea desde ya.
+--   · uso_llm    — tokens + costo USD del turno (jsonb {llamadas, tokens_in,
+--     tokens_out, costo_usd, modelo, nodos{}, parcial}). Se llena en el hot-path:
+--     el Agente corre con returnIntermediateSteps=true y expone sus llamadas LLM
+--     del tool-call en intermediateSteps[].action.messageLog[].kwargs.
+--     response_metadata.usage (con el costo USD real de OpenRouter). Preparar Envío
+--     lo suma (es el output del Agente, nodo main → referenciable; los SUB-nodos
+--     ai_languageModel NO lo son, por eso no se leen Verificador/Corrector/etc.).
+--     COBERTURA PARCIAL (parcial=true): cubre la(s) ronda(s) con tool-call del
+--     Agente —la cara, prompt+catálogo— pero NO la generación final ni Verificador/
+--     Corrector/Guardrails → es un PISO del gasto, no el total.
 --
 -- Preparada por Claude, APLICA MARTIN (regla: yo preparo, vos aplicás).
 -- Aditiva e idempotente: corre en el SQL editor sobre cualquier estado.

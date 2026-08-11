@@ -132,14 +132,12 @@
 
 
 -- =====================================================================
--- D. TOKENS (bot.decisiones.uso_llm) — forma: {llamadas, tokens_in, tokens_out,
---    nodos:{agente/verificador/corrector/guardrails:{in,out}}}. SIN costo USD:
---    los nodos langchain sólo dan conteo (a diferencia del v9). Se ESTIMA por tarifa.
---
---    OJO: la columna se llena en BATCH (job aparte keyed por execution_id contra la
---    API de ejecuciones de n8n), NO en el turno — los sub-nodos de modelo no se leen
---    desde el flujo principal. Hasta que ese job exista, uso_llm es NULL y D0-D3 dan
---    0 filas. execution_id (ya logueado) es la clave del join.
+-- D. TOKENS + COSTO (bot.decisiones.uso_llm) — forma: {llamadas, tokens_in,
+--    tokens_out, costo_usd, modelo, nodos:{agente:{in,out,usd}}, parcial}.
+--    Se llena en el turno desde intermediateSteps del Agente (returnIntermediateSteps),
+--    con el costo USD REAL de OpenRouter. OJO parcial=true: es un PISO — cubre la ronda
+--    tool-call del Agente (prompt+catálogo, lo caro) pero NO la generación final ni
+--    Verificador/Corrector/Guardrails (esos son sub-nodos, no legibles desde el main).
 -- =====================================================================
 
 -- D0. ¿SE ESTÁ POBLANDO? Debe dar ~igual al total de turnos LLM.
@@ -147,15 +145,14 @@
 -- from bot.decisiones
 -- where created_at > now() - interval '7 days' and uso_llm is not null;
 
--- D1. TOKENS DE LA SEMANA + costo estimado por tarifa. Ajustá $/1M de gemini-3.1-flash-lite
---     (hoy ~0.075 in / 0.30 out por 1M). El mensaje de WhatsApp (~0.026 c/u) domina el costo.
+-- D1. COSTO DE LA SEMANA (real de OpenRouter, PISO) vs. el mensaje de WhatsApp (~0.026 c/u
+--     desde 1-oct-2026). Confirma la tesis del v10: el LLM es marginal, lo caro es el mensaje.
 -- select
---   count(*)                                        as turnos,
---   sum((uso_llm->>'tokens_in')::bigint)            as tokens_in,
---   sum((uso_llm->>'tokens_out')::bigint)           as tokens_out,
---   round(sum((uso_llm->>'tokens_in')::bigint)  / 1e6 * 0.075
---       + sum((uso_llm->>'tokens_out')::bigint) / 1e6 * 0.30, 4) as llm_usd_est,
---   round(count(*) * 0.026, 2)                       as whatsapp_usd
+--   count(*)                                          as turnos,
+--   sum((uso_llm->>'tokens_in')::bigint)              as tokens_in,
+--   sum((uso_llm->>'tokens_out')::bigint)             as tokens_out,
+--   round(sum((uso_llm->>'costo_usd')::numeric), 4)   as llm_usd_piso,
+--   round(count(*) * 0.026, 2)                         as whatsapp_usd
 -- from bot.decisiones
 -- where created_at > now() - interval '7 days' and uso_llm is not null;
 
