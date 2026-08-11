@@ -1,6 +1,6 @@
 # Plan — Portar el caparazón de producción del v10 al bot RAG lite (variante Chatwoot)
 
-> Estado: **F1–F5 CONSTRUIDO** (2026-08-11; commits `54ec20e` F1, `0d2bc24` F2, `d20a7d8` F3+F4, `a2bf91e` F5; flow Chatwoot 60 nodos). F0 = runbook de Martin (Settings del workflow → Error Workflow → `tg-bot-error`). Pendiente Martin: re-importar + probar en vivo (ver §Verificación). Diferido a pedido de Martin: **F6 (escalación con labels)** y drop-Chatwoot.
+> Estado: **F1–F5 CONSTRUIDO** (2026-08-11; commits `54ec20e` F1, `0d2bc24` F2, `d20a7d8` F3+F4, `a2bf91e` F5; flow Chatwoot 60 nodos). F0 = runbook de Martin (Settings del workflow → Error Workflow → `tg-bot-error`). Pendiente Martin: re-importar + probar en vivo (ver §Verificación). **F6 (escalación con labels) CANCELADO** (2026-08-11): no tiene sentido poner labels en un sistema que se va a apagar; Chatwoot hoy = solo gate + historial, transitorio. Diferido: drop-Chatwoot (Cloud API directo + tablas propias).
 
 ## Context
 
