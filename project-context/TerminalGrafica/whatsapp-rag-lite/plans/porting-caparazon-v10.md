@@ -1,6 +1,6 @@
 # Plan — Portar el caparazón de producción del v10 al bot RAG lite (variante Chatwoot)
 
-> Estado: **F1 construida** (2026-08-11). F0 = runbook de Martin (cablear error-workflow a nivel instancia). Siguen F2–F4.
+> Estado: **MVP F1–F4 CONSTRUIDO** (2026-08-11; commits `54ec20e` F1, `0d2bc24` F2, `d20a7d8` F3+F4; flow Chatwoot 52 nodos). F0 = runbook de Martin (Settings del workflow → Error Workflow → `tg-bot-error`). Pendiente Martin: re-importar + probar en vivo (ver §Verificación). Diferido: F5 (Tier-2), F6 (escalación), drop-Chatwoot.
 
 ## Context
 
