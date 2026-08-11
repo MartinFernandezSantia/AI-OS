@@ -1170,7 +1170,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). Salida: **Enviar a Chatwoot**.\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). **F3/F4 (egreso):** Responder → **Preparar Envio** → **Enviar Mensaje** → **Chequear Envio** (entrega = id de Chatwoot, no status HTTP) → **¿Se Entregó?** (no → **Label Envío Fallido**) → **Log Turno** (bot.decisiones). F0 (runbook): en Settings del workflow, Error Workflow → tg-bot-error.\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).",
         "height": 560,
         "width": 540
       },
@@ -1185,21 +1185,34 @@
     },
     {
       "parameters": {
+        "jsCode": "const output = $json.output;\nconst trig = $('Cuando llega un mensaje').first().json;\nconst cw = trig._chatwoot || {};\nlet etapa = '';\ntry { etapa = (($('Preparar Respuesta').first().json.auditoria) || {}).etapa || ''; } catch (e) {}\nconst accion = etapa === 'falta_info' ? 'repregunto' : (etapa === 'otro' ? 'otro' : 'info');\nreturn [{ json: {\n  accountId: cw.accountId,\n  conversationId: cw.conversationId,\n  final: output,\n  userMessage: trig.chatInput,\n  accion,\n  notas: '',\n  senales: { etapa },\n} }];"
+      },
+      "id": "rag-preparar-envio",
+      "name": "Preparar Envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        0
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Cuando llega un mensaje').first().json._chatwoot.accountId + '/conversations/' + $('Cuando llega un mensaje').first().json._chatwoot.conversationId + '/messages' }}",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ content: $json.output, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "jsonBody": "={{ ({ content: $json.final, message_type: 'outgoing', content_type: 'text', private: false }) }}",
         "options": {}
       },
-      "id": "rag-enviar-chatwoot",
-      "name": "Enviar a Chatwoot",
+      "id": "rag-enviar-mensaje",
+      "name": "Enviar Mensaje",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2880,
+        3080,
         0
       ],
       "credentials": {
@@ -1213,6 +1226,123 @@
       "maxTries": 3,
       "waitBetweenTries": 3000,
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.\n//\n// Caso real (2026-07-29): Chatwoot devolvio \"Service temporarily unavailable\" y\n// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el\n// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje\n// en `final`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo\n// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.\n//\n// Un log que miente es peor que el error que oculta: es lo que usas para saber\n// si el bot esta funcionando.\n//\n// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su `id`\n// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,\n// porque con onError el nodo puede emitir un item de error sin status alguno.\nconst env = $('Preparar Envio').first().json;\nconst r = $input.first().json || {};\n\n// el id puede venir en la raiz o anidado segun como responda Chatwoot\nconst idMensaje = r.id || (r.data && r.data.id) || null;\nconst huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');\nconst entregado = !!idMensaje && !huboError;\n\nconst detalle = entregado ? null : String(\n  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message\n  || 'Chatwoot no devolvio id de mensaje'\n).slice(0, 300);\n\nreturn [{ json: {\n  ...env,\n  entregado,\n  idMensajeChatwoot: idMensaje || null,\n  accion: entregado ? env.accion : 'envio_fallido',\n  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),\n  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },\n} }];"
+      },
+      "id": "rag-chequear-envio",
+      "name": "Chequear Envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.entregado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "rag-se-entrego",
+      "name": "¿Se Entregó?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ labels: ['envio-fallido'] }) }}",
+        "options": {}
+      },
+      "id": "rag-label-envio-fallido",
+      "name": "Label Envío Fallido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3680,
+        160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "bot",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "decisiones",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $('Chequear Envio').first().json.conversationId }}",
+            "mensaje_cliente": "={{ $('Chequear Envio').first().json.userMessage }}",
+            "nivel_resolucion": "n2_llm",
+            "accion": "={{ $('Chequear Envio').first().json.accion }}",
+            "hubo_handoff": false,
+            "notas": "={{ $('Chequear Envio').first().json.notas }}",
+            "final": "={{ $('Chequear Envio').first().json.final }}",
+            "execution_id": "={{ $execution.id || '' }}",
+            "senales": "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "rag-log-turno",
+      "name": "Log Turno",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3880,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1707,7 +1837,69 @@
       "main": [
         [
           {
-            "node": "Enviar a Chatwoot",
+            "node": "Preparar Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Envio": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Chequear Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chequear Envio": {
+      "main": [
+        [
+          {
+            "node": "¿Se Entregó?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se Entregó?": {
+      "main": [
+        [
+          {
+            "node": "Log Turno",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label Envío Fallido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Envío Fallido": {
+      "main": [
+        [
+          {
+            "node": "Log Turno",
             "type": "main",
             "index": 0
           }

@@ -1172,32 +1172,153 @@ const normalizarChatwoot = {
   position: [880, 40],
 };
 
-const enviarChatwoot = {
-  // Publica la respuesta en la conversación de Chatwoot (canal-agnóstico: si la conversación es de
-  // WhatsApp, sale por WhatsApp). MISMA forma de body y retry que el v10; content = $json.output.
-  // accountId/conversationId salen del normalizador (siempre ejecutó).
+// ---------- F3 (verificación de entrega) + F4 (logging operativo) ----------
+// Cadena de egreso: Responder -> Preparar Envio -> Enviar Mensaje -> Chequear Envio -> ¿Se Entregó?
+//   -> [no] Label Envío Fallido -> Log Turno ; [sí] Log Turno. La entrega se confirma por el `id` que
+//   devuelve Chatwoot (no el status HTTP). Log Turno escribe a bot.decisiones (log operativo, además del
+//   bot.rag_decisiones del cerebro). NOMBRES sin acento en "Preparar Envio"/"Chequear Envio" = los mismos
+//   que el v10, así las refs transcritas ($('Preparar Envio'), $('Chequear Envio')) resuelven sin editar.
+const prepararEnvio = {
+  // Punto único antes de enviar: arma el "sobre" FLAT que Enviar Mensaje / Chequear Envio / Log Turno
+  // esperan. `accion` = valor VÁLIDO del enum bot.accion derivado de la etapa del Agente
+  // (falta_info→repregunto, otro→otro, resto→info); Chequear Envio la pisa con 'envio_fallido' si no llegó.
+  parameters: {
+    jsCode: [
+      "const output = $json.output;",
+      "const trig = $('Cuando llega un mensaje').first().json;",
+      "const cw = trig._chatwoot || {};",
+      "let etapa = '';",
+      "try { etapa = (($('Preparar Respuesta').first().json.auditoria) || {}).etapa || ''; } catch (e) {}",
+      "const accion = etapa === 'falta_info' ? 'repregunto' : (etapa === 'otro' ? 'otro' : 'info');",
+      "return [{ json: {",
+      "  accountId: cw.accountId,",
+      "  conversationId: cw.conversationId,",
+      "  final: output,",
+      "  userMessage: trig.chatInput,",
+      "  accion,",
+      "  notas: '',",
+      "  senales: { etapa },",
+      "} }];",
+    ].join("\n"),
+  },
+  id: "rag-preparar-envio",
+  name: "Preparar Envio",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [2880, 0],
+};
+
+const enviarMensaje = {
+  // Envía a la conversación de Chatwoot. Lee el sobre FLAT (final/accountId/conversationId). alwaysOutputData
+  // + onError=continue: aunque falle, emite un item para que Chequear Envio detecte la NO-entrega.
   parameters: {
     method: "POST",
     url:
-      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Cuando llega un mensaje').first().json._chatwoot.accountId + '/conversations/' + $('Cuando llega un mensaje').first().json._chatwoot.conversationId + '/messages' }}",
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
     authentication: "genericCredentialType",
     genericAuthType: "httpHeaderAuth",
     sendBody: true,
     specifyBody: "json",
-    jsonBody: "={{ ({ content: $json.output, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    jsonBody: "={{ ({ content: $json.final, message_type: 'outgoing', content_type: 'text', private: false }) }}",
     options: {},
   },
-  id: "rag-enviar-chatwoot",
-  name: "Enviar a Chatwoot",
+  id: "rag-enviar-mensaje",
+  name: "Enviar Mensaje",
   type: "n8n-nodes-base.httpRequest",
   typeVersion: 4.2,
-  position: [2880, 0],
+  position: [3080, 0],
   credentials: { httpHeaderAuth: CHATWOOT_CRED },
   onError: "continueRegularOutput",
   retryOnFail: true,
   maxTries: 3,
   waitBetweenTries: 3000,
   alwaysOutputData: true,
+};
+
+const chequearEnvio = {
+  // Copia EXACTA del v10: la entrega = `id` numérico que devuelve Chatwoot, NO el status HTTP (nació de
+  // un 503 logueado como éxito). Si no hay id → accion='envio_fallido' + marca en notas/senales.
+  parameters: {
+    jsCode:
+      "// EL LOG NO PUEDE DECIR QUE SE CONTESTO SI NO SE CONTESTO.\n//\n// Caso real (2026-07-29): Chatwoot devolvio \"Service temporarily unavailable\" y\n// el cliente nunca recibio la respuesta. Con onError:continueRegularOutput el\n// flujo siguio como si todo hubiera salido bien y Log Turno escribio el mensaje\n// en `final`, o sea que la base afirmaba una entrega que no ocurrio. Martin lo\n// descubrio mirando WhatsApp, no el log — y tuvo que reenviar a mano.\n//\n// Un log que miente es peor que el error que oculta: es lo que usas para saber\n// si el bot esta funcionando.\n//\n// COMO SE SABE SI LLEGO: Chatwoot devuelve el mensaje creado con su `id`\n// numerico. Si no hay id, no se creo nada. Se chequea eso y no el status HTTP,\n// porque con onError el nodo puede emitir un item de error sin status alguno.\nconst env = $('Preparar Envio').first().json;\nconst r = $input.first().json || {};\n\n// el id puede venir en la raiz o anidado segun como responda Chatwoot\nconst idMensaje = r.id || (r.data && r.data.id) || null;\nconst huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');\nconst entregado = !!idMensaje && !huboError;\n\nconst detalle = entregado ? null : String(\n  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message\n  || 'Chatwoot no devolvio id de mensaje'\n).slice(0, 300);\n\nreturn [{ json: {\n  ...env,\n  entregado,\n  idMensajeChatwoot: idMensaje || null,\n  accion: entregado ? env.accion : 'envio_fallido',\n  notas: String(env.notas || '') + (entregado ? '' : ' ENVIO-FALLIDO(' + detalle + ')'),\n  senales: { ...(env.senales || {}), entregado, envioFallido: !entregado },\n} }];",
+  },
+  id: "rag-chequear-envio",
+  name: "Chequear Envio",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [3280, 0],
+};
+
+const seEntrego = {
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, version: 2 },
+      combinator: "and",
+      conditions: [{ leftValue: "={{ $json.entregado }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } }],
+    },
+    options: {},
+  },
+  id: "rag-se-entrego",
+  name: "¿Se Entregó?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2.2,
+  position: [3480, 0],
+};
+
+const labelEnvioFallido = {
+  // Marca la conversación 'envio-fallido' para revisión manual. Ref a Decidir (siempre ejecutó).
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ labels: ['envio-fallido'] }) }}",
+    options: {},
+  },
+  id: "rag-label-envio-fallido",
+  name: "Label Envío Fallido",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [3680, 160],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+};
+
+const logTurno = {
+  // Log operativo a bot.decisiones (además del bot.rag_decisiones del cerebro). Lee de Chequear Envio.
+  // `accion`/`nivel_resolucion` = valores VÁLIDOS del enum (info/repregunto/otro/envio_fallido, n2_llm)
+  // → no rebota mudo (R8). Se omiten producto_resuelto/filas_sql/borrador (el RAG lite no los tiene).
+  parameters: {
+    schema: { __rl: true, value: "bot", mode: "list" },
+    table: { __rl: true, value: "decisiones", mode: "list" },
+    columns: {
+      mappingMode: "defineBelow",
+      value: {
+        conversation_id: "={{ $('Chequear Envio').first().json.conversationId }}",
+        mensaje_cliente: "={{ $('Chequear Envio').first().json.userMessage }}",
+        nivel_resolucion: "n2_llm",
+        accion: "={{ $('Chequear Envio').first().json.accion }}",
+        hubo_handoff: false,
+        notas: "={{ $('Chequear Envio').first().json.notas }}",
+        final: "={{ $('Chequear Envio').first().json.final }}",
+        execution_id: "={{ $execution.id || '' }}",
+        senales: "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}",
+      },
+      matchingColumns: [],
+      schema: [],
+    },
+    options: {},
+  },
+  id: "rag-log-turno",
+  name: "Log Turno",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [3880, 0],
+  credentials: { postgres: BOT_DB },
+  onError: "continueRegularOutput",
 };
 
 // ---------- F1: ENDURECIMIENTO DE INGRESO (nodos transcritos del v10) ----------
@@ -1476,7 +1597,7 @@ flowCw.nodes.unshift(
   labelCap,
   normalizarChatwoot,
 );
-flowCw.nodes.push(enviarChatwoot);
+flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, logTurno);
 // "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + debounce F2:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
 flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] };
@@ -1510,7 +1631,18 @@ flowCw.connections["Switch Ruteo"] = {
   ],
 };
 flowCw.connections["Mensaje Cap Email"] = { main: [[{ node: "Label Cap", type: "main", index: 0 }]] };
-flowCw.connections["Responder"] = { main: [[{ node: "Enviar a Chatwoot", type: "main", index: 0 }]] };
+// F3/F4 — egreso con verificación de entrega + log operativo:
+flowCw.connections["Responder"] = { main: [[{ node: "Preparar Envio", type: "main", index: 0 }]] };
+flowCw.connections["Preparar Envio"] = { main: [[{ node: "Enviar Mensaje", type: "main", index: 0 }]] };
+flowCw.connections["Enviar Mensaje"] = { main: [[{ node: "Chequear Envio", type: "main", index: 0 }]] };
+flowCw.connections["Chequear Envio"] = { main: [[{ node: "¿Se Entregó?", type: "main", index: 0 }]] };
+flowCw.connections["¿Se Entregó?"] = {
+  main: [
+    [{ node: "Log Turno", type: "main", index: 0 }], // 0 true = entregado
+    [{ node: "Label Envío Fallido", type: "main", index: 0 }], // 1 false = no entregado
+  ],
+};
+flowCw.connections["Label Envío Fallido"] = { main: [[{ node: "Log Turno", type: "main", index: 0 }]] };
 
 // Actualizar la nota (sticky) para reflejar el canal.
 const notaCw = flowCw.nodes.find((n) => n.id === "rag-nota");
@@ -1518,7 +1650,7 @@ if (notaCw) {
   notaCw.parameters.content =
     notaCw.parameters.content.replace(
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
-      "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). Salida: **Enviar a Chatwoot**.",
+      "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). **F3/F4 (egreso):** Responder → **Preparar Envio** → **Enviar Mensaje** → **Chequear Envio** (entrega = id de Chatwoot, no status HTTP) → **¿Se Entregó?** (no → **Label Envío Fallido**) → **Log Turno** (bot.decisiones). F0 (runbook): en Settings del workflow, Error Workflow → tg-bot-error.",
     ) +
     "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }
