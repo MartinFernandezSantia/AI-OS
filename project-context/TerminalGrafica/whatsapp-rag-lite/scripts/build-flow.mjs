@@ -3,23 +3,14 @@
 // Genera Chat Trigger -> Agente (RAG + Memoria + Salida estructurada) -> Verificador -> loop de
 // remediación -> Preparar Respuesta -> Buscar Precios -> Insertar Precios. El LLM nunca fija un
 // precio: escribe {Pn} y un nodo Code determinista inyecta/valida los montos contra el catálogo.
-// Emite TRES flows: el de chat interno, la variante Chatwoot (copia profunda + swap de extremos)
-// y faq-bot-rag-lite-uso-llm (backfill agendado de tokens+USD → bot.decisiones.uso_llm, ver abajo).
+// Emite DOS flows: el de chat interno y la variante Chatwoot (copia profunda + swap de extremos).
 import { writeFileSync } from "node:fs";
 
 const OUT_MAIN = process.argv[2] || "n8n/flows/faq-bot-rag-lite.json";
 const OUT_CHATWOOT = process.argv[3] || OUT_MAIN.replace(/\.json$/, "-chatwoot.json");
-const OUT_USO_LLM = process.argv[4] || OUT_MAIN.replace(/\.json$/, "-uso-llm.json");
 
 const OPENROUTER = { id: "widAoSc9Weo8PxAN", name: "OpenRouter" };
 const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
-// Credencial Header Auth para la API pública de n8n (backfill de uso_llm). El id es un
-// PLACEHOLDER: al importar, n8n marca la credencial como faltante y Martin la crea/selecciona
-// una vez (Name: X-N8N-API-KEY, Value: la API key de Settings → n8n API). Ver sticky del flow.
-const N8N_API_CRED = { id: "REEMPLAZAR-n8n-api", name: "n8n API Key" };
-// Base de la API de n8n, HORNEADA en build (n8n community NO expone $env en expresiones). Editá esta
-// constante si tu instancia no está en localhost:5678 — SIN barra final.
-const N8N_API_BASE = "http://localhost:5678";
 
 // --- Chatwoot (variante conectada). MISMA CONFIG QUE EL v10 (faq-bot-v10-live) ---
 // baseUrl + credencial + secret HMAC son EXACTAMENTE los del v10, así no hay setup nuevo del lado
@@ -571,12 +562,7 @@ const flow = {
         text: "={{ $json.chatInput }}",
         hasOutputParser: true,
         // El systemMessage antepone el contexto de decisiones previas (expresión) al prompt estático.
-        // returnIntermediateSteps: expone SOLO las rondas con TOOL-CALL en intermediateSteps[] (con
-        // usage + costo USD de OpenRouter). OJO — semántica LangChain: la generación FINAL nunca
-        // aparece ahí, y en turnos sin tool-call (repregunto/saludo) el array viene VACÍO. Sirve como
-        // PISO en caliente; el total real lo completa el workflow de backfill (faq-bot-rag-lite-uso-llm)
-        // vía la API de ejecuciones. Aditivo: no cambia `output`.
-        options: { systemMessage: "={{ $('Contexto Previo').first().json.contextoPrevio }}" + sistema, returnIntermediateSteps: true },
+        options: { systemMessage: "={{ $('Contexto Previo').first().json.contextoPrevio }}" + sistema },
       },
       id: "rag-agente",
       name: "Agente",
@@ -1244,36 +1230,6 @@ const prepararEnvio = {
       "let etapa = '', precios = [];",
       "try { const aud = ($('Preparar Respuesta').first().json.auditoria) || {}; etapa = aud.etapa || ''; precios = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []; } catch (e) {}",
       "const accion = etapa === 'falta_info' ? 'repregunto' : (precios.length > 0 ? 'informo_precio' : 'informo_capacidad');",
-      "// TOKENS (uso_llm) — FASE 1 (hot-path, PISO). Con returnIntermediateSteps=true el Agente",
-      "// expone SOLO las rondas con TOOL-CALL en intermediateSteps[].action.messageLog[].kwargs.",
-      "// response_metadata.usage (costo USD real de OpenRouter). LÍMITE ESTRUCTURAL (causa del",
-      "// 'todo en cero' del 2026-08-10): la generación FINAL nunca aparece en intermediateSteps, y",
-      "// en turnos SIN tool-call (repregunto/saludo: el prompt manda preguntar ANTES de buscar) el",
-      "// array viene VACÍO → 0 tokens. No hay forma in-flow de leer el usage de los sub-nodos",
-      "// ai_languageModel desde un nodo main (n8n no los expone). Por eso esto es solo un PISO",
-      "// inmediato; la FASE 2 (workflow aparte faq-bot-rag-lite-uso-llm) relee esta fila por",
-      "// execution_id vía la API de ejecuciones y PISA uso_llm con el total real de TODOS los",
-      "// modelos (Agente final incluido + Verificador + Corrector + Guardrails).",
-      "// fuente:'intermediateSteps' = marcador de 'pendiente de backfill' (la SELECT del backfill",
-      "// filtra por él; al completar escribe fuente:'runData').",
-      "let tin = 0, tout = 0, usd = 0, llamadas = 0, modelo = '';",
-      "try {",
-      "  const pasos = ($('Agente').first().json.intermediateSteps) || [];",
-      "  for (const p of pasos) {",
-      "    const logs = (p && p.action && p.action.messageLog) || [];",
-      "    for (const m of logs) {",
-      "      const meta = (m && m.kwargs && m.kwargs.response_metadata) || {};",
-      "      const u = meta.usage || null;",
-      "      if (!u) continue;",
-      "      tin += Number(u.prompt_tokens || 0);",
-      "      tout += Number(u.completion_tokens || 0);",
-      "      if (typeof u.cost === 'number') usd += u.cost;",
-      "      if (meta.model_name) modelo = meta.model_name;",
-      "      llamadas++;",
-      "    }",
-      "  }",
-      "} catch (e) {}",
-      "const uso_llm = { llamadas, tokens_in: tin, tokens_out: tout, costo_usd: usd, modelo, nodos: { agente: { in: tin, out: tout, usd } }, parcial: true, fuente: 'intermediateSteps' };",
       "return [{ json: {",
       "  accountId: cw.accountId,",
       "  conversationId: cw.conversationId,",
@@ -1282,7 +1238,6 @@ const prepararEnvio = {
       "  accion,",
       "  notas: '',",
       "  senales: { etapa },",
-      "  uso_llm,",
       "} }];",
     ].join("\n"),
   },
@@ -1393,12 +1348,6 @@ const logTurno = {
         senales: "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}",
         // latencia del turno (ms), cerebro+entrega sin el debounce fijo. Requiere db/observabilidad-rag-*.sql.
         latencia_ms: "={{ (() => { const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); return t0 > 0 ? Date.now() - t0 : null; })() }}",
-        // uso_llm (tokens + costo USD), en DOS FASES: acá se escribe el PISO del hot-path
-        // (fuente:'intermediateSteps' — solo rondas tool-call del Agente; en turnos repregunto/saludo
-        // es todo 0, es esperado). El workflow aparte faq-bot-rag-lite-uso-llm (backfill por
-        // execution_id vía API de ejecuciones) lo PISA minutos después con el total real de todos
-        // los modelos (fuente:'runData'). Fila que quede en 'intermediateSteps' = backfill pendiente/caído.
-        uso_llm: "={{ JSON.stringify($('Preparar Envio').first().json.uso_llm || {}) }}",
       },
       matchingColumns: [],
       schema: [],
@@ -1916,252 +1865,10 @@ if (notaCw) {
     "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }
 
-// =====================================================================================
-// TERCER FLOW: faq-bot-rag-lite-uso-llm — BACKFILL de tokens + costo USD (FASE 2).
-//
-// POR QUÉ EXISTE (causa raíz del uso_llm en cero, 2026-08-10): n8n NO expone el usage de
-// los sub-nodos ai_languageModel al flujo main ($('Modelo · X') no resuelve desde un nodo
-// main; thread SOLVED community.n8n.io/t/-/100039). Lo único referenciable in-flow es
-// intermediateSteps del Agente (returnIntermediateSteps), y por semántica LangChain eso
-// SOLO trae las rondas con TOOL-CALL: la generación final nunca, y en turnos sin tool-call
-// (repregunto/saludo — el prompt manda preguntar ANTES de buscar) viene vacío → todo 0.
-// Tampoco existe una opción del nodo Agent (typeVersion 1.9, con o sin output parser) que
-// saque el usage de la generación final por el output main.
-//
-// LA VÍA COMPLETA es la API pública de ejecuciones: GET /api/v1/executions/{id}
-// ?includeData=true → resultData.runData trae, por cada sub-nodo de modelo (Modelo,
-// Modelo · Verificador, Modelo · Corrector, Modelo · Guardrails), un run por invocación con
-// su usage. Como una ejecución recién se persiste al TERMINAR, esto no puede correr dentro
-// del mismo turno: es un workflow APARTE, agendado cada 5 min, que busca filas de
-// bot.decisiones con fuente:'intermediateSteps' (el marcador que deja el hot-path), trae la
-// ejecución por execution_id y PISA uso_llm con el total real (fuente:'runData').
-// Trade-off asumido: el dato completo llega con ~5-10 min de retraso; a cambio cubre TODOS
-// los turnos y TODAS las llamadas LLM sin tocar el hot-path ni el output del Agente.
-// =====================================================================================
-
-const notaUso = {
-  parameters: {
-    content: [
-      "## Backfill de uso LLM → bot.decisiones.uso_llm",
-      "",
-      "FASE 2 del logging de tokens del RAG lite. El flow principal solo puede loguear un PISO en caliente (intermediateSteps = rondas con tool-call del Agente; n8n no expone el usage de los sub-nodos de modelo al flujo main y la generación final nunca aparece; en turnos repregunto/saludo el piso es 0 y ES ESPERADO). Este workflow completa el dato: cada 5 min busca turnos con fuente 'intermediateSteps', trae la ejecución por la API pública (`?includeData=true`) y suma el usage de TODOS los modelos (Agente incl. generación final, Verificador, Corrector, Guardrails) → pisa uso_llm con fuente 'runData'.",
-      "",
-      "**SETUP (una vez):**",
-      "1. n8n → Settings → n8n API → Create API key.",
-      "2. Crear credencial **Header Auth** llamada 'n8n API Key': Name = `X-N8N-API-KEY`, Value = la key. Seleccionarla en **Traer Ejecución** (el import la marca como faltante: es un placeholder).",
-      "3. Si la API no responde en `http://localhost:5678`, editá la constante N8N_API_BASE en scripts/build-flow.mjs y re-buildeá (n8n community no expone $env en expresiones).",
-      "4. La credencial Postgres necesita **UPDATE** sobre bot.decisiones (Log Turno ya usa INSERT; si Actualizar Uso da error de permiso: `grant update on bot.decisiones to <rol>`).",
-      "5. El flow PRINCIPAL debe guardar ejecuciones EXITOSAS (Save successful executions = ON, es el default) y el pruning de n8n no debe borrarlas antes del backfill (default ~14 días, sobra).",
-      "6. **ACTIVAR este workflow** (el schedule solo corre activo).",
-      "",
-      "**LÍMITES:** si la ejecución se podó o nunca se guardó, tras 48h la fila conserva el piso del hot-path y queda fuente 'no_disponible' (deja de reintentar). Si OpenRouter no informa `cost`, el USD se estima con la tabla de precios de **Calcular Uso** (flag costo_estimado:true).",
-      "",
-      "**Chequeo:** `select accion, uso_llm->>'fuente' f, uso_llm->>'tokens_in' tin, uso_llm->>'costo_usd' usd from bot.decisiones order by created_at desc limit 5;` → tras 5-10 min todo turno debería estar en 'runData' con tokens > 0.",
-    ].join("\n"),
-    height: 720,
-    width: 620,
-  },
-  id: "uso-nota",
-  name: "Nota Backfill",
-  type: "n8n-nodes-base.stickyNote",
-  typeVersion: 1,
-  position: [0, -780],
-};
-
-const scheduleUso = {
-  parameters: { rule: { interval: [{ field: "minutes", minutesInterval: 5 }] } },
-  id: "uso-schedule",
-  name: "Cada 5 Minutos",
-  type: "n8n-nodes-base.scheduleTrigger",
-  typeVersion: 1.2,
-  position: [0, 0],
-};
-
-const turnosPendientes = {
-  // Filas del RAG lite pendientes de backfill. fuente='intermediateSteps' las identifica sin
-  // ambigüedad (el v10 no escribe ese marcador → este workflow NO toca filas del v10).
-  // < now()-3min: da margen a que la ejecución termine y se persista (el debounce + envío ya
-  // pasaron cuando existe la fila, pero la persistencia es al cierre de la ejecución).
-  // > now()-14 días: tope de reintentos alineado al pruning default de n8n (336h).
-  // asc + limit 20: drena el backlog en orden y acota las llamadas a la API por ciclo.
-  parameters: {
-    operation: "executeQuery",
-    query:
-      "select execution_id, uso_llm, created_at\n" +
-      "  from bot.decisiones\n" +
-      " where execution_id <> ''\n" +
-      "   and uso_llm->>'fuente' = 'intermediateSteps'\n" +
-      "   and created_at < now() - interval '3 minutes'\n" +
-      "   and created_at > now() - interval '14 days'\n" +
-      " order by created_at asc\n" +
-      " limit 20",
-    options: {},
-  },
-  id: "uso-turnos-pendientes",
-  name: "Turnos Pendientes",
-  type: "n8n-nodes-base.postgres",
-  typeVersion: 2.6,
-  position: [220, 0],
-  credentials: { postgres: BOT_DB },
-  // Sin alwaysOutputData a propósito: 0 filas pendientes → el ciclo termina acá, sin llamadas.
-};
-
-const traerEjecucion = {
-  // API pública de n8n: la ejecución completa CON runData. Corre 1 vez por fila pendiente.
-  // onError+alwaysOutputData: un 404/timeout emite el item igual (en la misma posición) y
-  // Calcular Uso decide (reintentar el próximo ciclo o marcar no_disponible a las 48h).
-  parameters: {
-    url: "={{ '" + N8N_API_BASE + "/api/v1/executions/' + $json.execution_id + '?includeData=true' }}",
-    authentication: "genericCredentialType",
-    genericAuthType: "httpHeaderAuth",
-    options: {},
-  },
-  id: "uso-traer-ejecucion",
-  name: "Traer Ejecución",
-  type: "n8n-nodes-base.httpRequest",
-  typeVersion: 4.2,
-  position: [440, 0],
-  credentials: { httpHeaderAuth: N8N_API_CRED },
-  onError: "continueRegularOutput",
-  alwaysOutputData: true,
-};
-
-const calcularUsoCode = [
-  "// Suma el usage de TODOS los sub-nodos de modelo de la ejecución (runData). Reglas:",
-  "// - Solo corre sobre run.data (el OUTPUT de cada invocación). NUNCA sobre inputOverride:",
-  "//   los mensajes de entrada de la 2ª llamada del agente traen el AI message previo CON su",
-  "//   usage viejo adentro → recorrerlo duplicaría la cuenta.",
-  "// - Un run de un sub-nodo ai_languageModel = UNA llamada LLM. Por run se elige UN solo",
-  "//   usage (el mismo puede aparecer serializado en más de un lugar): prefiere el estilo",
-  "//   OpenRouter con `cost` USD real; si ninguno lo trae, estima por tabla de precios y",
-  "//   marca costo_estimado:true.",
-  "// - Ejecución sin datos todavía (corriendo / recién persistida / API caída) → se SALTEA",
-  "//   (la fila queda en 'intermediateSteps' y se reintenta el próximo ciclo). Si a las 48h",
-  "//   sigue sin datos (podada / no guardada) → fuente:'no_disponible' CONSERVANDO el piso",
-  "//   del hot-path, y deja de reintentarse.",
-  "const turnos = $('Turnos Pendientes').all().map((i) => i.json);",
-  "const resps = $input.all().map((i) => i.json);",
-  "",
-  "// USD por MILLÓN de tokens {entrada, salida} — SOLO fallback si OpenRouter no trajo cost.",
-  "const PRECIOS_USD_POR_M = {",
-  "  'google/gemini-3.1-flash-lite': { entrada: 0.25, salida: 1.5 },",
-  "};",
-  "const PRECIO_DEFAULT = PRECIOS_USD_POR_M['google/gemini-3.1-flash-lite'];",
-  "const r6 = (x) => Math.round(x * 1e6) / 1e6;",
-  "",
-  "// Recolecta objetos-usage (estilo OpenRouter prompt_tokens/completion_tokens/cost, o estilo",
-  "// n8n promptTokens/completionTokens) y nombres de modelo, recursivamente.",
-  "const recolectar = (x, usages, modelos) => {",
-  "  if (!x || typeof x !== 'object') return;",
-  "  if (Array.isArray(x)) { for (const y of x) recolectar(y, usages, modelos); return; }",
-  "  if (typeof x.model_name === 'string') modelos.add(x.model_name);",
-  "  if (typeof x.prompt_tokens === 'number' || typeof x.completion_tokens === 'number') {",
-  "    usages.push({ tin: Number(x.prompt_tokens || 0), tout: Number(x.completion_tokens || 0), cost: typeof x.cost === 'number' ? x.cost : null });",
-  "  } else if (typeof x.promptTokens === 'number' || typeof x.completionTokens === 'number') {",
-  "    usages.push({ tin: Number(x.promptTokens || 0), tout: Number(x.completionTokens || 0), cost: null });",
-  "  }",
-  "  for (const k of Object.keys(x)) recolectar(x[k], usages, modelos);",
-  "};",
-  "",
-  "const out = [];",
-  "for (let i = 0; i < turnos.length; i++) {",
-  "  const turno = turnos[i];",
-  "  const ex = resps[i] || {};",
-  "  const esViejo = Date.now() - new Date(turno.created_at).getTime() > 48 * 3600 * 1000;",
-  "  const marcarNoDisponible = () => out.push({ json: { execution_id: turno.execution_id, uso_llm: { ...(turno.uso_llm || {}), fuente: 'no_disponible' } } });",
-  "",
-  "  let dataEx = ex.data;",
-  "  try { if (typeof dataEx === 'string') dataEx = JSON.parse(dataEx); } catch (e) { dataEx = null; }",
-  "  const runData = dataEx && dataEx.resultData && dataEx.resultData.runData;",
-  "  const terminada = ex.finished === true || !!ex.stoppedAt || ['success', 'error', 'crashed', 'canceled'].includes(String(ex.status || ''));",
-  "  const falloHttp = !!ex.error || !ex.id;",
-  "  if (falloHttp || !terminada || !runData) { if (esViejo) marcarNoDisponible(); continue; }",
-  "",
-  "  const nodos = {};",
-  "  const modelos = new Set();",
-  "  let tin = 0, tout = 0, usd = 0, llamadas = 0, costoEstimado = false;",
-  "  for (const [nombre, runs] of Object.entries(runData)) {",
-  "    if (!Array.isArray(runs)) continue;",
-  "    for (const run of runs) {",
-  "      const salida = run && run.data && run.data.ai_languageModel;",
-  "      if (!salida) continue; // solo sub-nodos de modelo (Modelo / · Verificador / · Corrector / · Guardrails)",
-  "      const cands = [];",
-  "      recolectar(salida, cands, modelos);",
-  "      if (!cands.length) continue;",
-  "      const elegido = cands.find((c) => c.cost !== null) || cands.reduce((a, b) => (b.tin + b.tout > a.tin + a.tout ? b : a));",
-  "      let costo = elegido.cost;",
-  "      if (costo === null) {",
-  "        const precio = PRECIOS_USD_POR_M[[...modelos][0]] || PRECIO_DEFAULT;",
-  "        costo = (elegido.tin * precio.entrada + elegido.tout * precio.salida) / 1e6;",
-  "        costoEstimado = true;",
-  "      }",
-  "      tin += elegido.tin; tout += elegido.tout; usd += costo; llamadas++;",
-  "      const n = nodos[nombre] || (nodos[nombre] = { in: 0, out: 0, usd: 0, llamadas: 0 });",
-  "      n.in += elegido.tin; n.out += elegido.tout; n.usd = r6(n.usd + costo); n.llamadas++;",
-  "    }",
-  "  }",
-  "",
-  "  // Ejecución terminada pero sin NINGÚN run de modelo con usage: raro (¿ejecución trunca?).",
-  "  // Misma regla de edad: reintentar hasta 48h, después cerrar como no_disponible.",
-  "  if (!llamadas) { if (esViejo) marcarNoDisponible(); continue; }",
-  "",
-  "  out.push({ json: { execution_id: turno.execution_id, uso_llm: {",
-  "    llamadas, tokens_in: tin, tokens_out: tout, costo_usd: r6(usd),",
-  "    costo_estimado: costoEstimado, modelo: [...modelos][0] || '',",
-  "    nodos, parcial: false, fuente: 'runData',",
-  "  } } });",
-  "}",
-  "return out;",
-].join("\n");
-
-const calcularUso = {
-  parameters: { jsCode: calcularUsoCode },
-  id: "uso-calcular",
-  name: "Calcular Uso",
-  type: "n8n-nodes-base.code",
-  typeVersion: 2,
-  position: [660, 0],
-};
-
-const actualizarUso = {
-  // El WHERE re-chequea fuente='intermediateSteps': nunca pisa un backfill ya completo ni una
-  // fila ajena, aunque dos ciclos se solapen. Corre 1 vez por item de Calcular Uso.
-  parameters: {
-    operation: "executeQuery",
-    query:
-      "update bot.decisiones\n" +
-      "   set uso_llm = $2::jsonb\n" +
-      " where execution_id = $1\n" +
-      "   and uso_llm->>'fuente' = 'intermediateSteps'",
-    options: {
-      queryReplacement: "={{ [ String($json.execution_id), JSON.stringify($json.uso_llm) ] }}",
-    },
-  },
-  id: "uso-actualizar",
-  name: "Actualizar Uso",
-  type: "n8n-nodes-base.postgres",
-  typeVersion: 2.6,
-  position: [880, 0],
-  credentials: { postgres: BOT_DB },
-  onError: "continueRegularOutput",
-};
-
-const flowUso = {
-  name: "faq-bot-rag-lite-uso-llm",
-  nodes: [notaUso, scheduleUso, turnosPendientes, traerEjecucion, calcularUso, actualizarUso],
-  connections: {
-    "Cada 5 Minutos": { main: [[{ node: "Turnos Pendientes", type: "main", index: 0 }]] },
-    "Turnos Pendientes": { main: [[{ node: "Traer Ejecución", type: "main", index: 0 }]] },
-    "Traer Ejecución": { main: [[{ node: "Calcular Uso", type: "main", index: 0 }]] },
-    "Calcular Uso": { main: [[{ node: "Actualizar Uso", type: "main", index: 0 }]] },
-  },
-  settings: { executionOrder: "v1" },
-};
 
 for (const [f, out] of [
   [flow, OUT_MAIN],
   [flowCw, OUT_CHATWOOT],
-  [flowUso, OUT_USO_LLM],
 ]) {
   const j = JSON.stringify(f, null, 2);
   JSON.parse(j);

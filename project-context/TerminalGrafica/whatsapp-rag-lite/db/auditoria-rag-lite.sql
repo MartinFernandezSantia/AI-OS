@@ -132,47 +132,13 @@
 
 
 -- =====================================================================
--- D. TOKENS + COSTO (bot.decisiones.uso_llm) — forma: {llamadas, tokens_in,
---    tokens_out, costo_usd, modelo, nodos:{agente:{in,out,usd}}, parcial}.
---    Se llena en el turno desde intermediateSteps del Agente (returnIntermediateSteps),
---    con el costo USD REAL de OpenRouter. OJO parcial=true: es un PISO — cubre la ronda
---    tool-call del Agente (prompt+catálogo, lo caro) pero NO la generación final ni
---    Verificador/Corrector/Guardrails (esos son sub-nodos, no legibles desde el main).
+-- D. TOKENS + COSTO (bot.decisiones.uso_llm) — PARKEADO (2026-08-11).
+--    El logging de tokens se REMOVIÓ del flow: ni intermediateSteps del Agente ni el
+--    backfill por execution_id cerraron bien en la versión community de n8n. La columna
+--    uso_llm queda inerte (NULL) hasta que Martin lo retome. Mientras tanto, el costo
+--    agregado del LLM se ve en el dashboard de OpenRouter (y por la tesis del v10 es
+--    marginal frente al mensaje de WhatsApp ~0.026 c/u). Sin queries acá.
 -- =====================================================================
-
--- D0. ¿SE ESTÁ POBLANDO? Debe dar ~igual al total de turnos LLM.
--- select count(*) as turnos_con_uso_llm
--- from bot.decisiones
--- where created_at > now() - interval '7 days' and uso_llm is not null;
-
--- D1. COSTO DE LA SEMANA (real de OpenRouter, PISO) vs. el mensaje de WhatsApp (~0.026 c/u
---     desde 1-oct-2026). Confirma la tesis del v10: el LLM es marginal, lo caro es el mensaje.
--- select
---   count(*)                                          as turnos,
---   sum((uso_llm->>'tokens_in')::bigint)              as tokens_in,
---   sum((uso_llm->>'tokens_out')::bigint)             as tokens_out,
---   round(sum((uso_llm->>'costo_usd')::numeric), 4)   as llm_usd_piso,
---   round(count(*) * 0.026, 2)                         as whatsapp_usd
--- from bot.decisiones
--- where created_at > now() - interval '7 days' and uso_llm is not null;
-
--- D2. QUÉ NODO SE COME LOS TOKENS. El 'agente' manda el catálogo topK en el prompt →
---     se espera que domine; si el 'verificador' lo pasa, algo se descontroló.
--- select clave as nodo, count(*) as veces,
---        sum((v->>'in')::bigint)  as tokens_in,
---        sum((v->>'out')::bigint) as tokens_out
--- from bot.decisiones d, lateral jsonb_each(d.uso_llm->'nodos') as e(clave, v)
--- where d.created_at > now() - interval '7 days'
--- group by clave order by tokens_in desc nulls last;
-
--- D3. TOKENS POR ACCIÓN — para ver qué tipo de consulta es la cara en tokens.
--- select accion, count(*) as turnos,
---        round(avg(((uso_llm->>'tokens_in')::numeric) + ((uso_llm->>'tokens_out')::numeric))) as tok_prom,
---        round(avg((uso_llm->>'tokens_in')::numeric))   as in_prom,
---        round(avg((uso_llm->>'tokens_out')::numeric))  as out_prom
--- from bot.decisiones
--- where created_at > now() - interval '7 days' and uso_llm is not null
--- group by accion order by in_prom desc nulls last;
 
 
 -- =====================================================================

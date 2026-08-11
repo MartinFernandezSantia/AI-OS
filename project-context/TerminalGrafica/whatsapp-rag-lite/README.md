@@ -12,7 +12,7 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + helpers + tests
 scripts/           rag-ingest.ts (ingesta) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
 db/                rag-embeddings.sql (pgvector + tabla) · rag-decisiones.sql (log de decisiones)
-n8n/flows/         faq-bot-rag-lite.json + -chatwoot.json + -uso-llm.json (GENERADOS por build-flow.mjs — no editar a mano)
+n8n/flows/         faq-bot-rag-lite.json + -chatwoot.json (GENERADOS por build-flow.mjs — no editar a mano)
 plans/             los planes del experimento
 ```
 

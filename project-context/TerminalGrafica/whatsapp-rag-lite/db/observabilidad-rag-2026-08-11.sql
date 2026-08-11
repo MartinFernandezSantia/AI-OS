@@ -8,22 +8,11 @@
 --   · latencia_ms — cuánto tardó el procesamiento (cerebro + entrega), SIN el
 --     debounce fijo de 3s. Lo estampa el adaptador ("Cuando llega un mensaje",
 --     campo _t0) y lo cierra Log Turno con Date.now() - _t0.
---   · uso_llm    — tokens + costo USD del turno (jsonb {llamadas, tokens_in,
---     tokens_out, costo_usd, modelo, nodos{}, parcial, fuente}). Se llena en DOS
---     FASES (lección del 2026-08-10: el hot-path solo dio ceros en turnos
---     "repregunto" porque intermediateSteps trae ÚNICAMENTE rondas con tool-call
---     — nunca la generación final — y n8n no expone el usage de los sub-nodos
---     ai_languageModel al flujo main):
---       FASE 1 (hot-path, PISO): Preparar Envío suma intermediateSteps del Agente
---       (returnIntermediateSteps) → fuente='intermediateSteps', parcial=true.
---       En turnos sin tool-call es todo 0 y ES ESPERADO.
---       FASE 2 (backfill, TOTAL): el workflow faq-bot-rag-lite-uso-llm (agendado
---       cada 5 min) relee la fila por execution_id vía la API pública de
---       ejecuciones (?includeData=true → runData de los 4 sub-nodos de modelo:
---       Modelo, · Verificador, · Corrector, · Guardrails) y PISA uso_llm →
---       fuente='runData', parcial=false. Si la ejecución no está tras 48h →
---       fuente='no_disponible' (conserva el piso). Fila que quede en
---       'intermediateSteps' = backfill pendiente o caído.
+--   · uso_llm    — columna RESERVADA para tokens/costo USD por turno. El logging se
+--     REMOVIÓ del flow (2026-08-11): las vías probadas (intermediateSteps del Agente,
+--     y el backfill por execution_id vía API de ejecuciones) no cerraron bien en la
+--     versión community de n8n, y Martin lo va a retomar en otra sesión. La columna
+--     se deja creada (inerte, siempre NULL) para no re-migrar cuando se implemente.
 --
 -- Preparada por Claude, APLICA MARTIN (regla: yo preparo, vos aplicás).
 -- Aditiva e idempotente: corre en el SQL editor sobre cualquier estado.
@@ -44,10 +33,8 @@ comment on column bot.decisiones.latencia_ms is
   'La estampa el adaptador (_t0) y la cierra Log Turno. Ver db/observabilidad-rag-2026-08-11.sql';
 
 comment on column bot.decisiones.uso_llm is
-  'Tokens y costo USD de las llamadas LLM del turno, en dos fases: hot-path escribe el piso '
-  '(fuente=intermediateSteps, 0 en turnos sin tool-call) y el workflow faq-bot-rag-lite-uso-llm '
-  'lo pisa con el total real via API de ejecuciones (fuente=runData; no_disponible si se perdio). '
-  'Claves: llamadas, tokens_in, tokens_out, costo_usd, costo_estimado, modelo, nodos{}, parcial, fuente.';
+  'RESERVADA para tokens/costo USD por turno. Logging removido del flow 2026-08-11 '
+  '(pendiente de retomar); la columna queda inerte (NULL) para no re-migrar despues.';
 
 -- Índices parciales: las auditorías filtran por fecha y sólo miran filas con dato.
 create index if not exists decisiones_latencia_idx
