@@ -494,17 +494,22 @@ const flow = {
       // Leer Decisiones (ambos siempre ejecutan al inicio del turno).
       parameters: {
         jsCode: [
-          "const chatInput = $('Cuando llega un mensaje').first().json.chatInput;",
+          "const _trig = $('Cuando llega un mensaje').first().json;",
+          "const chatInput = _trig.chatInput;",
+          "// historialTexto SOLO lo puebla la variante Chatwoot (memoria A2 = historial real del canal).",
+          "// En el chat de test viene undefined → '' → este nodo queda idéntico al comportamiento previo.",
+          "const historialTexto = _trig.historialTexto || '';",
           "let rows = [];",
           "try { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.productos) && r.productos.length); } catch (e) { rows = []; }",
-          "let contextoPrevio = '';",
+          "let bloqueDecisiones = '';",
           "if (rows.length) {",
           "  const lineas = rows.slice().reverse().map((r) => {",
           "    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
           "    return '- ' + ps;",
           "  });",
-          "  contextoPrevio = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';",
+          "  bloqueDecisiones = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';",
           "}",
+          "const contextoPrevio = historialTexto + bloqueDecisiones;",
           "return [{ json: { chatInput, contextoPrevio } }];",
         ].join("\n"),
       },
@@ -1138,26 +1143,33 @@ const verificarHmac = {
 };
 
 const normalizarChatwoot = {
-  // Adaptador de entrada: CONSERVA el nombre del Chat Trigger para no tocar el medio. Todo el filtrado
-  // (HMAC/entrante/canal/assignee y texto) ya lo hicieron Filtro Ingreso + ¿Tiene Texto? aguas arriba
-  // (F1), así que acá SOLO se EXTRAE. OJO: lee de $('Chatwoot Webhook') porque Firewall Tier-1 (postgres)
-  // y el Switch ya reemplazaron $json por la fila del firewall. Emite {sessionId, chatInput, _chatwoot}.
+  // Adaptador de entrada: CONSERVA el nombre del Chat Trigger para no tocar el medio. Cuelga de
+  // Switch Ruteo[process] (F2), así que lee de $('Decidir'): reforma su salida a {sessionId, chatInput,
+  // _chatwoot} + historialTexto. chatInput = la RÁFAGA mergeada (userMessage). historialTexto = los
+  // turnos PREVIOS del canal (memoria A2), que Contexto Previo antepone al system del Agente.
   parameters: {
     jsCode: [
-      "const p = $('Chatwoot Webhook').first().json.body || {};",
-      "const content = (p.content == null ? '' : String(p.content)).trim().normalize('NFC');",
-      "const conv = p.conversation || {};",
-      "const acc = p.account || {};",
-      "const conversationId = conv.id ?? p.conversation_id ?? null;",
-      "const accountId = acc.id ?? p.account_id ?? null;",
-      "return [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];",
+      "const d = $('Decidir').first().json;",
+      "const chatInput = String(d.userMessage || '').trim();",
+      "const conversationId = d.conversationId;",
+      "const accountId = d.accountId;",
+      "// d.conversation = [turnos previos..., {role:'user', content: mergedUser}] → el último es el mensaje",
+      "// nuevo (ya va como chatInput); los previos son el historial real de la conversación.",
+      "const conv = Array.isArray(d.conversation) ? d.conversation : [];",
+      "const previos = conv.slice(0, -1).filter((m) => m && m.content);",
+      "let historialTexto = '';",
+      "if (previos.length) {",
+      "  const lineas = previos.map((m) => (m.role === 'assistant' ? 'Vos' : 'Cliente') + ': ' + String(m.content));",
+      "  historialTexto = 'HISTORIAL DE ESTA CONVERSACIÓN (ya dicho; el mensaje nuevo del cliente va en el turno actual, no lo repitas):\\n' + lineas.join('\\n') + '\\n\\n';",
+      "}",
+      "return [{ json: { sessionId: String(conversationId), chatInput, _chatwoot: { accountId, conversationId }, historialTexto } }];",
     ].join("\n"),
   },
   id: "rag-normalizar-chatwoot",
   name: "Cuando llega un mensaje",
   type: "n8n-nodes-base.code",
   typeVersion: 2,
-  position: [120, 40],
+  position: [880, 40],
 };
 
 const enviarChatwoot = {
@@ -1310,9 +1322,138 @@ const descartarFirewall = {
   position: [-300, 760],
 };
 
+// ---------- F2: DEBOUNCE / IDEMPOTENCIA / RÁFAGA / CAP + memoria del canal (transcrito del v10) ----------
+// Variante de enlatado que lee account/conversation FLAT de Decidir ($json.accountId), no del webhook.
+const cannedDecidir = (id, name, position, texto) => ({
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ content: " + JSON.stringify(texto) + ", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    options: {},
+  },
+  id,
+  name,
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position,
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+});
+
+const waitDebounce = {
+  // Espera 3s antes de leer el historial: deja que lleguen los mensajes de una ráfaga.
+  parameters: { amount: 3 },
+  id: "rag-wait-debounce",
+  name: "Wait — Debounce",
+  type: "n8n-nodes-base.wait",
+  typeVersion: 1.1,
+  position: [80, -200],
+  webhookId: "wait-debounce-rag",
+};
+
+const getHistorial = {
+  // Lee TODA la conversación del canal (Chatwoot = la memoria). retry x3: leer el estado sí importa.
+  parameters: {
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    options: {},
+  },
+  id: "rag-get-historial",
+  name: "Get Historial",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [280, -200],
+  retryOnFail: true,
+  maxTries: 3,
+  waitBetweenTries: 3000,
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+};
+
+const decidir = {
+  // Copia EXACTA del cerebro del v10. Decide `action` ∈ skip/primer-mensaje/injection/cap/process,
+  // junta la ráfaga (entrantes con texto desde la última salida, NFC), aplica debounce ("soy el último"),
+  // idempotencia ("ya respondí"), CAP 24h (25) y arma `conversation` (últimos 6 turnos). Lee de
+  // $('Chatwoot Webhook') y $('Get Historial') por ref, no por passthrough.
+  parameters: {
+    jsCode:
+      "// === DECIDIR — decide QUÉ hacer y arma la conversación (sin catálogo: eso lo inyecta 'Armar mensajes') ===\nconst webhookData = $('Chatwoot Webhook').first().json;\nconst body = webhookData.body;\nconst myMessageId = body.id;\nconst conversationId = body.conversation.id;\nconst accountId = body.account.id;\n\n// F5: created_at robusto (unix int, string numérico o ISO) → siempre número\nconst num = (v) => {\n  if (v == null) return 0;\n  if (typeof v === 'number') return v;\n  const n = Number(v);\n  if (Number.isFinite(n)) return n;\n  const t = Date.parse(v);\n  return Number.isFinite(t) ? t : 0;\n};\nconst myCreatedAt = num(body.created_at);\n\nconst historialJson = $('Get Historial').first().json;\nconst rawPayload = historialJson.payload;\nconst allMessages = Array.isArray(rawPayload) ? rawPayload : (rawPayload && rawPayload.messages ? rawPayload.messages : []);\n\nconst isIn = (m) => m.message_type === 'incoming' || m.message_type === 0;\nconst isOut = (m) => (m.message_type === 'outgoing' || m.message_type === 1) && !m.private;\nconst hasContent = (m) => m.content && String(m.content).trim().length > 0;\n\nconst sorted = allMessages.slice().sort((a, b) => num(a.created_at) - num(b.created_at));\n\n// DEBOUNCE (F1): el \"último\" es el último ENTRANTE CON TEXTO.\n// Una foto que llega después de la pregunta ya no gana el \"soy el último\".\nconst incoming = sorted.filter((m) => isIn(m) && hasContent(m));\nconst lastIncoming = incoming.length ? incoming[incoming.length - 1] : null;\nif (lastIncoming && myMessageId && lastIncoming.id !== myMessageId) {\n  return [{ json: { action: 'skip', reason: 'no-soy-el-ultimo', conversationId, accountId } }];\n}\n\n// IDEMPOTENCIA (F5): ya hay respuesta posterior a mi mensaje → no repito\nconst repliedAfter = sorted.some((m) => isOut(m) && num(m.created_at) > myCreatedAt);\nif (repliedAfter) {\n  return [{ json: { action: 'skip', reason: 'ya-respondido', conversationId, accountId } }];\n}\n\n// Ráfaga del cliente = entrantes con texto desde la última salida\nlet lastOutIdx = -1;\nfor (let i = sorted.length - 1; i >= 0; i--) {\n  if (isOut(sorted[i])) { lastOutIdx = i; break; }\n}\nconst burst = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m)).map((m) => m.content);\n// v8.1 NFC: ningun lado normaliza Unicode. Un teclado iOS/macOS que emita acentos\n// DESCOMPUESTOS (\"impresio\\u0301n\") hace fallar todo match con acento, en silencio y\n// solo para algunos clientes. El catalogo esta en NFC; el mensaje del cliente, no.\nconst mergedUser = burst.join('\\n').normalize('NFC');\n\nif (!mergedUser) {\n  return [{ json: { action: 'skip', reason: 'sin-texto-nuevo', conversationId, accountId } }];\n}\n\n// INJECTION: regex sobre el texto agregado (red barata; Tier-1 lo duplicará)\nconst INJECTION_PATTERNS = [\n  /ignor[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /olvid[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /\\bnuevo rol\\b/i,\n  /ignore (previous|instructions|your)/i,\n  /system prompt/i,\n  /jailbreak/i,\n  /\\bDAN\\b/,\n  /pretend you are/i,\n  /do anything now/i,\n  /forget your instructions/i\n];\nif (INJECTION_PATTERNS.some((p) => p.test(mergedUser))) {\n  return [{ json: { action: 'injection', conversationId, accountId } }];\n}\n\n// PRIMER MENSAJE (F3): saludo enlatado SOLO si el texto es un saludo puro.\n// Primer mensaje con pregunta → process (lo contesta el LLM).\nconst hasOutgoing = sorted.some(isOut);\nfunction isGreetingOnly(text) {\n  const t = (text || '')\n    .toLowerCase()\n    .replace(/[¡!¿?.,;:()\"']/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  if (!t) return false;\n  const G = '(hola|holis|buenas|buen dia|buen día|buenos dias|buenos días|buenas tardes|buenas noches|hey|que tal|qué tal|como andas|cómo andás|como va|cómo va|todo bien)';\n  const re = new RegExp('^' + G + '( ' + G + ')*$');\n  return re.test(t);\n}\nif (!hasOutgoing && isGreetingOnly(mergedUser)) {\n  return [{ json: { action: 'primer-mensaje', conversationId, accountId } }];\n}\n\n// CAP DE RESPUESTAS POR CONVERSACIÓN (ventana rodante 24h): tope duro para floods sostenidos.\nconst CAP_RESPUESTAS = 25;\nconst nowMs = Date.now();\nconst botOut = sorted.filter((m) => isOut(m) && hasContent(m));\nconst botOut24 = botOut.filter((m) => nowMs - num(m.created_at) < 86400000);\nconst CAP_MARK = 'muchos mensajes en esta conversación';\nif (botOut24.length >= CAP_RESPUESTAS) {\n  const capYaAvisado = botOut24.some((m) => String(m.content).toLowerCase().includes(CAP_MARK));\n  if (capYaAvisado) {\n    return [{ json: { action: 'skip', reason: 'cap-ya-avisado', conversationId, accountId } }];\n  }\n  return [{ json: { action: 'cap', conversationId, accountId } }];\n}\n\n// PROCESS: armar la conversación (sin system, sin catálogo). 'Armar mensajes' le prepende el system+catálogo.\n// ¿ya se le avisó al cliente que el canal es solo informativo? (buscamos el email del negocio en salientes del bot)\nconst avisoDado = sorted.some((m) => isOut(m) && hasContent(m) && String(m.content).toLowerCase().includes('terminalgrafica@gmail.com'));\n// Últimas 3 respuestas del bot → el LLM las usa para no repetirse (action noop)\nconst lastBotReplies = botOut.slice(-3).map((m) => String(m.content));\n\nconst conversation = [];\nconst history = sorted.slice(0, lastOutIdx + 1).slice(-6);\nfor (const m of history) {\n  if (isIn(m) && hasContent(m)) {\n    conversation.push({ role: 'user', content: m.content });\n  } else if (isOut(m) && hasContent(m)) {\n    conversation.push({ role: 'assistant', content: m.content });\n  }\n}\nconversation.push({ role: 'user', content: mergedUser });\n\nreturn [{ json: { action: 'process', conversation, userMessage: mergedUser, avisoDado, lastBotReplies, conversationId, accountId } }];\n",
+  },
+  id: "rag-decidir",
+  name: "Decidir",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [480, -200],
+};
+
+const switchRuteo = {
+  // Rutea por `action` de Decidir. 5 salidas (skip/greeting/injection/process/cap); sin fallback:
+  // Decidir siempre devuelve una de esas acciones.
+  parameters: {
+    rules: {
+      values: [
+        mkRule("rt-skip", "skip", "skip"),
+        mkRule("rt-greeting", "primer-mensaje", "greeting"),
+        mkRule("rt-injection", "injection", "injection"),
+        mkRule("rt-process", "process", "process"),
+        mkRule("rt-cap", "cap", "cap"),
+      ],
+    },
+    options: {},
+  },
+  id: "rag-switch-ruteo",
+  name: "Switch Ruteo",
+  type: "n8n-nodes-base.switch",
+  typeVersion: 3.4,
+  position: [680, -200],
+};
+
+const descartarDebounce = {
+  parameters: {},
+  id: "rag-descartar-debounce",
+  name: "Descartar (debounce/dup)",
+  type: "n8n-nodes-base.noOp",
+  typeVersion: 1,
+  position: [880, -340],
+};
+const saludoBienvenida = cannedDecidir("rag-saludo", "Saludo Bienvenida", [880, -220], "Hola! Buenas, ¿en qué te podemos ayudar?");
+const mensajeAntiInjection = cannedDecidir("rag-anti-injection", "Mensaje Anti-Injection", [880, -100], "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?");
+const mensajeCapEmail = cannedDecidir("rag-cap-email", "Mensaje Cap Email", [880, 200], "Uy, venimos con muchos mensajes en esta conversación y no quiero que se nos escape nada. Para seguir bien con tu consulta o pedido, escribinos por email a terminalgrafica@gmail.com con el detalle, o pasá por el local (Rodríguez Peña 3865, Mar del Plata). ¡Gracias!");
+const labelCap = {
+  // Marca la conversación con 'revisar-volumen' cuando se llega al CAP. Ref a Decidir (siempre ejecutó).
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ labels: ['revisar-volumen'] }) }}",
+    options: {},
+  },
+  id: "rag-label-cap",
+  name: "Label Cap",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [1080, 200],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+};
+
 const flowCw = JSON.parse(JSON.stringify(flow));
 flowCw.name = "faq-bot-rag-lite-chatwoot";
 flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-chat-trigger");
+// A2 (memoria del canal): se saca el buffer de n8n; el historial lo alimenta Contexto Previo desde
+// $('Cuando llega un mensaje').historialTexto (poblado por el adaptador con lo que trajo Get Historial).
+flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-memoria");
+delete flowCw.connections["Memoria"];
 flowCw.nodes.unshift(
   webhookChatwoot,
   verificarHmac,
@@ -1324,10 +1465,19 @@ flowCw.nodes.unshift(
   mensajeFirewallRefusal,
   avisoRateFirewall,
   descartarFirewall,
+  waitDebounce,
+  getHistorial,
+  decidir,
+  switchRuteo,
+  descartarDebounce,
+  saludoBienvenida,
+  mensajeAntiInjection,
+  mensajeCapEmail,
+  labelCap,
   normalizarChatwoot,
 );
 flowCw.nodes.push(enviarChatwoot);
-// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + extremos:
+// "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + debounce F2:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
 flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] };
 flowCw.connections["Filtro Ingreso"] = { main: [[{ node: "Firewall Tier-1", type: "main", index: 0 }]] };
@@ -1343,10 +1493,23 @@ flowCw.connections["Switch Firewall"] = {
 };
 flowCw.connections["¿Tiene Texto?"] = {
   main: [
-    [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 0 true = hay texto
+    [{ node: "Wait — Debounce", type: "main", index: 0 }], // 0 true = hay texto → debounce/ráfaga
     [{ node: "Respuesta No-Texto", type: "main", index: 0 }], // 1 false = no-texto (enlatado)
   ],
 };
+flowCw.connections["Wait — Debounce"] = { main: [[{ node: "Get Historial", type: "main", index: 0 }]] };
+flowCw.connections["Get Historial"] = { main: [[{ node: "Decidir", type: "main", index: 0 }]] };
+flowCw.connections["Decidir"] = { main: [[{ node: "Switch Ruteo", type: "main", index: 0 }]] };
+flowCw.connections["Switch Ruteo"] = {
+  main: [
+    [{ node: "Descartar (debounce/dup)", type: "main", index: 0 }], // 0 skip
+    [{ node: "Saludo Bienvenida", type: "main", index: 0 }], // 1 greeting (primer-mensaje)
+    [{ node: "Mensaje Anti-Injection", type: "main", index: 0 }], // 2 injection
+    [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 3 process → el medio
+    [{ node: "Mensaje Cap Email", type: "main", index: 0 }], // 4 cap
+  ],
+};
+flowCw.connections["Mensaje Cap Email"] = { main: [[{ node: "Label Cap", type: "main", index: 0 }]] };
 flowCw.connections["Responder"] = { main: [[{ node: "Enviar a Chatwoot", type: "main", index: 0 }]] };
 
 // Actualizar la nota (sticky) para reflejar el canal.
@@ -1355,7 +1518,7 @@ if (notaCw) {
   notaCw.parameters.content =
     notaCw.parameters.content.replace(
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
-      "Conectado por **Chatwoot** con la config del v10. **Ingreso endurecido (F1):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check: injection/rate/strikes) → **Switch** (pass / refusal / rate / drop, con enlatados) → **¿Tiene Texto?** (audio/archivo → enlatado no-texto) → **Cuando llega un mensaje** (adaptador que extrae {sessionId, chatInput}). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).",
+      "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). Salida: **Enviar a Chatwoot**.",
     ) +
     "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }

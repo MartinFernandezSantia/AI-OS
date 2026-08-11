@@ -372,14 +372,322 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Chatwoot Webhook').first().json.body || {};\nconst content = (p.content == null ? '' : String(p.content)).trim().normalize('NFC');\nconst conv = p.conversation || {};\nconst acc = p.account || {};\nconst conversationId = conv.id ?? p.conversation_id ?? null;\nconst accountId = acc.id ?? p.account_id ?? null;\nreturn [{ json: { sessionId: String(conversationId), chatInput: content, _chatwoot: { accountId, conversationId } } }];"
+        "amount": 3
+      },
+      "id": "rag-wait-debounce",
+      "name": "Wait — Debounce",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        -200
+      ],
+      "webhookId": "wait-debounce-rag"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "rag-get-historial",
+      "name": "Get Historial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === DECIDIR — decide QUÉ hacer y arma la conversación (sin catálogo: eso lo inyecta 'Armar mensajes') ===\nconst webhookData = $('Chatwoot Webhook').first().json;\nconst body = webhookData.body;\nconst myMessageId = body.id;\nconst conversationId = body.conversation.id;\nconst accountId = body.account.id;\n\n// F5: created_at robusto (unix int, string numérico o ISO) → siempre número\nconst num = (v) => {\n  if (v == null) return 0;\n  if (typeof v === 'number') return v;\n  const n = Number(v);\n  if (Number.isFinite(n)) return n;\n  const t = Date.parse(v);\n  return Number.isFinite(t) ? t : 0;\n};\nconst myCreatedAt = num(body.created_at);\n\nconst historialJson = $('Get Historial').first().json;\nconst rawPayload = historialJson.payload;\nconst allMessages = Array.isArray(rawPayload) ? rawPayload : (rawPayload && rawPayload.messages ? rawPayload.messages : []);\n\nconst isIn = (m) => m.message_type === 'incoming' || m.message_type === 0;\nconst isOut = (m) => (m.message_type === 'outgoing' || m.message_type === 1) && !m.private;\nconst hasContent = (m) => m.content && String(m.content).trim().length > 0;\n\nconst sorted = allMessages.slice().sort((a, b) => num(a.created_at) - num(b.created_at));\n\n// DEBOUNCE (F1): el \"último\" es el último ENTRANTE CON TEXTO.\n// Una foto que llega después de la pregunta ya no gana el \"soy el último\".\nconst incoming = sorted.filter((m) => isIn(m) && hasContent(m));\nconst lastIncoming = incoming.length ? incoming[incoming.length - 1] : null;\nif (lastIncoming && myMessageId && lastIncoming.id !== myMessageId) {\n  return [{ json: { action: 'skip', reason: 'no-soy-el-ultimo', conversationId, accountId } }];\n}\n\n// IDEMPOTENCIA (F5): ya hay respuesta posterior a mi mensaje → no repito\nconst repliedAfter = sorted.some((m) => isOut(m) && num(m.created_at) > myCreatedAt);\nif (repliedAfter) {\n  return [{ json: { action: 'skip', reason: 'ya-respondido', conversationId, accountId } }];\n}\n\n// Ráfaga del cliente = entrantes con texto desde la última salida\nlet lastOutIdx = -1;\nfor (let i = sorted.length - 1; i >= 0; i--) {\n  if (isOut(sorted[i])) { lastOutIdx = i; break; }\n}\nconst burst = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m)).map((m) => m.content);\n// v8.1 NFC: ningun lado normaliza Unicode. Un teclado iOS/macOS que emita acentos\n// DESCOMPUESTOS (\"impresio\\u0301n\") hace fallar todo match con acento, en silencio y\n// solo para algunos clientes. El catalogo esta en NFC; el mensaje del cliente, no.\nconst mergedUser = burst.join('\\n').normalize('NFC');\n\nif (!mergedUser) {\n  return [{ json: { action: 'skip', reason: 'sin-texto-nuevo', conversationId, accountId } }];\n}\n\n// INJECTION: regex sobre el texto agregado (red barata; Tier-1 lo duplicará)\nconst INJECTION_PATTERNS = [\n  /ignor[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /olvid[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /\\bnuevo rol\\b/i,\n  /ignore (previous|instructions|your)/i,\n  /system prompt/i,\n  /jailbreak/i,\n  /\\bDAN\\b/,\n  /pretend you are/i,\n  /do anything now/i,\n  /forget your instructions/i\n];\nif (INJECTION_PATTERNS.some((p) => p.test(mergedUser))) {\n  return [{ json: { action: 'injection', conversationId, accountId } }];\n}\n\n// PRIMER MENSAJE (F3): saludo enlatado SOLO si el texto es un saludo puro.\n// Primer mensaje con pregunta → process (lo contesta el LLM).\nconst hasOutgoing = sorted.some(isOut);\nfunction isGreetingOnly(text) {\n  const t = (text || '')\n    .toLowerCase()\n    .replace(/[¡!¿?.,;:()\"']/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  if (!t) return false;\n  const G = '(hola|holis|buenas|buen dia|buen día|buenos dias|buenos días|buenas tardes|buenas noches|hey|que tal|qué tal|como andas|cómo andás|como va|cómo va|todo bien)';\n  const re = new RegExp('^' + G + '( ' + G + ')*$');\n  return re.test(t);\n}\nif (!hasOutgoing && isGreetingOnly(mergedUser)) {\n  return [{ json: { action: 'primer-mensaje', conversationId, accountId } }];\n}\n\n// CAP DE RESPUESTAS POR CONVERSACIÓN (ventana rodante 24h): tope duro para floods sostenidos.\nconst CAP_RESPUESTAS = 25;\nconst nowMs = Date.now();\nconst botOut = sorted.filter((m) => isOut(m) && hasContent(m));\nconst botOut24 = botOut.filter((m) => nowMs - num(m.created_at) < 86400000);\nconst CAP_MARK = 'muchos mensajes en esta conversación';\nif (botOut24.length >= CAP_RESPUESTAS) {\n  const capYaAvisado = botOut24.some((m) => String(m.content).toLowerCase().includes(CAP_MARK));\n  if (capYaAvisado) {\n    return [{ json: { action: 'skip', reason: 'cap-ya-avisado', conversationId, accountId } }];\n  }\n  return [{ json: { action: 'cap', conversationId, accountId } }];\n}\n\n// PROCESS: armar la conversación (sin system, sin catálogo). 'Armar mensajes' le prepende el system+catálogo.\n// ¿ya se le avisó al cliente que el canal es solo informativo? (buscamos el email del negocio en salientes del bot)\nconst avisoDado = sorted.some((m) => isOut(m) && hasContent(m) && String(m.content).toLowerCase().includes('terminalgrafica@gmail.com'));\n// Últimas 3 respuestas del bot → el LLM las usa para no repetirse (action noop)\nconst lastBotReplies = botOut.slice(-3).map((m) => String(m.content));\n\nconst conversation = [];\nconst history = sorted.slice(0, lastOutIdx + 1).slice(-6);\nfor (const m of history) {\n  if (isIn(m) && hasContent(m)) {\n    conversation.push({ role: 'user', content: m.content });\n  } else if (isOut(m) && hasContent(m)) {\n    conversation.push({ role: 'assistant', content: m.content });\n  }\n}\nconversation.push({ role: 'user', content: mergedUser });\n\nreturn [{ json: { action: 'process', conversation, userMessage: mergedUser, avisoDado, lastBotReplies, conversationId, accountId } }];\n"
+      },
+      "id": "rag-decidir",
+      "name": "Decidir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "rt-skip",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "skip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "rt-greeting",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "primer-mensaje",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "greeting"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "rt-injection",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "injection",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "injection"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "rt-process",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "process",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "process"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "rt-cap",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "cap",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cap"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "rag-switch-ruteo",
+      "name": "Switch Ruteo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        -200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "rag-descartar-debounce",
+      "name": "Descartar (debounce/dup)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: \"Hola! Buenas, ¿en qué te podemos ayudar?\", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "rag-saludo",
+      "name": "Saludo Bienvenida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: \"Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?\", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "rag-anti-injection",
+      "name": "Mensaje Anti-Injection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: \"Uy, venimos con muchos mensajes en esta conversación y no quiero que se nos escape nada. Para seguir bien con tu consulta o pedido, escribinos por email a terminalgrafica@gmail.com con el detalle, o pasá por el local (Rodríguez Peña 3865, Mar del Plata). ¡Gracias!\", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+        "options": {}
+      },
+      "id": "rag-cap-email",
+      "name": "Mensaje Cap Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chatwoot.silvercoastwebagency.com/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ labels: ['revisar-volumen'] }) }}",
+        "options": {}
+      },
+      "id": "rag-label-cap",
+      "name": "Label Cap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KxbAlYAWQ95ZZKQ5",
+          "name": "Chatwoot API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Decidir').first().json;\nconst chatInput = String(d.userMessage || '').trim();\nconst conversationId = d.conversationId;\nconst accountId = d.accountId;\n// d.conversation = [turnos previos..., {role:'user', content: mergedUser}] → el último es el mensaje\n// nuevo (ya va como chatInput); los previos son el historial real de la conversación.\nconst conv = Array.isArray(d.conversation) ? d.conversation : [];\nconst previos = conv.slice(0, -1).filter((m) => m && m.content);\nlet historialTexto = '';\nif (previos.length) {\n  const lineas = previos.map((m) => (m.role === 'assistant' ? 'Vos' : 'Cliente') + ': ' + String(m.content));\n  historialTexto = 'HISTORIAL DE ESTA CONVERSACIÓN (ya dicho; el mensaje nuevo del cliente va en el turno actual, no lo repitas):\\n' + lineas.join('\\n') + '\\n\\n';\n}\nreturn [{ json: { sessionId: String(conversationId), chatInput, _chatwoot: { accountId, conversationId }, historialTexto } }];"
       },
       "id": "rag-normalizar-chatwoot",
       "name": "Cuando llega un mensaje",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        120,
+        880,
         40
       ]
     },
@@ -410,7 +718,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const chatInput = $('Cuando llega un mensaje').first().json.chatInput;\nlet rows = [];\ntry { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.productos) && r.productos.length); } catch (e) { rows = []; }\nlet contextoPrevio = '';\nif (rows.length) {\n  const lineas = rows.slice().reverse().map((r) => {\n    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');\n    return '- ' + ps;\n  });\n  contextoPrevio = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';\n}\nreturn [{ json: { chatInput, contextoPrevio } }];"
+        "jsCode": "const _trig = $('Cuando llega un mensaje').first().json;\nconst chatInput = _trig.chatInput;\n// historialTexto SOLO lo puebla la variante Chatwoot (memoria A2 = historial real del canal).\n// En el chat de test viene undefined → '' → este nodo queda idéntico al comportamiento previo.\nconst historialTexto = _trig.historialTexto || '';\nlet rows = [];\ntry { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.productos) && r.productos.length); } catch (e) { rows = []; }\nlet bloqueDecisiones = '';\nif (rows.length) {\n  const lineas = rows.slice().reverse().map((r) => {\n    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');\n    return '- ' + ps;\n  });\n  bloqueDecisiones = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';\n}\nconst contextoPrevio = historialTexto + bloqueDecisiones;\nreturn [{ json: { chatInput, contextoPrevio } }];"
       },
       "id": "rag-contexto-previo",
       "name": "Contexto Previo",
@@ -553,21 +861,6 @@
           "name": "OpenRouter"
         }
       }
-    },
-    {
-      "parameters": {
-        "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Cuando llega un mensaje').first().json.sessionId }}",
-        "contextWindowLength": 10
-      },
-      "id": "rag-memoria",
-      "name": "Memoria",
-      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
-      "typeVersion": 1.3,
-      "position": [
-        300,
-        240
-      ]
     },
     {
       "parameters": {
@@ -877,7 +1170,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** con la config del v10. **Ingreso endurecido (F1):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check: injection/rate/strikes) → **Switch** (pass / refusal / rate / drop, con enlatados) → **¿Tiene Texto?** (audio/archivo → enlatado no-texto) → **Cuando llega un mensaje** (adaptador que extrae {sessionId, chatInput}). Salida: **Enviar a Chatwoot** (POST a la API de la conversación).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nConectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). Salida: **Enviar a Chatwoot**.\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y la tool **buscar_catalogo** = nodo **PGVector Vector Store** (modo *Retrieve as Tool*) con el sub-nodo **Embeddings Google Gemini**. El nodo embebe la consulta y hace la búsqueda — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos/envíos/stock/pedidos), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).",
         "height": 560,
         "width": 540
       },
@@ -1160,17 +1453,6 @@
         ]
       ]
     },
-    "Memoria": {
-      "ai_memory": [
-        [
-          {
-            "node": "Agente",
-            "type": "ai_memory",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "buscar_catalogo": {
       "ai_tool": [
         [
@@ -1324,7 +1606,7 @@
       "main": [
         [
           {
-            "node": "Cuando llega un mensaje",
+            "node": "Wait — Debounce",
             "type": "main",
             "index": 0
           }
@@ -1332,6 +1614,89 @@
         [
           {
             "node": "Respuesta No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait — Debounce": {
+      "main": [
+        [
+          {
+            "node": "Get Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Historial": {
+      "main": [
+        [
+          {
+            "node": "Decidir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir": {
+      "main": [
+        [
+          {
+            "node": "Switch Ruteo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Ruteo": {
+      "main": [
+        [
+          {
+            "node": "Descartar (debounce/dup)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saludo Bienvenida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje Anti-Injection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cuando llega un mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje Cap Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Cap Email": {
+      "main": [
+        [
+          {
+            "node": "Label Cap",
             "type": "main",
             "index": 0
           }
