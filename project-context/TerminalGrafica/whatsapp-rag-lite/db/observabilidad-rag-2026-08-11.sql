@@ -8,10 +8,13 @@
 --   · latencia_ms — cuánto tardó el procesamiento (cerebro + entrega), SIN el
 --     debounce fijo de 3s. Lo estampa el adaptador ("Cuando llega un mensaje",
 --     campo _t0) y lo cierra Log Turno con Date.now() - _t0.
---   · uso_llm    — tokens y costo USD del turno (misma columna y forma que el
---     v10, db/uso-llm-2026-07-28.sql). AÚN NO SE POBLA en el RAG lite: los nodos
---     nativos langchain no exponen `usage` como el v9 lo sacaba del HTTP Request.
---     La columna se crea igual para no re-migrar cuando cableemos la captura.
+--   · uso_llm    — tokens del turno (jsonb {llamadas, tokens_in, tokens_out,
+--     nodos{}}). Log Turno suma el `tokenUsage` de cada nodo de modelo que corrió
+--     (Agente='Modelo', Verificador, Corrector, Guardrails). SIN costo USD: los
+--     nodos langchain sólo dan conteo de tokens; el costo se estima por tarifa en
+--     db/auditoria-rag-lite.sql (sección D). CAVEAT: si un modelo corrió varias
+--     veces en el turno (el Agente hace ≥2 por el tool-call), .all() puede traer
+--     sólo la última → posible subconteo del Agente. Verificar contra 1 ejecución.
 --
 -- Preparada por Claude, APLICA MARTIN (regla: yo preparo, vos aplicás).
 -- Aditiva e idempotente: corre en el SQL editor sobre cualquier estado.

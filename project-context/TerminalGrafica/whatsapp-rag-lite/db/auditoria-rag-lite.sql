@@ -132,15 +132,46 @@
 
 
 -- =====================================================================
--- D. COSTO / TOKENS (bot.decisiones.uso_llm)
---    La columna existe pero AÚN NO se puebla en el RAG lite (los nodos nativos
---    langchain no exponen `usage` como el v9). Cuando se cablee la captura, el
---    pack de queries de costo YA está escrito en db/uso-llm-2026-07-28.sql
---    (costo semanal vs. mensaje de WhatsApp, costo por conversación, por nodo).
---    Chequeo de que ya se está poblando:
+-- D. TOKENS (bot.decisiones.uso_llm) — forma: {llamadas, tokens_in, tokens_out,
+--    nodos:{agente/verificador/corrector/guardrails:{in,out}}}. SIN costo USD:
+--    los nodos langchain sólo dan conteo de tokens (a diferencia del v9, que lo
+--    sacaba de OpenRouter). El costo se ESTIMA por tarifa acá abajo.
+-- =====================================================================
+
+-- D0. ¿SE ESTÁ POBLANDO? Debe dar ~igual al total de turnos LLM.
 -- select count(*) as turnos_con_uso_llm
 -- from bot.decisiones
 -- where created_at > now() - interval '7 days' and uso_llm is not null;
+
+-- D1. TOKENS DE LA SEMANA + costo estimado por tarifa. Ajustá $/1M de gemini-3.1-flash-lite
+--     (hoy ~0.075 in / 0.30 out por 1M). El mensaje de WhatsApp (~0.026 c/u) domina el costo.
+-- select
+--   count(*)                                        as turnos,
+--   sum((uso_llm->>'tokens_in')::bigint)            as tokens_in,
+--   sum((uso_llm->>'tokens_out')::bigint)           as tokens_out,
+--   round(sum((uso_llm->>'tokens_in')::bigint)  / 1e6 * 0.075
+--       + sum((uso_llm->>'tokens_out')::bigint) / 1e6 * 0.30, 4) as llm_usd_est,
+--   round(count(*) * 0.026, 2)                       as whatsapp_usd
+-- from bot.decisiones
+-- where created_at > now() - interval '7 days' and uso_llm is not null;
+
+-- D2. QUÉ NODO SE COME LOS TOKENS. El 'agente' manda el catálogo topK en el prompt →
+--     se espera que domine; si el 'verificador' lo pasa, algo se descontroló.
+-- select clave as nodo, count(*) as veces,
+--        sum((v->>'in')::bigint)  as tokens_in,
+--        sum((v->>'out')::bigint) as tokens_out
+-- from bot.decisiones d, lateral jsonb_each(d.uso_llm->'nodos') as e(clave, v)
+-- where d.created_at > now() - interval '7 days'
+-- group by clave order by tokens_in desc nulls last;
+
+-- D3. TOKENS POR ACCIÓN — para ver qué tipo de consulta es la cara en tokens.
+-- select accion, count(*) as turnos,
+--        round(avg(((uso_llm->>'tokens_in')::numeric) + ((uso_llm->>'tokens_out')::numeric))) as tok_prom,
+--        round(avg((uso_llm->>'tokens_in')::numeric))   as in_prom,
+--        round(avg((uso_llm->>'tokens_out')::numeric))  as out_prom
+-- from bot.decisiones
+-- where created_at > now() - interval '7 days' and uso_llm is not null
+-- group by accion order by in_prom desc nulls last;
 
 
 -- =====================================================================

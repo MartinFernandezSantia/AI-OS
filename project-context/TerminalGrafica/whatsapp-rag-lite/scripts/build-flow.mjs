@@ -1322,6 +1322,11 @@ const logTurno = {
         senales: "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}",
         // latencia del turno (ms), cerebro+entrega sin el debounce fijo. Requiere db/observabilidad-rag-*.sql.
         latencia_ms: "={{ (() => { const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); return t0 > 0 ? Date.now() - t0 : null; })() }}",
+        // tokens por turno: suma el tokenUsage de cada nodo de modelo que corrió (Agente='Modelo',
+        // Verificador, Corrector, Guardrails). Sin costo USD (los nodos langchain no lo dan; se estima
+        // por tarifa en la auditoría). CAVEAT: .all() puede traer solo la última llamada de un modelo
+        // que corrió varias veces (el Agente hace ≥2 por el tool-call) → posible subconteo del Agente.
+        uso_llm: "={{ (() => { const nodos = {}; let tin = 0, tout = 0, llamadas = 0; const acc = (clave, ref) => { let items = []; try { items = $(ref).all(); } catch (e) { items = []; } let i = 0, o = 0, n = 0; for (const it of (items || [])) { const u = (it && it.json && it.json.tokenUsage) || {}; const pi = Number(u.promptTokens || 0), co = Number(u.completionTokens || 0); if (pi || co) { i += pi; o += co; n++; } } if (i || o) { nodos[clave] = { in: i, out: o }; tin += i; tout += o; llamadas += n; } }; acc('agente', 'Modelo'); acc('verificador', 'Modelo · Verificador'); acc('corrector', 'Modelo · Corrector'); acc('guardrails', 'Modelo · Guardrails'); return JSON.stringify({ llamadas, tokens_in: tin, tokens_out: tout, nodos }); })() }}",
       },
       matchingColumns: [],
       schema: [],
