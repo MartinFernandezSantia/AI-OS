@@ -134,8 +134,12 @@
 -- =====================================================================
 -- D. TOKENS (bot.decisiones.uso_llm) — forma: {llamadas, tokens_in, tokens_out,
 --    nodos:{agente/verificador/corrector/guardrails:{in,out}}}. SIN costo USD:
---    los nodos langchain sólo dan conteo de tokens (a diferencia del v9, que lo
---    sacaba de OpenRouter). El costo se ESTIMA por tarifa acá abajo.
+--    los nodos langchain sólo dan conteo (a diferencia del v9). Se ESTIMA por tarifa.
+--
+--    OJO: la columna se llena en BATCH (job aparte keyed por execution_id contra la
+--    API de ejecuciones de n8n), NO en el turno — los sub-nodos de modelo no se leen
+--    desde el flujo principal. Hasta que ese job exista, uso_llm es NULL y D0-D3 dan
+--    0 filas. execution_id (ya logueado) es la clave del join.
 -- =====================================================================
 
 -- D0. ¿SE ESTÁ POBLANDO? Debe dar ~igual al total de turnos LLM.

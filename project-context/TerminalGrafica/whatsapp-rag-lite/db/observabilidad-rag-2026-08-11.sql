@@ -9,12 +9,14 @@
 --     debounce fijo de 3s. Lo estampa el adaptador ("Cuando llega un mensaje",
 --     campo _t0) y lo cierra Log Turno con Date.now() - _t0.
 --   · uso_llm    — tokens del turno (jsonb {llamadas, tokens_in, tokens_out,
---     nodos{}}). Log Turno suma el `tokenUsage` de cada nodo de modelo que corrió
---     (Agente='Modelo', Verificador, Corrector, Guardrails). SIN costo USD: los
---     nodos langchain sólo dan conteo de tokens; el costo se estima por tarifa en
---     db/auditoria-rag-lite.sql (sección D). CAVEAT: si un modelo corrió varias
---     veces en el turno (el Agente hace ≥2 por el tool-call), .all() puede traer
---     sólo la última → posible subconteo del Agente. Verificar contra 1 ejecución.
+--     nodos{}}). NO se llena en el hot-path: los sub-nodos ai_languageModel de n8n
+--     NO son referenciables desde el flujo principal ($('Modelo') no resuelve;
+--     confirmado por la comunidad, único camino = la API de ejecuciones). Se
+--     enriquece en BATCH keyed por execution_id: un job posterior consulta
+--     GET /api/v1/executions/{id}?includeData=true, suma el tokenUsage del runData
+--     de cada nodo de modelo y hace UPDATE ... WHERE execution_id = X. Sin costo
+--     USD (los nodos langchain sólo dan conteo); se estima por tarifa. PENDIENTE
+--     de construir (ver auditoria-rag-lite.sql §D). La columna se crea desde ya.
 --
 -- Preparada por Claude, APLICA MARTIN (regla: yo preparo, vos aplicás).
 -- Aditiva e idempotente: corre en el SQL editor sobre cualquier estado.
