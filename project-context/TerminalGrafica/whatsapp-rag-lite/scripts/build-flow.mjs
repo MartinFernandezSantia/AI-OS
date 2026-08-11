@@ -17,6 +17,9 @@ const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
 // PLACEHOLDER: al importar, n8n marca la credencial como faltante y Martin la crea/selecciona
 // una vez (Name: X-N8N-API-KEY, Value: la API key de Settings → n8n API). Ver sticky del flow.
 const N8N_API_CRED = { id: "REEMPLAZAR-n8n-api", name: "n8n API Key" };
+// Base de la API de n8n, HORNEADA en build (n8n community NO expone $env en expresiones). Editá esta
+// constante si tu instancia no está en localhost:5678 — SIN barra final.
+const N8N_API_BASE = "http://localhost:5678";
 
 // --- Chatwoot (variante conectada). MISMA CONFIG QUE EL v10 (faq-bot-v10-live) ---
 // baseUrl + credencial + secret HMAC son EXACTAMENTE los del v10, así no hay setup nuevo del lado
@@ -1946,7 +1949,7 @@ const notaUso = {
       "**SETUP (una vez):**",
       "1. n8n → Settings → n8n API → Create API key.",
       "2. Crear credencial **Header Auth** llamada 'n8n API Key': Name = `X-N8N-API-KEY`, Value = la key. Seleccionarla en **Traer Ejecución** (el import la marca como faltante: es un placeholder).",
-      "3. Si la API no responde en `http://localhost:5678`, definir `N8N_API_BASE` en el env de n8n (URL base SIN barra final).",
+      "3. Si la API no responde en `http://localhost:5678`, editá la constante N8N_API_BASE en scripts/build-flow.mjs y re-buildeá (n8n community no expone $env en expresiones).",
       "4. La credencial Postgres necesita **UPDATE** sobre bot.decisiones (Log Turno ya usa INSERT; si Actualizar Uso da error de permiso: `grant update on bot.decisiones to <rol>`).",
       "5. El flow PRINCIPAL debe guardar ejecuciones EXITOSAS (Save successful executions = ON, es el default) y el pruning de n8n no debe borrarlas antes del backfill (default ~14 días, sobra).",
       "6. **ACTIVAR este workflow** (el schedule solo corre activo).",
@@ -2008,7 +2011,7 @@ const traerEjecucion = {
   // onError+alwaysOutputData: un 404/timeout emite el item igual (en la misma posición) y
   // Calcular Uso decide (reintentar el próximo ciclo o marcar no_disponible a las 48h).
   parameters: {
-    url: "={{ ($env.N8N_API_BASE || 'http://localhost:5678') + '/api/v1/executions/' + $json.execution_id + '?includeData=true' }}",
+    url: "={{ '" + N8N_API_BASE + "/api/v1/executions/' + $json.execution_id + '?includeData=true' }}",
     authentication: "genericCredentialType",
     genericAuthType: "httpHeaderAuth",
     options: {},
