@@ -17,9 +17,20 @@ const COBRO: Record<string, string> = {
   trabajo: "por trabajo",
   unidad: "por unidad",
   hoja: "por hoja",
+  hoja_a3: "por hoja A3",
+  plancha_a3: "por plancha A3",
   pagina: "por pagina",
   m2: "por m2",
   metro: "por metro",
+};
+
+// Override de unidad_venta POR VARIANTE (clave = variante_id, UUID estable del export).
+// Para productos cuyo unidad_venta en el catálogo NO describe cómo se cobra de verdad y confunde
+// al cliente. Corregido acá porque sobrevive a re-ingesta/re-export; el fix durable es setear el
+// unidad_venta correcto en la curación upstream (ahí este override queda redundante y se saca).
+const UNIDAD_VENTA_OVERRIDE: Record<string, string> = {
+  // "Iman. Impresión laminada y corte." — se cobra por plancha A3, no "por unidad".
+  "6556342c-5169-4c94-85cf-92594811bd2c": "plancha_a3",
 };
 
 /** Lee un atributo EFECTIVO del item (en v4 el export ya mergeó producto||variante). */
@@ -59,7 +70,9 @@ export function derivarUnidad(item: ItemBot): string | null {
   // Con escalera, la cantidad la manda el tramo → el pack se calla ("tramoPisaPack").
   if (packUnidades > 0 && tramos.length === 0) return `el pack de ${packUnidades} unidades`;
   if (item.por_pack) return "el pack";
-  const uv = String(attrItem(item, "unidad_venta") || "").toLowerCase().trim();
+  const uv =
+    UNIDAD_VENTA_OVERRIDE[item.variante_id] ||
+    String(attrItem(item, "unidad_venta") || "").toLowerCase().trim();
   if (uv && COBRO[uv]) return COBRO[uv];
   return null;
 }

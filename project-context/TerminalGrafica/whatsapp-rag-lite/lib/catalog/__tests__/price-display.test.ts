@@ -83,6 +83,33 @@ describe("escalera por cantidad (Iman, precio_lista 0)", () => {
   });
 });
 
+describe("override de unidad_venta por variante (Iman laminado → plancha A3)", () => {
+  // Mismo Iman real, pero con su variante_id del export: el override pisa unidad_venta="unidad".
+  const iman = item({
+    variante_id: "6556342c-5169-4c94-85cf-92594811bd2c",
+    nombre_variante_bot: "Imanes",
+    precio_lista: 0,
+    atributos: { unidad_venta: "unidad" },
+    rangos_cantidad: [
+      { value: 8000, minQty: 1, maxQty: 3 },
+      { value: 7200, minQty: 4, maxQty: 10 },
+      { value: 6500, minQty: 11, maxQty: 20 },
+    ],
+  });
+
+  it("muestra 'por plancha A3', no 'por unidad'", () => {
+    expect(derivarUnidad(iman)).toBe("por plancha A3");
+    expect(contextoPrecio(precioVariante(iman, "v1"))).toBe(
+      "por plancha A3: 1-3 $8.000, 4-10 $7.200, 11-20 $6.500",
+    );
+  });
+
+  it("otras variantes con unidad_venta='unidad' siguen dando 'por unidad'", () => {
+    const otra = item({ variante_id: "otra", precio_lista: 500, atributos: { unidad_venta: "unidad" } });
+    expect(derivarUnidad(otra)).toBe("por unidad");
+  });
+});
+
 describe("packs discretos con hueco → redondeo HACIA ARRIBA al que cubre la cantidad", () => {
   const v = item({
     nombre_variante_bot: "Pack",
