@@ -23,7 +23,7 @@
     { "p": "Carteleria en Pvc c/vinilo brillo/mate", "v": "m2", "u": "m2", "m": true },
     { "p": "Cartón", "v": null, "u": "unidad", "m": true },
     { "p": "Montado sobre cartón", "v": null, "u": "unidad", "m": true },
-    { "p": "Imanes (impresión laminada y corte)", "v": null, "u": "unidad", "m": true },
+    { "p": "Imanes (impresión laminada y corte)", "v": null, "u": "plancha_a3", "m": true, "revisado": "2026-08-12: se cobra por plancha A3, no por unidad (curacion-2026-08-12.sql)" },
     { "p": "Vinilo, Lona Brillo/Mate Uv", "v": null, "u": "metro", "m": false, "tg": true },
     { "p": "Impresiones a4 papel obra 106 gr", "v": null, "u": "hoja", "m": true, "confirmado": "ver nota B" },
     { "p": "Impresiones papel obra 75 gr", "v": null, "u": "hoja", "m": true, "confirmado": "ver nota B" },
