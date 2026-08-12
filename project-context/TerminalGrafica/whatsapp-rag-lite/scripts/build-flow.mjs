@@ -1585,8 +1585,8 @@ const cannedDecidir = (id, name, position, texto) => ({
 });
 
 const waitDebounce = {
-  // Espera 3s antes de leer el historial: deja que lleguen los mensajes de una ráfaga.
-  parameters: { amount: 3 },
+  // Espera 15s antes de leer el historial: deja que lleguen los mensajes de una ráfaga.
+  parameters: { amount: 15 },
   id: "rag-wait-debounce",
   name: "Wait — Debounce",
   type: "n8n-nodes-base.wait",
