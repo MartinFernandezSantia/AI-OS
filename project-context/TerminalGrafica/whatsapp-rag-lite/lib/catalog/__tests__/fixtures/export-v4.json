@@ -1,24 +1,14 @@
 {
-  "exportado": "2026-08-09T00:00:00.000Z",
+  "exportado": "2026-08-13T00:00:00.000Z",
   "schema_version": 4,
-  "familias": [
-    { "clave": "carteleria", "nombre": "Cartelería", "nota": null },
-    { "clave": "impresiones_papel", "nombre": "Impresiones en papel", "nota": null },
-    { "clave": "libreria", "nombre": "Librería", "nota": "Artículos que se venden sueltos, listos: no son un trabajo de impresión a medida." },
-    { "clave": "otro", "nombre": "Otros", "nota": null }
-  ],
   "productos": [
     {
       "producto_id": "promocion para inmobiliarias|carteleria en plastico corrugado",
-      "clave": "promocion para inmobiliarias|carteleria en plastico corrugado",
       "nombre_bot": "Promoción para inmobiliarias (cartel de 1 × 0,65 m, llevando 6)",
-      "familia": "carteleria",
-      "familia_nota": null,
       "sinonimos": ["cartel inmobiliario", "carteles para vender casa"],
       "casos_de_uso": ["vender propiedad", "señalizar una casa en venta"],
       "nicho": "inmobiliarias",
       "nota": null,
-      "peso": 1.0,
       "oculto": false,
       "items": [
         {
@@ -28,9 +18,8 @@
           "color": null,
           "unidad": "Unidad",
           "precio_lista": 15000,
-          "por_pagina": false,
           "por_pack": false,
-          "atributos": { "material": "plastico_corrugado", "unidad_venta": "trabajo" },
+          "atributos": { "unidad_venta": "trabajo" },
           "rangos_cantidad": null,
           "mostrable": true,
           "tiene_override": false,
@@ -41,15 +30,11 @@
     },
     {
       "producto_id": "plastificados-5e3140",
-      "clave": "plastificados-5e3140",
       "nombre_bot": "Plastificados",
-      "familia": "otro",
-      "familia_nota": null,
       "sinonimos": ["enmicado", "enmicar"],
       "casos_de_uso": [],
       "nicho": null,
       "nota": null,
-      "peso": 1.0,
       "oculto": false,
       "items": [
         {
@@ -58,7 +43,6 @@
           "color": null,
           "unidad": "Unidad",
           "precio_lista": 800,
-          "por_pagina": false,
           "por_pack": false,
           "atributos": { "unidad_venta": "unidad" },
           "rangos_cantidad": null,
@@ -73,7 +57,6 @@
           "color": null,
           "unidad": "Unidad",
           "precio_lista": 500,
-          "por_pagina": false,
           "por_pack": true,
           "atributos": {},
           "rangos_cantidad": null,
@@ -86,15 +69,11 @@
     },
     {
       "producto_id": "impresion laser color papel obra 106 gr|impresiones laser color",
-      "clave": "impresion laser color papel obra 106 gr|impresiones laser color",
       "nombre_bot": "Impresión Láser Color papel obra 106 gr",
-      "familia": "impresiones_papel",
-      "familia_nota": null,
       "sinonimos": ["obra 106"],
       "casos_de_uso": ["imprimir fotos en color"],
       "nicho": null,
       "nota": null,
-      "peso": 1.2,
       "oculto": false,
       "items": [
         {
@@ -103,9 +82,8 @@
           "color": null,
           "unidad": "Hoja",
           "precio_lista": 0,
-          "por_pagina": false,
           "por_pack": false,
-          "atributos": { "unidad_venta": "hoja", "material": "obra", "tecnologia": "laser", "tamano": ["a4"] },
+          "atributos": { "unidad_venta": "hoja" },
           "rangos_cantidad": [
             { "value": 200, "minQty": 1, "maxQty": 99 },
             { "value": 150, "minQty": 100, "maxQty": null }
@@ -119,15 +97,11 @@
     },
     {
       "producto_id": "sobres-95fa5f",
-      "clave": "sobres-95fa5f",
       "nombre_bot": "Sobres",
-      "familia": "libreria",
-      "familia_nota": "Artículos que se venden sueltos, listos: no son un trabajo de impresión a medida.",
       "sinonimos": ["sobre clasico"],
       "casos_de_uso": [],
       "nicho": null,
-      "nota": null,
-      "peso": 1.0,
+      "nota": "Artículos que se venden sueltos, listos: no son un trabajo de impresión a medida.",
       "oculto": false,
       "items": [
         {
@@ -136,7 +110,6 @@
           "color": null,
           "unidad": "Unidad",
           "precio_lista": 100,
-          "por_pagina": false,
           "por_pack": false,
           "atributos": { "unidad_venta": "unidad" },
           "rangos_cantidad": null,
@@ -149,15 +122,11 @@
     },
     {
       "producto_id": "servicio a confirmar|otro",
-      "clave": "servicio a confirmar|otro",
       "nombre_bot": "Servicio a confirmar",
-      "familia": "otro",
-      "familia_nota": null,
       "sinonimos": [],
       "casos_de_uso": [],
       "nicho": null,
       "nota": null,
-      "peso": 1.0,
       "oculto": false,
       "items": [
         {
@@ -166,7 +135,6 @@
           "color": null,
           "unidad": "Unidad",
           "precio_lista": null,
-          "por_pagina": false,
           "por_pack": false,
           "atributos": {},
           "rangos_cantidad": null,
@@ -179,15 +147,11 @@
     },
     {
       "producto_id": "oculto-x",
-      "clave": "oculto-x",
       "nombre_bot": "Producto oculto",
-      "familia": "otro",
-      "familia_nota": null,
       "sinonimos": [],
       "casos_de_uso": [],
       "nicho": null,
       "nota": null,
-      "peso": 1.0,
       "oculto": true,
       "items": []
     }

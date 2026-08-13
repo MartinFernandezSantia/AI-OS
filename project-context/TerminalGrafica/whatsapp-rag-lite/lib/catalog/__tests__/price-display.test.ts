@@ -11,7 +11,6 @@ function item(over: Partial<ItemBot> = {}): ItemBot {
     color: null,
     unidad: "Hoja",
     precio_lista: null,
-    por_pagina: false,
     por_pack: false,
     atributos: {},
     rangos_cantidad: null,
@@ -83,13 +82,13 @@ describe("escalera por cantidad (Iman, precio_lista 0)", () => {
   });
 });
 
-describe("override de unidad_venta por variante (Iman laminado → plancha A3)", () => {
-  // Mismo Iman real, pero con su variante_id del export: el override pisa unidad_venta="unidad".
+describe("unidad de cobro curada (Iman laminado → plancha A3 vía sale_unit)", () => {
+  // El dashboard cura bot.variant.sale_unit='plancha_a3' → el export lo baja como
+  // atributos.unidad_venta. Ya no hay override hardcodeado: la unidad sale del catálogo.
   const iman = item({
-    variante_id: "6556342c-5169-4c94-85cf-92594811bd2c",
     nombre_variante_bot: "Imanes",
     precio_lista: 0,
-    atributos: { unidad_venta: "unidad" },
+    atributos: { unidad_venta: "plancha_a3" },
     rangos_cantidad: [
       { value: 8000, minQty: 1, maxQty: 3 },
       { value: 7200, minQty: 4, maxQty: 10 },

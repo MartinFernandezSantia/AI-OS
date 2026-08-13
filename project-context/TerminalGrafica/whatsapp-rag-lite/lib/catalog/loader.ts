@@ -1,8 +1,8 @@
-// Carga robusta del export. Portado del curador: acepta la envoltura del SQL editor
-// ([{"export": {...}}]) y repara mojibake (UTF-8 leído como latin1/win-1252), porque
-// de esos strings salen las claves naturales del SQL — si vienen rotos, no matchean.
+// Carga robusta del export. Acepta la envoltura del SQL editor ([{"export": {...}}]) y repara
+// mojibake (UTF-8 leído como latin1/win-1252), porque de esos strings salen las claves naturales
+// del SQL — si vienen rotos, no matchean.
 
-import type { CatalogExport, CatalogExportV4, ProductoBot } from "./types";
+import type { CatalogExportV4, ProductoBot } from "./types";
 
 /** Desenvuelve [{"export": {...}}] y variantes de un solo valor. */
 export function desenvolver(j: unknown): unknown {
@@ -41,31 +41,14 @@ export function repararMojibake(t: string): { texto: string; reparado: boolean }
   }
 }
 
-export interface ParseResult {
-  data: CatalogExport;
-  reparado: boolean;
-}
-
-/** Parsea el texto del archivo a un CatalogExport (repara encoding + desenvuelve). */
-export function parseExport(texto: string): ParseResult {
-  const { texto: fixed, reparado } = repararMojibake(texto);
-  const j = desenvolver(JSON.parse(fixed));
-  if (!j || typeof j !== "object" || !("productos" in j) || !("exportado" in j)) {
-    throw new Error("Ese JSON no parece un export del catálogo (falta productos/exportado).");
-  }
-  const data = j as CatalogExport;
-  if (!Array.isArray(data.rubros)) data.rubros = [];
-  return { data, reparado };
-}
-
 export interface ParseResultV4 {
   data: CatalogExportV4;
   reparado: boolean;
 }
 
-/** Parsea el export v4 (modelo producto-bot). Misma envoltura/reparación; EXIGE schema_version 4
- *  y productos con `items` — así un v2/v3 guardado por error NO se ingesta como basura (truncaría
- *  la tabla y la llenaría de chunks vacíos). */
+/** Parsea el export del catálogo (modelo producto-bot). Misma envoltura/reparación; EXIGE
+ *  schema_version 4 y productos con `items` — así un export de otra forma NO se ingesta como basura
+ *  (truncaría la tabla y la llenaría de chunks vacíos). */
 export function parseExportV4(texto: string): ParseResultV4 {
   const { texto: fixed, reparado } = repararMojibake(texto);
   const j = desenvolver(JSON.parse(fixed));
@@ -75,12 +58,11 @@ export function parseExportV4(texto: string): ParseResultV4 {
   const data = j as CatalogExportV4;
   if (data.schema_version !== 4) {
     throw new Error(
-      `Export v4 esperado (schema_version 4); vino ${data.schema_version ?? "sin versión"}. ¿Guardaste el v3 por error?`,
+      `Export esperado (schema_version 4); vino ${data.schema_version ?? "sin versión"}.`,
     );
   }
   if (!data.productos.every((p) => Array.isArray((p as ProductoBot).items))) {
-    throw new Error("Export v4 inválido: hay productos sin 'items' (¿es un export v2/v3?).");
+    throw new Error("Export inválido: hay productos sin 'items'.");
   }
-  if (!Array.isArray(data.familias)) data.familias = [];
   return { data, reparado };
 }

@@ -1,9 +1,10 @@
 // Derivación de precio POR UNIDAD para el bot RAG lite. Porteo del subconjunto SIN totales de
 // `Armar Candidatos` + `Calcular Montos` del v10 (nunca multiplica, nunca totaliza, sin CAP).
 //
-// v4 (modelo producto-bot): las funciones operan POR ITEM. Un producto-bot puede agrupar variantes
-// de VARIOS productos public con formas de cobro distintas, así que el contexto de cobro
-// (por_pagina/por_pack/atributos efectivos) viene en cada `ItemBot`, no en un "producto" común.
+// Las funciones operan POR ITEM. Un producto-bot puede agrupar variantes de VARIOS productos public
+// con formas de cobro distintas, así que el contexto de cobro (por_pack/atributos efectivos) viene en
+// cada `ItemBot`, no en un "producto" común. La unidad de cobro sale de atributos.unidad_venta
+// (= bot.variant.sale_unit): 'pagina' cubre el viejo flag por_pagina, 'plancha_a3' lo cura el dashboard.
 //
 // Función PURA y testeada: es la lógica que le habla de plata al cliente, así que va con tests
 // (memoria "los fixtures mienten"). El nodo Code "Insertar Precios" de n8n inlinea una COPIA de
@@ -24,16 +25,7 @@ const COBRO: Record<string, string> = {
   metro: "por metro",
 };
 
-// Override de unidad_venta POR VARIANTE (clave = variante_id, UUID estable del export).
-// Para productos cuyo unidad_venta en el catálogo NO describe cómo se cobra de verdad y confunde
-// al cliente. Corregido acá porque sobrevive a re-ingesta/re-export; el fix durable es setear el
-// unidad_venta correcto en la curación upstream (ahí este override queda redundante y se saca).
-const UNIDAD_VENTA_OVERRIDE: Record<string, string> = {
-  // "Iman. Impresión laminada y corte." — se cobra por plancha A3, no "por unidad".
-  "6556342c-5169-4c94-85cf-92594811bd2c": "plancha_a3",
-};
-
-/** Lee un atributo EFECTIVO del item (en v4 el export ya mergeó producto||variante). */
+/** Lee un atributo EFECTIVO del item (el export ya resolvió el cobro por item). */
 function attrItem(item: ItemBot, key: string): unknown {
   const a = (item.atributos as Record<string, unknown>) || {};
   return a[key];
@@ -66,13 +58,10 @@ export function asRangos(item: Pick<ItemBot, "rangos_cantidad">): RangoCantidad[
 export function derivarUnidad(item: ItemBot): string | null {
   const tramos = asRangos(item);
   const packUnidades = Number(attrItem(item, "pack_unidades")) || 0;
-  if (item.por_pagina) return "por pagina";
   // Con escalera, la cantidad la manda el tramo → el pack se calla ("tramoPisaPack").
   if (packUnidades > 0 && tramos.length === 0) return `el pack de ${packUnidades} unidades`;
   if (item.por_pack) return "el pack";
-  const uv =
-    UNIDAD_VENTA_OVERRIDE[item.variante_id] ||
-    String(attrItem(item, "unidad_venta") || "").toLowerCase().trim();
+  const uv = String(attrItem(item, "unidad_venta") || "").toLowerCase().trim();
   if (uv && COBRO[uv]) return COBRO[uv];
   return null;
 }

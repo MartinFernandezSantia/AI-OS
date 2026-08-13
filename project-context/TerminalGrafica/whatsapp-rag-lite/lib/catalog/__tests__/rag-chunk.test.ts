@@ -36,20 +36,15 @@ describe("chunkRAG sobre producto-bot de nicho (inmobiliarias)", () => {
   it("captura el nicho (heredado en la migración) como metadata", () => {
     expect(c.meta.nicho).toBe("inmobiliarias");
   });
-  it("la familia va a metadata (no al texto, es genérica)", () => {
-    expect(c.meta.familia).toBe("carteleria");
-    expect(c.texto).not.toContain("carteleria");
-  });
   it("el título y el nombre_canonico son el nombre_bot", () => {
     expect(c.title).toContain("Promoción para inmobiliarias");
     expect(c.meta.nombre_canonico).toBe(c.title);
   });
-  it("el texto incluye sinónimos, casos de uso y material", () => {
+  it("el texto incluye sinónimos y casos de uso", () => {
     expect(c.texto).toContain("También llamado:");
     expect(c.texto).toContain("cartel inmobiliario");
     expect(c.texto).toContain("Sirve para:");
     expect(c.texto).toContain("vender propiedad");
-    expect(c.texto.toLowerCase()).toContain("material: plastico corrugado");
   });
   it("precio confiable: item simple sin reglas → rango poblado", () => {
     expect(c.meta.precio_confiable).toBe(true);
@@ -82,12 +77,12 @@ describe("cobro POR ITEM en un producto-bot multi-producto (Plastificados)", () 
   });
 });
 
-describe("chunkRAG: escalera + familia_nota", () => {
+describe("chunkRAG: escalera + nota", () => {
   it("los tramos se muestran en Opciones (obra 106)", () => {
     const c = chunkRAG(byId("impresion laser color papel obra 106 gr|impresiones laser color"));
     expect(c.texto).toContain("por hoja: 1-99 $200, 100+ $150");
   });
-  it("hornea la nota de familia librería (Sobres)", () => {
+  it("hornea la nota del producto (Sobres librería)", () => {
     const c = chunkRAG(byId("sobres-95fa5f"));
     expect(c.texto).toContain("se venden sueltos");
   });
@@ -98,15 +93,11 @@ describe("chunkRAG: escalera + familia_nota", () => {
 function prodBase(over: Partial<ProductoBot> = {}): ProductoBot {
   return {
     producto_id: "p-test",
-    clave: "p-test",
     nombre_bot: "Producto Test",
-    familia: "otro",
-    familia_nota: null,
     sinonimos: [],
     casos_de_uso: [],
     nicho: null,
     nota: null,
-    peso: 1.0,
     oculto: false,
     items: [],
     ...over,
@@ -136,7 +127,6 @@ describe("bordes (v4)", () => {
             color: null,
             unidad: null,
             precio_lista: 500,
-            por_pagina: false,
             por_pack: false,
             atributos: {},
             rangos_cantidad: null,
