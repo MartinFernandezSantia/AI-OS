@@ -9,42 +9,43 @@ Diseñado con Fable. Plan completo en [`plans/rag-lite-bot.md`](plans/rag-lite-b
 ## Estructura
 
 ```
-lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + helpers + tests
+lib/catalog/       chunkRAG() + price-display.ts (precios, testeado) + loader + types + tests
 scripts/           rag-ingest.ts (ingesta catálogo + --info) · rag-query.ts (consulta) · build-flow.mjs (genera el flow)
-db/                rag-embeddings.sql (pgvector + catálogo) · rag-info-negocio.sql (info del negocio) · rag-decisiones.sql (log)
+db/                schema-bot.sql (schema greenfield: catálogo 2 tablas + rag_* + log + roles/RLS) · auditoria-rag-lite.sql (queries)
 n8n/flows/         faq-bot-rag-lite.json + -chatwoot.json (GENERADOS por build-flow.mjs — no editar a mano)
 plans/             los planes del experimento
 ```
 
 El flow se regenera con `pnpm flow:build` (fuente de verdad = `scripts/build-flow.mjs`).
 
-`lib/catalog` es una **copia autocontenida** de los helpers del repo `whatsapp-automation`
-(el dashboard de curación). El export del catálogo se lee, por defecto, del contexto
-compartido `../whatsapp-automation/db/export-actualizado-catalogo.json` (override con `--export`).
+`lib/catalog` es la lógica de chunk/precios que consume el export. El export del catálogo lo
+genera `../whatsapp-automation/db/curador-export.sql` (lee `bot.product` + `bot.variant` + public);
+se lee por defecto de `../whatsapp-automation/db/export-catalogo.json` (override con `--export`).
 
 ## Cómo se usa
 
 Requiere `pnpm install`. Env: `GEMINI_API_KEY` (API key de Google AI Studio, para ingesta/consulta)
 y `DATABASE_URL` (`--apply`/consulta).
 
-1. **DDL** — aplicar `db/rag-embeddings.sql` (catálogo, `bot.rag_catalogo`) y `db/rag-info-negocio.sql`
-   (info del negocio, `bot.rag_info_negocio`) en el SQL Editor de Supabase (extensión vector + tablas
-   en formato LangChain). La info del negocio además necesita `bot.info_negocio` poblada — es la fuente
-   de verdad de los datos (ver `../whatsapp-automation/db/info-negocio.sql`).
+1. **DDL** — aplicar `db/schema-bot.sql` en el SQL Editor de Supabase: crea el schema greenfield
+   completo (catálogo `bot.product`/`bot.variant`, vectores `bot.rag_catalog`/`bot.rag_business_info`,
+   fuente `bot.business_info`, log unificado `bot.log`, `bot.errors`, roles `bot_runtime`/`bot_curator`,
+   grants + RLS). Requiere el enum `bot.accion` + firewall ya aplicados (whatsapp-automation, NO greenfield).
+   La info del negocio necesita `bot.business_info` (pares `key`/`value`) poblada — es la fuente de verdad.
 2. **Ingesta** — catálogo: `pnpm rag:ingest --dry` (imprime los chunks, sin API/DB) para revisarlos;
    `pnpm rag:ingest` genera `rag-embeddings-data.sql` (truncate+insert) para aplicar; o
    `pnpm rag:ingest --apply` upsertea directo. Info del negocio: `pnpm rag:ingest:info --apply` lee
-   `bot.info_negocio` y llena `bot.rag_info_negocio` (o sin `--apply` genera `rag-info-negocio-data.sql`).
-   Reingesta = correr de nuevo (idempotente). Editaste `bot.info_negocio` → re-corré `rag:ingest:info`.
+   `bot.business_info` y llena `bot.rag_business_info` (o sin `--apply` genera `rag-info-negocio-data.sql`).
+   Reingesta = correr de nuevo (idempotente). Editaste `bot.business_info` → re-corré `rag:ingest:info`.
 3. **Consulta** — `pnpm rag:query "sirve para plotear un plano a1?"` (flags `--medicina` /
    `--inmobiliarias` para el guard de nicho).
 4. **Workflow** — importar `n8n/flows/faq-bot-rag-lite.json`. En la UI: (a) en **AMBOS** sub-nodos
    **Embeddings (Google Gemini)** —el de `buscar_catalogo` y el de `consultar_info_negocio`— elegir la
    credencial **Google Gemini(PaLM) API** con tu key de Google AI Studio, modelo
    `models/gemini-embedding-001` (el MISMO de la ingesta); (b) en **buscar_catalogo** (PGVector) el
-   Table Name va **schema-cualificado: `bot.rag_catalogo`** (si va solo `rag_catalogo` consulta `public`
+   Table Name va **schema-cualificado: `bot.rag_catalog`** (si va solo `rag_catalog` consulta `public`
    y devuelve `[]` en verde), Column Names id/embedding/text/metadata, sin Metadata Filter; (c) en
-   **consultar_info_negocio** lo mismo con Table Name `bot.rag_info_negocio`. El chat sigue en
+   **consultar_info_negocio** lo mismo con Table Name `bot.rag_business_info`. El chat sigue en
    OpenRouter. Probar desde el chat de test del Chat Trigger.
 
 ## Tests
@@ -61,9 +62,9 @@ y `DATABASE_URL` (`--apply`/consulta).
   query por el nodo nativo Embeddings Google Gemini. Chat sigue en OpenRouter. Tabla formato
   LangChain (`text`/`metadata`/`embedding`).
 - Guard de nicho **blando** (nicho en metadata + lo maneja el prompt del agente).
-- **Info del negocio = segunda tool RAG** (`consultar_info_negocio`, tabla `bot.rag_info_negocio`).
+- **Info del negocio = segunda tool RAG** (`consultar_info_negocio`, tabla `bot.rag_business_info`).
   Datos operativos (horario, dirección, estacionamiento, pago/seña, envíos/retiro, plazos, urgentes,
-  contacto, facturación, redes). Fuente de verdad = `bot.info_negocio` (pares clave/valor curados a
+  contacto, facturación, redes). Fuente de verdad = `bot.business_info` (pares key/value curados a
   mano, compartida con el v10); `rag:ingest:info` la vectoriza. Es info **autoritativa**: el agente la
   afirma sin anclar en `buscar_catalogo`. El Verificador NO marca la política oficial (no hay envíos /
   plazo por mail / urgentes coordinados) como `info_no_permitida`; sí marca plazos concretos inventados.
@@ -85,17 +86,19 @@ y `DATABASE_URL` (`--apply`/consulta).
     etiquetar la línea ("Pack de 100 doble faz: {P1}") queda correcto en vez de duplicar
     ("$15.000 el pack de 100 unidades el pack de 100"). El monto sigue siendo determinista/validado;
     solo el texto de la unidad pasa al agente. El nodo terminal colapsa cualquier eco residual.
-- **Memoria de decisiones** (`bot.rag_decisiones`, DDL en `db/rag-decisiones.sql`) — lazo cerrado
-  escritura + lectura:
-  - **Escritura** (`Log Decisión`, al final): por cada mensaje del bot guarda `session_id`, mensaje
-    final, `estado`, `productos` recomendados, `precios` y el veredicto. **Si el Verificador modificó
-    el mensaje, `productos`/`precios` quedan EN BLANCO** (no es fiable qué sobrevivió). `onError=
-    continue` (un fallo de log no rompe la respuesta); **Responder** re-emite el mensaje al chat.
-  - **Lectura** (`Leer Decisiones` → `Contexto Previo`, al inicio del turno): trae las últimas
-    decisiones OK de la sesión y antepone al system prompt un bloque con **qué productos ya recomendó
-    el bot** — así el agente da continuidad con datos estructurados, no solo infiriendo del texto.
-  - Es una memoria estructurada sobre Postgres (misma tabla); swappable por Redis si se quiere TTL.
-    Requiere el DDL + INSERT para el rol del bot (mismo que escribe `bot.decisiones` en el v10).
+- **Log unificado + memoria** (`bot.log`, DDL en `db/schema-bot.sql`) — **una fila por turno** que
+  funde el viejo log operativo (`decisiones`) + la memoria del cerebro (`rag_decisiones`):
+  - **Escritura** — `Log Decisión` (tras Insertar Precios) hace el **INSERT** del turno: `session_id`,
+    las dos puntas `customer_message`/`bot_message`, `state`, `products`, `prices`, `verification`,
+    `execution_id`. **Si el Verificador modificó el mensaje, `products`/`prices` quedan EN BLANCO**
+    (no es fiable qué sobrevivió). En Chatwoot, `Log Turno` (fin del turno) hace **UPDATE** de ESA
+    MISMA fila (match `execution_id`) con `action`, `signals` (entrega + `latencia_ms` plegada) y el
+    `bot_message` realmente entregado. `onError=continue` (un fallo de log no rompe la respuesta).
+  - **Lectura** (`Leer Decisiones` → `Contexto Previo`, al inicio del turno): trae de `bot.log` las
+    últimas filas OK (`state='ok'` + `products`) de la sesión y antepone al system prompt un bloque
+    con **qué productos ya recomendó el bot** — continuidad con datos estructurados, no solo el texto.
+  - Roles: escribe/lee `bot_runtime` (INSERT+SELECT+UPDATE en `bot.log`, con RLS). El firewall
+    auto-loguea vía `bot.fw_log` (`action` firewall_*, `resolution_level='firewall'`).
 - **Salida estructurada** (nodo `Salida · Agente`, `outputParserStructured`): el agente no
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
