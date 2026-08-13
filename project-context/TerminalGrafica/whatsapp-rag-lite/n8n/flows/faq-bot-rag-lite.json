@@ -166,26 +166,20 @@
     },
     {
       "parameters": {
-        "model": "google/gemini-3.1-flash-lite",
+        "modelName": "models/gemini-3.1-flash-lite",
         "options": {
           "temperature": 0.3,
-          "maxTokens": 900
+          "maxOutputTokens": 900
         }
       },
       "id": "rag-modelo",
       "name": "Modelo",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
         120,
         240
-      ],
-      "credentials": {
-        "openRouterApi": {
-          "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -328,26 +322,20 @@
     },
     {
       "parameters": {
-        "model": "google/gemini-3.1-flash-lite",
+        "modelName": "models/gemini-3.1-flash-lite",
         "options": {
           "temperature": 0.1,
-          "maxTokens": 1200
+          "maxOutputTokens": 1200
         }
       },
       "id": "rag-verif-modelo",
       "name": "Modelo · Verificador",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
         560,
         620
-      ],
-      "credentials": {
-        "openRouterApi": {
-          "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -479,26 +467,20 @@
     },
     {
       "parameters": {
-        "model": "google/gemini-3.1-flash-lite",
+        "modelName": "models/gemini-3.1-flash-lite",
         "options": {
           "temperature": 0.2,
-          "maxTokens": 400
+          "maxOutputTokens": 400
         }
       },
       "id": "rag-corrector-modelo",
       "name": "Modelo · Corrector",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
         1340,
         40
-      ],
-      "credentials": {
-        "openRouterApi": {
-          "id": "widAoSc9Weo8PxAN",
-          "name": "OpenRouter"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -554,7 +536,7 @@
     },
     {
       "parameters": {
-        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalog) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_business_info). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas filas OK de la sesión (bot.log) y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** hace el INSERT del turno en **bot.log** (log unificado, requiere db/schema-bot.sql): session_id, customer_message/bot_message, state, products, prices, verification; si el Verificador MODIFICÓ el mensaje → products EN BLANCO. En Chatwoot, **Log Turno** hace UPDATE de esa misma fila (match execution_id) con action/signals/entrega. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.\n2) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n3) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
+        "content": "## Bot RAG lite — agente + PGVector (nativo)\n\nPrueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).\n\nEl **Agente** tiene: Modelo de chat (Google Gemini nativo), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalog) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_business_info). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.\n\n**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).\n\n**Precios**: el agente NUNCA tipea un número — escribe {P1},{P2}… y declara `precios_solicitados`. El chunk trae los precios en 'Opciones:' como contexto. **Buscar Precios** lee metadata.precios y **Insertar Precios** (terminal) reemplaza los {Pn} por el precio real y valida cualquier monto tipeado contra el catálogo (no coincide → 'a confirmar por mail'). Solo unitario/tramo, sin totales.\n\n**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.\n\n**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).\n\n**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.\n\n**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).\n\n**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas filas OK de la sesión (bot.log) y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** hace el INSERT del turno en **bot.log** (log unificado, requiere db/schema-bot.sql): session_id, customer_message/bot_message, state, products, prices, verification; si el Verificador MODIFICÓ el mensaje → products EN BLANCO. En Chatwoot, **Log Turno** hace UPDATE de esa misma fila (match execution_id) con action/signals/entrega. onError=continue. **Responder** re-emite el mensaje al chat.\n\n⚠️ VERIFICAR EN LA UI:\n1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta).\n2) Modelos de CHAT — TODOS los nodos Modelo (Modelo, Modelo · Verificador, Modelo · Corrector y, en Chatwoot, Modelo · Guardrails) pasaron a **Google Gemini nativo** (lmChatGoogleGemini, ya no OpenRouter): cableales la MISMA credencial Google Gemini(PaLM) API que los embeddings y confirmá el modelo (GEMINI_MODEL, hoy models/gemini-3.1-flash-lite).\n3) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.\n4) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
         "height": 560,
         "width": 540
       },

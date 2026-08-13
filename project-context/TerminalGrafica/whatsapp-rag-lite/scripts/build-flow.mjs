@@ -9,7 +9,11 @@ import { writeFileSync } from "node:fs";
 const OUT_MAIN = process.argv[2] || "n8n/flows/faq-bot-rag-lite.json";
 const OUT_CHATWOOT = process.argv[3] || OUT_MAIN.replace(/\.json$/, "-chatwoot.json");
 
-const OPENROUTER = { id: "widAoSc9Weo8PxAN", name: "OpenRouter" };
+// Modelo de chat: Google Gemini NATIVO (mismo proveedor que los embeddings, ya no OpenRouter).
+// La credencial "Google Gemini(PaLM) API" (API key de Google AI Studio) se cablea en la UI, igual
+// que en los sub-nodos de embeddings. Un solo lugar para el nombre del modelo → confirmá que exista
+// en tu Google AI Studio (el naming nativo puede diferir, p.ej. models/gemini-flash-lite-latest).
+const GEMINI_MODEL = "models/gemini-3.1-flash-lite";
 const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
 
 // --- Chatwoot (variante conectada). MISMA CONFIG QUE EL v10 (faq-bot-v10-live) ---
@@ -734,15 +738,14 @@ const flow = {
       position: [2660, 0],
     },
     {
-      // maxTokens 900 (no 500): la salida estructurada (respuesta + productos_ofrecidos +
+      // maxOutputTokens 900 (no 500): la salida estructurada (respuesta + productos_ofrecidos +
       // precios_solicitados + afirmaciones) más el tool-call trunca el JSON a 500 y el parser lo rechaza.
-      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.3, maxTokens: 900 } },
+      parameters: { modelName: GEMINI_MODEL, options: { temperature: 0.3, maxOutputTokens: 900 } },
       id: "rag-modelo",
       name: "Modelo",
-      type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       typeVersion: 1,
       position: [120, 240],
-      credentials: { openRouterApi: OPENROUTER },
     },
     {
       parameters: {
@@ -867,16 +870,15 @@ const flow = {
       onError: "continueErrorOutput",
     },
     {
-      // maxTokens 1200 (no 700): con varias fallas el veredicto JSON crece y truncaba → parser falla
+      // maxOutputTokens 1200 (no 700): con varias fallas el veredicto JSON crece y truncaba → parser falla
       // → Fallback aprueba por defecto (falla-abierto justo en las respuestas más rotas). El veredicto
       // es barato, así que damos aire.
-      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.1, maxTokens: 1200 } },
+      parameters: { modelName: GEMINI_MODEL, options: { temperature: 0.1, maxOutputTokens: 1200 } },
       id: "rag-verif-modelo",
       name: "Modelo · Verificador",
-      type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       typeVersion: 1,
       position: [560, 620],
-      credentials: { openRouterApi: OPENROUTER },
     },
     {
       parameters: {
@@ -1037,7 +1039,7 @@ const flow = {
       typeVersion: 1.9,
       position: [1340, -160],
       // RESILIENCIA: el Corrector NO tenía red y encima es el destino del fallback (veredicto
-      // ilegible + loop agotado caen acá). Un 500/timeout de OpenRouter mataba la ejecución. Ahora
+      // ilegible + loop agotado caen acá). Un 500/timeout de Gemini mataba la ejecución. Ahora
       // reintenta y, si falla, enruta por ERROR (main[1]) → Fallback Corrector (pasa el original).
       retryOnFail: true,
       maxTries: 2,
@@ -1045,13 +1047,12 @@ const flow = {
       onError: "continueErrorOutput",
     },
     {
-      parameters: { model: "google/gemini-3.1-flash-lite", options: { temperature: 0.2, maxTokens: 400 } },
+      parameters: { modelName: GEMINI_MODEL, options: { temperature: 0.2, maxOutputTokens: 400 } },
       id: "rag-corrector-modelo",
       name: "Modelo · Corrector",
-      type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       typeVersion: 1,
       position: [1340, 40],
-      credentials: { openRouterApi: OPENROUTER },
     },
     {
       // Reconstruye la forma canónica { respuesta(corregida), auditoria, verificacion } leyendo la
@@ -1143,7 +1144,7 @@ const flow = {
           "",
           "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
           "",
-          "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalog) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_business_info). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.",
+          "El **Agente** tiene: Modelo de chat (Google Gemini nativo), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalog) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_business_info). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.",
           "",
           "**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).",
           "",
@@ -1160,9 +1161,10 @@ const flow = {
           "**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas filas OK de la sesión (bot.log) y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** hace el INSERT del turno en **bot.log** (log unificado, requiere db/schema-bot.sql): session_id, customer_message/bot_message, state, products, prices, verification; si el Verificador MODIFICÓ el mensaje → products EN BLANCO. En Chatwoot, **Log Turno** hace UPDATE de esa misma fila (match execution_id) con action/signals/entrega. onError=continue. **Responder** re-emite el mensaje al chat.",
           "",
           "⚠️ VERIFICAR EN LA UI:",
-          "1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
-          "2) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
-          "3) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
+          "1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta).",
+          "2) Modelos de CHAT — TODOS los nodos Modelo (Modelo, Modelo · Verificador, Modelo · Corrector y, en Chatwoot, Modelo · Guardrails) pasaron a **Google Gemini nativo** (lmChatGoogleGemini, ya no OpenRouter): cableales la MISMA credencial Google Gemini(PaLM) API que los embeddings y confirmá el modelo (GEMINI_MODEL, hoy models/gemini-3.1-flash-lite).",
+          "3) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
+          "4) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
         ].join("\n"),
         height: 560,
         width: 540,
@@ -1729,13 +1731,12 @@ const guardrailsTier2 = {
 };
 
 const modeloGuardrails = {
-  parameters: { model: "google/gemini-3.1-flash-lite", options: {} },
+  parameters: { modelName: GEMINI_MODEL, options: {} },
   id: "rag-modelo-guardrails",
   name: "Modelo · Guardrails",
-  type: "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+  type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
   typeVersion: 1,
   position: [900, -640],
-  credentials: { openRouterApi: OPENROUTER },
 };
 
 const routerFailTier2 = {
@@ -1743,7 +1744,7 @@ const routerFailTier2 = {
   // (fail-open). Mapea topicalAlignment→offtopic para que calce con el enum bot.accion (bug H2).
   parameters: {
     jsCode:
-      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si OpenRouter está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n",
+      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n",
   },
   id: "rag-router-fail-tier2",
   name: "Router Fail Tier-2",
