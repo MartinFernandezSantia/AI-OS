@@ -1,13 +1,13 @@
-// Ingesta RAG del catálogo → embeddings → bot.rag_catalogo (plan rag-lite-bot, enfoque nativo).
+// Ingesta RAG del catálogo → embeddings → bot.rag_catalog (plan rag-lite-bot, enfoque nativo).
 //
 //   pnpm rag:ingest --dry     # arma e imprime los chunks, sin API ni DB
 //   pnpm rag:ingest           # --sql (default): genera rag-embeddings-data.sql (truncate+insert)
 //   pnpm rag:ingest --apply   # upsert directo vía pg (necesita DATABASE_URL admin)
 //
-// INFO DEL NEGOCIO (segunda tool consultar_info_negocio; fuente = tabla bot.info_negocio):
-//   pnpm rag:ingest --info --dry     # imprime las filas de bot.info_negocio (necesita DATABASE_URL)
+// INFO DEL NEGOCIO (segunda tool consultar_info_negocio; fuente = tabla bot.business_info):
+//   pnpm rag:ingest --info --dry     # imprime las filas de bot.business_info (necesita DATABASE_URL)
 //   pnpm rag:ingest --info           # genera rag-info-negocio-data.sql (truncate+insert)
-//   pnpm rag:ingest --info --apply   # upsert directo a bot.rag_info_negocio
+//   pnpm rag:ingest --info --apply   # upsert directo a bot.rag_business_info
 //
 // El vector se guarda con la dimensión NATIVA del modelo (sin truncar): la query en n8n usa el
 // MISMO modelo (google/gemini-embedding-001), así los vectores son comparables. Reingesta =
@@ -26,14 +26,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MODELO = "models/gemini-embedding-001";
 const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:batchEmbedContents`;
 const BATCH = 100;
-const TABLE = "bot.rag_catalogo";
+const TABLE = "bot.rag_catalog";
 // Índice vectorial de la info del negocio (segunda tool consultar_info_negocio). Fuente de verdad de
-// los DATOS: bot.info_negocio (pares clave/valor curados). --info lee de ahí y embebe en TABLE_INFO.
-const TABLE_INFO = "bot.rag_info_negocio";
-const INFO_SOURCE = "bot.info_negocio";
+// los DATOS: bot.business_info (pares key/value curados). --info lee de ahí y embebe en TABLE_INFO.
+const TABLE_INFO = "bot.rag_business_info";
+const INFO_SOURCE = "bot.business_info";
 
-// Export del catálogo v4 (modelo producto-bot; curador-export-v4.sql). Fuente compartida al lado.
-const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v4.json");
+// Export del catálogo (modelo producto-bot; curador-export.sql). Fuente compartida al lado.
+const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-catalogo.json");
 const OUT_SQL = join(HERE, "..", "rag-embeddings-data.sql");
 const OUT_SQL_INFO = join(HERE, "..", "rag-info-negocio-data.sql");
 
@@ -88,7 +88,6 @@ const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const metaObj = (c: RagChunk) => ({
   producto_id: c.meta.producto_id, // clave natural (estable testing↔prod)
   nombre_canonico: c.meta.nombre_canonico, // = nombre_bot (clave de match del flujo de precios)
-  familia: c.meta.familia,
   nicho: c.meta.nicho,
   precio_desde: c.meta.precio_desde,
   precio_hasta: c.meta.precio_hasta,
@@ -174,8 +173,9 @@ async function pricesOnly(chunks: RagChunk[]): Promise<void> {
 
 // ─────────────────────────── INFO DEL NEGOCIO (--info) ───────────────────────────
 // Segunda tool del agente (consultar_info_negocio). La fuente de verdad de los DATOS es la tabla
-// bot.info_negocio (pares clave/valor curados a mano). --info la lee, embebe cada `valor` y llena
-// bot.rag_info_negocio. Requiere DATABASE_URL (la fuente vive en la DB, no en un JSON como el catálogo).
+// bot.business_info (pares key/value curados a mano). --info la lee, embebe cada `value` y llena
+// bot.rag_business_info. Requiere DATABASE_URL (la fuente vive en la DB, no en un JSON como el catálogo).
+// La CLAVE de metadata queda en español (`clave`) para no tocar las queries metadata->> del bot.
 type InfoRow = { clave: string; texto: string };
 const metaInfo = (r: InfoRow) => ({ clave: r.clave });
 
@@ -188,16 +188,16 @@ async function pgConnect(url: string) {
   return cli;
 }
 
-/** Lee bot.info_negocio como filas {clave, texto}. Excluye las filas placeholder ('COMPLETAR…'). */
+/** Lee bot.business_info como filas {clave, texto}. Excluye las filas placeholder ('COMPLETAR…'). */
 async function cargarInfoNegocio(): Promise<InfoRow[]> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error(`Falta DATABASE_URL: --info lee los datos de ${INFO_SOURCE}.`);
   const cli = await pgConnect(url);
   try {
-    const r = await cli.query(`select clave, valor from ${INFO_SOURCE} where valor not ilike 'COMPLETAR%' order by clave`);
-    const rows: InfoRow[] = r.rows.map((x: { clave: string; valor: string }) => ({ clave: String(x.clave), texto: String(x.valor) }));
+    const r = await cli.query(`select key, value from ${INFO_SOURCE} where value not ilike 'COMPLETAR%' order by key`);
+    const rows: InfoRow[] = r.rows.map((x: { key: string; value: string }) => ({ clave: String(x.key), texto: String(x.value) }));
     console.error(`${INFO_SOURCE}: ${rows.length} filas (excluye placeholders 'COMPLETAR').`);
-    if (!rows.length) throw new Error(`${INFO_SOURCE} vacía o inexistente: aplicá ../whatsapp-automation/db/info-negocio.sql primero.`);
+    if (!rows.length) throw new Error(`${INFO_SOURCE} vacía o inexistente: poblá bot.business_info (key/value) primero.`);
     return rows;
   } finally {
     await cli.end();
@@ -256,7 +256,7 @@ async function ingestInfo(): Promise<void> {
 }
 
 async function main() {
-  // --info: rama independiente (fuente = bot.info_negocio en la DB, no el export del catálogo).
+  // --info: rama independiente (fuente = bot.business_info en la DB, no el export del catálogo).
   if (has("--info")) {
     await ingestInfo();
     return;

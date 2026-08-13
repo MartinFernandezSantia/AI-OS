@@ -519,10 +519,10 @@ const insertarPreciosCode = [
   "// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió",
   "texto = texto.replace(/\\s+en total\\b/gi, '');",
   "",
-  "// 4) REGISTRO DE DECISIÓN (bot.rag_decisiones). Si el Verificador MODIFICÓ el mensaje,",
+  "// 4) REGISTRO DE DECISIÓN (bot.log). Si el Verificador MODIFICÓ el mensaje,",
   "//    el registro de productos queda EN BLANCO: no es fiable qué producto sobrevivió a la edición.",
   "const _decision = {",
-  "  estado: pr.corregido ? 'corregido' : 'ok',",
+  "  estado: pr.corregido ? 'corrected' : 'ok',",
   "  productos: pr.corregido ? [] : (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []),",
   "  precios: pr.corregido ? [] : (Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []),",
   "  verificacion: pr.verificacion || null,",
@@ -550,9 +550,9 @@ const flow = {
       parameters: {
         operation: "executeQuery",
         query:
-          "select productos, precios, mensaje\n" +
-          "  from bot.rag_decisiones\n" +
-          " where session_id = $1 and estado = 'ok' and jsonb_array_length(productos) > 0\n" +
+          "select products, prices, bot_message\n" +
+          "  from bot.log\n" +
+          " where session_id = $1 and state = 'ok' and jsonb_array_length(products) > 0\n" +
           " order by created_at desc\n" +
           " limit 5",
         options: { queryReplacement: "={{ [ String($json.sessionId || '') ] }}" },
@@ -580,11 +580,11 @@ const flow = {
           "// En el chat de test viene undefined → '' → este nodo queda idéntico al comportamiento previo.",
           "const historialTexto = _trig.historialTexto || '';",
           "let rows = [];",
-          "try { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.productos) && r.productos.length); } catch (e) { rows = []; }",
+          "try { rows = $('Leer Decisiones').all().map((i) => i.json).filter((r) => r && Array.isArray(r.products) && r.products.length); } catch (e) { rows = []; }",
           "let bloqueDecisiones = '';",
           "if (rows.length) {",
           "  const lineas = rows.slice().reverse().map((r) => {",
-          "    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.nombre_variante ? ' ' + p.nombre_variante : '') + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
+          "    const ps = r.products.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.nombre_variante ? ' ' + p.nombre_variante : '') + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
           "    return '- ' + ps;",
           "  });",
           "  bloqueDecisiones = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';",
@@ -653,7 +653,7 @@ const flow = {
         operation: "executeQuery",
         query:
           "select metadata->>'nombre_canonico' as nombre, metadata->'precios' as precios\n" +
-          "  from bot.rag_catalogo\n" +
+          "  from bot.rag_catalog\n" +
           " where trim(regexp_replace(translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g')) = any(\n" +
           "   select trim(regexp_replace(translate(lower(x), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g'))\n" +
           "     from jsonb_array_elements_text($1::jsonb) as x)",
@@ -689,16 +689,19 @@ const flow = {
       position: [2220, 0],
     },
     {
-      // Registro durable de la decisión del turno (bot.rag_decisiones). onError=continue: si el log
-      // falla (permiso/tabla), NO rompe la respuesta al cliente. session_id del Chat Trigger.
+      // INSERT del turno en el log unificado bot.log (memoria del cerebro: session_id + las dos puntas
+      // customer_message/bot_message + products/prices/verification). En la variante Chatwoot, Log Turno
+      // (fin del turno) hace UPDATE de ESTA MISMA fila (match por execution_id) para sumar
+      // action/signals/entrega — una fila por turno. onError=continue: si el log falla, NO rompe la
+      // respuesta al cliente. session_id/customer_message del adaptador ("Cuando llega un mensaje").
       parameters: {
         operation: "executeQuery",
         query:
-          "insert into bot.rag_decisiones (session_id, mensaje, estado, productos, precios, verificacion)\n" +
-          "values ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)",
+          "insert into bot.log (session_id, customer_message, bot_message, resolution_level, state, products, prices, verification, execution_id)\n" +
+          "values ($1, $2, $3, 'llm', $4, $5::jsonb, $6::jsonb, $7::jsonb, $8)",
         options: {
           queryReplacement:
-            "={{ (() => { const d = $json._decision || {}; return [ String($('Cuando llega un mensaje').first().json.sessionId || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null) ]; })() }}",
+            "={{ (() => { const d = $json._decision || {}; const t = $('Cuando llega un mensaje').first().json; return [ String(t.sessionId || ''), String(t.chatInput || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null), String($execution.id || '') ]; })() }}",
         },
       },
       id: "rag-log-decision",
@@ -749,14 +752,14 @@ const flow = {
     },
     {
       // PGVector Vector Store en modo TOOL del agente. Embebe la consulta (con el sub-nodo
-      // Embeddings) y hace KNN sobre bot.rag_catalogo.
+      // Embeddings) y hace KNN sobre bot.rag_catalog.
       parameters: {
         mode: "retrieve-as-tool",
         toolName: "buscar_catalogo",
         toolDescription: toolDesc,
         // Schema-cualificado: el nodo NO aplica un schema aparte, así que la tabla va como
-        // `bot.rag_catalogo` (si va solo `rag_catalogo`, consulta public y devuelve [] en verde).
-        tableName: "bot.rag_catalogo",
+        // `bot.rag_catalog` (si va solo `rag_catalog`, consulta public y devuelve [] en verde).
+        tableName: "bot.rag_catalog",
         topK: 8,
         options: {
           // Nombres de columna = los del DDL (coinciden con los defaults del nodo).
@@ -787,14 +790,14 @@ const flow = {
     },
     {
       // SEGUNDA tool del agente: info operativa del negocio (horario, dirección, pago, envíos, plazos,
-      // contacto, redes). MISMO patrón que buscar_catalogo pero sobre bot.rag_info_negocio (poblada por
-      // rag-ingest.ts --info desde bot.info_negocio). Tabla schema-cualificada (si va sin schema consulta
+      // contacto, redes). MISMO patrón que buscar_catalogo pero sobre bot.rag_business_info (poblada por
+      // rag-ingest.ts --info desde bot.business_info). Tabla schema-cualificada (si va sin schema consulta
       // public y devuelve [] en verde). topK bajo: la tabla es chica (~11 filas) y cada fila es autónoma.
       parameters: {
         mode: "retrieve-as-tool",
         toolName: "consultar_info_negocio",
         toolDescription: toolDescInfo,
-        tableName: "bot.rag_info_negocio",
+        tableName: "bot.rag_business_info",
         topK: 4,
         options: {
           columnNames: {
@@ -894,7 +897,7 @@ const flow = {
           "select metadata->>'nombre_canonico' as nombre,\n" +
           "       metadata->>'nicho'           as nicho,\n" +
           "       text\n" +
-          "  from bot.rag_catalogo\n" +
+          "  from bot.rag_catalog\n" +
           " where trim(regexp_replace(translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g')) = any(\n" +
           "   select trim(regexp_replace(translate(lower(x), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g'))\n" +
           "     from jsonb_array_elements_text($1::jsonb) as x)",
@@ -1134,7 +1137,7 @@ const flow = {
           "",
           "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
           "",
-          "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalogo) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_info_negocio). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.",
+          "El **Agente** tiene: Modelo de chat (OpenRouter), **Memoria** (10 turnos/sesión) y DOS tools PGVector (modo *Retrieve as Tool*, cada una con su sub-nodo **Embeddings Google Gemini**): **buscar_catalogo** (productos, tabla bot.rag_catalog) y **consultar_info_negocio** (datos operativos del negocio —horario, dirección, pago, envíos, plazos, contacto, redes—, tabla bot.rag_business_info). El nodo embebe la consulta y busca — sin HTTP ni sub-workflow.",
           "",
           "**Flujo por etapas** (system prompt): saludo · pedido claro (usa la tool) · falta info→pregunta · seguimiento · otro. Guard de nicho blando (por prompt).",
           "",
@@ -1148,12 +1151,12 @@ const flow = {
           "",
           "**Preparar Respuesta** (punto único de convergencia): junta `respuesta` + `auditoria` + `verificacion` + `corregido`. Lee solo de su input (ref a nodo no ejecutado bloquea 300s).",
           "",
-          "**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas decisiones OK de la sesión y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** (bot.rag_decisiones, requiere db/rag-decisiones.sql) registra por turno qué recomendó (session_id, mensaje, estado, productos, precios, veredicto); si el Verificador MODIFICÓ el mensaje → productos EN BLANCO. onError=continue. **Responder** re-emite el mensaje al chat.",
+          "**Memoria de decisiones** (lazo cerrado): **Leer Decisiones** (postgres) trae las últimas filas OK de la sesión (bot.log) y **Contexto Previo** arma un bloque que se antepone al system prompt → el agente sabe QUÉ productos ya recomendó, no solo el texto previo. **Log Decisión** hace el INSERT del turno en **bot.log** (log unificado, requiere db/schema-bot.sql): session_id, customer_message/bot_message, state, products, prices, verification; si el Verificador MODIFICÓ el mensaje → products EN BLANCO. En Chatwoot, **Log Turno** hace UPDATE de esa misma fila (match execution_id) con action/signals/entrega. onError=continue. **Responder** re-emite el mensaje al chat.",
           "",
           "⚠️ VERIFICAR EN LA UI:",
           "1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta). Chat + ambos agentes en OpenRouter; solo embeddings en Google.",
-          "2) buscar_catalogo (PGVector): Table Name = bot.rag_catalogo (schema-cualificado). Requiere db/rag-embeddings.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
-          "3) consultar_info_negocio (PGVector): Table Name = bot.rag_info_negocio (schema-cualificado). Requiere db/rag-info-negocio.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.info_negocio). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
+          "2) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
+          "3) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
         ].join("\n"),
         height: 560,
         width: 540,
@@ -1297,8 +1300,8 @@ const normalizarChatwoot = {
 // ---------- F3 (verificación de entrega) + F4 (logging operativo) ----------
 // Cadena de egreso: Responder -> Preparar Envio -> Enviar Mensaje -> Chequear Envio -> ¿Se Entregó?
 //   -> [no] Label Envío Fallido -> Log Turno ; [sí] Log Turno. La entrega se confirma por el `id` que
-//   devuelve Chatwoot (no el status HTTP). Log Turno escribe a bot.decisiones (log operativo, además del
-//   bot.rag_decisiones del cerebro). NOMBRES sin acento en "Preparar Envio"/"Chequear Envio" = los mismos
+//   devuelve Chatwoot (no el status HTTP). Log Turno hace UPDATE de la fila de bot.log que insertó Log
+//   Decisión (match execution_id), sumando el lado operativo. NOMBRES sin acento en "Preparar Envio"/"Chequear Envio" = los mismos
 //   que el v10, así las refs transcritas ($('Preparar Envio'), $('Chequear Envio')) resuelven sin editar.
 const prepararEnvio = {
   // Punto único antes de enviar: arma el "sobre" FLAT que Enviar Mensaje / Chequear Envio / Log Turno
@@ -1411,31 +1414,22 @@ const labelEnvioFallido = {
 };
 
 const logTurno = {
-  // Log operativo a bot.decisiones (además del bot.rag_decisiones del cerebro). Lee de Chequear Envio.
-  // `accion`/`nivel_resolucion` = valores VÁLIDOS del enum (info/repregunto/otro/envio_fallido, n2_llm)
-  // → no rebota mudo (R8). Se omiten producto_resuelto/filas_sql/borrador (el RAG lite no los tiene).
+  // UPDATE de la fila que Log Decisión INSERTó este turno (match por execution_id): suma lo que sólo
+  // se sabe al FINAL — action del router (enum bot.accion), señales de entrega + latencia PLEGADA en
+  // signals, y el bot_message REALMENTE entregado. Una fila por turno. Lee de Chequear Envio.
+  // onError=continue: un fallo del log NO rompe la entrega (que ya ocurrió antes de este nodo).
   parameters: {
-    schema: { __rl: true, value: "bot", mode: "list" },
-    table: { __rl: true, value: "decisiones", mode: "list" },
-    columns: {
-      mappingMode: "defineBelow",
-      value: {
-        conversation_id: "={{ $('Chequear Envio').first().json.conversationId }}",
-        mensaje_cliente: "={{ $('Chequear Envio').first().json.userMessage }}",
-        nivel_resolucion: "n2_llm",
-        accion: "={{ $('Chequear Envio').first().json.accion }}",
-        hubo_handoff: false,
-        notas: "={{ $('Chequear Envio').first().json.notas }}",
-        final: "={{ $('Chequear Envio').first().json.final }}",
-        execution_id: "={{ $execution.id || '' }}",
-        senales: "={{ JSON.stringify($('Chequear Envio').first().json.senales || {}) }}",
-        // latencia del turno (ms), cerebro+entrega sin el debounce fijo. Requiere db/observabilidad-rag-*.sql.
-        latencia_ms: "={{ (() => { const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); return t0 > 0 ? Date.now() - t0 : null; })() }}",
-      },
-      matchingColumns: [],
-      schema: [],
+    operation: "executeQuery",
+    query:
+      "update bot.log\n" +
+      "   set action = nullif($1,'')::bot.accion,\n" +
+      "       bot_message = $2,\n" +
+      "       signals = $3::jsonb\n" +
+      " where execution_id = $4",
+    options: {
+      queryReplacement:
+        "={{ (() => { const c = $('Chequear Envio').first().json; const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); const lat = t0 > 0 ? Date.now() - t0 : null; const sig = { ...(c.senales || {}), latencia_ms: lat }; return [ String(c.accion || ''), String(c.final || ''), JSON.stringify(sig), String($execution.id || '') ]; })() }}",
     },
-    options: {},
   },
   id: "rag-log-turno",
   name: "Log Turno",
@@ -1943,7 +1937,7 @@ if (notaCw) {
   notaCw.parameters.content =
     notaCw.parameters.content.replace(
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
-      "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Guardrails Tier-2** (F5: LLM guard jailbreak/off-topic; si viola → Strike → refusal/silencio; fail-open) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). **F3/F4 (egreso):** Responder → **Preparar Envio** → **Enviar Mensaje** → **Chequear Envio** (entrega = id de Chatwoot, no status HTTP) → **¿Se Entregó?** (no → **Label Envío Fallido**) → **Log Turno** (bot.decisiones). F0 (runbook): en Settings del workflow, Error Workflow → tg-bot-error.",
+      "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Guardrails Tier-2** (F5: LLM guard jailbreak/off-topic; si viola → Strike → refusal/silencio; fail-open) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). **F3/F4 (egreso):** Responder → **Preparar Envio** → **Enviar Mensaje** → **Chequear Envio** (entrega = id de Chatwoot, no status HTTP) → **¿Se Entregó?** (no → **Label Envío Fallido**) → **Log Turno** (UPDATE de bot.log). F0 (runbook): en Settings del workflow, Error Workflow → tg-bot-error.",
     ) +
     "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
 }

@@ -4,12 +4,12 @@
 //   pnpm rag:query --inmobiliarias "cartel para vender una casa"
 //
 // Embebe la pregunta con el MISMO modelo que la ingesta (gemini-embedding-001) y hace KNN coseno
-// sobre bot.rag_catalogo. Los flags de nicho son solo para PROBAR el guard blando localmente
+// sobre bot.rag_catalog. Los flags de nicho son solo para PROBAR el guard blando localmente
 // (en el bot real el nicho lo maneja el prompt del agente). Env: OPENROUTER_API_KEY, DATABASE_URL.
 
 const MODELO = "models/gemini-embedding-001";
 const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/${MODELO}:embedContent`;
-const TABLE = "bot.rag_catalogo";
+const TABLE = "bot.rag_catalog";
 
 const has = (flag: string) => process.argv.includes(flag);
 const pregunta = process.argv.slice(2).filter((a) => !a.startsWith("--")).join(" ").trim();
@@ -45,7 +45,6 @@ async function main() {
     // pasó el flag correspondiente. En el bot real esto lo decide el agente por prompt.
     const { rows } = await cli.query(
       `select metadata->>'nombre_canonico' as nombre,
-              metadata->>'familia'         as familia,
               metadata->>'nicho'           as nicho,
               round((1 - (embedding <=> $1::vector))::numeric, 4) as sim,
               text
@@ -64,7 +63,7 @@ async function main() {
       return;
     }
     rows.forEach((r, i) =>
-      console.log(`${i + 1}. [${r.sim}] ${r.nombre}  (${r.familia || "s/familia"}${r.nicho ? `, nicho:${r.nicho}` : ""})`),
+      console.log(`${i + 1}. [${r.sim}] ${r.nombre}${r.nicho ? `  (nicho:${r.nicho})` : ""}`),
     );
   } finally {
     await cli.end();
