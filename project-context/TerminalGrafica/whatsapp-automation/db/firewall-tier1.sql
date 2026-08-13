@@ -83,8 +83,10 @@ language plpgsql
 as $$
 begin
   begin
-    insert into bot.decisiones (conversation_id, mensaje_cliente, nivel_resolucion, accion, hubo_handoff)
-    values (p_conversation_id, left(coalesce(p_text, ''), 500), 'firewall', p_accion, false);
+    -- Log unificado greenfield (bot.log). Antes era bot.decisiones (ya no existe).
+    -- resolution_level='firewall'; action = enum bot.accion. Ver whatsapp-rag-lite/db/schema-bot.sql.
+    insert into bot.log (session_id, customer_message, action, resolution_level)
+    values (p_conversation_id::text, left(coalesce(p_text, ''), 500), p_accion::bot.accion, 'firewall');
   exception when others then
     -- logging es fire-and-forget: si falla, la decision sigue viva
     null;
