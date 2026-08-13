@@ -235,8 +235,10 @@ campo y su detalle están en el schema de salida). Lo que importa que hagas bien
 - productos_ofrecidos: uno por CADA producto del que AFIRMASTE algún dato de catálogo (aunque sea de
   pasada o mientras preguntabas otra cosa). Preguntar SIN afirmar datos (sin enumerar papeles /
   medidas / opciones) NO requiere declararlo. nombre_catalogo va EXACTO como vino de buscar_catalogo.
-  Los atributos de cada uno salen de la MISMA opción [vN] (o de lo común del producto): NO mezcles
-  atributos entre [vN] distintas ni entre productos.
+  nombre_variante: el nombre de la opción puntual que ofreciste (tal cual en Opciones: [vN]) si
+  recomendaste una específica; null si hablaste del producto en general. Los atributos de cada uno
+  salen de la MISMA opción [vN] (o de lo común del producto): NO mezcles atributos entre [vN]
+  distintas ni entre productos.
 - precios_solicitados: uno por CADA {Pn} que usaste (nombre_catalogo EXACTO + variante_ref [vN]).
 - afirmaciones + motivo: lo verificable que afirmaste, y en una línea por qué elegiste eso.
 Regla de oro: TODO lo que pongas acá tiene que estar respaldado por lo que devolvió la tool. Este
@@ -288,6 +290,11 @@ const esquemaSalida = {
           nombre_mostrado: {
             type: "string",
             description: "cómo lo nombraste en tu respuesta al cliente (puede diferir del de catálogo)",
+          },
+          nombre_variante: {
+            type: ["string", "null"],
+            description:
+              "el nombre de la variante/opción PUNTUAL que ofreciste (tal cual figura en Opciones: [vN]), si recomendaste una específica; null si hablaste del producto en general",
           },
           atributos: {
             type: "array",
@@ -577,7 +584,7 @@ const flow = {
           "let bloqueDecisiones = '';",
           "if (rows.length) {",
           "  const lineas = rows.slice().reverse().map((r) => {",
-          "    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
+          "    const ps = r.productos.map((p) => (p.nombre_mostrado || p.nombre_catalogo) + (p.nombre_variante ? ' ' + p.nombre_variante : '') + (p.cantidad ? ' x' + p.cantidad : '')).join(', ');",
           "    return '- ' + ps;",
           "  });",
           "  bloqueDecisiones = 'CONTEXTO INTERNO (no es un mensaje del cliente) — productos que YA le recomendaste en mensajes anteriores de esta conversación. Usalos para dar continuidad; no rehagas la búsqueda si el cliente sigue sobre lo mismo:\\n' + lineas.join('\\n') + '\\n\\n';",
