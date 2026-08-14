@@ -246,7 +246,7 @@ campo y su detalle están en el schema de salida). Lo que importa que hagas bien
   pasada o mientras preguntabas otra cosa). Preguntar SIN afirmar datos (sin enumerar papeles /
   medidas / opciones) NO requiere declararlo. nombre_catalogo va EXACTO como vino de buscar_catalogo.
   nombre_variante: el nombre de la opción puntual que ofreciste (tal cual en Opciones: [vN]) si
-  recomendaste una específica; null si hablaste del producto en general. Los atributos de cada uno
+  recomendaste una específica; omitilo si hablaste del producto en general. Los atributos de cada uno
   salen de la MISMA opción [vN] (o de lo común del producto): NO mezcles atributos entre [vN]
   distintas ni entre productos.
 - precios_solicitados: uno por CADA {Pn} que usaste (nombre_catalogo EXACTO + variante_ref [vN]).
@@ -302,9 +302,9 @@ const esquemaSalida = {
             description: "cómo lo nombraste en tu respuesta al cliente (puede diferir del de catálogo)",
           },
           nombre_variante: {
-            type: ["string", "null"],
+            type: "string",
             description:
-              "el nombre de la variante/opción PUNTUAL que ofreciste (tal cual figura en Opciones: [vN]), si recomendaste una específica; null si hablaste del producto en general",
+              "el nombre de la variante/opción PUNTUAL que ofreciste (tal cual figura en Opciones: [vN]), si recomendaste una específica; omití el campo si hablaste del producto en general",
           },
           atributos: {
             type: "array",
@@ -313,8 +313,8 @@ const esquemaSalida = {
               "atributos concretos que le afirmaste a ESTE producto (medida, faz, material, color, acabado). Cada uno tiene que salir de la MISMA opción [vN] de Opciones, o de lo común del producto (nombre, Sirve para, Material/Tecnología)",
           },
           cantidad: {
-            type: ["number", "null"],
-            description: "cantidad que el cliente pidió para este producto, si la mencionó; sino null",
+            type: "number",
+            description: "cantidad que el cliente pidió para este producto, si la mencionó; omití el campo si no la mencionó",
           },
         },
       },
@@ -339,7 +339,7 @@ const esquemaSalida = {
           ref: { type: "string", description: "el marcador, ej. 'P1'" },
           nombre_catalogo: { type: "string", description: "nombre EXACTO del producto" },
           variante_ref: { type: "string", description: "el token [vN] de la opción cotizada, ej. 'v1'" },
-          cantidad: { type: ["number", "null"], description: "cantidad pedida para este precio, o null" },
+          cantidad: { type: "number", description: "cantidad pedida para este precio; omití el campo si no aplica" },
         },
       },
     },
