@@ -785,7 +785,7 @@
         1440,
         -540
       ],
-      "onError": "continueErrorOutput",
+      "onError": "stopWorkflow",
       "credentials": {
         "postgres": {
           "id": "vxRQvyIwYEqGpJqc",
@@ -1717,7 +1717,7 @@
           "name": "Bot Readonly DB"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "stopWorkflow"
     },
     {
       "parameters": {
@@ -1772,82 +1772,6 @@
       "position": [
         1080,
         -720
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { ...({}), _fallo } }];"
-      },
-      "id": "rag-fallback-log-turno",
-      "name": "Fallback Log Turno",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3880,
-        180
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
-        "options": {
-          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Log Turno [escritura fallida]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
-        }
-      },
-      "id": "rag-log-fallo-log-turno",
-      "name": "Log Fallo Log Turno",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        4040,
-        180
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { ...({\"action\":\"silence\"}), _fallo } }];"
-      },
-      "id": "rag-fallback-strike-tier2",
-      "name": "Fallback Strike",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1440,
-        -360
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
-        "options": {
-          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Strike Tier-2 [escritura fallida]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
-        }
-      },
-      "id": "rag-log-fallo-strike",
-      "name": "Log Fallo Strike",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        1620,
-        -360
       ],
       "credentials": {
         "postgres": {
@@ -2499,52 +2423,6 @@
         [
           {
             "node": "Switch Strike Tier-2",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Fallback Strike",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fallback Strike": {
-      "main": [
-        [
-          {
-            "node": "Switch Strike Tier-2",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Log Fallo Strike",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log Turno": {
-      "main": [
-        [],
-        [
-          {
-            "node": "Fallback Log Turno",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fallback Log Turno": {
-      "main": [
-        [
-          {
-            "node": "Log Fallo Log Turno",
             "type": "main",
             "index": 0
           }

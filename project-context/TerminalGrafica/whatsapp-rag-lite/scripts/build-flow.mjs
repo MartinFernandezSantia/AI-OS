@@ -1589,11 +1589,11 @@ const logTurno = {
   credentials: { postgres: BOT_DB },
   // OBSERVABILIDAD: era continueRegularOutput → un fallo del UPDATE dejaba el turno a medio registrar
   // (sin action/señales/entrega) y sin traza. Es EL nodo del bug de julio (null → cero filas, mudo).
-  // Ahora main[1] (error) → Fallback Log Turno → Log Fallo Log Turno. main[0] (OK) es terminal.
-  onError: "continueErrorOutput",
+  // Es TERMINAL y para cuando corre el cliente YA fue atendido (Enviar Mensaje/Chequear Envio pasaron
+  // antes), así que un fallo no lo afecta → lo dejamos CRASHEAR: el Error Workflow (tg-bot-error) lo
+  // asienta en bot.errors con la misma traza, sin necesidad de un Fallback.
+  onError: "stopWorkflow",
 };
-
-const fallbackLogTurno = mkFallbackLog("rag-fallback-log-turno", "Fallback Log Turno", [3880, 180], {});
 
 // ---------- F1: ENDURECIMIENTO DE INGRESO (nodos transcritos del v10) ----------
 // Helper para los mensajes ENLATADOS de Chatwoot (refusal / rate / no-texto): POST a la conversación,
@@ -1956,16 +1956,13 @@ const strikeTier2 = {
   typeVersion: 2.6,
   position: [1440, -540],
   // OBSERVABILIDAD: era continueRegularOutput → un fallo del strike no incrementaba el contador (el
-  // abusador reincidente nunca escalaba al silencio permanente) y no dejaba traza. Ahora main[1]
-  // (error) → Fallback Strike, que PRESERVA el fail-behavior (action='silence' → Switch → Silencio)
-  // y loguea el fallo. main[0] (OK) sigue igual → Switch Strike Tier-2.
-  onError: "continueErrorOutput",
+  // abusador reincidente nunca escalaba al silencio permanente) y no dejaba traza. El resultado de cara
+  // al cliente ante un fallo es SILENCIO (no se envía refusal), aceptable en el camino de abuso → lo
+  // dejamos CRASHEAR: el abusador queda en silencio igual y el Error Workflow asienta el fallo en
+  // bot.errors. Sin Fallback ni ruteo extra.
+  onError: "stopWorkflow",
   credentials: { postgres: BOT_DB },
 };
-
-// Preserva el comportamiento previo ante fallo del strike: sin `action` el Switch caía al fallback =
-// silencio; acá emitimos action='silence' explícito para rutear igual, y sumamos el log.
-const fallbackStrikeTier2 = mkFallbackLog("rag-fallback-strike-tier2", "Fallback Strike", [1440, -360], { action: "silence" });
 
 const switchStrikeTier2 = {
   // La función SQL decide el escalado strike→silencio; acá se rutea su `action` (refusal/silence).
@@ -2075,16 +2072,12 @@ flowCw.nodes.unshift(
   normalizarChatwoot,
 );
 flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, logTurno);
-// Observabilidad Chatwoot-only: red de seguridad + log del fail-open del Firewall Tier-1 y del guard Tier-2,
-// más los Fallback de las escrituras de-registro Chatwoot-only (Log Turno, Strike Tier-2).
+// Observabilidad Chatwoot-only: red de seguridad + log del fail-open del Firewall Tier-1 y del guard
+// Tier-2. (Log Turno y Strike Tier-2 NO llevan Fallback: crashean → los levanta el Error Workflow.)
 flowCw.nodes.push(
   fallbackFirewall,
   logFallo("rag-log-fallo-firewall", "Log Fallo Firewall", "Firewall Tier-1 [fail-open manejado]", [-300, 580]),
   logGuardFail,
-  fallbackLogTurno,
-  logFallo("rag-log-fallo-log-turno", "Log Fallo Log Turno", "Log Turno [escritura fallida]", [4040, 180]),
-  fallbackStrikeTier2,
-  logFallo("rag-log-fallo-strike", "Log Fallo Strike", "Strike Tier-2 [escritura fallida]", [1620, -360]),
 );
 // "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + debounce F2:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
@@ -2152,25 +2145,9 @@ flowCw.connections["¿Violación Real Tier-2?"] = {
     [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 1 false = OK → sigue al medio
   ],
 };
-// Strike Tier-2: main[0] OK → Switch; main[1] ERROR → Fallback Strike (action='silence' preserva el
-// fail-behavior → Switch → Silencio) + Log Fallo Strike.
-flowCw.connections["Strike Tier-2"] = {
-  main: [
-    [{ node: "Switch Strike Tier-2", type: "main", index: 0 }],
-    [{ node: "Fallback Strike", type: "main", index: 0 }],
-  ],
-};
-flowCw.connections["Fallback Strike"] = {
-  main: [
-    [
-      { node: "Switch Strike Tier-2", type: "main", index: 0 },
-      { node: "Log Fallo Strike", type: "main", index: 0 },
-    ],
-  ],
-};
-// Log Turno: main[0] OK es terminal; main[1] ERROR → Fallback Log Turno → Log Fallo Log Turno.
-flowCw.connections["Log Turno"] = { main: [[], [{ node: "Fallback Log Turno", type: "main", index: 0 }]] };
-flowCw.connections["Fallback Log Turno"] = { main: [[{ node: "Log Fallo Log Turno", type: "main", index: 0 }]] };
+// Strike Tier-2 → Switch Strike (onError=stopWorkflow: si el strike falla, crashea → Error Workflow;
+// el cliente abusivo queda en silencio igual). Log Turno es terminal (idem: crashea → Error Workflow).
+flowCw.connections["Strike Tier-2"] = { main: [[{ node: "Switch Strike Tier-2", type: "main", index: 0 }]] };
 flowCw.connections["Switch Strike Tier-2"] = {
   main: [
     [{ node: "Mensaje Refusal Tier-2", type: "main", index: 0 }], // 0 refusal
