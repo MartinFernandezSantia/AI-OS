@@ -1114,8 +1114,10 @@ const flow = {
       parameters: {
         jsCode: [
           "const _e = $input.first() || {};",
-          "const _err = _e.error || (_e.json && _e.json.error) || {};",
-          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+          "const _err = _e.error || (_e.json && _e.json.error) || null;",
+          "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+          "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+          "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
           "const lv = $('Leer Veredicto').first().json;",
           "return [{ json: {",
           "  respuesta: lv.respuesta ?? '',",
@@ -1139,8 +1141,10 @@ const flow = {
       parameters: {
         jsCode: [
           "const _e = $input.first() || {};",
-          "const _err = _e.error || (_e.json && _e.json.error) || {};",
-          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+          "const _err = _e.error || (_e.json && _e.json.error) || null;",
+          "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+          "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+          "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
           "return [{ json: {",
           "  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',",
           "  auditoria: null,",
@@ -1162,8 +1166,10 @@ const flow = {
       parameters: {
         jsCode: [
           "const _e = $input.first() || {};",
-          "const _err = _e.error || (_e.json && _e.json.error) || {};",
-          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+          "const _err = _e.error || (_e.json && _e.json.error) || null;",
+          "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+          "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+          "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
           "return [{ json: { _fallo, output: {",
           "  aprobado: true,",
           "  accion: 'aprobar',",

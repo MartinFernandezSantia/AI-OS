@@ -497,7 +497,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nconst lv = $('Leer Veredicto').first().json;\nreturn [{ json: {\n  respuesta: lv.respuesta ?? '',\n  auditoria: lv.auditoria ?? null,\n  verificacion: lv.verificacion ?? null,\n  corregido: true,\n  _fallo,\n} }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nconst lv = $('Leer Veredicto').first().json;\nreturn [{ json: {\n  respuesta: lv.respuesta ?? '',\n  auditoria: lv.auditoria ?? null,\n  verificacion: lv.verificacion ?? null,\n  corregido: true,\n  _fallo,\n} }];"
       },
       "id": "rag-fallback-corrector",
       "name": "Fallback Corrector",
@@ -510,7 +510,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: {\n  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',\n  auditoria: null,\n  verificacion: null,\n  corregido: false,\n  _fallo,\n} }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: {\n  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',\n  auditoria: null,\n  verificacion: null,\n  corregido: false,\n  _fallo,\n} }];"
       },
       "id": "rag-fallback-agente",
       "name": "Fallback Agente",
@@ -523,7 +523,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { _fallo, output: {\n  aprobado: true,\n  accion: 'aprobar',\n  fallas: [],\n  resumen: 'auditor no disponible; se aprueba por defecto',\n} } }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { _fallo, output: {\n  aprobado: true,\n  accion: 'aprobar',\n  fallas: [],\n  resumen: 'auditor no disponible; se aprueba por defecto',\n} } }];"
       },
       "id": "rag-fallback-verif",
       "name": "Fallback Verificador",
