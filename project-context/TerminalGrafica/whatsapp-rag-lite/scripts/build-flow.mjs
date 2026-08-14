@@ -571,6 +571,30 @@ const logFallo = (id, name, etiqueta, position) => ({
   alwaysOutputData: true,
 });
 
+// FÁBRICA DE FALLBACKS DE ESCRITURA. Los nodos de log de-registro (Log Decisión / Log Turno /
+// Strike Tier-2) escriben en bot.log|bot.errors y hasta ahora eran continueRegularOutput: si la
+// escritura fallaba (drift de schema, valor fuera de enum, constraint) el turno NO quedaba registrado
+// Y NO había traza — la clase exacta del bug de julio (Log Turno null → cero filas, mudo). Ahora
+// enrutan el error por main[1] a uno de estos Fallback, que captura el fallo en _fallo (→ Log Fallo)
+// y re-emite `passJson` para PRESERVAR el comportamiento aguas abajo (Responder / Switch / terminal).
+const mkFallbackLog = (id, name, position, passJson) => ({
+  parameters: {
+    jsCode: [
+      "const _e = $input.first() || {};",
+      "const _err = _e.error || (_e.json && _e.json.error) || null;",
+      "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+      "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+      "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+      "return [{ json: { ...(" + JSON.stringify(passJson || {}) + "), _fallo } }];",
+    ].join("\n"),
+  },
+  id,
+  name,
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position,
+});
+
 const flow = {
   name: "faq-bot-rag-lite",
   nodes: [
@@ -774,11 +798,15 @@ const flow = {
       typeVersion: 2.6,
       position: [2440, 0],
       credentials: { postgres: BOT_DB },
-      onError: "continueRegularOutput",
+      // OBSERVABILIDAD: era continueRegularOutput → un fallo del INSERT dejaba el turno sin registrar
+      // y sin traza. Ahora main[1] (error) → Fallback Log Decisión (re-emite un item para que Responder
+      // siga) → Log Fallo Log Decisión. main[0] (OK) sigue igual → Responder.
+      onError: "continueErrorOutput",
       // Defensivo: Responder depende de que salga un item. El INSERT ya emite uno, pero el flag
       // cubre cualquier variante donde el driver no devuelva filas.
       alwaysOutputData: true,
     },
+    mkFallbackLog("rag-fallback-log-decision", "Fallback Log Decisión", [2440, 180], {}),
     {
       // Nodo terminal REAL: re-emite el mensaje para el chat (el output de Log Decisión es el
       // resultado del INSERT, no el mensaje). Ref segura a Insertar Precios (siempre ejecuta).
@@ -1303,7 +1331,20 @@ const flow = {
     "Preparar Respuesta": { main: [[{ node: "Buscar Precios", type: "main", index: 0 }]] },
     "Buscar Precios": { main: [[{ node: "Insertar Precios", type: "main", index: 0 }]] },
     "Insertar Precios": { main: [[{ node: "Log Decisión", type: "main", index: 0 }]] },
-    "Log Decisión": { main: [[{ node: "Responder", type: "main", index: 0 }]] },
+    "Log Decisión": {
+      main: [
+        [{ node: "Responder", type: "main", index: 0 }], // main[0] OK
+        [{ node: "Fallback Log Decisión", type: "main", index: 0 }], // main[1] ERROR → sigue + log
+      ],
+    },
+    "Fallback Log Decisión": {
+      main: [
+        [
+          { node: "Responder", type: "main", index: 0 }, // el turno se responde igual
+          { node: "Log Fallo Log Decisión", type: "main", index: 0 }, // y el fallo queda en bot.errors
+        ],
+      ],
+    },
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
@@ -1328,6 +1369,8 @@ flow.nodes.push(
   // Log del fail-open de Leer Decisiones (la conexión Fallback Decisiones → Log ya se cableó arriba,
   // en el literal de connections). También lo hereda flowCw por la copia profunda.
   logFallo("rag-log-fallo-decisiones", "Log Fallo Decisiones", "Leer Decisiones [fail-open manejado]", [160, 380]),
+  // Log del fallo de la ESCRITURA del turno (Log Decisión). Ídem: heredado por flowCw.
+  logFallo("rag-log-fallo-log-decision", "Log Fallo Log Decisión", "Log Decisión [escritura fallida]", [2600, 180]),
 );
 flow.connections["Fallback Agente"].main[0].push({ node: "Log Fallo Agente", type: "main", index: 0 });
 flow.connections["Fallback Verificador"].main[0].push({ node: "Log Fallo Verificador", type: "main", index: 0 });
@@ -1544,8 +1587,13 @@ const logTurno = {
   typeVersion: 2.6,
   position: [3880, 0],
   credentials: { postgres: BOT_DB },
-  onError: "continueRegularOutput",
+  // OBSERVABILIDAD: era continueRegularOutput → un fallo del UPDATE dejaba el turno a medio registrar
+  // (sin action/señales/entrega) y sin traza. Es EL nodo del bug de julio (null → cero filas, mudo).
+  // Ahora main[1] (error) → Fallback Log Turno → Log Fallo Log Turno. main[0] (OK) es terminal.
+  onError: "continueErrorOutput",
 };
+
+const fallbackLogTurno = mkFallbackLog("rag-fallback-log-turno", "Fallback Log Turno", [3880, 180], {});
 
 // ---------- F1: ENDURECIMIENTO DE INGRESO (nodos transcritos del v10) ----------
 // Helper para los mensajes ENLATADOS de Chatwoot (refusal / rate / no-texto): POST a la conversación,
@@ -1907,9 +1955,17 @@ const strikeTier2 = {
   type: "n8n-nodes-base.postgres",
   typeVersion: 2.6,
   position: [1440, -540],
-  onError: "continueRegularOutput",
+  // OBSERVABILIDAD: era continueRegularOutput → un fallo del strike no incrementaba el contador (el
+  // abusador reincidente nunca escalaba al silencio permanente) y no dejaba traza. Ahora main[1]
+  // (error) → Fallback Strike, que PRESERVA el fail-behavior (action='silence' → Switch → Silencio)
+  // y loguea el fallo. main[0] (OK) sigue igual → Switch Strike Tier-2.
+  onError: "continueErrorOutput",
   credentials: { postgres: BOT_DB },
 };
+
+// Preserva el comportamiento previo ante fallo del strike: sin `action` el Switch caía al fallback =
+// silencio; acá emitimos action='silence' explícito para rutear igual, y sumamos el log.
+const fallbackStrikeTier2 = mkFallbackLog("rag-fallback-strike-tier2", "Fallback Strike", [1440, -360], { action: "silence" });
 
 const switchStrikeTier2 = {
   // La función SQL decide el escalado strike→silencio; acá se rutea su `action` (refusal/silence).
@@ -2019,11 +2075,16 @@ flowCw.nodes.unshift(
   normalizarChatwoot,
 );
 flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, logTurno);
-// Observabilidad Chatwoot-only: red de seguridad + log del fail-open del Firewall Tier-1 y del guard Tier-2.
+// Observabilidad Chatwoot-only: red de seguridad + log del fail-open del Firewall Tier-1 y del guard Tier-2,
+// más los Fallback de las escrituras de-registro Chatwoot-only (Log Turno, Strike Tier-2).
 flowCw.nodes.push(
   fallbackFirewall,
   logFallo("rag-log-fallo-firewall", "Log Fallo Firewall", "Firewall Tier-1 [fail-open manejado]", [-300, 580]),
   logGuardFail,
+  fallbackLogTurno,
+  logFallo("rag-log-fallo-log-turno", "Log Fallo Log Turno", "Log Turno [escritura fallida]", [4040, 180]),
+  fallbackStrikeTier2,
+  logFallo("rag-log-fallo-strike", "Log Fallo Strike", "Strike Tier-2 [escritura fallida]", [1620, -360]),
 );
 // "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + debounce F2:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
@@ -2091,7 +2152,25 @@ flowCw.connections["¿Violación Real Tier-2?"] = {
     [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 1 false = OK → sigue al medio
   ],
 };
-flowCw.connections["Strike Tier-2"] = { main: [[{ node: "Switch Strike Tier-2", type: "main", index: 0 }]] };
+// Strike Tier-2: main[0] OK → Switch; main[1] ERROR → Fallback Strike (action='silence' preserva el
+// fail-behavior → Switch → Silencio) + Log Fallo Strike.
+flowCw.connections["Strike Tier-2"] = {
+  main: [
+    [{ node: "Switch Strike Tier-2", type: "main", index: 0 }],
+    [{ node: "Fallback Strike", type: "main", index: 0 }],
+  ],
+};
+flowCw.connections["Fallback Strike"] = {
+  main: [
+    [
+      { node: "Switch Strike Tier-2", type: "main", index: 0 },
+      { node: "Log Fallo Strike", type: "main", index: 0 },
+    ],
+  ],
+};
+// Log Turno: main[0] OK es terminal; main[1] ERROR → Fallback Log Turno → Log Fallo Log Turno.
+flowCw.connections["Log Turno"] = { main: [[], [{ node: "Fallback Log Turno", type: "main", index: 0 }]] };
+flowCw.connections["Fallback Log Turno"] = { main: [[{ node: "Log Fallo Log Turno", type: "main", index: 0 }]] };
 flowCw.connections["Switch Strike Tier-2"] = {
   main: [
     [{ node: "Mensaje Refusal Tier-2", type: "main", index: 0 }], // 0 refusal

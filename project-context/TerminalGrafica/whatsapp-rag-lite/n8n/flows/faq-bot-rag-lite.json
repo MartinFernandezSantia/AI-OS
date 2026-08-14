@@ -161,8 +161,21 @@
           "name": "Bot Readonly DB"
         }
       },
-      "onError": "continueRegularOutput",
+      "onError": "continueErrorOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { ...({}), _fallo } }];"
+      },
+      "id": "rag-fallback-log-decision",
+      "name": "Fallback Log Decisión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        180
+      ]
     },
     {
       "parameters": {
@@ -661,6 +674,31 @@
       },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Log Decisión [escritura fallida]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-log-decision",
+      "name": "Log Fallo Log Decisión",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2600,
+        180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -922,6 +960,29 @@
         [
           {
             "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Log Decisión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Log Decisión": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Log Decisión",
             "type": "main",
             "index": 0
           }
