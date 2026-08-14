@@ -603,11 +603,35 @@ const flow = {
       typeVersion: 2.6,
       position: [0, 200],
       credentials: { postgres: BOT_DB },
-      onError: "continueRegularOutput",
+      // OBSERVABILIDAD: antes continueRegularOutput tragaba el fallo → el bot seguía SIN memoria de la
+      // conversación (contexto vacío) y sin rastro: degradación silenciosa de continuidad. Ahora el
+      // error va por main[1] → Fallback Decisiones, que preserva el fail-open (contexto vacío) pero
+      // asienta el fallo en bot.errors (Log Fallo Decisiones). main[0] sigue igual → Contexto Previo.
+      onError: "continueErrorOutput",
       // CRÍTICO: sesión nueva / tabla vacía → 0 filas → 0 items → Contexto Previo y el Agente NO
       // ejecutan → el PRIMER mensaje de toda conversación muere sin respuesta. alwaysOutputData
       // emite un item igual (Contexto Previo ya filtra el vacío). Mismo footgun que Buscar Precios.
       alwaysOutputData: true,
+    },
+    {
+      // RED DE SEGURIDAD de Leer Decisiones. Recibe su salida de ERROR (query a bot.log falló) y
+      // preserva el fail-open: emite un item que Contexto Previo filtra (sin `products` → rows=[] →
+      // contexto vacío), y captura el fallo en _fallo para Log Fallo Decisiones.
+      parameters: {
+        jsCode: [
+          "const _e = $input.first() || {};",
+          "const _err = _e.error || (_e.json && _e.json.error) || null;",
+          "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+          "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+          "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+          "return [{ json: { _fallo } }];",
+        ].join("\n"),
+      },
+      id: "rag-fallback-decisiones",
+      name: "Fallback Decisiones",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [0, 380],
     },
     {
       // Arma el bloque de contexto estructurado y pasa el chatInput. Ref segura al Chat Trigger y a
@@ -1225,7 +1249,20 @@ const flow = {
   ],
   connections: {
     "Cuando llega un mensaje": { main: [[{ node: "Leer Decisiones", type: "main", index: 0 }]] },
-    "Leer Decisiones": { main: [[{ node: "Contexto Previo", type: "main", index: 0 }]] },
+    "Leer Decisiones": {
+      main: [
+        [{ node: "Contexto Previo", type: "main", index: 0 }], // main[0] OK
+        [{ node: "Fallback Decisiones", type: "main", index: 0 }], // main[1] ERROR → fail-open + log
+      ],
+    },
+    "Fallback Decisiones": {
+      main: [
+        [
+          { node: "Contexto Previo", type: "main", index: 0 }, // sigue el turno con contexto vacío
+          { node: "Log Fallo Decisiones", type: "main", index: 0 }, // y registra el fallo
+        ],
+      ],
+    },
     "Contexto Previo": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
     // Agente: main[0] = OK → pre-fetch del catálogo → Verificador; main[1] = ERROR → Fallback Agente.
     Agente: {
@@ -1288,6 +1325,9 @@ flow.nodes.push(
   logFallo("rag-log-fallo-agente", "Log Fallo Agente", "Agente [fallback manejado]", [280, 460]),
   logFallo("rag-log-fallo-verif", "Log Fallo Verificador", "Agente Verificador [fallback manejado]", [620, 460]),
   logFallo("rag-log-fallo-corrector", "Log Fallo Corrector", "Corrector [fallback manejado]", [1560, -480]),
+  // Log del fail-open de Leer Decisiones (la conexión Fallback Decisiones → Log ya se cableó arriba,
+  // en el literal de connections). También lo hereda flowCw por la copia profunda.
+  logFallo("rag-log-fallo-decisiones", "Log Fallo Decisiones", "Leer Decisiones [fail-open manejado]", [160, 380]),
 );
 flow.connections["Fallback Agente"].main[0].push({ node: "Log Fallo Agente", type: "main", index: 0 });
 flow.connections["Fallback Verificador"].main[0].push({ node: "Log Fallo Verificador", type: "main", index: 0 });
@@ -1575,7 +1615,32 @@ const firewallTier1 = {
   typeVersion: 2.6,
   position: [-520, 400],
   credentials: { postgres: BOT_DB },
-  onError: "continueRegularOutput",
+  // OBSERVABILIDAD: antes era continueRegularOutput → si la función SQL fallaba, el item seguía sin
+  // `action`, el Switch caía al fallback = pass (fail-open) y el firewall se caía MUDO: sin protección
+  // Y sin rastro. Ahora enruta el error por main[1] → Fallback Firewall, que PRESERVA el fail-open
+  // (emite action='pass') pero deja el fallo registrado en bot.errors (Log Fallo Firewall).
+  onError: "continueErrorOutput",
+};
+
+const fallbackFirewall = {
+  // RED DE SEGURIDAD del Firewall Tier-1. Recibe su salida de ERROR y preserva el FAIL-OPEN (action=pass
+  // → el Switch lo rutea a pass, igual que antes), pero captura el fallo en _fallo para que Log Fallo
+  // Firewall lo asiente en bot.errors. Así una caída del firewall —aislada o SISTÉMICA— queda contable.
+  parameters: {
+    jsCode: [
+      "const _e = $input.first() || {};",
+      "const _err = _e.error || (_e.json && _e.json.error) || null;",
+      "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+      "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+      "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+      "return [{ json: { action: 'pass', _fallo } }];",
+    ].join("\n"),
+  },
+  id: "rag-fallback-firewall",
+  name: "Fallback Firewall",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [-520, 580],
 };
 
 const mkRule = (id, val, key) => ({
@@ -1803,7 +1868,7 @@ const routerFailTier2 = {
   // (fail-open). Mapea topicalAlignment→offtopic para que calce con el enum bot.accion (bug H2).
   parameters: {
     jsCode:
-      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n",
+      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n",
   },
   id: "rag-router-fail-tier2",
   name: "Router Fail Tier-2",
@@ -1890,6 +1955,32 @@ const silencioTier2 = {
   position: [1820, -460],
 };
 
+// OBSERVABILIDAD del guard Tier-2. El Router Fail YA distingue una violación REAL de una CAÍDA del
+// modelo-guard (reason='model_error', fail-open). Antes ese fail-open no dejaba rastro: si Gemini-guard
+// se caía, el turno pasaba SIN guard y en silencio. Este nodo cuelga en paralelo del Router Fail y
+// asienta el fallo en bot.errors SOLO cuando reason='model_error' (el `insert ... select ... where`
+// inserta 0 filas en las violaciones reales, que ya se loguean por fw_log/Strike). onError=continue.
+const logGuardFail = {
+  parameters: {
+    operation: "executeQuery",
+    query:
+      "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\n" +
+      "select $1, $2, $3, $4, $5, $6 where $7 = 'model_error'",
+    options: {
+      queryReplacement:
+        "={{ (() => { const r = $('Router Fail Tier-2').first().json; return [ String($workflow.name || ''), 'Guardrails Tier-2 [guard-down fail-open]', 'Guard Tier-2 caído (model_error): el turno pasó SIN guard de jailbreak/off-topic' + (r.guardError ? ' — ' + r.guardError : ''), '', String($execution.id || ''), String($execution.mode || ''), String(r.reason || '') ]; })() }}",
+    },
+  },
+  id: "rag-log-guard-fail",
+  name: "Log Fallo Guard",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [1080, -720],
+  credentials: { postgres: BOT_DB },
+  onError: "continueRegularOutput",
+  alwaysOutputData: true,
+};
+
 const flowCw = JSON.parse(JSON.stringify(flow));
 flowCw.name = "faq-bot-rag-lite-chatwoot";
 flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "rag-chat-trigger");
@@ -1928,11 +2019,30 @@ flowCw.nodes.unshift(
   normalizarChatwoot,
 );
 flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, logTurno);
+// Observabilidad Chatwoot-only: red de seguridad + log del fail-open del Firewall Tier-1 y del guard Tier-2.
+flowCw.nodes.push(
+  fallbackFirewall,
+  logFallo("rag-log-fallo-firewall", "Log Fallo Firewall", "Firewall Tier-1 [fail-open manejado]", [-300, 580]),
+  logGuardFail,
+);
 // "Cuando llega un mensaje" -> Leer Decisiones ya existe (heredado). Cadena de ingreso F1 + debounce F2:
 flowCw.connections["Chatwoot Webhook"] = { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] };
 flowCw.connections["Verificar HMAC"] = { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] };
 flowCw.connections["Filtro Ingreso"] = { main: [[{ node: "Firewall Tier-1", type: "main", index: 0 }]] };
-flowCw.connections["Firewall Tier-1"] = { main: [[{ node: "Switch Firewall", type: "main", index: 0 }]] };
+flowCw.connections["Firewall Tier-1"] = {
+  main: [
+    [{ node: "Switch Firewall", type: "main", index: 0 }], // main[0] OK
+    [{ node: "Fallback Firewall", type: "main", index: 0 }], // main[1] ERROR → fail-open + log
+  ],
+};
+flowCw.connections["Fallback Firewall"] = {
+  main: [
+    [
+      { node: "Switch Firewall", type: "main", index: 0 }, // action='pass' → sigue como fail-open
+      { node: "Log Fallo Firewall", type: "main", index: 0 }, // y registra el fallo
+    ],
+  ],
+};
 flowCw.connections["Switch Firewall"] = {
   main: [
     [{ node: "¿Tiene Texto?", type: "main", index: 0 }], // 0 pass
@@ -1967,7 +2077,14 @@ flowCw.connections["Guardrails Tier-2"] = {
     [{ node: "Router Fail Tier-2", type: "main", index: 0 }], // 1 fallo del guard → fail-open
   ],
 };
-flowCw.connections["Router Fail Tier-2"] = { main: [[{ node: "¿Violación Real Tier-2?", type: "main", index: 0 }]] };
+flowCw.connections["Router Fail Tier-2"] = {
+  main: [
+    [
+      { node: "¿Violación Real Tier-2?", type: "main", index: 0 }, // sigue el ruteo (fail-open si model_error)
+      { node: "Log Fallo Guard", type: "main", index: 0 }, // y loguea SOLO si es model_error (WHERE en el insert)
+    ],
+  ],
+};
 flowCw.connections["¿Violación Real Tier-2?"] = {
   main: [
     [{ node: "Strike Tier-2", type: "main", index: 0 }], // 0 true = violación → strike

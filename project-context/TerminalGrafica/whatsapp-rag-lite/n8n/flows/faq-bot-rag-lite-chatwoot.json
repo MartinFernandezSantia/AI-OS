@@ -129,7 +129,7 @@
           "name": "Bot Readonly DB"
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -724,7 +724,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+        "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n"
       },
       "id": "rag-router-fail-tier2",
       "name": "Router Fail Tier-2",
@@ -933,8 +933,21 @@
           "name": "Bot Readonly DB"
         }
       },
-      "onError": "continueRegularOutput",
+      "onError": "continueErrorOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { _fallo } }];"
+      },
+      "id": "rag-fallback-decisiones",
+      "name": "Fallback Decisiones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        380
+      ]
     },
     {
       "parameters": {
@@ -1506,6 +1519,31 @@
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Leer Decisiones [fail-open manejado]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-decisiones",
+      "name": "Log Fallo Decisiones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        160,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
         "jsCode": "const output = $json.output;\nconst trig = $('Cuando llega un mensaje').first().json;\nconst cw = trig._chatwoot || {};\nlet etapa = '', precios = [];\ntry { const aud = ($('Preparar Respuesta').first().json.auditoria) || {}; etapa = aud.etapa || ''; precios = Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []; } catch (e) {}\nconst accion = etapa === 'falta_info' ? 'repregunto' : (precios.length > 0 ? 'informo_precio' : 'informo_capacidad');\nreturn [{ json: {\n  accountId: cw.accountId,\n  conversationId: cw.conversationId,\n  final: output,\n  userMessage: trig.chatInput,\n  accion,\n  notas: '',\n  senales: { etapa },\n} }];"
       },
       "id": "rag-preparar-envio",
@@ -1642,6 +1680,69 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || null;\nlet _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';\nif (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }\nconst _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { action: 'pass', _fallo } }];"
+      },
+      "id": "rag-fallback-firewall",
+      "name": "Fallback Firewall",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Firewall Tier-1 [fail-open manejado]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-firewall",
+      "name": "Log Fallo Firewall",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -300,
+        580
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nselect $1, $2, $3, $4, $5, $6 where $7 = 'model_error'",
+        "options": {
+          "queryReplacement": "={{ (() => { const r = $('Router Fail Tier-2').first().json; return [ String($workflow.name || ''), 'Guardrails Tier-2 [guard-down fail-open]', 'Guard Tier-2 caído (model_error): el turno pasó SIN guard de jailbreak/off-topic' + (r.guardError ? ' — ' + r.guardError : ''), '', String($execution.id || ''), String($execution.mode || ''), String(r.reason || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-guard-fail",
+      "name": "Log Fallo Guard",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1080,
+        -720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -1661,6 +1762,29 @@
         [
           {
             "node": "Contexto Previo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Decisiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Decisiones": {
+      "main": [
+        [
+          {
+            "node": "Contexto Previo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Decisiones",
             "type": "main",
             "index": 0
           }
@@ -2026,6 +2150,29 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Fallback Firewall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Firewall": {
+      "main": [
+        [
+          {
+            "node": "Switch Firewall",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Firewall",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -2181,6 +2328,11 @@
         [
           {
             "node": "¿Violación Real Tier-2?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Guard",
             "type": "main",
             "index": 0
           }
