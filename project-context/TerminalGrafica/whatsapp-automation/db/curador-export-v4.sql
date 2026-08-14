@@ -1,92 +1,136 @@
 -- =============================================================================
--- EXPORT DEL CATÁLOGO A JSON — v4 (modelo producto-bot para RAG)
+-- EXPORT DEL CATÁLOGO A JSON — v4 (modelo producto-bot para RAG) · GREENFIELD
 -- =============================================================================
--- Nueva fuente: bot.producto / bot.producto_item (la unidad es el PRODUCTO-BOT,
--- no el producto de public). El precio y el contexto de cobro salen POR ITEM de
--- bot.variantes, así price-display funciona aunque un producto-bot agrupe variantes
--- de varios productos public con formas de cobro distintas.
+-- Fuente: bot.product / bot.variant (schema greenfield: schema-bot.sql). La unidad
+-- es el PRODUCTO-BOT (N variantes de public que cuelgan). El PRECIO no se guarda en
+-- bot: se resuelve acá desde public.product_variants + public.pricing_rules por
+-- variant_id (misma lógica que la vieja vista bot.variantes / cotizador-v7), así
+-- price-display funciona aunque un producto-bot agrupe variantes con cobros distintos.
 --
--- NO reemplaza a v3: coexisten. v3 sigue alimentando la app de curación vieja hasta
--- que se adapte; v4 alimenta el RAG ingest (whatsapp-rag-lite).
+-- Reemplaza al export viejo (leía bot.producto/producto_item/variantes/variante_meta/
+-- familia, que el greenfield eliminó). Emite el MISMO JSON schema_version=4 que ya
+-- consume el ingest (lib/catalog/{types,loader,rag-chunk}.ts) — sin familias/peso.
 --
 -- Uso (Martin): correr en el SQL editor del Supabase de TESTING → guardar como
 --   db/export-actualizado-catalogo-v4.json → re-ingestar (pnpm rag:ingest).
 -- SOLO SELECT. schema_version = 4.
 --
 -- Claves de metadata que consume el bot (estables, para no tocar los nodos):
---   producto_id = bot.producto.clave  (clave natural, NO uuid: testing y prod difieren)
---   nombre_canonico = nombre_bot      (lo resuelve el chunk; el flujo de precios matchea por nombre)
+--   producto_id = bot.product.key   (clave natural, NO uuid: testing y prod difieren)
+--   nombre_canonico = bot_name       (lo resuelve el chunk; el flujo de precios matchea por nombre)
 -- =============================================================================
 
+with recursive
+-- Cadena de categorías (cada categoría → sí misma y todos sus ancestros), para que una
+-- regla de precio apuntada a una categoría alcance a los productos de sus subcategorías.
+cat_chain as (
+  select id as start_id, id as node_id, parent_id from public.categories
+  union all
+  select cc.start_id, c.id, c.parent_id
+  from cat_chain cc
+  join public.categories c on c.id = cc.parent_id
+),
+-- Reglas de precio ACTIVAS que aplican a cada variante, resueltas por las 3 vías de target
+-- (variante puntual / producto / cualquier categoría de su cadena). Un target apunta por UNA
+-- sola vía (las otras columnas van null), así que el join no infla de más — mismo conteo que
+-- la vista vieja bot.variantes.
+rules as (
+  select v.id as variant_id, r.rule_type, r.effect
+  from public.product_variants v
+  join public.products p on p.id = v.product_id
+  join public.pricing_rule_targets t
+    on t.product_variant_id = v.id
+    or t.product_id         = v.product_id
+    or t.category_id in (select cc.node_id from cat_chain cc where cc.start_id = p.category_id)
+  join public.pricing_rules r on r.id = t.pricing_rule_id and r.is_active = true
+  where v.is_active
+),
+-- Precio + flags de confiabilidad POR VARIANTE de public (activa, categoría pública). Es lo que
+-- antes traía ya horneado la vista bot.variantes.
+pricing as (
+  select
+    v.id                                                          as variant_id,
+    v.name                                                        as variante_origen,
+    v.color                                                       as color,
+    v.unit                                                        as unidad,          -- MIENTE: no se usa para cobro
+    v.price                                                       as precio_lista,
+    v.price_updated_at                                            as precio_actualizado,
+    -- mostrable = no hay NINGUNA regla activa (precio de lista limpio y confiable)
+    not exists (select 1 from rules rr where rr.variant_id = v.id) as mostrable,
+    coalesce(
+      (select bool_and(rr.rule_type = 'discount') from rules rr where rr.variant_id = v.id),
+      false)                                                       as solo_descuentos,
+    exists (
+      select 1 from rules rr where rr.variant_id = v.id and rr.rule_type = 'override'
+    )                                                              as tiene_override,
+    (
+      select count(*)::int from rules rr
+      where rr.variant_id = v.id and rr.rule_type = 'quantity_range'
+    )                                                              as n_reglas_cantidad,
+    (
+      select rr.effect->'ranges' from rules rr
+      where rr.variant_id = v.id and rr.rule_type = 'quantity_range' limit 1
+    )                                                              as rangos_cantidad
+  from public.product_variants v
+  join public.products  p on p.id = v.product_id
+  join public.categories c on c.id = p.category_id
+  where v.is_active = true
+    and p.is_active = true
+    and c.audience  = 'publico'
+)
 select json_build_object(
   'exportado', now(),
   'schema_version', 4,
 
-  -- familias con su nota (el chunk hornea la nota al embedding de sus productos)
-  'familias', (
-    select coalesce(json_agg(json_build_object(
-        'clave',  f.clave,
-        'nombre', f.nombre,
-        'nota',   f.nota
-      ) order by f.clave), '[]'::json)
-    from bot.familia f
-  ),
-
-  -- un objeto por producto-bot visible
+  -- un objeto por producto-bot VISIBLE (no oculto) con al menos un item exportable
   'productos', (
-    select coalesce(json_agg(prod order by prod->>'familia', prod->>'nombre_bot'), '[]'::json)
+    select coalesce(json_agg(prod order by prod->>'nombre_bot'), '[]'::json)
     from (
       select json_build_object(
-        'producto_id',  p.clave,                 -- clave natural = clave de metadata
-        'clave',        p.clave,
-        'nombre_bot',   p.nombre_bot,
-        'familia',      p.familia,
-        'familia_nota', f.nota,
-        'sinonimos',    p.sinonimos,
-        'casos_de_uso', p.casos_de_uso,
-        'nicho',        p.nicho,
-        'nota',         p.nota,
-        'peso',         p.peso,
-        'oculto',       p.oculto,
-        -- items = variantes de public que cuelgan, con su contexto de cobro por item
+        'producto_id',  bp.key,                  -- clave natural = clave de metadata
+        'nombre_bot',   bp.bot_name,
+        'sinonimos',    bp.synonyms,
+        'casos_de_uso', bp.use_cases,
+        'nicho',        bp.niche,
+        'nota',         bp.note,
+        'oculto',       bp.hidden,
+        -- items = variantes de public que cuelgan (no ocultas), con su cobro resuelto POR ITEM.
+        -- INNER join a pricing: una variante inactiva/no-pública no se exporta (no inventa cobro).
         'items', (
           select coalesce(json_agg(json_build_object(
-              'variante_id',        v.id,
-              'nombre_variante_bot', coalesce(pi.nombre_variante_bot, vm.display_variante, v.name),
-              'variante_origen',    v.name,
-              'color',              v.color,
-              'unidad',             coalesce(bv.unidad, v.unit),
-              'precio_lista',       bv.precio_lista,
-              'precio_actualizado', bv.precio_actualizado,
-              -- flags/atributos de cobro POR ITEM (lo que price-display necesita)
-              'por_pagina',         coalesce(bv.por_pagina, false),
-              'por_pack',           coalesce(bv.por_pack, false),
-              'atributos',          coalesce(bv.atributos, '{}'::jsonb),
-              'rangos_cantidad',    bv.rangos_cantidad,
-              -- metadata de reglas (marca de confiabilidad del precio)
-              'mostrable',          bv.mostrable,
-              'tiene_override',     bv.tiene_override,
-              'solo_descuentos',    bv.solo_descuentos,
-              'n_reglas_cantidad',  bv.n_reglas_cantidad
-            ) order by coalesce(pi.nombre_variante_bot, vm.display_variante, v.name)), '[]'::json)
-          -- INNER join a bot.variantes: un item cuya variante no está en la vista de precios
-          -- (oculta/inactiva) NO se exporta — evita hornear cobro inventado (false ≠ desconocido).
-          from bot.producto_item pi
-          join public.product_variants v on v.id = pi.variante_id and v.is_active
-          join bot.variantes bv          on bv.variante_id = v.id
-          left join bot.variante_meta vm on vm.variante_id = v.id
-          where pi.producto_id = p.id and not pi.oculto
+              'variante_id',        pr.variant_id,
+              'nombre_variante_bot', coalesce(bv.bot_name, pr.variante_origen),
+              'variante_origen',    pr.variante_origen,
+              'color',              pr.color,
+              'unidad',             pr.unidad,
+              'precio_lista',       pr.precio_lista,
+              'precio_actualizado', pr.precio_actualizado,
+              -- cobro curado POR ITEM (lo que price-display consume)
+              'por_pack',           coalesce(bv.by_pack, false),
+              'atributos',          jsonb_build_object(
+                                       'unidad_venta',  bv.sale_unit,
+                                       'pack_unidades', bv.pack_units
+                                    ),
+              'rangos_cantidad',    pr.rangos_cantidad,
+              -- marca de confiabilidad del precio (resuelta desde pricing_rules)
+              'mostrable',          pr.mostrable,
+              'tiene_override',     pr.tiene_override,
+              'solo_descuentos',    pr.solo_descuentos,
+              'n_reglas_cantidad',  pr.n_reglas_cantidad
+            ) order by coalesce(bv.bot_name, pr.variante_origen)), '[]'::json)
+          from bot.variant bv
+          join pricing pr on pr.variant_id = bv.variant_id
+          where bv.product_id = bp.id and not bv.hidden
         )
       ) as prod
-      from bot.producto p
-      left join bot.familia f on f.clave = p.familia
-      where not p.oculto
+      from bot.product bp
+      where not bp.hidden
         -- no emitir un producto-bot que quedaría sin items exportables (chunk degenerado)
         and exists (
-          select 1 from bot.producto_item pi
-          join public.product_variants v on v.id = pi.variante_id and v.is_active
-          join bot.variantes bv          on bv.variante_id = v.id
-          where pi.producto_id = p.id and not pi.oculto
+          select 1
+          from bot.variant bv
+          join pricing pr on pr.variant_id = bv.variant_id
+          where bv.product_id = bp.id and not bv.hidden
         )
     ) s
   )

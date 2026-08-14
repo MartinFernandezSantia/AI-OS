@@ -32,8 +32,9 @@ const TABLE = "bot.rag_catalog";
 const TABLE_INFO = "bot.rag_business_info";
 const INFO_SOURCE = "bot.business_info";
 
-// Export del catálogo (modelo producto-bot; curador-export.sql). Fuente compartida al lado.
-const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-catalogo.json");
+// Export del catálogo (modelo producto-bot; curador-export-v4.sql, greenfield). Fuente al lado: el
+// SQL editor de Supabase vuelca el resultado a este archivo. Override con --export <ruta>.
+const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v4.json");
 const OUT_SQL = join(HERE, "..", "rag-embeddings-data.sql");
 const OUT_SQL_INFO = join(HERE, "..", "rag-info-negocio-data.sql");
 
