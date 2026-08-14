@@ -1377,7 +1377,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lv = $('Leer Veredicto').first().json;\nreturn [{ json: {\n  respuesta: lv.respuesta ?? '',\n  auditoria: lv.auditoria ?? null,\n  verificacion: lv.verificacion ?? null,\n  corregido: true,\n} }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nconst lv = $('Leer Veredicto').first().json;\nreturn [{ json: {\n  respuesta: lv.respuesta ?? '',\n  auditoria: lv.auditoria ?? null,\n  verificacion: lv.verificacion ?? null,\n  corregido: true,\n  _fallo,\n} }];"
       },
       "id": "rag-fallback-corrector",
       "name": "Fallback Corrector",
@@ -1390,7 +1390,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: {\n  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',\n  auditoria: null,\n  verificacion: null,\n  corregido: false,\n} }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: {\n  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',\n  auditoria: null,\n  verificacion: null,\n  corregido: false,\n  _fallo,\n} }];"
       },
       "id": "rag-fallback-agente",
       "name": "Fallback Agente",
@@ -1403,7 +1403,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { output: {\n  aprobado: true,\n  accion: 'aprobar',\n  fallas: [],\n  resumen: 'auditor no disponible; se aprueba por defecto',\n} } }];"
+        "jsCode": "const _e = $input.first() || {};\nconst _err = _e.error || (_e.json && _e.json.error) || {};\nconst _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };\nreturn [{ json: { _fallo, output: {\n  aprobado: true,\n  accion: 'aprobar',\n  fallas: [],\n  resumen: 'auditor no disponible; se aprueba por defecto',\n} } }];"
       },
       "id": "rag-fallback-verif",
       "name": "Fallback Verificador",
@@ -1428,6 +1428,81 @@
         0,
         -520
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Agente [fallback manejado]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-agente",
+      "name": "Log Fallo Agente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        280,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Agente Verificador [fallback manejado]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-verif",
+      "name": "Log Fallo Verificador",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        620,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\nvalues ($1, $2, $3, $4, $5, $6)",
+        "options": {
+          "queryReplacement": "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), \"Corrector [fallback manejado]\", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}"
+        }
+      },
+      "id": "rag-log-fallo-corrector",
+      "name": "Log Fallo Corrector",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1560,
+        -480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -1650,6 +1725,11 @@
             "node": "Preparar Respuesta",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Log Fallo Agente",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1677,6 +1757,11 @@
         [
           {
             "node": "Leer Veredicto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Verificador",
             "type": "main",
             "index": 0
           }
@@ -1746,6 +1831,11 @@
         [
           {
             "node": "Preparar Respuesta",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fallo Corrector",
             "type": "main",
             "index": 0
           }

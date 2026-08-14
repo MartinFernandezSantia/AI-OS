@@ -541,6 +541,36 @@ const insertarPreciosCode = [
   "return [{ json: { ...pr, output: texto, _decision } }];",
 ].join("\n");
 
+// LOG DE FALLOS MANEJADOS (observabilidad). Cada Fallback (Agente/Verificador/Corrector) ATRAPA el
+// error y la ejecución sigue en verde → el Error Workflow NUNCA se dispara y el fallo quedaba INVISIBLE
+// (el cliente recibe un mensaje de degradación que parece normal). Este nodo cuelga EN PARALELO de
+// cada Fallback e inserta una fila en bot.errors, así una degradación —aislada o SISTÉMICA— queda
+// registrada y contable. Se correlaciona con el turno de bot.log por execution_id (no hace falta tocar
+// bot.log: join por execution_id). La etiqueta en failed_node distingue estos fallos MANEJADOS de los
+// crasheados que loguea tg-bot-error. onError=continue: si el log falla, no rompe la respuesta.
+const logFallo = (id, name, etiqueta, position) => ({
+  parameters: {
+    operation: "executeQuery",
+    query:
+      "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\n" +
+      "values ($1, $2, $3, $4, $5, $6)",
+    options: {
+      queryReplacement:
+        "={{ (() => { const f = $json._fallo || {}; return [ String($workflow.name || ''), " +
+        JSON.stringify(etiqueta) +
+        ", String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}",
+    },
+  },
+  id,
+  name,
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position,
+  credentials: { postgres: BOT_DB },
+  onError: "continueRegularOutput",
+  alwaysOutputData: true,
+});
+
 const flow = {
   name: "faq-bot-rag-lite",
   nodes: [
@@ -1083,12 +1113,16 @@ const flow = {
       // blanquea productos (no es fiable qué sobrevivió). Ref segura a Leer Veredicto (siempre ejecutó).
       parameters: {
         jsCode: [
+          "const _e = $input.first() || {};",
+          "const _err = _e.error || (_e.json && _e.json.error) || {};",
+          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
           "const lv = $('Leer Veredicto').first().json;",
           "return [{ json: {",
           "  respuesta: lv.respuesta ?? '',",
           "  auditoria: lv.auditoria ?? null,",
           "  verificacion: lv.verificacion ?? null,",
           "  corregido: true,",
+          "  _fallo,",
           "} }];",
         ].join("\n"),
       },
@@ -1104,11 +1138,15 @@ const flow = {
       // al Verificador). El cliente SIEMPRE recibe algo; la ejecución nunca muere por un parse-error.
       parameters: {
         jsCode: [
+          "const _e = $input.first() || {};",
+          "const _err = _e.error || (_e.json && _e.json.error) || {};",
+          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
           "return [{ json: {",
           "  respuesta: 'Perdoná, no te entendí bien. ¿Me lo repetís?',",
           "  auditoria: null,",
           "  verificacion: null,",
           "  corregido: false,",
+          "  _fallo,",
           "} }];",
         ].join("\n"),
       },
@@ -1123,7 +1161,10 @@ const flow = {
       // MISMA forma { output: {...} } que espera Leer Veredicto, así el mensaje del bot sale igual.
       parameters: {
         jsCode: [
-          "return [{ json: { output: {",
+          "const _e = $input.first() || {};",
+          "const _err = _e.error || (_e.json && _e.json.error) || {};",
+          "const _fallo = { message: String((_err && (_err.message || _err.description)) || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+          "return [{ json: { _fallo, output: {",
           "  aprobado: true,",
           "  accion: 'aprobar',",
           "  fallas: [],",
@@ -1233,6 +1274,18 @@ const flow = {
   },
   settings: { executionOrder: "v1" },
 };
+
+// Colgar el log de fallos EN PARALELO de cada Fallback (fan-out: el Fallback sigue a su destino normal
+// —Preparar Respuesta / Leer Veredicto— Y ADEMÁS dispara el insert en bot.errors). flowCw lo hereda por
+// la copia profunda de abajo, así que aplica a los DOS canales sin duplicar nada.
+flow.nodes.push(
+  logFallo("rag-log-fallo-agente", "Log Fallo Agente", "Agente [fallback manejado]", [280, 460]),
+  logFallo("rag-log-fallo-verif", "Log Fallo Verificador", "Agente Verificador [fallback manejado]", [620, 460]),
+  logFallo("rag-log-fallo-corrector", "Log Fallo Corrector", "Corrector [fallback manejado]", [1560, -480]),
+);
+flow.connections["Fallback Agente"].main[0].push({ node: "Log Fallo Agente", type: "main", index: 0 });
+flow.connections["Fallback Verificador"].main[0].push({ node: "Log Fallo Verificador", type: "main", index: 0 });
+flow.connections["Fallback Corrector"].main[0].push({ node: "Log Fallo Corrector", type: "main", index: 0 });
 
 // =====================================================================
 // VARIANTE CHATWOOT — mismo "medio" que el flow de chat; solo cambian los EXTREMOS.
