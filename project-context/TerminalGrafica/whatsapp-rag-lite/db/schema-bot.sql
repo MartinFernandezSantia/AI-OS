@@ -217,6 +217,19 @@ grant select on bot.rag_catalog, bot.rag_business_info to bot_runtime;
 grant select, insert, update on bot.log to bot_runtime;   -- INSERT (Log Decisión) + UPDATE (Log Turno)
 grant insert, select on bot.errors to bot_runtime;
 
+-- CREATE en schema bot: el nodo PGVector de n8n (LangChain) corre `create table if not
+-- exists` en su init aun en modo retrieve (ensureTable). Sin este grant tira 42501
+-- "permission denied for schema bot". Concesión al nodo (la tabla ya existe → el create es
+-- no-op); RLS sigue tapando todo lo que no tenga policy. Revisar si se cambia de nodo.
+grant create on schema bot to bot_runtime;
+
+-- pgvector vive en el schema `extensions` (create extension … with schema extensions, arriba).
+-- El operador `<=>` no se puede calificar con schema → se resuelve por search_path. Los roles
+-- default de Supabase ya traen `extensions`; bot_runtime (greenfield least-privilege) no. Sin
+-- esto la búsqueda vectorial tira "operator does not exist: extensions.vector <=> unknown".
+grant usage on schema extensions to bot_runtime;
+alter role bot_runtime set search_path = "$user", public, extensions;  -- aplica en conexiones nuevas
+
 -- ---- RLS: prender en TODAS las tablas de bot ----
 alter table bot.product           enable row level security;
 alter table bot.variant           enable row level security;
