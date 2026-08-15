@@ -59,7 +59,10 @@ async function embedBatch(textos: string[]): Promise<number[][]> {
     method: "POST",
     headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({
-      requests: textos.map((t) => ({ model: MODELO, content: { parts: [{ text: t }] } })),
+      // taskType RETRIEVAL_DOCUMENT: gemini-embedding-001 SOLO da retrieval usable si los
+      // documentos se embeben en el espacio de recuperación. Sin esto los vectores colapsan
+      // (matching léxico, banda de sim finísima). La query usa RETRIEVAL_QUERY (rag-query.ts + nodo n8n).
+      requests: textos.map((t) => ({ model: MODELO, taskType: "RETRIEVAL_DOCUMENT", content: { parts: [{ text: t }] } })),
     }),
   });
   if (!res.ok) throw new Error(`Google embeddings ${res.status}: ${await res.text()}`);

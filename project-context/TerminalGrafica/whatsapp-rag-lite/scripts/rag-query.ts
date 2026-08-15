@@ -20,7 +20,9 @@ async function embed(texto: string): Promise<number[]> {
   const res = await fetch(EMBED_URL, {
     method: "POST",
     headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODELO, content: { parts: [{ text: texto }] } }),
+    // taskType RETRIEVAL_QUERY: la query DEBE embeberse en el mismo espacio de recuperación que
+    // los documentos (ingesta = RETRIEVAL_DOCUMENT). Con esto los vectores comparan semánticamente.
+    body: JSON.stringify({ model: MODELO, taskType: "RETRIEVAL_QUERY", content: { parts: [{ text: texto }] } }),
   });
   if (!res.ok) throw new Error(`Google embeddings ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { embedding: { values: number[] } };
