@@ -96,6 +96,8 @@ select json_build_object(
         'oculto',       bp.hidden,
         -- items = variantes de public que cuelgan (no ocultas), con su cobro resuelto POR ITEM.
         -- INNER join a pricing: una variante inactiva/no-pública no se exporta (no inventa cobro).
+        -- OJO: este json_build_object está DUPLICADO en 'trabajos'.componentes (abajo) → cambio de
+        -- campos = tocar los DOS bloques.
         'items', (
           select coalesce(json_agg(json_build_object(
               'variante_id',        pr.variant_id,
@@ -133,5 +135,59 @@ select json_build_object(
           where bv.product_id = bp.id and not bv.hidden
         )
     ) s
+  ),
+
+  -- un objeto por TRABAJO (combo) VISIBLE con al menos un material exportable. El objeto de material
+  -- es una copia EXACTA del json de item de producto (arriba) → OJO: cambio de campos = tocar los DOS
+  -- bloques. NO se emite 'total': se CALCULA en TS (chunkTrabajo) sumando los precio_lista.
+  'trabajos', (
+    select coalesce(json_agg(job order by job->>'nombre_bot'), '[]'::json)
+    from (
+      select json_build_object(
+        'producto_id',   bj.key,
+        'nombre_bot',    bj.bot_name,
+        'sinonimos',     bj.synonyms,
+        'casos_de_uso',  bj.use_cases,
+        'nicho',         bj.niche,
+        'nota',          bj.note,
+        'oculto',        bj.hidden,
+        'mostrar_total', bj.show_total,
+        'componentes', (
+          select coalesce(json_agg(json_build_object(
+              'variante_id',        pr.variant_id,
+              'nombre_variante_bot', coalesce(bv.bot_name, pr.variante_origen),
+              'variante_origen',    pr.variante_origen,
+              'color',              pr.color,
+              'unidad',             pr.unidad,
+              'precio_lista',       pr.precio_lista,
+              'precio_actualizado', pr.precio_actualizado,
+              'por_pack',           coalesce(bv.by_pack, false),
+              'atributos',          jsonb_build_object(
+                                       'unidad_venta',  bv.sale_unit,
+                                       'pack_unidades', bv.pack_units
+                                    ),
+              'rangos_cantidad',    pr.rangos_cantidad,
+              'mostrable',          pr.mostrable,
+              'tiene_override',     pr.tiene_override,
+              'solo_descuentos',    pr.solo_descuentos,
+              'n_reglas_cantidad',  pr.n_reglas_cantidad
+            ) order by coalesce(bv.bot_name, pr.variante_origen)), '[]'::json)
+          from bot.job_material jm
+          join bot.variant bv on bv.id = jm.bot_variant_id
+          join pricing pr on pr.variant_id = bv.variant_id
+          where jm.job_id = bj.id and not bv.hidden
+        )
+      ) as job
+      from bot.job bj
+      where not bj.hidden
+        -- no emitir un trabajo sin materiales exportables (chunk degenerado)
+        and exists (
+          select 1
+          from bot.job_material jm
+          join bot.variant bv on bv.id = jm.bot_variant_id
+          join pricing pr on pr.variant_id = bv.variant_id
+          where jm.job_id = bj.id and not bv.hidden
+        )
+    ) sj
   )
 ) as export;

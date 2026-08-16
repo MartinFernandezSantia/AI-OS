@@ -120,6 +120,46 @@ create unique index if not exists bot_variant_variant_uq on bot.variant (variant
 create index if not exists bot_variant_product_idx on bot.variant (product_id);
 
 -- =============================================================================
+-- 2b. TRABAJOS (combos: 2+ materiales del catálogo que se hacen juntos)
+-- =============================================================================
+-- Un trabajo (ej. "invitaciones de casamiento") agrupa MATERIALES (variantes ya
+-- curadas del catálogo) que se usan TODOS juntos, a diferencia de las variantes
+-- de un producto (alternativas a elegir). El PRECIO TOTAL no se guarda: se CALCULA
+-- sumando los precios de los materiales en la ingesta (chunkTrabajo). show_total
+-- decide si el cliente ve ese total o solo los precios de los materiales.
+create table if not exists bot.job (
+  id         uuid primary key default gen_random_uuid(),
+  key        text unique not null,                 -- slug natural → metadata.producto_id
+  bot_name   text not null,                        -- lo que ve/nombra el bot (= nombre_canonico)
+  synonyms   text[] not null default '{}',         -- "También llamado:" (embedding)
+  use_cases  text[] not null default '{}',         -- "Sirve para:" (embedding)
+  niche      text,                                 -- filtro blando
+  note       text,                                 -- info puntual al embedding
+  show_total boolean not null default true,        -- true: mostrar el total calculado; false: solo materiales
+  hidden     boolean not null default false,
+  updated_at timestamptz not null default now()
+  -- SIN columnas de precio: el total se calcula, no se cura.
+);
+
+-- Nombre normalizado único (espejo de bot_product_name_norm_uq). OJO: es un índice SEPARADO del de
+-- product → un trabajo y un producto con el mismo nombre normalizado colisionarían en el match de
+-- precios (por nombre) del bot. Convención de curación: nombres de trabajo distintos de los productos.
+create unique index if not exists bot_job_name_norm_uq
+  on bot.job (translate(lower(trim(bot_name)), 'áéíóúñ', 'aeioun'))
+  where not hidden;
+
+-- Materiales que componen un trabajo. Cada uno ES una variante ya curada del catálogo → reusa su
+-- cobro/precio (sale_unit, pack_units, precio de public). Sin `position` (se ordena por nombre en el
+-- chunk) ni `hidden` (un material compone o no; si no va, se borra la fila).
+create table if not exists bot.job_material (
+  id             uuid primary key default gen_random_uuid(),
+  job_id         uuid not null references bot.job(id)     on delete cascade,
+  bot_variant_id uuid not null references bot.variant(id) on delete cascade,
+  unique (job_id, bot_variant_id)
+);
+create index if not exists bot_job_material_job_idx on bot.job_material (job_id);
+
+-- =============================================================================
 -- 3. RUNTIME DEL BOT
 -- =============================================================================
 -- Formato LangChain/PGVector (id/text/metadata/embedding): defaults del nodo n8n.
@@ -208,6 +248,7 @@ end $g$;
 -- ---- bot_curator: escribe el catálogo, lee la fuente public ----
 grant usage on schema bot to bot_curator;
 grant select, insert, update, delete on bot.product, bot.variant to bot_curator;
+grant select, insert, update, delete on bot.job, bot.job_material to bot_curator;
 grant usage on schema public to bot_curator;
 grant select on public.products, public.product_variants, public.categories to bot_curator;
 
@@ -233,6 +274,8 @@ alter role bot_runtime set search_path = "$user", public, extensions;  -- aplica
 -- ---- RLS: prender en TODAS las tablas de bot ----
 alter table bot.product           enable row level security;
 alter table bot.variant           enable row level security;
+alter table bot.job               enable row level security;
+alter table bot.job_material       enable row level security;
 alter table bot.rag_catalog       enable row level security;
 alter table bot.rag_business_info enable row level security;
 alter table bot.business_info     enable row level security;
@@ -245,6 +288,10 @@ drop policy if exists curator_all on bot.product;
 create policy curator_all on bot.product           for all    to bot_curator using (true) with check (true);
 drop policy if exists curator_all on bot.variant;
 create policy curator_all on bot.variant           for all    to bot_curator using (true) with check (true);
+drop policy if exists curator_all on bot.job;
+create policy curator_all on bot.job               for all    to bot_curator using (true) with check (true);
+drop policy if exists curator_all on bot.job_material;
+create policy curator_all on bot.job_material      for all    to bot_curator using (true) with check (true);
 
 drop policy if exists runtime_select on bot.rag_catalog;
 create policy runtime_select on bot.rag_catalog       for select to bot_runtime using (true);
