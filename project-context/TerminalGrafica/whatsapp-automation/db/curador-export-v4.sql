@@ -137,9 +137,11 @@ select json_build_object(
     ) s
   ),
 
-  -- un objeto por TRABAJO (combo) VISIBLE con al menos un material exportable. El objeto de material
-  -- es una copia EXACTA del json de item de producto (arriba) → OJO: cambio de campos = tocar los DOS
-  -- bloques. NO se emite 'total': se CALCULA en TS (chunkTrabajo) sumando los precio_lista.
+  -- un objeto por TRABAJO (combo) VISIBLE con al menos un material exportable. Los materiales se agrupan
+  -- por PRODUCTO-BOT: cada 'componente'/parte = un bot.product con sus variantes ALTERNATIVAS ('items').
+  -- El bot combina una opción de cada parte. NO se emite 'total': lo CALCULA TS (chunkTrabajo) como la
+  -- combinación más barata. El objeto de item es una copia EXACTA del json de item de producto (arriba)
+  -- → OJO: cambio de campos = tocar los DOS bloques.
   'trabajos', (
     select coalesce(json_agg(job order by job->>'nombre_bot'), '[]'::json)
     from (
@@ -152,30 +154,40 @@ select json_build_object(
         'nota',          bj.note,
         'oculto',        bj.hidden,
         'mostrar_total', bj.show_total,
+        -- partes: un objeto por producto-bot presente entre los materiales, con sus variantes en 'items'.
         'componentes', (
-          select coalesce(json_agg(json_build_object(
-              'variante_id',        pr.variant_id,
-              'nombre_variante_bot', coalesce(bv.bot_name, pr.variante_origen),
-              'variante_origen',    pr.variante_origen,
-              'color',              pr.color,
-              'unidad',             pr.unidad,
-              'precio_lista',       pr.precio_lista,
-              'precio_actualizado', pr.precio_actualizado,
-              'por_pack',           coalesce(bv.by_pack, false),
-              'atributos',          jsonb_build_object(
-                                       'unidad_venta',  bv.sale_unit,
-                                       'pack_unidades', bv.pack_units
-                                    ),
-              'rangos_cantidad',    pr.rangos_cantidad,
-              'mostrable',          pr.mostrable,
-              'tiene_override',     pr.tiene_override,
-              'solo_descuentos',    pr.solo_descuentos,
-              'n_reglas_cantidad',  pr.n_reglas_cantidad
-            ) order by coalesce(bv.bot_name, pr.variante_origen)), '[]'::json)
-          from bot.job_material jm
-          join bot.variant bv on bv.id = jm.bot_variant_id
-          join pricing pr on pr.variant_id = bv.variant_id
-          where jm.job_id = bj.id and not bv.hidden
+          select coalesce(json_agg(comp order by comp->>'nombre_bot'), '[]'::json)
+          from (
+            select json_build_object(
+              'producto_id', bp.key,
+              'nombre_bot',  bp.bot_name,
+              'items', json_agg(json_build_object(
+                  'variante_id',        pr.variant_id,
+                  'nombre_variante_bot', coalesce(bv.bot_name, pr.variante_origen),
+                  'variante_origen',    pr.variante_origen,
+                  'color',              pr.color,
+                  'unidad',             pr.unidad,
+                  'precio_lista',       pr.precio_lista,
+                  'precio_actualizado', pr.precio_actualizado,
+                  'por_pack',           coalesce(bv.by_pack, false),
+                  'atributos',          jsonb_build_object(
+                                           'unidad_venta',  bv.sale_unit,
+                                           'pack_unidades', bv.pack_units
+                                        ),
+                  'rangos_cantidad',    pr.rangos_cantidad,
+                  'mostrable',          pr.mostrable,
+                  'tiene_override',     pr.tiene_override,
+                  'solo_descuentos',    pr.solo_descuentos,
+                  'n_reglas_cantidad',  pr.n_reglas_cantidad
+                ) order by coalesce(bv.bot_name, pr.variante_origen))
+            ) as comp
+            from bot.job_material jm
+            join bot.variant bv on bv.id = jm.bot_variant_id
+            join bot.product bp on bp.id = bv.product_id
+            join pricing pr on pr.variant_id = bv.variant_id
+            where jm.job_id = bj.id and not bv.hidden
+            group by bp.id, bp.key, bp.bot_name
+          ) c
         )
       ) as job
       from bot.job bj

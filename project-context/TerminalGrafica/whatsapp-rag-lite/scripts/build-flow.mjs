@@ -68,9 +68,10 @@ atiende por ellos, no la del local.
      cierre ni "otro": eso se contesta con consultar_info_negocio (ver "## Info del negocio").
 
 ## Trabajos (combos)
-Un trabajo es un ítem que combina 2+ materiales del catálogo (ej.: invitaciones = tarjeta + sobre + cinta). Lo reconocés porque el texto arranca con "Trabajo:" y lista los materiales en "Incluye: [c1]…, [c2]…". Reglas duras:
-- Los materiales van TODOS juntos: NO son opciones, no le hagas elegir uno. Describir varios materiales del mismo trabajo es normal y correcto.
-- Si trae línea "Precio del trabajo:", cotizá el total con variante_ref:'total' ("el trabajo sale {Pn}"). Si no la trae, cotizá cada material con su variante_ref:'cN'.
+Un trabajo se ARMA combinando una opción de cada PARTE (2+ productos; ej.: encartonado con impresión = una impresión + un encartonado). Lo reconocés porque el texto arranca con "Trabajo:" y lista las partes en "- Parte: [c1]…; [c2]…". Reglas duras:
+- Dentro de una parte, las opciones [cN] son ALTERNATIVAS: el cliente elige UNA. Entre partes se COMBINAN: una de cada. Ofrecé/preguntá una opción por parte; NUNCA presentes dos opciones de la MISMA parte como si fueran juntas.
+- Cotizá la combinación elegida por sus refs 'cN' (una por parte). Si todavía no eligió, mostrá las opciones de cada parte con su precio.
+- Si trae "Precio del trabajo: desde {Pn}", ese es el piso (la combinación más barata): decilo como "sale desde {Pn}, dependiendo de …" nombrando las partes que varían. Si el total viene sin "desde", es exacto ("sale {Pn}").
 - NUNCA sumes ni armes totales a mano: el {Pn} ya trae el número.
 
 ## Preguntar vs proponer (LEÉ — es el error más común)
@@ -263,7 +264,7 @@ bloque existe justamente para que se pueda comprobar que no inventaste.`;
 const toolDesc =
   "Busca en el catálogo de la imprenta los productos más parecidos a una consulta en lenguaje " +
   "natural (RAG semántico). Devuelve candidatos con su descripción. También puede devolver TRABAJOS: " +
-  "combos de varios materiales que se usan juntos, con su precio total. Usala cuando necesites " +
+  "combos que se arman eligiendo una opción de cada parte (varios productos), con su precio desde. Usala cuando necesites " +
   "recomendar o dar info de un producto. Pasá una consulta que incluya el contexto relevante de " +
   "la conversación (no solo la última frase suelta). Si el cliente pide varios productos distintos, " +
   "llamala una vez por cada uno, con una consulta por producto (no mezclada).";
@@ -376,7 +377,7 @@ Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no pro
 
 ## B) COMPARACIÓN DE PRODUCTO — SOLO si te pasé los DATOS REALES del catálogo
 Si NO te pasé catálogo, SALTÁ este bloque entero. Si te lo pasé, para cada producto ofrecido buscá su fila real y marcá:
-- fusion_variantes — el bot afirmó JUNTOS atributos que no conviven en una misma opción. Un producto puede traer varias opciones "Opciones: [v1]…, [v2]…"; cada [vN] es una variante distinta. Vale para TODAS las opciones: lo que está en el nombre del producto, su descripción ("Sirve para", notas) y las líneas Material/Tecnología. Vale para UNA sola opción: lo que está en el nombre de ESE [vN]. Es fusión si combinó atributos de opciones [vN] DISTINTAS (ej.: "brillo y mate a la vez" cuando [v1] es brillo y [v2] es mate; o el tamaño de [v1] con el acabado de [v2]). También: si hay precios_solicitados, el [vN] cotizado (variante_ref) tiene que ser la MISMA opción cuyos atributos describió. Excepción: si la fila real arranca con "Trabajo:" y lista materiales en "Incluye: [c1]…", describir varios de SUS materiales juntos NO es fusión (un trabajo combina materiales por diseño). Sigue siendo fusión mezclar materiales o atributos de trabajos o productos DISTINTOS, o combinar opciones [vN] dentro de un producto normal. En un trabajo, variante_ref:'total' cotiza el combo entero y 'cN' un material suyo.
+- fusion_variantes — el bot afirmó JUNTOS atributos que no conviven en una misma opción. Un producto puede traer varias opciones "Opciones: [v1]…, [v2]…"; cada [vN] es una variante distinta. Vale para TODAS las opciones: lo que está en el nombre del producto, su descripción ("Sirve para", notas) y las líneas Material/Tecnología. Vale para UNA sola opción: lo que está en el nombre de ESE [vN]. Es fusión si combinó atributos de opciones [vN] DISTINTAS (ej.: "brillo y mate a la vez" cuando [v1] es brillo y [v2] es mate; o el tamaño de [v1] con el acabado de [v2]). También: si hay precios_solicitados, el [vN] cotizado (variante_ref) tiene que ser la MISMA opción cuyos atributos describió. Excepción: si la fila real arranca con "Trabajo:" y lista partes en "- Parte: [c1]…", describir UNA opción de cada parte del MISMO trabajo NO es fusión (un trabajo se arma combinando una opción por parte). SÍ es fusión combinar dos opciones de la MISMA parte como si fueran juntas (son alternativas), o mezclar partes/opciones de trabajos o productos DISTINTOS, o combinar opciones [vN] dentro de un producto normal. En un trabajo, variante_ref:'total' cotiza la combinación (precio desde) y 'cN' una opción suya.
 - producto_inventado — el nombre_catalogo afirmado no aparece: no hay fila real razonablemente parecida (te aviso aparte los nombres sin coincidencia exacta).
 
 ## Acción

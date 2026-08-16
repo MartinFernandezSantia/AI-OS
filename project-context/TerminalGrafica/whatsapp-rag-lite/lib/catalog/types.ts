@@ -60,13 +60,22 @@ export interface ProductoBot {
   items: ItemBot[];
 }
 
-/** Un material que compone un TRABAJO: es una variante ya curada del catálogo (mismo shape que
- *  ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_material. */
+/** Un material que compone una PARTE de un trabajo: es una variante ya curada del catálogo (mismo shape
+ *  que ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_material. */
 export type MaterialBot = ItemBot;
 
-/** Un TRABAJO (combo): se realiza combinando 2+ materiales del catálogo. Tiene embedding propio en el
- *  RAG. El precio total se CALCULA sumando los precios de los materiales (no se guarda), y `mostrar_total`
- *  decide si el cliente lo ve o solo ve los precios de los materiales. Mismo molde que ProductoBot. */
+/** Una PARTE de un trabajo = un producto-bot con sus variantes ALTERNATIVAS (el cliente elige una). Se
+ *  agrupa por bot.variant.product_id: variantes del mismo producto = alternativas; partes distintas se
+ *  combinan (una de cada). Un trabajo válido tiene ≥2 partes. */
+export interface TrabajoComponente {
+  producto_id: string; // = bot.product.key de la parte
+  nombre_bot: string; // = bot.product.bot_name (nombre de la parte)
+  items: MaterialBot[]; // variantes alternativas de esta parte
+}
+
+/** Un TRABAJO (combo): se arma combinando UNA opción de cada PARTE (2+ productos-bot). Tiene embedding
+ *  propio en el RAG. El precio total se CALCULA (no se guarda): con `mostrar_total`, el bot muestra el
+ *  total "desde" (combinación más barata); si no, solo los precios por opción. Mismo molde que ProductoBot. */
 export interface TrabajoBot {
   producto_id: string; // = clave natural (bot.job.key) — clave de metadata
   nombre_bot: string;
@@ -75,8 +84,8 @@ export interface TrabajoBot {
   nicho: string | null;
   nota: string | null;
   oculto: boolean;
-  mostrar_total: boolean; // = bot.job.show_total: mostrar el total calculado, o solo los materiales
-  componentes: MaterialBot[];
+  mostrar_total: boolean; // = bot.job.show_total: mostrar el total "desde", o solo los precios por opción
+  componentes: TrabajoComponente[]; // partes (productos-bot) agrupadas
 }
 
 export interface CatalogExportV4 {
