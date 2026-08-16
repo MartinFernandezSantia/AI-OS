@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseExportV4 } from "../lib/catalog/loader";
-import { chunksDeExport, type RagChunk } from "../lib/catalog/rag-chunk";
+import { chunksDeExport, chunksDeTrabajos, type RagChunk } from "../lib/catalog/rag-chunk";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Embeddings vía API de Google AI Studio (Gemini) — MISMO proveedor/modelo que el nodo
@@ -47,8 +47,13 @@ const has = (flag: string) => process.argv.includes(flag);
 function cargarChunks(): RagChunk[] {
   const path = argVal("--export") || DEFAULT_EXPORT;
   const { data } = parseExportV4(readFileSync(path, "utf8"));
-  const chunks = chunksDeExport(data.productos);
-  console.error(`Export v4: ${path}\nProducto-bot: ${data.productos.length} → chunks: ${chunks.length} (excluye ocultos)`);
+  const chunksProd = chunksDeExport(data.productos);
+  const chunksTrab = chunksDeTrabajos(data.trabajos ?? []);
+  const chunks = [...chunksProd, ...chunksTrab];
+  console.error(
+    `Export v4: ${path}\nProducto-bot: ${data.productos.length} → ${chunksProd.length} chunks` +
+      ` · Trabajos: ${(data.trabajos ?? []).length} → ${chunksTrab.length} chunks (excluye ocultos)`,
+  );
   return chunks;
 }
 
@@ -97,6 +102,7 @@ const metaObj = (c: RagChunk) => ({
   precio_hasta: c.meta.precio_hasta,
   precio_confiable: c.meta.precio_confiable,
   precios: c.meta.precios, // cada uno lleva variante_id (auditoría/--prices-only)
+  tipo: c.meta.tipo, // undefined en productos → JSON.stringify lo descarta; "trabajo" en combos
 });
 
 function generarSql(chunks: RagChunk[], vecs: number[][]): string {

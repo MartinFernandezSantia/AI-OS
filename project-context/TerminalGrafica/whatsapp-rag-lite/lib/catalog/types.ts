@@ -60,8 +60,28 @@ export interface ProductoBot {
   items: ItemBot[];
 }
 
+/** Un material que compone un TRABAJO: es una variante ya curada del catálogo (mismo shape que
+ *  ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_material. */
+export type MaterialBot = ItemBot;
+
+/** Un TRABAJO (combo): se realiza combinando 2+ materiales del catálogo. Tiene embedding propio en el
+ *  RAG. El precio total se CALCULA sumando los precios de los materiales (no se guarda), y `mostrar_total`
+ *  decide si el cliente lo ve o solo ve los precios de los materiales. Mismo molde que ProductoBot. */
+export interface TrabajoBot {
+  producto_id: string; // = clave natural (bot.job.key) — clave de metadata
+  nombre_bot: string;
+  sinonimos: string[];
+  casos_de_uso: string[];
+  nicho: string | null;
+  nota: string | null;
+  oculto: boolean;
+  mostrar_total: boolean; // = bot.job.show_total: mostrar el total calculado, o solo los materiales
+  componentes: MaterialBot[];
+}
+
 export interface CatalogExportV4 {
   exportado: string;
   schema_version: number; // 4
   productos: ProductoBot[];
+  trabajos?: TrabajoBot[]; // opcional → un export viejo sin trabajos sigue siendo válido
 }

@@ -2,7 +2,7 @@
 // mojibake (UTF-8 leído como latin1/win-1252), porque de esos strings salen las claves naturales
 // del SQL — si vienen rotos, no matchean.
 
-import type { CatalogExportV4, ProductoBot } from "./types";
+import type { CatalogExportV4, ProductoBot, TrabajoBot } from "./types";
 
 /** Desenvuelve [{"export": {...}}] y variantes de un solo valor. */
 export function desenvolver(j: unknown): unknown {
@@ -63,6 +63,16 @@ export function parseExportV4(texto: string): ParseResultV4 {
   }
   if (!data.productos.every((p) => Array.isArray((p as ProductoBot).items))) {
     throw new Error("Export inválido: hay productos sin 'items'.");
+  }
+  // Trabajos (combos) son OPCIONALES: un export viejo sin la clave sigue siendo válido. Si vienen,
+  // exigimos que cada trabajo traiga su lista de componentes (si no, chunkTrabajo no puede armar nada).
+  if (data.trabajos != null) {
+    if (!Array.isArray(data.trabajos)) {
+      throw new Error("Export inválido: 'trabajos' no es un array.");
+    }
+    if (!data.trabajos.every((t) => Array.isArray((t as TrabajoBot).componentes))) {
+      throw new Error("Export inválido: hay trabajos sin 'componentes'.");
+    }
   }
   return { data, reparado };
 }
