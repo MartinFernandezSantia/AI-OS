@@ -129,6 +129,63 @@ sudo ufw reload
 - `https://2.25.108.12` (IP directa) → timeout (solo-Cloudflare).
 - `https://chat.terminalgrafica.cloud` desde AR → OK (prod arriba).
 
+### Estabilidad y parches automáticos (2026-08-17)
+
+**Timezone del server a hora AR** (para cron y logs):
+
+```bash
+sudo timedatectl set-timezone America/Argentina/Buenos_Aires
+```
+
+**Swap 2 GB + tuning de memoria** (colchón anti-OOM para Chatwoot + fix del warning de Redis):
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+# swappiness bajo + overcommit para Redis (bgsave)
+printf 'vm.swappiness=10\nvm.overcommit_memory=1\n' | sudo tee /etc/sysctl.d/99-vps.conf
+sudo sysctl --system
+```
+
+**unattended-upgrades conservador** — parches de seguridad automáticos, pero SIN auto-reboot y con Docker fuera del auto-update (para que un `docker-ce` no tumbe el bot sin aviso):
+
+```bash
+sudo apt install -y unattended-upgrades
+# activar el ciclo automático
+sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+# overrides (drop-in 51 pisa al default 50)
+sudo tee /etc/apt/apt.conf.d/51custom-unattended > /dev/null <<'EOF'
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Package-Blacklist {
+    "docker-ce";
+    "docker-ce-cli";
+    "containerd.io";
+};
+EOF
+```
+
+**Cron de reboot** — desacopla "instalar parche" de "reiniciar". apt deja la bandera `/var/run/reboot-required` cuando un parche pide reboot (kernel, glibc); el cron reinicia solo si está, y solo domingos 04:00 AR:
+
+```bash
+sudo tee /usr/local/bin/reboot-if-needed.sh > /dev/null <<'EOF'
+#!/bin/bash
+if [ -f /var/run/reboot-required ]; then
+    logger "reboot-if-needed: parche pendiente, reiniciando"
+    /sbin/reboot
+fi
+EOF
+sudo chmod +x /usr/local/bin/reboot-if-needed.sh
+echo '0 4 * * 0 root /usr/local/bin/reboot-if-needed.sh' | sudo tee /etc/cron.d/weekly-reboot
+```
+
+Docker arranca al boot (`systemctl is-enabled docker` = enabled) y los contenedores tienen `restart: always`/`unless-stopped`, así que el stack vuelve solo tras el reboot.
+
 ### Notas de seguridad Cloudflare
 
 - Todos los subdominios: **proxied + SSL Full (strict)**.
@@ -141,12 +198,13 @@ sudo ufw reload
 ## 6. Pendientes
 
 **Hardening (sección 2 de la guía `references/vps-hostinger-setup-guide.md`):**
+- [x] Timezone del server a `America/Argentina/Buenos_Aires` (2026-08-17).
+- [x] Swap 2 GB + `vm.swappiness=10` + `vm.overcommit_memory=1` (fix del warning de Redis) (2026-08-17).
+- [x] `unattended-upgrades` conservador: sin auto-reboot, Docker en blacklist (2026-08-17).
+- [x] Cron de reboot domingos 04:00 AR, solo si `/var/run/reboot-required` (2026-08-17).
 - [ ] Cron mensual que re-corre el loop de rangos de Cloudflare (los CIDR cambian de vez en cuando).
-- [ ] `sudo sysctl vm.overcommit_memory=1` + persistir en `/etc/sysctl.conf` (Redis).
-- [ ] `fail2ban` (bans por fuerza bruta SSH).
-- [ ] `unattended-upgrades` (parches de seguridad automáticos).
-- [ ] Swap (Chatwoot lo pide).
-- [ ] **Backups off-site a R2** (`pg_dump` + `rclone`) — lo más crítico que falta.
+- [ ] `fail2ban` — evaluado y DESPRIORIZADO: SSH ya es solo-clave (no hay password que forzar) y todo lo web entra por Cloudflare (el host solo ve IPs de CF → banear = cortarse solo). Marginal.
+- [ ] **Backups off-site a R2** (`pg_dump` + `rclone`) — lo más crítico que falta. DIFERIDO: el cliente todavía no cargó método de pago en Cloudflare (R2 lo exige aunque el free tier no cobre).
 
 **Funcional (el bot):**
 - [x] Super-admin de Chatwoot y owner de n8n creados.
