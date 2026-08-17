@@ -21,7 +21,7 @@ const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
 // Chatwoot ni credenciales nuevas. El webhook usa el MISMO path que el v10 → por eso los dos NO
 // pueden estar ACTIVOS a la vez en el mismo n8n (Chatwoot entrega a un solo workflow por path):
 // para probar este, desactivá el v10 (y viceversa). El secret HMAC viaja por $env.CHATWOOT_WEBHOOK_SECRET.
-const CHATWOOT_BASE_URL = "https://chatwoot.silvercoastwebagency.com";
+const CHATWOOT_BASE_URL = "https://chat.terminalgrafica.cloud";
 const CHATWOOT_CRED = { id: "KxbAlYAWQ95ZZKQ5", name: "Chatwoot API Token" };
 
 const sistema = `Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina.
@@ -2242,7 +2242,7 @@ if (notaCw) {
       "Prueba interna (chat de test del Chat Trigger, sin Chatwoot/WhatsApp).",
       "Conectado por **Chatwoot** con la config del v10. **F1 (ingreso):** Chatwoot Webhook (rawBody) → Verificar HMAC → **Filtro Ingreso** (solo WhatsApp entrante, sin agente humano asignado) → **Firewall Tier-1** (SQL bot.firewall_check) → **Switch** (pass/refusal/rate/drop) → **¿Tiene Texto?** (audio/archivo → enlatado). **F2 (debounce + memoria del canal):** **Wait 3s** → **Get Historial** → **Decidir** (debounce/idempotencia/ráfaga/CAP) → **Switch Ruteo** (skip/saludo/injection/cap/**process**) → **Guardrails Tier-2** (F5: LLM guard jailbreak/off-topic; si viola → Strike → refusal/silencio; fail-open) → **Cuando llega un mensaje** (adaptador: ráfaga mergeada + historial del canal). La Memoria de n8n se SACÓ: el historial lo alimenta Contexto Previo desde el canal (arregla el bug {P1}). **F3/F4 (egreso):** Responder → **Preparar Envio** → **Enviar Mensaje** → **Chequear Envio** (entrega = id de Chatwoot, no status HTTP) → **¿Se Entregó?** (no → **Label Envío Fallido**) → **Log Turno** (UPDATE de bot.log). F0 (runbook): en Settings del workflow, Error Workflow → tg-bot-error.",
     ) +
-    "\n\n⚙️ MISMA CONFIG QUE EL v10: base URL chatwoot.silvercoastwebagency.com, credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el MISMO path de webhook (chatwoot). Por eso este flow y el v10 NO pueden estar ACTIVOS a la vez: para probar este, DESACTIVÁ el v10 (Chatwoot entrega a un solo workflow por path).";
+    "\n\n⚙️ CONFIG: base URL chat.terminalgrafica.cloud (prod, VPS), credencial 'Chatwoot API Token', secret $env.CHATWOOT_WEBHOOK_SECRET y el path de webhook (chatwoot). Chatwoot entrega a un solo workflow por path: no tengas dos flows activos sobre el mismo path a la vez.";
 }
 
 
