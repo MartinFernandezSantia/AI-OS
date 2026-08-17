@@ -122,16 +122,17 @@ Supabase Free **no tiene backups**. Antes de aplicar cambios de schema, dump a u
 
 ## Estado actual (2026-08-17) y pendiente para la próxima sesión
 
-**Hecho:** backup + verificación; schema (enums/schema-bot/firewall) + passwords aplicados; BOT_DB;
-entrada Chatwoot→n8n (WAF por IPv6 + HMAC OK); salida n8n→Chatwoot interna; token de admin → Get Historial 200.
+**Hecho:** backup + verificación; schema (enums/schema-bot/firewall) + passwords aplicados; BOT_DB; cred
+**Gemini atada a los 6 nodos**; entrada Chatwoot→n8n (WAF por IPv6 + HMAC OK); salida n8n→Chatwoot interna;
+token de admin → Get Historial 200. **Circuito end-to-end PROBADO: mensaje real de WhatsApp → el bot
+respondió** (plomería + cerebro OK).
 
-**Pendiente (para que el bot RESPONDA):**
-1. **Cred de Google Gemini** atada a los **6 nodos** (4 `lmChatGoogleGemini` + 2 `embeddingsGoogleGemini`).
-   El flow **no usa OpenRouter** (la memoria vieja decía eso — desactualizado; hoy es todo Gemini).
-2. **Datos del catálogo**: `bot.product`/`bot.variant` vacíos → **curar** (dashboard, `bot_curator`) + **ingest**
-   (`pnpm rag:ingest --apply` + `rag:ingest:info --apply` contra prod). Decidir: re-curar de cero vs migrar
-   curación de dev.
-3. **Prueba end-to-end** por WhatsApp + **activar** el workflow + Error Workflow (`tg-bot-error`).
+**Pendiente (para respuestas de producto reales):**
+1. **Datos del catálogo (bloqueante principal)**: `bot.product`/`bot.variant` vacíos → **curar** (dashboard,
+   `bot_curator`) + **ingest** (`pnpm rag:ingest --apply` + `rag:ingest:info --apply` contra prod). Decidir:
+   re-curar de cero vs migrar curación de dev.
+2. Dejar el workflow **activo** + Error Workflow (`tg-bot-error`).
+(El flow NO usa OpenRouter — hoy es todo Gemini; la memoria vieja estaba desactualizada.)
 
 **Hardening diferido:** cert CA para el Postgres de n8n (verify-full), fail2ban, unattended-upgrades, swap,
 backups a R2, cron de rangos de Cloudflare.
