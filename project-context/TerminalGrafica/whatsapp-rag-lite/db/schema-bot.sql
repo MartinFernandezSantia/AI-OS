@@ -209,12 +209,18 @@ create table if not exists bot.log (
   prices           jsonb,                           -- solo auditoría
   verification     jsonb,                           -- solo auditoría (veredicto del Verificador)
   signals          jsonb,                           -- {entregado, envioFallido, latencia_ms, …}
-  execution_id     text                             -- $execution.id (match INSERT↔UPDATE del turno)
+  execution_id     text,                            -- $execution.id (match INSERT↔UPDATE del turno)
+  denied_products  jsonb not null default '[]'      -- demanda no servida: pedidos que el bot no pudo ofrecer
 );
 create index if not exists bot_log_session_idx on bot.log (session_id, created_at);
 create index if not exists bot_log_execution_idx on bot.log (execution_id);
+-- Idempotente para bases YA creadas: el `create table if not exists` de arriba es no-op sobre una
+-- tabla existente, así que la columna nueva se agrega acá aparte.
+alter table bot.log add column if not exists denied_products jsonb not null default '[]';
 comment on table bot.log is
   'Log unificado del bot (una fila por turno): operativo + memoria del cerebro. Ver plan greenfield.';
+comment on column bot.log.denied_products is
+  'Demanda no servida: [{pedido, motivo: sin_match|no_trabajado, origen?}]. Señal de curación.';
 
 -- Errores de ejecución del bot (Error Trigger tg-bot-error → nodo Log Error).
 create table if not exists bot.errors (

@@ -119,6 +119,28 @@
 -- where created_at > now() - interval '7 days' and state is distinct from 'ok'
 -- order by created_at desc limit 30;
 
+-- C4. DEMANDA NO SERVIDA — qué pidieron los clientes que el bot NO pudo ofrecer (señal de curación).
+--     motivo: sin_match (no había nada en catálogo → derivó a mail) | no_trabajado (lista negra, ej.
+--     fotocopias; origen 'verificador' = lo cazó el guardrail, no el agente). Un pedido que aparece hoy
+--     y se resuelve mañana igual cuenta: es curación de sinónimos, no ruido.
+-- select d->>'motivo'            as motivo,
+--        lower(d->>'pedido')     as pedido,
+--        count(*)                as veces,
+--        count(distinct session_id) as clientes,
+--        max(created_at)         as ultima_vez
+-- from bot.log, jsonb_array_elements(denied_products) d
+-- where created_at > now() - interval '7 days'
+-- group by motivo, lower(d->>'pedido')
+-- order by veces desc, ultima_vez desc;
+
+-- C5. CONTROL DE SUB-REPORTE de C4 — turnos que HUELEN a derivación a mail (nada ofrecido + "mail" en la
+--     respuesta) pero con denied_products vacío. Si esto es alto, el campo del LLM sub-reporta → revisar
+--     el prompt (pedidos_no_resueltos). Casi toda la señal cruda ya está en columnas existentes.
+-- select count(*) as sospechosos
+-- from bot.log
+-- where created_at > now() - interval '7 days' and resolution_level = 'llm'
+--   and products = '[]'::jsonb and denied_products = '[]'::jsonb and bot_message ilike '%mail%';
+
 
 -- =====================================================================
 -- D. CONVERSACIONES FUERA DE RANGO (candidatas a revisión manual)

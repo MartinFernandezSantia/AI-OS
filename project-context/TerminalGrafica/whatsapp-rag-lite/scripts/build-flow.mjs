@@ -189,11 +189,22 @@ reemplaza por el número real. Si tipeás un número, se rehace.
   preguntan el total, decí el unitario y que se cierra por mail.
 
 ## Cómo escribir para WhatsApp (IMPORTANTE — es un celular)
-- LARGO MÁXIMO: mantené la respuesta POR DEBAJO DE 200 CARACTERES. Es un tope duro, no una sugerencia.
+- LARGO: apuntá a ~100 CARACTERES. Escribí la respuesta más corta que igual transmita la decisión —
+  como MÁXIMO ~200 (tope duro), pero eso es el techo, no la meta: si te sale en 190, sobra la mitad.
   La ÚNICA excepción es cuando estás LISTANDO OPCIONES (variantes de un producto o productos distintos,
-  una por renglón): ahí la lista puede pasarse de 200, pero el texto que la rodea igual va corto. Decí
+  una por renglón): ahí la lista puede pasarse, pero el texto que la rodea igual va corto. Decí
   lo justo: sin preámbulos, sin repetir lo que el cliente dijo, sin explicaciones de más. Cordial y
   humano, pero al grano — corto no es seco.
+- COMPRIMÍ AGRESIVO. Antes de mandar, releé y sacá toda palabra que no ayude a decidir. Cuando respondés
+  UNA sola opción (si listás varias, vale la regla de LISTAS de abajo): dejá SOLO las piezas que el
+  cliente necesita, en este orden: sí lo hacen → producto/promo → medida/cantidad → precio, y si hace
+  falta un cierre, UNA sola pregunta corta. Cortá preámbulos, muletillas y la mitad redundante del
+  cierre. Formas naturales de WhatsApp: "promo" (no "promoción"), "c/u" (no "por unidad"). Para meter una
+  especificación usá DOS PUNTOS, no paréntesis. El objetivo es ~100 chars; la versión "después" de abajo
+  tiene ~110 y ya dice todo. Ejemplo (es la FORMA de escribir, NO un molde de contenido; esa promo solo
+  existe si buscar_catalogo la devuelve, y el precio va como {P1}, nunca tipeado):
+  antes (~155): "Sí, hacemos. Tenemos una promoción para inmobiliarias (cartel de 1 x 0,65 m, llevando 6) que sale {P1} por unidad. ¿Te sirve esta opción o necesitás consultar algo más?"
+  después (~110): "Sí, hacemos. Tenemos promo para inmobiliarias: cartel 1 x 0,65 m, llevando 6 a {P1} c/u. ¿Te sirve?"
 - PÁRRAFOS: como MÁXIMO dos párrafos por mensaje, o sea UN solo renglón en blanco en todo el mensaje
   (p. ej. entre lo que informás y la pregunta de cierre). Nunca tres o más bloques. Si no hace falta,
   con un solo párrafo alcanza — no partas por partir.
@@ -217,14 +228,16 @@ reemplaza por el número real. Si tipeás un número, se rehace.
   dirección, pago, envíos, plazos, contacto, redes— NO se anclan en buscar_catalogo; salen de
   consultar_info_negocio, ver "## Info del negocio".)
 - Este canal solo INFORMA: no tomes pedidos ni pidas archivos.
-- NO CIERRES la charla vos ni asumas que terminó. Cuando INFORMÁS o RECOMENDÁS algo, ofrecé seguir
-  ayudando, pero VARIÁ la frase cada vez — no repitas siempre la misma. Ejemplos (NO un molde fijo,
-  redactala natural según la charla): "¿necesitás algo más?", "¿te ayudo con otra cosa?", "¿querés que
-  veamos otra opción?", "¿algo más que quieras cotizar?". EXCEPCIÓN: si el turno es una REPREGUNTA
-  (etapa falta_info: le estás pidiendo un dato para poder cotizar), el mensaje termina en la pregunta
-  y NO lleva ninguna de esas coletillas de cierre — sería una segunda pregunta de relleno. Derivá al mail
-  (terminalgrafica@gmail.com) SOLO si el cliente dice explícitamente que quiere hacer el pedido o
-  avanzar. NUNCA pidas archivos ni digas "mandá el PDF" por tu cuenta.
+- NO ASUMAS que la charla terminó, pero tampoco fuerces un cierre. Si el mensaje ya se explica solo,
+  terminá ahí — no agregues una pregunta de relleno. Si sumás un cierre, que sea UNA sola pregunta corta
+  y natural, como la escribiría un empleado del local: "¿te sirve?", "¿lo vemos?", "¿te paso algo más?".
+  NADA de coletillas dobles ("¿te sirve esta opción o necesitás consultar algo más?" → "¿te sirve?") ni
+  de cierres que suenan a bot o venta forzada ("¿vas con esa?", "¿te tiento con alguna?"). VARIÁ la frase,
+  no repitas siempre la misma. EXCEPCIÓN: si el turno es una REPREGUNTA (etapa falta_info: le estás
+  pidiendo un dato para poder cotizar), el mensaje termina en la pregunta y NO lleva ninguna coletilla de
+  cierre — sería una segunda pregunta de relleno. Derivá al mail (terminalgrafica@gmail.com) SOLO si el
+  cliente dice explícitamente que quiere hacer el pedido o avanzar. NUNCA pidas archivos ni digas "mandá
+  el PDF" por tu cuenta.
 - NO TRABAJAMOS: fotocopias. SOLO mencionalo si el cliente pregunta por fotocopias: ahí aclarale
   que eso no lo hacemos, aunque la búsqueda traiga algo parecido por sinónimo. Si el cliente NO las
   nombró, NO lo traigas vos — no cierres con "no hacemos fotocopias" porque sí.
@@ -258,6 +271,13 @@ campo y su detalle están en el schema de salida). Lo que importa que hagas bien
   distintas ni entre productos.
 - precios_solicitados: uno por CADA {Pn} que usaste (nombre_catalogo EXACTO + variante_ref [vN]).
 - afirmaciones + motivo: lo verificable que afirmaste, y en una línea por qué elegiste eso.
+- pedidos_no_resueltos: por CADA pedido concreto del cliente que NO pudiste ofrecer desde el catálogo,
+  agregá una entrada (pedido en las palabras del cliente + motivo); si no hubo ninguno, mandá []. Dos
+  casos: buscaste y no había nada del catálogo para ofrecer (lo derivaste a mail) → sin_match; el
+  cliente nombró algo de la lista de no-trabajado (fotocopias) → no_trabajado. NO registres acá un
+  producto que SÍ ofreciste aunque el precio/total se cierre por mail, ni las repreguntas (falta_info):
+  ahí todavía no fallaste. ESTO NO CAMBIA tu mensaje: seguí sin negar nada fuera de la lista. Es sólo el
+  registro interno de lo que quedó sin servir.
 Regla de oro: TODO lo que pongas acá tiene que estar respaldado por lo que devolvió la tool. Este
 bloque existe justamente para que se pueda comprobar que no inventaste.`;
 
@@ -283,7 +303,7 @@ const toolDescInfo =
 //   - afirmaciones                          → anti-dato-inventado del negocio
 const esquemaSalida = {
   type: "object",
-  required: ["respuesta", "etapa", "productos_ofrecidos"],
+  required: ["respuesta", "etapa", "productos_ofrecidos", "pedidos_no_resueltos"],
   properties: {
     respuesta: {
       type: "string",
@@ -348,6 +368,29 @@ const esquemaSalida = {
           nombre_catalogo: { type: "string", description: "nombre EXACTO del producto" },
           variante_ref: { type: "string", description: "el token [vN] de la opción cotizada, ej. 'v1'" },
           cantidad: { type: "number", description: "cantidad pedida para este precio; omití el campo si no aplica" },
+        },
+      },
+    },
+    pedidos_no_resueltos: {
+      type: "array",
+      description:
+        "un item por CADA pedido concreto del cliente que NO pudiste ofrecer desde el catálogo en este " +
+        "turno; [] si no hubo ninguno. NO cambia tu mensaje al cliente: registro interno de curación.",
+      items: {
+        type: "object",
+        required: ["pedido", "motivo"],
+        properties: {
+          pedido: {
+            type: "string",
+            description: "lo que pidió el cliente, EN SUS PALABRAS (no el nombre de catálogo)",
+          },
+          motivo: {
+            type: "string",
+            enum: ["sin_match", "no_trabajado"],
+            description:
+              "sin_match = buscaste y no había nada del catálogo para ofrecer (lo derivaste a mail); " +
+              "no_trabajado = está en la lista de no-trabajado (fotocopias)",
+          },
         },
       },
     },
@@ -456,8 +499,8 @@ El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: son PLACEH
 copialos TAL CUAL, no los reescribas ni los borres ni pongas un número. Si sacás un producto entero,
 sacá también su {Pn}.
 
-Castellano rioplatense, 2 a 5 líneas, sin emojis. Devolvé SOLO el mensaje para el cliente, sin
-comillas ni explicaciones.`;
+Castellano rioplatense, corto (1 a 3 líneas; una lista de opciones puede exceder), sin inflar el cierre,
+sin emojis. Devolvé SOLO el mensaje para el cliente, sin comillas ni explicaciones.`;
 
 // ───────────────────────── INSERTAR PRECIOS (nodo terminal) ─────────────────────────
 // Copia inline de lib/catalog/price-display.ts (n8n no importa TS). Mantener en sync.
@@ -537,12 +580,25 @@ const insertarPreciosCode = [
   "// 3) ANTI-TOTAL: el bot no totaliza; sacar el 'en total' si igual lo escribió",
   "texto = texto.replace(/\\s+en total\\b/gi, '');",
   "",
-  "// 4) REGISTRO DE DECISIÓN (bot.log). Si el Verificador MODIFICÓ el mensaje,",
-  "//    el registro de productos queda EN BLANCO: no es fiable qué producto sobrevivió a la edición.",
+  "// 4) DEMANDA NO SERVIDA: lo que el agente auto-declaró (pedidos_no_resueltos) + backstop determinista.",
+  "//    Backstop: si el Verificador cazó no_trabajado, el agente NO lo auto-declaró (creyó que lo servía),",
+  "//    así que la entrada más valiosa se perdería. La sintetizamos desde la falla y la mergeamos.",
+  "const denegados = Array.isArray(aud.pedidos_no_resueltos) ? aud.pedidos_no_resueltos.slice() : [];",
+  "const _fallas = ((pr.verificacion || {}).fallas) || [];",
+  "const _yaNT = denegados.some((d) => d && d.motivo === 'no_trabajado');",
+  "if (!_yaNT && Array.isArray(_fallas) && _fallas.some((f) => f && f.tipo === 'no_trabajado')) {",
+  "  const _chat = String((($('Cuando llega un mensaje').first() || {}).json || {}).chatInput || '').slice(0, 120);",
+  "  denegados.push({ pedido: _chat, motivo: 'no_trabajado', origen: 'verificador' });",
+  "}",
+  "",
+  "// 5) REGISTRO DE DECISIÓN (bot.log). Si el Verificador MODIFICÓ el mensaje, el registro de productos",
+  "//    queda EN BLANCO: no es fiable qué producto sobrevivió a la edición. `denegados` NO se blanquea:",
+  "//    es una decisión sobre lo que pidió el cliente, independiente de la edición de precios.",
   "const _decision = {",
   "  estado: pr.corregido ? 'corrected' : 'ok',",
   "  productos: pr.corregido ? [] : (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []),",
   "  precios: pr.corregido ? [] : (Array.isArray(aud.precios_solicitados) ? aud.precios_solicitados : []),",
+  "  denegados: denegados,",
   "  verificacion: pr.verificacion || null,",
   "};",
   "",
@@ -793,11 +849,11 @@ const flow = {
       parameters: {
         operation: "executeQuery",
         query:
-          "insert into bot.log (session_id, customer_message, bot_message, resolution_level, state, products, prices, verification, execution_id)\n" +
-          "values ($1, $2, $3, 'llm', $4, $5::jsonb, $6::jsonb, $7::jsonb, $8)",
+          "insert into bot.log (session_id, customer_message, bot_message, resolution_level, state, products, prices, verification, execution_id, denied_products)\n" +
+          "values ($1, $2, $3, 'llm', $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9::jsonb)",
         options: {
           queryReplacement:
-            "={{ (() => { const d = $json._decision || {}; const t = $('Cuando llega un mensaje').first().json; return [ String(t.sessionId || ''), String(t.chatInput || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null), String($execution.id || '') ]; })() }}",
+            "={{ (() => { const d = $json._decision || {}; const t = $('Cuando llega un mensaje').first().json; return [ String(t.sessionId || ''), String(t.chatInput || ''), String($json.output || ''), d.estado || 'ok', JSON.stringify(d.productos || []), JSON.stringify(d.precios || []), JSON.stringify(d.verificacion || null), String($execution.id || ''), JSON.stringify(d.denegados || []) ]; })() }}",
         },
       },
       id: "rag-log-decision",
