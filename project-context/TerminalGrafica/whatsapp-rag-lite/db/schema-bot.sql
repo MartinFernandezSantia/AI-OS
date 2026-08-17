@@ -10,12 +10,14 @@
 -- (decisiones + rag_decisiones) en UNA tabla bot.log. RLS prendido en todo `bot`
 -- como defensa en profundidad (la base está COMPARTIDA con quote-automation).
 --
--- REQUIERE ya aplicado (NO son parte del greenfield, quedan como están):
---   · schema `bot` + enum `bot.accion` (whatsapp-automation/db/enum-accion-*.sql)
---   · firewall: bot.blocklist / bot.sender_estado / bot.injection_patterns +
---     funciones bot.firewall_check / bot.firewall_strike / bot.fw_log
---     (whatsapp-automation/db/firewall-tier1.sql, firewall-tier2-strike.sql).
---     Este archivo ACTUALIZA bot.fw_log al final (ahora loguea en bot.log).
+-- ORDEN DE APLICACIÓN EN PROD (greenfield):
+--   1. db/enums.sql     → enum bot.accion (este archivo lo usa en bot.log.action)
+--   2. db/schema-bot.sql (ESTE)
+--   3. db/firewall.sql  → bot.blocklist/sender_estado/injection_patterns +
+--                         bot.firewall_check / bot.firewall_strike / bot.fw_log
+--   4. passwords de bot_runtime + bot_curator (ver sección 0)
+-- (enums.sql + firewall.sql consolidan lo que en dev venía de whatsapp-automation/db.)
+-- Este archivo define una copia de bot.fw_log (sección 5); firewall.sql la deja igual.
 --
 -- Inglés = SOLO tablas y columnas. Los VALORES de token quedan en español:
 --   · bot.sale_unit: unidad/hoja/pagina/plancha_a3/… (el COBRO map del bot no cambia)
