@@ -208,9 +208,25 @@ Docker arranca al boot (`systemctl is-enabled docker` = enabled) y los contenedo
 
 **Funcional (el bot):**
 - [x] Super-admin de Chatwoot y owner de n8n creados.
-- [ ] Reconectar WhatsApp Cloud API en Chatwoot.
+- [x] WhatsApp Cloud API reconectado en Chatwoot (2026-08-17). Ver "Trampas de la conexión WhatsApp" abajo.
 - [ ] Importar el workflow del bot en n8n.
 - [ ] Cablear Chatwoot ↔ n8n con `CHATWOOT_WEBHOOK_SECRET`.
+
+### Trampas de la conexión WhatsApp Cloud (2026-08-17)
+
+Se reusó la app de Meta + número + token permanente (System User) de dev; solo se repuntó el webhook a prod. Dos trampas costaron el rato:
+
+1. **El geo-block WAF rompía el handshake del webhook.** Los servidores de Meta que validan la Callback URL no están en AR → la regla solo-AR los bloqueaba. Fix: excepción en la regla de Cloudflare para la ruta del webhook:
+   ```
+   (ip.src.country ne "AR" and not http.request.uri.path contains "/webhooks/")
+   ```
+   Abre solo `/webhooks/*` al mundo (seguro: Chatwoot valida verify token + firma de Meta); el resto sigue solo-AR.
+
+2. **Número argentino con `15` de más → Sidekiq descartaba los mensajes.** Los mensajes llegaban a `rails` pero Sidekiq logueaba `Inactive WhatsApp channel: unknown - +549223155934526`. Chatwoot v4.16 rutea el inbox por el **`display_phone_number` del payload** + el `phone_number_id` (`WebhookChannelFinderService`), NO por la columna `phone_number` a secas. La UI había guardado el número con un `15` (prefijo local móvil AR que no va en E.164): guardado `+549223155934526` vs Meta manda `5492235934526`. Fix directo en la DB (la UI lo re-normaliza y lo rompe):
+   ```sql
+   UPDATE channel_whatsapp SET phone_number = '+5492235934526' WHERE id = 2;
+   ```
+   Igualar EXACTO al `display_phone_number` del payload (sacarlo de los logs de `rails`, no adivinar el formato). El `phone_number_id` no se toca; los mensajes salientes usan ese ID, no la columna.
 
 ---
 
