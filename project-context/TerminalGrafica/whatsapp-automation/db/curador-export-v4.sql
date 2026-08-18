@@ -54,7 +54,11 @@ pricing as (
     v.color                                                       as color,
     v.unit                                                        as unidad,          -- MIENTE: no se usa para cobro
     v.price                                                       as precio_lista,
-    v.price_updated_at                                            as precio_actualizado,
+    -- public.product_variants NO tiene columna de freshness de precio (nunca se aplicó
+    -- precio-freshness.sql a prod). precio_actualizado es opcional en types.ts y NADIE lo
+    -- consume (ni rag-chunk ni price-display) → null. Si algún día se agrega la columna,
+    -- volver a `v.price_updated_at`.
+    null::timestamptz                                             as precio_actualizado,
     -- mostrable = no hay NINGUNA regla activa (precio de lista limpio y confiable)
     not exists (select 1 from rules rr where rr.variant_id = v.id) as mostrable,
     coalesce(
