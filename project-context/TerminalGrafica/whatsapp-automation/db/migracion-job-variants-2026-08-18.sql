@@ -61,6 +61,16 @@ create table if not exists bot.job_variant_material (
 );
 create index if not exists bot_job_variant_material_jv_idx on bot.job_variant_material (job_variant_id);
 
+-- Grants + RLS para las tablas nuevas (sin esto, bot_curator no puede escribirlas). Espeja el
+-- bloque 4 de schema-bot.sql. bot.job_material pierde su grant/policy al dropearse en el PASO 4.
+grant select, insert, update, delete on bot.job_variant, bot.job_variant_material to bot_curator;
+alter table bot.job_variant           enable row level security;
+alter table bot.job_variant_material  enable row level security;
+drop policy if exists curator_all on bot.job_variant;
+create policy curator_all on bot.job_variant          for all to bot_curator using (true) with check (true);
+drop policy if exists curator_all on bot.job_variant_material;
+create policy curator_all on bot.job_variant_material for all to bot_curator using (true) with check (true);
+
 -- -----------------------------------------------------------------------------
 -- PASO 2 — RE-CURACIÓN del encartonado (MANUAL, en el dashboard catalog-curator).
 -- En la pantalla de Trabajos → Encartonado, crear las variantes-de-trabajo y asignar

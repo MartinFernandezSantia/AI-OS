@@ -274,7 +274,7 @@ end $g$;
 -- ---- bot_curator: escribe el catálogo, lee la fuente public ----
 grant usage on schema bot to bot_curator;
 grant select, insert, update, delete on bot.product, bot.variant to bot_curator;
-grant select, insert, update, delete on bot.job, bot.job_material to bot_curator;
+grant select, insert, update, delete on bot.job, bot.job_variant, bot.job_variant_material to bot_curator;
 grant usage on schema public to bot_curator;
 grant select on public.products, public.product_variants, public.categories to bot_curator;
 
@@ -300,8 +300,9 @@ alter role bot_runtime set search_path = "$user", public, extensions;  -- aplica
 -- ---- RLS: prender en TODAS las tablas de bot ----
 alter table bot.product           enable row level security;
 alter table bot.variant           enable row level security;
-alter table bot.job               enable row level security;
-alter table bot.job_material       enable row level security;
+alter table bot.job                   enable row level security;
+alter table bot.job_variant           enable row level security;
+alter table bot.job_variant_material  enable row level security;
 alter table bot.rag_catalog       enable row level security;
 alter table bot.rag_business_info enable row level security;
 alter table bot.business_info     enable row level security;
@@ -315,9 +316,11 @@ create policy curator_all on bot.product           for all    to bot_curator usi
 drop policy if exists curator_all on bot.variant;
 create policy curator_all on bot.variant           for all    to bot_curator using (true) with check (true);
 drop policy if exists curator_all on bot.job;
-create policy curator_all on bot.job               for all    to bot_curator using (true) with check (true);
-drop policy if exists curator_all on bot.job_material;
-create policy curator_all on bot.job_material      for all    to bot_curator using (true) with check (true);
+create policy curator_all on bot.job                  for all    to bot_curator using (true) with check (true);
+drop policy if exists curator_all on bot.job_variant;
+create policy curator_all on bot.job_variant          for all    to bot_curator using (true) with check (true);
+drop policy if exists curator_all on bot.job_variant_material;
+create policy curator_all on bot.job_variant_material for all    to bot_curator using (true) with check (true);
 
 drop policy if exists runtime_select on bot.rag_catalog;
 create policy runtime_select on bot.rag_catalog       for select to bot_runtime using (true);
