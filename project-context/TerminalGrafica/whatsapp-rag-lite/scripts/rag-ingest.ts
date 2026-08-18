@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseExportV4 } from "../lib/catalog/loader";
+import { parseExportV5 } from "../lib/catalog/loader";
 import { chunksDeExport, chunksDeTrabajos, type RagChunk } from "../lib/catalog/rag-chunk";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -32,9 +32,9 @@ const TABLE = "bot.rag_catalog";
 const TABLE_INFO = "bot.rag_business_info";
 const INFO_SOURCE = "bot.business_info";
 
-// Export del catálogo (modelo producto-bot; curador-export-v4.sql, greenfield). Fuente al lado: el
-// SQL editor de Supabase vuelca el resultado a este archivo. Override con --export <ruta>.
-const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v4.json");
+// Export del catálogo (modelo producto-bot + trabajos con variantes; curador-export-v5.sql, greenfield).
+// Fuente al lado: el SQL editor de Supabase vuelca el resultado a este archivo. Override con --export <ruta>.
+const DEFAULT_EXPORT = resolve(HERE, "../../whatsapp-automation/db/export-actualizado-catalogo-v5.json");
 const OUT_SQL = join(HERE, "..", "rag-embeddings-data.sql");
 const OUT_SQL_INFO = join(HERE, "..", "rag-info-negocio-data.sql");
 
@@ -46,12 +46,12 @@ const has = (flag: string) => process.argv.includes(flag);
 
 function cargarChunks(): RagChunk[] {
   const path = argVal("--export") || DEFAULT_EXPORT;
-  const { data } = parseExportV4(readFileSync(path, "utf8"));
+  const { data } = parseExportV5(readFileSync(path, "utf8"));
   const chunksProd = chunksDeExport(data.productos);
   const chunksTrab = chunksDeTrabajos(data.trabajos ?? []);
   const chunks = [...chunksProd, ...chunksTrab];
   console.error(
-    `Export v4: ${path}\nProducto-bot: ${data.productos.length} → ${chunksProd.length} chunks` +
+    `Export v5: ${path}\nProducto-bot: ${data.productos.length} → ${chunksProd.length} chunks` +
       ` · Trabajos: ${(data.trabajos ?? []).length} → ${chunksTrab.length} chunks (excluye ocultos)`,
   );
   return chunks;

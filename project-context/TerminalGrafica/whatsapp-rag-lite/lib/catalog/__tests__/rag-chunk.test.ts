@@ -1,14 +1,14 @@
-// Prueba que el chunk RAG deriva bien del export v4 (modelo producto-bot) + bordes.
+// Prueba que el chunk RAG deriva bien del export v5 (modelo producto-bot) + bordes.
 // Fixture sintético representativo (el export real lo genera Martin tras la migración).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseExportV4 } from "../loader";
+import { parseExportV5 } from "../loader";
 import { chunkRAG, chunksDeExport, esChunkeable } from "../rag-chunk";
-import type { CatalogExportV4, ProductoBot } from "../types";
+import type { CatalogExportV5, ProductoBot } from "../types";
 
 const raw = readFileSync(join(__dirname, "fixtures", "export-v4.json"), "utf8");
-const data: CatalogExportV4 = parseExportV4(raw).data;
+const data: CatalogExportV5 = parseExportV5(raw).data;
 const byId = (id: string) => data.productos.find((p) => p.producto_id === id)!;
 
 describe("chunksDeExport (v4)", () => {

@@ -2,7 +2,7 @@
 // mojibake (UTF-8 leído como latin1/win-1252), porque de esos strings salen las claves naturales
 // del SQL — si vienen rotos, no matchean.
 
-import type { CatalogExportV4, ProductoBot, TrabajoBot, TrabajoComponente } from "./types";
+import type { CatalogExportV5, ProductoBot, TrabajoBot, VarianteTrabajo } from "./types";
 
 /** Desenvuelve [{"export": {...}}] y variantes de un solo valor. */
 export function desenvolver(j: unknown): unknown {
@@ -41,42 +41,42 @@ export function repararMojibake(t: string): { texto: string; reparado: boolean }
   }
 }
 
-export interface ParseResultV4 {
-  data: CatalogExportV4;
+export interface ParseResultV5 {
+  data: CatalogExportV5;
   reparado: boolean;
 }
 
 /** Parsea el export del catálogo (modelo producto-bot). Misma envoltura/reparación; EXIGE
- *  schema_version 4 y productos con `items` — así un export de otra forma NO se ingesta como basura
+ *  schema_version 5 y productos con `items` — así un export de otra forma NO se ingesta como basura
  *  (truncaría la tabla y la llenaría de chunks vacíos). */
-export function parseExportV4(texto: string): ParseResultV4 {
+export function parseExportV5(texto: string): ParseResultV5 {
   const { texto: fixed, reparado } = repararMojibake(texto);
   const j = desenvolver(JSON.parse(fixed));
-  if (!j || typeof j !== "object" || !("productos" in j) || !Array.isArray((j as CatalogExportV4).productos)) {
+  if (!j || typeof j !== "object" || !("productos" in j) || !Array.isArray((j as CatalogExportV5).productos)) {
     throw new Error("Ese JSON no parece un export del catálogo (falta productos).");
   }
-  const data = j as CatalogExportV4;
-  if (data.schema_version !== 4) {
+  const data = j as CatalogExportV5;
+  if (data.schema_version !== 5) {
     throw new Error(
-      `Export esperado (schema_version 4); vino ${data.schema_version ?? "sin versión"}.`,
+      `Export esperado (schema_version 5); vino ${data.schema_version ?? "sin versión"}.`,
     );
   }
   if (!data.productos.every((p) => Array.isArray((p as ProductoBot).items))) {
     throw new Error("Export inválido: hay productos sin 'items'.");
   }
-  // Trabajos (combos) son OPCIONALES: un export viejo sin la clave sigue siendo válido. Si vienen,
-  // exigimos la forma agrupada: cada trabajo con `componentes` (partes) y cada parte con `items`
-  // (variantes alternativas) — si no, chunkTrabajo no puede armar nada.
+  // Trabajos (combos) son OPCIONALES: un export sin la clave sigue siendo válido. Si vienen, exigimos
+  // la forma nueva: cada trabajo con `variantes` (variantes-de-trabajo) y cada una con `componentes`
+  // (las bot.variant que la arman) — si no, chunkTrabajo no puede armar nada.
   if (data.trabajos != null) {
     if (!Array.isArray(data.trabajos)) {
       throw new Error("Export inválido: 'trabajos' no es un array.");
     }
-    if (!data.trabajos.every((t) => Array.isArray((t as TrabajoBot).componentes))) {
-      throw new Error("Export inválido: hay trabajos sin 'componentes'.");
+    if (!data.trabajos.every((t) => Array.isArray((t as TrabajoBot).variantes))) {
+      throw new Error("Export inválido: hay trabajos sin 'variantes'.");
     }
-    const partes = data.trabajos.flatMap((t) => (t as TrabajoBot).componentes);
-    if (!partes.every((c) => Array.isArray((c as TrabajoComponente).items))) {
-      throw new Error("Export inválido: hay partes de trabajo sin 'items'.");
+    const variantes = data.trabajos.flatMap((t) => (t as TrabajoBot).variantes);
+    if (!variantes.every((vt) => Array.isArray((vt as VarianteTrabajo).componentes))) {
+      throw new Error("Export inválido: hay variantes-de-trabajo sin 'componentes'.");
     }
   }
   return { data, reparado };

@@ -1,16 +1,16 @@
-// Prueba el chunk de TRABAJO con COMBINACIONES: partes agrupadas por producto (opciones alternativas),
-// refs [cN] corridos, total "desde" (combinación más barata), y la validación del loader. Fixtures
-// sintéticos (memoria "los fixtures mienten": acá el shape es simple y controlado; la lógica de precio
-// la comparte con price-display ya testeado).
+// Prueba el chunk de TRABAJO con VARIANTES CERRADAS: cada variante-de-trabajo enumera sus componentes
+// concretos (las bot.variant que van juntas), su precio = Σ de componentes, refs [tN] por position, y el
+// "desde" = mínimo real entre variantes-de-trabajo válidas. Fixtures sintéticos (memoria "los fixtures
+// mienten": acá el shape es simple y controlado; la lógica de precio la comparte con price-display).
 import { describe, it, expect } from "vitest";
-import { parseExportV4 } from "../loader";
+import { parseExportV5 } from "../loader";
 import { chunkTrabajo, chunksDeTrabajos } from "../rag-chunk";
-import type { ItemBot, TrabajoBot, TrabajoComponente } from "../types";
+import type { ItemBot, TrabajoBot, VarianteTrabajo } from "../types";
 
 function matBase(over: Partial<ItemBot> = {}): ItemBot {
   return {
     variante_id: "m-x",
-    nombre_variante_bot: "Opción",
+    nombre_variante_bot: "Componente",
     color: null,
     unidad: null,
     precio_lista: 800,
@@ -25,152 +25,192 @@ function matBase(over: Partial<ItemBot> = {}): ItemBot {
   };
 }
 
-function comp(nombre_bot: string, producto_id: string, items: ItemBot[]): TrabajoComponente {
-  return { producto_id, nombre_bot, items };
+function vt(nombre_bot: string, ref_pos: number, componentes: ItemBot[]): VarianteTrabajo {
+  return { nombre_bot, ref_pos, componentes };
 }
 
 function trabajoBase(over: Partial<TrabajoBot> = {}): TrabajoBot {
   return {
-    producto_id: "encartonado-con-impresion",
-    nombre_bot: "Encartonado con impresión",
-    sinonimos: ["encartonado impreso"],
+    producto_id: "encartonado",
+    nombre_bot: "Encartonado",
+    sinonimos: ["montado sobre cartón"],
     casos_de_uso: ["portfolios", "muestras"],
     nicho: null,
     nota: null,
     oculto: false,
     mostrar_total: true,
-    componentes: [
-      comp("Impresión encapada", "impresion-encapada", [
-        matBase({ variante_id: "i-25", nombre_variante_bot: "25%", precio_lista: 800 }),
-        matBase({ variante_id: "i-50", nombre_variante_bot: "50%", precio_lista: 1000 }),
-        matBase({ variante_id: "i-100", nombre_variante_bot: "100%", precio_lista: 1500 }),
+    // A3 = encartonado A3 ($3.500) + encapsulado A3 ($750) = 4.250
+    // 100x70 = encartonado 100x70 ($6.500) + encapsulado por metro ($1.200) = 7.700
+    variantes: [
+      vt("A3", 1, [
+        matBase({ variante_id: "enc-a3", nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+        matBase({ variante_id: "encap-a3", nombre_variante_bot: "Encapsulado A3", precio_lista: 750 }),
       ]),
-      comp("Encartonado", "encartonado", [
-        matBase({ variante_id: "e-ch", nombre_variante_bot: "Chico", precio_lista: 500 }),
-        matBase({ variante_id: "e-gr", nombre_variante_bot: "Grande", precio_lista: 700 }),
+      vt("100x70", 2, [
+        matBase({ variante_id: "enc-100", nombre_variante_bot: "Encartonado 100x70", precio_lista: 6500 }),
+        matBase({ variante_id: "encap-m", nombre_variante_bot: "Encapsulado por metro", precio_lista: 1200 }),
       ]),
     ],
     ...over,
   };
 }
 
-describe("chunkTrabajo: partes agrupadas + refs corridos", () => {
+describe("chunkTrabajo: variantes-de-trabajo cerradas + refs por position", () => {
   const c = chunkTrabajo(trabajoBase());
 
-  it("el texto arranca con 'Trabajo:' y agrupa las opciones por parte", () => {
-    expect(c.texto.startsWith("Trabajo: Encartonado con impresión.")).toBe(true);
-    expect(c.texto).toContain("Se arma combinando una opción de cada parte:");
-    expect(c.texto).toContain("- Impresión encapada: [c1] 25%");
-    expect(c.texto).toContain("[c2] 50%");
-    expect(c.texto).toContain("[c3] 100%");
-    expect(c.texto).toContain("- Encartonado: [c4] Chico");
-    expect(c.texto).toContain("[c5] Grande");
+  it("el texto arranca con 'Trabajo:' y lista una línea por variante-de-trabajo con [tN]", () => {
+    expect(c.texto.startsWith("Trabajo: Encartonado.")).toBe(true);
+    expect(c.texto).toContain("Opciones del trabajo (cada una es una combinación cerrada; el cliente elige una):");
+    expect(c.texto).toContain("- [t1] A3 ($4.250 por trabajo).");
+    expect(c.texto).toContain("- [t2] 100x70 ($7.700 por trabajo).");
     expect(c.texto).not.toContain("Opciones:"); // no se confunde con un producto
+    expect(c.texto).not.toContain("- Parte:"); // modelo viejo, ya no existe
   });
 
-  it("meta.precios: refs c1..cN de todas las opciones + un ref 'total'", () => {
-    expect(c.meta.precios.map((p) => p.ref)).toEqual(["c1", "c2", "c3", "c4", "c5", "total"]);
+  it("meta.precios: una entrada por variante-de-trabajo, ref t1..tN, precio = Σ de componentes", () => {
+    expect(c.meta.precios.map((p) => p.ref)).toEqual(["t1", "t2"]);
+    const a3 = c.meta.precios.find((p) => p.ref === "t1")!;
+    expect(a3.variante).toBe("A3");
+    expect(a3.precio_lista).toBe(4250);
+    expect(a3.unidad).toBe("por trabajo");
+    expect(a3.cobrable).toBe(true);
   });
 
-  it("total 'desde' = suma del más barato de cada parte (800 + 500)", () => {
-    const total = c.meta.precios.find((p) => p.ref === "total")!;
-    expect(total.precio_lista).toBe(1300);
-    expect(total.unidad).toBe("por trabajo");
-    expect(total.cobrable).toBe(true);
-  });
-
-  it("muestra 'desde …' con las partes que varían", () => {
-    expect(c.texto).toContain(
-      "Precio del trabajo: desde $1.300 por trabajo (varía según Impresión encapada y Encartonado).",
-    );
-    expect(c.meta.precio_desde).toBe(1300);
+  it("'desde' = mínimo REAL entre variantes-de-trabajo válidas (4.250, no una suma de mínimos sueltos)", () => {
+    expect(c.texto).toContain("Precio del trabajo: desde $4.250 por trabajo (según la variante).");
+    expect(c.meta.precio_desde).toBe(4250);
     expect(c.meta.precio_hasta).toBeNull(); // hay variación → tope abierto
     expect(c.meta.precio_confiable).toBe(true);
     expect(c.meta.tipo).toBe("trabajo");
   });
 });
 
-describe("chunkTrabajo: una sola combinación (1 opción por parte)", () => {
+describe("chunkTrabajo: el 'desde' NO es la suma de mínimos sueltos (fix del bug del cartesiano)", () => {
+  // El componente más barato de cada 'lado' (encapsulado A3 $750 + encartonado chico $500 = 1.250) NO
+  // forman una combinación válida enumerada. Las variantes-de-trabajo válidas son A3 ($750+$3.500=4.250)
+  // y Chico ($1.200+$500=1.700). El "desde" debe ser 1.700 (mínimo VÁLIDO), nunca 1.250.
   const c = chunkTrabajo(
     trabajoBase({
-      componentes: [
-        comp("Tarjeta", "tarjeta", [matBase({ nombre_variante_bot: "9x5", precio_lista: 800 })]),
-        comp("Sobre", "sobre", [matBase({ nombre_variante_bot: "Blanco", precio_lista: 500 })]),
+      variantes: [
+        vt("A3", 1, [
+          matBase({ variante_id: "encap-a3", nombre_variante_bot: "Encapsulado A3", precio_lista: 750 }),
+          matBase({ variante_id: "enc-a3", nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+        ]),
+        vt("Chico", 2, [
+          matBase({ variante_id: "encap-m", nombre_variante_bot: "Encapsulado metro", precio_lista: 1200 }),
+          matBase({ variante_id: "enc-ch", nombre_variante_bot: "Encartonado chico", precio_lista: 500 }),
+        ]),
       ],
     }),
   );
-  it("muestra el total EXACTO, sin 'desde'", () => {
-    expect(c.texto).toContain("Precio del trabajo: $1.300 por trabajo.");
-    expect(c.texto).not.toContain("desde");
-    expect(c.meta.precio_desde).toBe(1300);
-    expect(c.meta.precio_hasta).toBe(1300);
+  it("publica el mínimo de una combinación VÁLIDA, no la suma de componentes más baratos", () => {
+    expect(c.meta.precio_desde).toBe(1700);
+    expect(c.meta.precio_desde).not.toBe(1250);
+    expect(c.texto).toContain("desde $1.700 por trabajo");
   });
 });
 
-describe("chunkTrabajo: el total es OPCIONAL", () => {
-  it("mostrar_total=false → sin línea de precio ni ref 'total'", () => {
-    const c = chunkTrabajo(trabajoBase({ mostrar_total: false }));
-    expect(c.texto).not.toContain("Precio del trabajo:");
-    expect(c.meta.precios.some((p) => p.ref === "total")).toBe(false);
-    expect(c.meta.precio_confiable).toBe(false);
-    expect(c.meta.precio_desde).toBeNull();
+describe("chunkTrabajo: una sola variante-de-trabajo", () => {
+  const c = chunkTrabajo(
+    trabajoBase({
+      variantes: [
+        vt("A3", 1, [
+          matBase({ nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+          matBase({ nombre_variante_bot: "Encapsulado A3", precio_lista: 750 }),
+        ]),
+      ],
+    }),
+  );
+  it("muestra el precio EXACTO, sin 'desde'", () => {
+    expect(c.texto).toContain("Precio del trabajo: $4.250 por trabajo.");
+    expect(c.texto).not.toContain("desde");
+    expect(c.meta.precio_desde).toBe(4250);
+    expect(c.meta.precio_hasta).toBe(4250);
   });
+});
 
-  it("un material NO confiable (override) anula el total, aunque mostrar_total=true", () => {
+describe("chunkTrabajo: variante-de-trabajo con componente no cobrable", () => {
+  it("esa variante-de-trabajo se lista SIN precio; las demás sí lo traen", () => {
     const c = chunkTrabajo(
       trabajoBase({
-        componentes: [
-          comp("Impresión encapada", "impresion-encapada", [
-            matBase({ nombre_variante_bot: "25%", precio_lista: 800, tiene_override: true }),
+        variantes: [
+          vt("A3", 1, [
+            matBase({ nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+            matBase({ nombre_variante_bot: "Encapsulado A3", precio_lista: 750 }),
           ]),
-          comp("Encartonado", "encartonado", [matBase({ nombre_variante_bot: "Chico", precio_lista: 500 })]),
+          // 100x70: un componente con override → no confiable → variante-de-trabajo sin precio
+          vt("100x70", 2, [
+            matBase({ nombre_variante_bot: "Encartonado 100x70", precio_lista: 6500, tiene_override: true }),
+            matBase({ nombre_variante_bot: "Encapsulado metro", precio_lista: 1200 }),
+          ]),
         ],
       }),
     );
+    // la A3 se lista con precio, la 100x70 se lista sin precio
+    expect(c.texto).toContain("- [t1] A3 ($4.250 por trabajo).");
+    expect(c.texto).toContain("- [t2] 100x70.");
+    const v100 = c.meta.precios.find((p) => p.ref === "t2")!;
+    expect(v100.cobrable).toBe(false);
+    // el "desde" ignora la no cobrable → es el precio de la A3
+    expect(c.meta.precio_desde).toBe(4250);
+    expect(c.meta.precio_hasta).toBe(4250); // solo 1 confiable → no hay variación
+    expect(c.texto).toContain("Precio del trabajo: $4.250 por trabajo.");
+  });
+});
+
+describe("chunkTrabajo: el precio es OPCIONAL (mostrar_total)", () => {
+  it("mostrar_total=false → lista las variantes SIN precio y sin línea 'Precio del trabajo:'", () => {
+    const c = chunkTrabajo(trabajoBase({ mostrar_total: false }));
     expect(c.texto).not.toContain("Precio del trabajo:");
-    expect(c.meta.precios.some((p) => p.ref === "total")).toBe(false);
-    // las opciones igual se listan
-    expect(c.texto).toContain("[c1] 25%");
+    expect(c.texto).toContain("- [t1] A3."); // sin monto
+    expect(c.texto).not.toContain("$4.250");
+    expect(c.meta.precio_confiable).toBe(false);
+    expect(c.meta.precio_desde).toBeNull();
   });
 });
 
 describe("chunksDeTrabajos: filtros", () => {
-  it("excluye ocultos y los trabajos con menos de 2 PARTES", () => {
+  it("excluye ocultos y los trabajos sin ninguna variante-de-trabajo con nombre", () => {
     const ok = trabajoBase({ producto_id: "ok" });
     const oculto = trabajoBase({ producto_id: "oculto", oculto: true });
-    const unaParte = trabajoBase({
-      producto_id: "una",
-      componentes: [comp("Solo", "solo", [matBase()])],
-    });
-    const chunks = chunksDeTrabajos([ok, oculto, unaParte]);
+    const sinVariantes = trabajoBase({ producto_id: "vacio", variantes: [] });
+    const chunks = chunksDeTrabajos([ok, oculto, sinVariantes]);
     expect(chunks.map((c) => c.meta.producto_id)).toEqual(["ok"]);
+  });
+
+  it("un trabajo con UNA sola variante-de-trabajo es válido (no se filtra)", () => {
+    const una = trabajoBase({
+      producto_id: "una",
+      variantes: [vt("A3", 1, [matBase({ precio_lista: 3500 }), matBase({ precio_lista: 750 })])],
+    });
+    expect(chunksDeTrabajos([una])).toHaveLength(1);
   });
 });
 
-describe("loader: trabajos agrupados y validados", () => {
+describe("loader: trabajos con variantes-de-trabajo, validados", () => {
   const wrap = (trabajos: unknown) =>
-    JSON.stringify({ exportado: "2026-08-16", schema_version: 4, productos: [], trabajos });
+    JSON.stringify({ exportado: "2026-08-18", schema_version: 5, productos: [], trabajos });
 
-  it("acepta un export con trabajos bien formados (partes con items)", () => {
-    const { data } = parseExportV4(
-      wrap([{ producto_id: "t", componentes: [{ producto_id: "p", nombre_bot: "P", items: [] }] }]),
+  it("acepta un export con trabajos bien formados (variantes con componentes)", () => {
+    const { data } = parseExportV5(
+      wrap([{ producto_id: "t", variantes: [{ nombre_bot: "A3", ref_pos: 1, componentes: [] }] }]),
     );
     expect(data.trabajos).toHaveLength(1);
   });
 
-  it("rechaza un trabajo sin 'componentes'", () => {
-    expect(() => parseExportV4(wrap([{ producto_id: "t" }]))).toThrow(/componentes/);
+  it("rechaza un trabajo sin 'variantes'", () => {
+    expect(() => parseExportV5(wrap([{ producto_id: "t" }]))).toThrow(/variantes/);
   });
 
-  it("rechaza una parte sin 'items'", () => {
+  it("rechaza una variante-de-trabajo sin 'componentes'", () => {
     expect(() =>
-      parseExportV4(wrap([{ producto_id: "t", componentes: [{ producto_id: "p", nombre_bot: "P" }] }])),
-    ).toThrow(/items/);
+      parseExportV5(wrap([{ producto_id: "t", variantes: [{ nombre_bot: "A3", ref_pos: 1 }] }])),
+    ).toThrow(/componentes/);
   });
 
-  it("un export SIN la clave trabajos sigue parseando (back-compat)", () => {
-    const { data } = parseExportV4(
-      JSON.stringify({ exportado: "x", schema_version: 4, productos: [] }),
+  it("un export SIN la clave trabajos sigue parseando", () => {
+    const { data } = parseExportV5(
+      JSON.stringify({ exportado: "x", schema_version: 5, productos: [] }),
     );
     expect(data.trabajos).toBeUndefined();
   });

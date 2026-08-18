@@ -4,8 +4,8 @@
 // (un producto-bot puede agrupar variantes con cobros distintos). Función PURA y browser-safe:
 // el hash de contenido lo calcula el script de ingesta, no acá.
 
-import type { ItemBot, PrecioVariante, ProductoBot, TrabajoBot, TrabajoComponente } from "./types";
-import { contextoPrecio, precioVariante } from "./price-display";
+import type { ItemBot, PrecioVariante, ProductoBot, TrabajoBot, VarianteTrabajo } from "./types";
+import { contextoPrecio, fmtPrecio, precioVariante } from "./price-display";
 
 export interface RagChunkMeta {
   producto_id: string; // = clave natural del producto-bot (clave de metadata, no uuid)
@@ -106,36 +106,21 @@ export function chunksDeExport(productos: ProductoBot[]): RagChunk[] {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// TRABAJOS (combos): un chunk = un trabajo entero. Se arma combinando UNA opción de cada PARTE
-// (producto-bot); las opciones de una parte son ALTERNATIVAS, y partes distintas se combinan. El texto
-// lista "- Parte: [c1]…; [c2]…" con refs [cN] corridos (NO [vN]) y arranca con "Trabajo:" para que el
-// Verificador reconozca la composición y no la marque como fusión de variantes.
+// TRABAJOS (combos): un chunk = un trabajo entero. El trabajo tiene VARIANTES CERRADAS propias (medidas),
+// cada una con sus componentes concretos ya enumerados (las bot.variant que van JUNTAS). El texto lista
+// "- [t1] A3 ($X); …" con refs [tN] corridos (por position) y arranca con "Trabajo:" para que el
+// Verificador reconozca la composición y no la marque como fusión de variantes. El precio de cada
+// variante-de-trabajo = Σ de sus componentes; no hay cartesiano ni suma de mínimos sueltos.
 // ---------------------------------------------------------------------------------------------------
 
 const conNombre = (it: ItemBot): boolean =>
   !!(it.nombre_variante_bot || it.variante_origen || "").trim();
 
-/** Aplana las partes a opciones con ref [cN] CORRIDO (único en el trabajo), conservando la parte. */
-function partesConPrecio(
-  componentes: TrabajoComponente[],
-): { parte: string; opciones: { ref: string; pv: PrecioVariante }[] }[] {
-  let n = 0;
-  return componentes
-    .map((comp) => ({
-      parte: (comp.nombre_bot || "").trim(),
-      opciones: (comp.items || []).filter(conNombre).map((it) => {
-        const ref = `c${++n}`;
-        return { ref, pv: precioVariante(it, ref) };
-      }),
-    }))
-    .filter((p) => p.opciones.length > 0);
-}
-
-/** Item sintético que representa el TOTAL "desde" del combo, para hornearlo con precioVariante como un
- *  precio más (unidad_venta 'trabajo' → "por trabajo"). El total NO se guarda: es la combinación más barata. */
-function itemTotal(producto_id: string, total: number): ItemBot {
+/** Item sintético que representa el precio de una VARIANTE-DE-TRABAJO (Σ de sus componentes), para
+ *  hornearlo con precioVariante como un precio más (unidad_venta 'trabajo' → "por trabajo"). */
+function itemVarianteTrabajo(producto_id: string, ref_pos: number, total: number): ItemBot {
   return {
-    variante_id: `${producto_id}::total`,
+    variante_id: `${producto_id}::t${ref_pos}`,
     nombre_variante_bot: "Total",
     variante_origen: "Total",
     color: null,
@@ -151,55 +136,63 @@ function itemTotal(producto_id: string, total: number): ItemBot {
   };
 }
 
-/** Arma el chunk RAG de un TRABAJO. Asume !oculto y ≥2 partes (ver chunksDeTrabajos). El total es la
- *  combinación MÁS BARATA (Σ del más barato de cada parte) y se hornea SOLO si mostrar_total y TODOS los
- *  materiales son confiables (precio simple, sin override/escalera): un total con un precio dudoso mentiría.
- *  Si alguna parte tiene >1 opción, el precio se muestra "desde X"; si hay una sola combinación, exacto. */
+/** Hornea el PrecioVariante de una variante-de-trabajo. Su precio = Σ del precio_lista de sus
+ *  componentes; es cobrable SOLO si tiene componentes y TODOS son confiables (precio simple, sin
+ *  override/escalera): si alguno es dudoso, la variante-de-trabajo se lista sin precio (a confirmar por
+ *  mail). El nombre visible es el nombre_bot de la variante-de-trabajo, no "Total". */
+function precioVarianteTrabajo(vt: VarianteTrabajo): PrecioVariante {
+  const ref = `t${vt.ref_pos}`;
+  const nombre = (vt.nombre_bot || "").trim();
+  const componentes = (vt.componentes || []).filter(conNombre);
+  const confiable = componentes.length > 0 && componentes.every(itemPrecioConfiable);
+  const suma = componentes.reduce((acc, it) => acc + (Number(it.precio_lista) || 0), 0);
+  const pv = precioVariante(itemVarianteTrabajo("", vt.ref_pos, confiable ? suma : 0), ref);
+  return { ...pv, variante: nombre, cobrable: confiable && suma > 0 };
+}
+
+/** Arma el chunk RAG de un TRABAJO. Asume !oculto y ≥1 variante-de-trabajo (ver chunksDeTrabajos). Cada
+ *  variante-de-trabajo trae su precio real (Σ de sus componentes); el "desde" = mínimo entre las variantes
+ *  con precio confiable. Con una sola variante-de-trabajo, el precio es exacto (sin "desde"). El "desde" /
+ *  los precios se muestran solo si mostrar_total. */
 export function chunkTrabajo(t: TrabajoBot): RagChunk {
   const nombre = (t.nombre_bot || "").trim();
   const sinonimos = (t.sinonimos || []).map((s) => s.trim()).filter(Boolean);
   const casos = (t.casos_de_uso || []).map((s) => s.trim()).filter(Boolean);
-  const partes = partesConPrecio(t.componentes || []);
-  const todasLasOpciones = partes.flatMap((p) => p.opciones);
 
-  // Items usados por parte (con nombre). Total "desde" = Σ del más barato de cada parte; solo si se pidió
-  // mostrarlo, cada parte tiene ≥1 material y TODOS son confiables.
-  const itemsPorParte = (t.componentes || []).map((c) => (c.items || []).filter(conNombre));
-  const materialesUsados = itemsPorParte.flat();
-  const todosConfiables =
-    materialesUsados.length > 0 &&
-    itemsPorParte.every((items) => items.length > 0) &&
-    materialesUsados.every(itemPrecioConfiable);
-  const totalDesde = itemsPorParte.reduce(
-    (acc, items) => acc + Math.min(...items.map((it) => Number(it.precio_lista || 0))),
-    0,
-  );
-  const hayVariacion = itemsPorParte.some((items) => items.length > 1);
-  const totalPv =
-    t.mostrar_total && todosConfiables
-      ? precioVariante(itemTotal(t.producto_id, totalDesde), "total")
-      : null;
-  const totalCtx = totalPv ? contextoPrecio(totalPv) : null;
-  // Partes que varían (para el "dependiendo de …" que redacta el bot).
-  const partesVariables = t.componentes
-    .filter((c) => (c.items || []).filter(conNombre).length > 1)
-    .map((c) => (c.nombre_bot || "").trim())
-    .filter(Boolean);
+  // Una entrada por variante-de-trabajo (con nombre), ordenada por ref_pos → ref [tN] estable.
+  const variantes = (t.variantes || [])
+    .filter((vt) => (vt.nombre_bot || "").trim())
+    .slice()
+    .sort((a, b) => a.ref_pos - b.ref_pos)
+    .map((vt) => precioVarianteTrabajo(vt));
+
+  // "desde" = mínimo real entre variantes-de-trabajo con precio confiable (combinaciones válidas).
+  const confiables = variantes.filter((pv) => pv.cobrable);
+  const preciosConfiables = confiables.map((pv) => Number(pv.precio_lista));
+  const hayPrecio = t.mostrar_total && preciosConfiables.length > 0;
+  const desde = hayPrecio ? Math.min(...preciosConfiables) : null;
+  const hasta = hayPrecio ? Math.max(...preciosConfiables) : null;
+  const hayVariacion = preciosConfiables.length > 1;
 
   const lineas: string[] = [];
   lineas.push(`Trabajo: ${nombre}.`);
   if (sinonimos.length) lineas.push(`También llamado: ${sinonimos.join(", ")}.`);
   if (casos.length) lineas.push(`Sirve para: ${casos.join(", ")}.`);
   if (t.nota && t.nota.trim()) lineas.push(t.nota.trim());
-  if (partes.length) {
-    lineas.push("Se arma combinando una opción de cada parte:");
-    for (const p of partes) lineas.push(`- ${p.parte}: ${opcionesTexto(p.opciones)}.`);
+  if (variantes.length) {
+    lineas.push("Opciones del trabajo (cada una es una combinación cerrada; el cliente elige una):");
+    for (const pv of variantes) {
+      const ctx = t.mostrar_total ? contextoPrecio(pv) : null;
+      lineas.push(`- [${pv.ref}] ${pv.variante}${ctx ? ` (${ctx})` : ""}.`);
+    }
   }
-  if (totalCtx) {
+  if (hayPrecio && desde != null) {
+    // Monto + "por trabajo" (la unidad de cualquier variante-de-trabajo confiable es la misma).
+    const unidad = confiables[0]?.unidad ? ` ${confiables[0].unidad}` : "";
     lineas.push(
       hayVariacion
-        ? `Precio del trabajo: desde ${totalCtx}${partesVariables.length ? ` (varía según ${partesVariables.join(" y ")})` : ""}.`
-        : `Precio del trabajo: ${totalCtx}.`,
+        ? `Precio del trabajo: desde ${fmtPrecio(desde)}${unidad} (según la variante).`
+        : `Precio del trabajo: ${fmtPrecio(desde)}${unidad}.`,
     );
   }
 
@@ -210,19 +203,19 @@ export function chunkTrabajo(t: TrabajoBot): RagChunk {
       producto_id: t.producto_id,
       nombre_canonico: nombre,
       nicho: t.nicho ?? null,
-      precio_desde: totalPv ? totalDesde : null,
-      precio_hasta: totalPv ? (hayVariacion ? null : totalDesde) : null,
-      precio_confiable: totalPv != null,
-      precios: [...todasLasOpciones.map((o) => o.pv), ...(totalPv ? [totalPv] : [])],
+      precio_desde: desde,
+      precio_hasta: hayPrecio ? (hayVariacion ? null : hasta) : null,
+      precio_confiable: hayPrecio,
+      precios: variantes,
       tipo: "trabajo",
     },
   };
 }
 
-/** Todos los chunks de trabajos de un export. Excluye ocultos y los degenerados (<2 PARTES: un trabajo
- *  se define por combinar 2 o más productos distintos). */
+/** Todos los chunks de trabajos de un export. Excluye ocultos y los degenerados (sin ninguna
+ *  variante-de-trabajo: un trabajo se define por tener ≥1 combinación cerrada cotizable). */
 export function chunksDeTrabajos(trabajos: TrabajoBot[]): RagChunk[] {
   return trabajos
-    .filter((t) => !t.oculto && (t.componentes || []).length >= 2)
+    .filter((t) => !t.oculto && (t.variantes || []).some((vt) => (vt.nombre_bot || "").trim()))
     .map((t) => chunkTrabajo(t));
 }

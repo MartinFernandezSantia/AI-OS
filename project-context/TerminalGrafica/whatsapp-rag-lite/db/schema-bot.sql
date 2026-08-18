@@ -122,13 +122,17 @@ create unique index if not exists bot_variant_variant_uq on bot.variant (variant
 create index if not exists bot_variant_product_idx on bot.variant (product_id);
 
 -- =============================================================================
--- 2b. TRABAJOS (combos: 2+ materiales del catálogo que se hacen juntos)
+-- 2b. TRABAJOS (combos: producto compuesto con VARIANTES CERRADAS ya cotizables)
 -- =============================================================================
--- Un trabajo (ej. "invitaciones de casamiento") agrupa MATERIALES (variantes ya
--- curadas del catálogo) que se usan TODOS juntos, a diferencia de las variantes
--- de un producto (alternativas a elegir). El PRECIO TOTAL no se guarda: se CALCULA
--- sumando los precios de los materiales en la ingesta (chunkTrabajo). show_total
--- decide si el cliente ve ese total o solo los precios de los materiales.
+-- Un trabajo (ej. "encartonado") tiene sus PROPIAS variantes (bot.job_variant: las
+-- medidas A3, 100x70, …). Cada variante-de-trabajo enumera EXPLÍCITAMENTE los
+-- componentes que la arman (bot.job_variant_material → bot.variant concretas que van
+-- JUNTAS). No hay cartesiano: solo existen las combinaciones que el curador definió,
+-- así la compatibilidad se expresa por enumeración (ej. encartonado A3 va con
+-- encapsulado A3; las demás medidas van con encapsulado por metro). El PRECIO de cada
+-- variante-de-trabajo se CALCULA en la ingesta = Σ de sus componentes; el "desde" del
+-- trabajo = mínimo entre variantes-de-trabajo válidas. show_total decide si el cliente
+-- ve ese precio/desde o solo la existencia de las variantes.
 create table if not exists bot.job (
   id         uuid primary key default gen_random_uuid(),
   key        text unique not null,                 -- slug natural → metadata.producto_id
@@ -137,10 +141,10 @@ create table if not exists bot.job (
   use_cases  text[] not null default '{}',         -- "Sirve para:" (embedding)
   niche      text,                                 -- filtro blando
   note       text,                                 -- info puntual al embedding
-  show_total boolean not null default true,        -- true: mostrar el total calculado; false: solo materiales
+  show_total boolean not null default true,        -- true: mostrar precio de cada variante + "desde"; false: solo las variantes
   hidden     boolean not null default false,
   updated_at timestamptz not null default now()
-  -- SIN columnas de precio: el total se calcula, no se cura.
+  -- SIN columnas de precio: el precio de cada variante-de-trabajo se calcula, no se cura.
 );
 
 -- Nombre normalizado único (espejo de bot_product_name_norm_uq). OJO: es un índice SEPARADO del de
@@ -150,16 +154,30 @@ create unique index if not exists bot_job_name_norm_uq
   on bot.job (translate(lower(trim(bot_name)), 'áéíóúñ', 'aeioun'))
   where not hidden;
 
--- Materiales que componen un trabajo. Cada uno ES una variante ya curada del catálogo → reusa su
--- cobro/precio (sale_unit, pack_units, precio de public). Sin `position` (se ordena por nombre en el
--- chunk) ni `hidden` (un material compone o no; si no va, se borra la fila).
-create table if not exists bot.job_material (
-  id             uuid primary key default gen_random_uuid(),
-  job_id         uuid not null references bot.job(id)     on delete cascade,
-  bot_variant_id uuid not null references bot.variant(id) on delete cascade,
-  unique (job_id, bot_variant_id)
+-- Variantes PROPIAS de un trabajo: cada una es una combinación cerrada y válida (ej. "A3", "100x70").
+-- El bot la cotiza por su ref [tN] en el chunk; `position` fija el orden de ese ref (estable ante
+-- renombres). `unique(job_id, bot_name)` evita variantes homónimas dentro del trabajo (cruzarían refs).
+create table if not exists bot.job_variant (
+  id         uuid primary key default gen_random_uuid(),
+  job_id     uuid not null references bot.job(id) on delete cascade,
+  bot_name   text not null,                        -- "A3", "100x70"… (nombre de la variante-de-trabajo)
+  position   integer not null default 0,           -- orden estable del ref [tN] en el chunk
+  hidden     boolean not null default false,
+  updated_at timestamptz not null default now(),
+  unique (job_id, bot_name)
 );
-create index if not exists bot_job_material_job_idx on bot.job_material (job_id);
+create index if not exists bot_job_variant_job_idx on bot.job_variant (job_id);
+
+-- Componentes de una variante-de-trabajo: cada uno ES una variante ya curada del catálogo → reusa su
+-- cobro/precio (sale_unit, pack_units, precio de public). TODOS los de una variante-de-trabajo van
+-- JUNTOS (no son alternativas): el precio de la variante-de-trabajo es la suma de ellos.
+create table if not exists bot.job_variant_material (
+  id             uuid primary key default gen_random_uuid(),
+  job_variant_id uuid not null references bot.job_variant(id) on delete cascade,
+  bot_variant_id uuid not null references bot.variant(id)     on delete cascade,
+  unique (job_variant_id, bot_variant_id)
+);
+create index if not exists bot_job_variant_material_jv_idx on bot.job_variant_material (job_variant_id);
 
 -- =============================================================================
 -- 3. RUNTIME DEL BOT

@@ -60,22 +60,25 @@ export interface ProductoBot {
   items: ItemBot[];
 }
 
-/** Un material que compone una PARTE de un trabajo: es una variante ya curada del catálogo (mismo shape
- *  que ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_material. */
+/** Un componente de una variante-de-trabajo: es una variante ya curada del catálogo (mismo shape que
+ *  ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_variant_material.
+ *  Todos los componentes de una variante-de-trabajo van JUNTOS (no son alternativas): el precio de la
+ *  variante-de-trabajo es la suma de ellos. */
 export type MaterialBot = ItemBot;
 
-/** Una PARTE de un trabajo = un producto-bot con sus variantes ALTERNATIVAS (el cliente elige una). Se
- *  agrupa por bot.variant.product_id: variantes del mismo producto = alternativas; partes distintas se
- *  combinan (una de cada). Un trabajo válido tiene ≥2 partes. */
-export interface TrabajoComponente {
-  producto_id: string; // = bot.product.key de la parte
-  nombre_bot: string; // = bot.product.bot_name (nombre de la parte)
-  items: MaterialBot[]; // variantes alternativas de esta parte
+/** Una VARIANTE-DE-TRABAJO: una combinación CERRADA y válida del trabajo (ej. "A3", "100x70"), con sus
+ *  componentes concretos ya enumerados. Su precio = Σ de sus componentes. El bot la cotiza por su ref
+ *  [tN] en el chunk. La compatibilidad se expresa por enumeración: solo existen las que el curador armó. */
+export interface VarianteTrabajo {
+  nombre_bot: string; // = bot.job_variant.bot_name ("A3", "100x70"…)
+  ref_pos: number; // = bot.job_variant.position → orden estable del ref [tN]
+  componentes: MaterialBot[]; // las bot.variant que la arman (van todas juntas)
 }
 
-/** Un TRABAJO (combo): se arma combinando UNA opción de cada PARTE (2+ productos-bot). Tiene embedding
- *  propio en el RAG. El precio total se CALCULA (no se guarda): con `mostrar_total`, el bot muestra el
- *  total "desde" (combinación más barata); si no, solo los precios por opción. Mismo molde que ProductoBot. */
+/** Un TRABAJO (combo): un producto compuesto con VARIANTES CERRADAS propias (VarianteTrabajo). Tiene
+ *  embedding propio en el RAG. El precio de cada variante-de-trabajo se CALCULA (Σ de sus componentes);
+ *  con `mostrar_total`, el bot muestra ese precio por variante y el "desde" (la más barata). Mismo molde
+ *  que ProductoBot. */
 export interface TrabajoBot {
   producto_id: string; // = clave natural (bot.job.key) — clave de metadata
   nombre_bot: string;
@@ -84,13 +87,13 @@ export interface TrabajoBot {
   nicho: string | null;
   nota: string | null;
   oculto: boolean;
-  mostrar_total: boolean; // = bot.job.show_total: mostrar el total "desde", o solo los precios por opción
-  componentes: TrabajoComponente[]; // partes (productos-bot) agrupadas
+  mostrar_total: boolean; // = bot.job.show_total: mostrar el precio de cada variante + "desde", o solo las variantes
+  variantes: VarianteTrabajo[]; // variantes-de-trabajo (combinaciones cerradas)
 }
 
-export interface CatalogExportV4 {
+export interface CatalogExportV5 {
   exportado: string;
-  schema_version: number; // 4
+  schema_version: number; // 5
   productos: ProductoBot[];
-  trabajos?: TrabajoBot[]; // opcional → un export viejo sin trabajos sigue siendo válido
+  trabajos?: TrabajoBot[]; // opcional → un export sin trabajos sigue siendo válido
 }
