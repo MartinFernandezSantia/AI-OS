@@ -160,6 +160,33 @@ La Cloud API pide el número **registrado** con un **PIN de 6 dígitos** (two-st
 2. Chatwoot (versiones nuevas) registra el número solo al crear el inbox. Si quedó "pending",
    registrar desde WhatsApp Manager / API.
 
+**Registrar por API (la UI esconde el error real).** El botón "Register" del WhatsApp Manager tira
+un toast genérico ("Se ha producido un error, vuelve a intentarlo") que no dice NADA. Registrá por
+la API y vas a ver el `error.code` real:
+
+```bash
+curl -X POST 'https://graph.facebook.com/v25.0/<PHONE_NUMBER_ID>/register' \
+  -H 'Authorization: Bearer <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"messaging_product":"whatsapp","pin":"<PIN_NUEVO_6_DIGITOS>"}'
+```
+
+(En **bash** las comillas van tal cual; el `\"` de PowerShell rompe el JSON y da un falso
+`(#100) messaging_product is required`.)
+
+**Gotcha real vivido (2026-08-19): `133005` Two-step verification PIN Mismatch en un chip
+prepago NUEVO.** El 2FA de la Cloud API es DISTINTO del 2FA del WhatsApp consumer. Diagnóstico:
+- Si instalás WhatsApp normal en el número y **NO te pide PIN** → no hay 2FA de consumer / no es
+  número reciclado. El PIN trabado está en la **registración de la Cloud API**, seteado en algún
+  intento previo (o en el asistente de alta) y ya no lo conocés.
+- **NO sirve**: reintentar el register (te lleva a `133009`, bloqueo por horas), ni quitar/re-poner
+  el 2FA en el app consumer.
+- **Fix que destrabó**: **borrar el número de la WABA en WhatsApp Manager y volver a agregarlo**
+  (Add phone number → re-verificar OTP → PIN nuevo desde cero). La registración vieja y su PIN se
+  van. **Cuidado: el número recibe un Phone Number ID NUEVO → actualizarlo en Chatwoot.**
+- Antes de borrar/re-agregar, probá el reset en WhatsApp Manager → número → Settings → Two-step
+  verification (a veces resetea por mail de recuperación sin pedir el PIN viejo).
+
 ---
 
 ## 11. App a modo LIVE
