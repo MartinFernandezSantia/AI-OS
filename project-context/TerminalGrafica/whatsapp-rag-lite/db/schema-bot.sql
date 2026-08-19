@@ -275,6 +275,9 @@ end $g$;
 grant usage on schema bot to bot_curator;
 grant select, insert, update, delete on bot.product, bot.variant to bot_curator;
 grant select, insert, update, delete on bot.job, bot.job_variant, bot.job_variant_material to bot_curator;
+-- Ingesta del catálogo al RAG desde el dashboard (botón "Ingestar al bot"): reescribe rag_catalog con
+-- DELETE+INSERT (no truncate → no necesita ser owner). bot_runtime la sigue leyendo (runtime_select).
+grant select, insert, delete on bot.rag_catalog to bot_curator;
 grant usage on schema public to bot_curator;
 -- El dashboard lee products/variants/categories; el export (curador-export-v5) además resuelve precios
 -- desde pricing_rules/pricing_rule_targets. bot_curator NUNCA escribe public (solo select).
@@ -346,6 +349,10 @@ drop policy if exists runtime_select on bot.rag_catalog;
 create policy runtime_select on bot.rag_catalog       for select to bot_runtime using (true);
 drop policy if exists runtime_select on bot.rag_business_info;
 create policy runtime_select on bot.rag_business_info for select to bot_runtime using (true);
+
+-- bot_curator reingesta rag_catalog desde el dashboard (delete+insert). Combina por OR con runtime_select.
+drop policy if exists curator_rag on bot.rag_catalog;
+create policy curator_rag on bot.rag_catalog for all to bot_curator using (true) with check (true);
 
 -- bot.log: INSERT (Log Decisión) + SELECT (read-back de memoria) + UPDATE (Log Turno).
 drop policy if exists runtime_all on bot.log;
