@@ -103,28 +103,22 @@ y `DATABASE_URL` (`--apply`/consulta).
   devuelve solo texto sino un objeto `{ respuesta, etapa, productos_ofrecidos[], motivo,
   afirmaciones[] }`. `productos_ofrecidos` lleva `nombre_catalogo` (exacto como vino de la
   búsqueda) + `nombre_mostrado` + `atributos` (de UNA fila) + `cantidad` (si el cliente la dijo).
-- **Agente Verificador** (2º agente, `outputParserStructured`, **SIN tool**): audita
-  `productos_ofrecidos` contra el catálogo real y marca fallas: `producto_inventado`,
-  `fusion_variantes` (atributos que no viven juntos en una fila real), `no_trabajado` (**Regla 0
-  autoritativa**: pisa la existencia en catálogo, así un sinónimo tramposo —ej. *fotocopias*— no
-  excusa ofrecerlo; lista ampliable), `dato_no_corroborable`. Devuelve `{ aprobado, accion,
-  fallas[], resumen }` con `accion` ∈ aprobar/corregir/regenerar. Prompt con Fable + `prompt-master`.
-  - **Pre-fetch batch, sin loop agéntico**: en vez de una tool que el modelo llama producto por
-    producto (una inferencia nueva re-mandando todo el contexto cada vez, ~2k tok/producto), un
-    nodo **Traer Catálogo Real** (postgres) trae de UNA query las filas reales de los productos
-    afirmados y **Armar Verificación** las inyecta en el prompt → el Verificador audita en **UNA
-    sola pasada**. N vueltas al modelo → 1. Mismo patrón que `Buscar Precios`.
-  - **Match EXACTO (`= any`, no substring)**: trae SOLO las filas necesarias (nada de basura por
-    `LIKE`) y, clave, un nombre que el Agente inventó/escribió mal **no trae fila** → `Armar
-    Verificación` lo detecta (compara nombres afirmados vs filas devueltas) y se lo pasa al
-    Verificador como `producto_inventado`. El propio match hace de anti-alucinación de nombres.
+- **Agente Verificador** (2º agente, `outputParserStructured`, **SIN tool**): guardrail de
+  **política/rol** sobre la respuesta del bot. **NO mira el catálogo real** (no audita productos ni
+  precios). Marca fallas: `no_trabajado` (**Regla 0 autoritativa**: pisa la existencia en catálogo,
+  así un sinónimo tramposo —ej. *fotocopias*— no excusa ofrecerlo; lista ampliable),
+  `info_no_permitida` (plazos/envíos/stock/toma de pedidos inventados; la política oficial vía
+  `consultar_info_negocio` NO se marca), `derivacion_prematura`, `pedido_o_archivo_por_canal`,
+  `fuera_de_rol`, `producto_no_declarado` (cruce respuesta-vs-auditoría: afirma datos de catálogo de
+  un producto que no está en `productos_ofrecidos`; no valida contra el catálogo). **Armar
+  Verificación** le pasa pedido + respuesta + auditoría en **UNA sola pasada** (sin tool, sin
+  pre-fetch de catálogo → prompt corto y barato). Devuelve `{ aprobado, accion, fallas[], resumen }`
+  con `accion` ∈ aprobar/corregir. Prompt con Fable + `prompt-master`.
 - **Remediación** (`Leer Veredicto` → `Ruteo Acción` switch):
   - **aprobar** → sale directo.
-  - **corregir** (fallas que se arreglan editando texto) → **Corrector** (agente LLM sin tools,
-    barato: saca/reformula sin re-buscar ni agregar) → `Aplicar Corrección`.
-  - **regenerar** (solo grave: producto equivocado / no relacionado) → vuelve al **Agente
-    principal** con feedback (respuesta anterior + fallas) y rehace. **Loop acotado a 3**
-    (`¿Reintentar? (máx 3)` corta por `$runIndex`; al 4º intento cae al Corrector).
+  - **corregir** (cualquier falla) → **Corrector** (agente LLM sin tools, barato: saca/reformula
+    sin re-buscar ni agregar) → `Aplicar Corrección`. Es la ÚNICA remediación: la respuesta nunca
+    se rehace desde cero (regenerar ya no existe; cualquier acción que no sea aprobar cae a corregir).
   - El Agente principal además sabe por prompt que **no se hacen fotocopias** (línea A), para no
     afirmarlo de entrada.
 - **Preguntar para converger** (etapa "falta info"): sin tope fijo de recomendados; si el pedido

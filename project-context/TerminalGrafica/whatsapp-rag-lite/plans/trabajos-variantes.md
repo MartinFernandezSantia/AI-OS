@@ -152,5 +152,11 @@ El bug 1 (combinaciones inválidas) desaparece por construcción; el bug 2 (desd
 | Dashboard UI | `catalog-curator/components/job-editor.tsx` (+ workspace/page de trabajos) |
 | Dashboard tests | `catalog-curator/lib/__tests__/jobs.test.ts` |
 
-## Plan diferido (NO en este ciclo)
-Retirar el bloque B del Verificador (deja de mirar productos/precios). Mapa de remoción ya investigado: eliminar nodo `Traer Catálogo Real`, recablear `Agente → Armar Verificación`, quitar el bloque `if(conCatalogo)` de `Armar Verificación`, borrar el bloque B de `sistemaVerif` + las fallas `fusion_variantes`/`producto_inventado` de `esquemaVerif`/`sistemaCorrector`. Quedan los 6 checks de política; nada aguas abajo se rompe; cero tests que cubran eso.
+## Plan diferido — ✅ HECHO (ver `plans/retirar-bloque-b-verificador.md`)
+Retirar el bloque B del Verificador (deja de mirar productos/precios). **Ejecutado 2026-08-19:**
+eliminado el nodo `Traer Catálogo Real`, recableado `Agente → Armar Verificación`, quitado el
+bloque `if(conCatalogo)` de `Armar Verificación`, borrado el bloque B de `sistemaVerif` + las
+fallas `fusion_variantes`/`producto_inventado` de `esquemaVerif`/`sistemaCorrector`. Quedan los 6
+checks de política (`producto_no_declarado` incluido). Nada aguas abajo se rompió; JSON de test
+huérfano archivado; README actualizado. Downgrade aceptado: se pierde el check determinista de
+nombres inventados (`faltantes`). Detalle completo en `plans/retirar-bloque-b-verificador.md`.

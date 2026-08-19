@@ -406,19 +406,19 @@ const esquemaSalida = {
 };
 
 // ─────────────────────────────── VERIFICADOR ───────────────────────────────
-// Guardrail de política SIEMPRE (checks de negocio/rol) + veredicto comparativo de producto GATEADO
-// por etapa (solo recomendacion/seguimiento, cuando Armar Verificación le pasa el catálogo real).
+// Guardrail de política/rol: checks de negocio/consistencia sobre la respuesta del bot.
+// NO mira el catálogo real (no audita productos ni precios); solo cruza respuesta-vs-auditoría.
 // No habla con el cliente: devuelve un veredicto JSON para el log y la remediación. Nunca regenera.
 const sistemaVerif = `Sos el GUARDRAIL del bot de WhatsApp de Terminal Gráfica (imprenta argentina). NO le hablás al cliente: revisás su respuesta y devolvés un veredicto JSON para el log y la remediación.
 
-Recibís en un solo mensaje: el pedido del cliente + la respuesta del bot + la auditoría del bot (etapa; productos_ofrecidos con nombre_catalogo, atributos y cantidad; afirmaciones; precios_solicitados). A VECES (solo cuando el bot ofreció productos) también recibís los DATOS REALES del catálogo de esos productos. Verificá en UNA sola pasada.
+Recibís en un solo mensaje: el pedido del cliente + la respuesta del bot + la auditoría del bot (etapa; productos_ofrecidos con nombre_catalogo, atributos y cantidad; afirmaciones; precios_solicitados). Verificá en UNA sola pasada.
 
 SESGO: marcá SOLO violaciones claras. Ante la duda, APROBÁ. Un falso positivo hace que un nodo edite una respuesta que estaba bien.
 
 ## Fast-path
 Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no promete nada y no pide nada, devolvé aprobado=true con fallas=[] y terminá.
 
-## A) CHECKS SIEMPRE — política + consistencia, en toda respuesta (con o sin catálogo)
+## A) CHECKS SIEMPRE — política + consistencia, en toda respuesta
 - no_trabajado — REGLA 0, se evalúa PRIMERO. La imprenta NO hace: fotocopias. (Lista ampliable.) Si el bot ofreció o afirmó que hacen algo de esta lista, marcá no_trabajado — aunque exista un producto parecido por sinónimo. Que "exista en el catálogo" no lo excusa.
 - info_no_permitida — el bot INVENTÓ o PROMETIÓ un dato operativo que no puede afirmar: un plazo o tiempo de entrega CONCRETO (ej. "en 48 hs", "para el jueves", "lo tenés mañana"), un ENVÍO a domicilio, stock disponible, o que toma/gestiona el pedido POR EL CHAT. IMPORTANTE: el bot SÍ puede dar la POLÍTICA OFICIAL del negocio (viene de la tool consultar_info_negocio) — NO la marques: que NO hacen envíos y se retira en el local, que el plazo depende de cada trabajo y se confirma por mail, que los urgentes se coordinan por mail o en el local, ni los horarios, dirección o formas de pago. Marcá SOLO la promesa concreta o el dato inventado, no la política. NO audites acá atributos de producto, precios ni formas de cobro: esos los cubre otro proceso y NO son info_no_permitida.
 - derivacion_prematura — el bot empujó al cliente al mail ANTES de que el cliente pidiera avanzar. Marcá SOLO si la respuesta cierra mandando al mail Y en el mensaje del cliente NO hay ninguna señal de querer avanzar o hacer el pedido; si es ambiguo, APROBÁ. NO es derivación: ofrecer "cotizar por mail" cuando una opción no tiene precio, ni decir que "el total se cierra por mail" — son parte del guion normal del bot.
@@ -426,18 +426,13 @@ Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no pro
 - fuera_de_rol — el bot respondió algo ajeno al negocio o a su rol (temas que no son la imprenta, opiniones, tareas que no le tocan, salirse del personaje).
 - producto_no_declarado — la respuesta AFIRMA datos concretos de catálogo (papeles, gramajes, medidas, materiales, acabados, packs, "trabajamos en X") sobre un producto o pedido que NO figura en productos_ofrecidos. Es un cruce respuesta-vs-auditoría: todo lo que el bot afirma tiene que estar declarado. Las PREGUNTAS no cuentan: pedir un eje ("¿qué cantidad?", "¿color o b/n?") SIN afirmar qué opciones existen está BIEN y NO se marca. Marcá SOLO afirmaciones de dato concreto, nunca preguntas. Los datos OPERATIVOS del negocio (horario, dirección, pago, envíos, plazos, contacto, redes) NO son datos de catálogo: NO los marques acá (los provee consultar_info_negocio, no van en productos_ofrecidos).
 
-## B) COMPARACIÓN DE PRODUCTO — SOLO si te pasé los DATOS REALES del catálogo
-Si NO te pasé catálogo, SALTÁ este bloque entero. Si te lo pasé, para cada producto ofrecido buscá su fila real y marcá:
-- fusion_variantes — el bot afirmó JUNTOS atributos que no conviven en una misma opción. Un producto puede traer varias opciones "Opciones: [v1]…, [v2]…"; cada [vN] es una variante distinta. Vale para TODAS las opciones: lo que está en el nombre del producto, su descripción ("Sirve para", notas) y las líneas Material/Tecnología. Vale para UNA sola opción: lo que está en el nombre de ESE [vN]. Es fusión si combinó atributos de opciones [vN] DISTINTAS (ej.: "brillo y mate a la vez" cuando [v1] es brillo y [v2] es mate; o el tamaño de [v1] con el acabado de [v2]). También: si hay precios_solicitados, el [vN] cotizado (variante_ref) tiene que ser la MISMA opción cuyos atributos describió. Excepción: si la fila real arranca con "Trabajo:" y lista variantes-de-trabajo en "- [t1] …", cada [tN] es una combinación CERRADA y válida con su propio precio: cotizar una variante-de-trabajo [tN] NO es fusión. SÍ es fusión mezclar variantes de trabajos o productos DISTINTOS, o combinar opciones [vN] dentro de un producto normal. En un trabajo, variante_ref es el 'tN' de la variante cotizada.
-- producto_inventado — el nombre_catalogo afirmado no aparece: no hay fila real razonablemente parecida (te aviso aparte los nombres sin coincidencia exacta).
-
 ## Acción
 - aprobar — no hay fallas.
-- corregir — SIEMPRE que haya al menos una falla. Un nodo barato edita el mensaje sacando o reformulando lo observado (saca la afirmación no permitida, quita el atributo de más de una fusión, saca el producto inventado). Es la ÚNICA remediación: la respuesta NUNCA se rehace desde cero.
+- corregir — SIEMPRE que haya al menos una falla. Un nodo barato edita el mensaje sacando o reformulando lo observado (saca la afirmación no permitida, saca los datos de catálogo afirmados sobre un producto no declarado). Es la ÚNICA remediación: la respuesta NUNCA se rehace desde cero.
 
 ## Salida (formato obligatorio)
 Devolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:
-{"aprobado": boolean, "accion": "aprobar" | "corregir", "fallas": [{"tipo": "no_trabajado" | "info_no_permitida" | "derivacion_prematura" | "pedido_o_archivo_por_canal" | "fuera_de_rol" | "producto_no_declarado" | "fusion_variantes" | "producto_inventado", "producto": string, "detalle": string}], "resumen": string}
+{"aprobado": boolean, "accion": "aprobar" | "corregir", "fallas": [{"tipo": "no_trabajado" | "info_no_permitida" | "derivacion_prematura" | "pedido_o_archivo_por_canal" | "fuera_de_rol" | "producto_no_declarado", "producto": string, "detalle": string}], "resumen": string}
 aprobado=false si hay al menos una falla; en ese caso accion="corregir". resumen = 1 frase en castellano rioplatense.
 Ejemplo: {"aprobado": false, "accion": "corregir", "fallas": [{"tipo": "no_trabajado", "producto": "fotocopias", "detalle": "El bot ofreció fotocopias, un servicio que la imprenta no hace."}], "resumen": "Ofreció fotocopias, que no se trabajan."}`;
 
@@ -468,8 +463,6 @@ const esquemaVerif = {
               "pedido_o_archivo_por_canal",
               "fuera_de_rol",
               "producto_no_declarado",
-              "fusion_variantes",
-              "producto_inventado",
             ],
           },
           producto: { type: "string", description: "el nombre_catalogo afectado, si aplica" },
@@ -501,7 +494,6 @@ que marque el auditor:
 - fuera_de_rol: sacá lo ajeno al negocio.
 - producto_no_declarado: sacá los datos de catálogo afirmados de ese producto/pedido (papeles,
   medidas, opciones); si había una pregunta al cliente, dejala TAL CUAL.
-- fusion_variantes: quitá el atributo que sobra. producto_inventado: sacá ese producto.
 
 El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: son PLACEHOLDERS legítimos,
 copialos TAL CUAL, no los reescribas ni los borres ni pongas un número. Si sacás un producto entero,
@@ -1002,11 +994,11 @@ const flow = {
       position: [480, 420],
     },
     {
-      // Segundo agente = guardrail de política + consistencia (siempre) + comparación de producto (gateada por etapa).
+      // Segundo agente = guardrail de política/rol + consistencia. NO mira el catálogo real.
       parameters: {
         promptType: "define",
-        // Prompt pre-armado por "Armar Verificación": pedido + respuesta + auditoría siempre; los datos
-        // reales del catálogo solo si etapa ∈ {recomendacion, seguimiento}. Sin tool, una sola inferencia.
+        // Prompt pre-armado por "Armar Verificación": pedido + respuesta + auditoría.
+        // Sin tool, una sola inferencia.
         text: "={{ $json.prompt }}",
         hasOutputParser: true,
         options: { systemMessage: sistemaVerif },
@@ -1046,42 +1038,8 @@ const flow = {
       position: [740, 620],
     },
     {
-      // PRE-FETCH DETERMINISTA (reemplaza la tool agéntica del Verificador). Trae de UNA query las
-      // filas reales de los productos afirmados con match sobre nombre_canonico normalizado (acentos +
-      // puntuación/espacios colapsados: el chunk muestra el nombre con un punto final "…gr." y el LLM
-      // lo copia con el punto, pero el canónico no lo tiene → sin esto daba 0 filas). `= any`, no LIKE:
-      // trae SOLO lo necesario y un nombre realmente inventado igual NO trae fila → señal de
-      // producto_inventado que Armar Verificación detecta. alwaysOutputData: sin productos (saludo)
-      // → 0 filas pero igual emite un item para que la cola no se corte.
-      parameters: {
-        operation: "executeQuery",
-        query:
-          "select metadata->>'nombre_canonico' as nombre,\n" +
-          "       metadata->>'nicho'           as nicho,\n" +
-          "       text\n" +
-          "  from bot.rag_catalog\n" +
-          " where trim(regexp_replace(translate(lower(metadata->>'nombre_canonico'), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g')) = any(\n" +
-          "   select trim(regexp_replace(translate(lower(x), $$áéíóúñ$$, $$aeioun$$), '[^a-z0-9]+', ' ', 'g'))\n" +
-          "     from jsonb_array_elements_text($1::jsonb) as x)",
-        options: {
-          // $1 = JSON array de nombres afirmados. null-safe: sin productos → [] → 0 filas.
-          queryReplacement:
-            "={{ [ JSON.stringify((((($('Agente').first().json.output)||{}).productos_ofrecidos)||[]).map(p => p.nombre_catalogo)) ] }}",
-        },
-      },
-      id: "rag-traer-catalogo",
-      name: "Traer Catálogo Real",
-      type: "n8n-nodes-base.postgres",
-      typeVersion: 2.6,
-      position: [420, 180],
-      credentials: { postgres: BOT_DB },
-      alwaysOutputData: true,
-    },
-    {
-      // Arma el mensaje de usuario del Verificador. Los CHECKS DE POLÍTICA corren SIEMPRE (pedido +
-      // respuesta + auditoría). La COMPARACIÓN DE PRODUCTO (fusion/inventado) es gateada por etapa: solo
-      // si etapa ∈ {recomendacion, seguimiento} se inyectan las filas reales ($input) y los faltantes.
-      // FALTANTES (nombres afirmados sin fila exacta) se computan SIEMPRE → observabilidad en el log.
+      // Arma el mensaje de usuario del Verificador: pedido del cliente + respuesta del bot +
+      // auditoría. Solo checks de política/rol; NO inyecta catálogo real.
       parameters: {
         jsCode: [
           "let ag = $('Agente').first().json.output ?? {};",
@@ -1089,28 +1047,12 @@ const flow = {
           "const aud = (ag && typeof ag === 'object') ? ag : { respuesta: String(ag ?? '') };",
           "const cliente = $('Cuando llega un mensaje').first().json.chatInput || '';",
           "const etapa = String(aud.etapa || '');",
-          "const conCatalogo = etapa === 'recomendacion' || etapa === 'seguimiento';",
-          "const rows = $input.all().map((i) => i.json).filter((r) => r && r.nombre);",
-          "// normalizador espejo del SQL: acentos + colapsa puntuación/espacios (matchea 'gr.' con 'gr')",
-          "const nk = (s) => String(s || '').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').replace(/[^a-z0-9]+/g,' ').trim();",
-          "const encontrados = new Set(rows.map((r) => nk(r.nombre)));",
-          "const pedidos = (Array.isArray(aud.productos_ofrecidos) ? aud.productos_ofrecidos : []).map((p) => p && p.nombre_catalogo).filter(Boolean);",
-          "const faltantes = [...new Set(pedidos.filter((n) => !encontrados.has(nk(n))))];",
           "const partes = [",
           "  'Pedido del cliente:', cliente, '',",
           "  'Respuesta del bot (revisala):', String(aud.respuesta || ''), '',",
           "  'Auditoría del bot:', JSON.stringify(aud, null, 2),",
           "];",
-          "if (conCatalogo) {",
-          "  const real = rows.length",
-          "    ? rows.map((r) => '### ' + r.nombre + (r.nicho ? ' [nicho: ' + r.nicho + ']' : '') + '\\n' + (r.text || '')).join('\\n\\n')",
-          "    : '(ninguno de los productos ofrecidos existe en el catálogo)';",
-          "  partes.push('', 'DATOS REALES del catálogo (hacé la comparación de producto SOLO contra esto):', real);",
-          "  if (faltantes.length) {",
-          "    partes.push('', 'PRODUCTOS SIN COINCIDENCIA EXACTA EN EL CATÁLOGO — el bot afirmó estos nombres pero no existen tal cual. Marcá producto_inventado para cada uno:', faltantes.map((n) => '- ' + n).join('\\n'));",
-          "  }",
-          "}",
-          "return [{ json: { prompt: partes.join('\\n'), auditoria: aud, etapa, faltantes, conCatalogo } }];",
+          "return [{ json: { prompt: partes.join('\\n'), auditoria: aud, etapa } }];",
         ].join("\n"),
       },
       id: "rag-armar-verif",
@@ -1122,8 +1064,6 @@ const flow = {
     {
       // Unifica en un solo item lo que las ramas de abajo necesitan: la respuesta + auditoría del
       // Agente (siempre ejecutó → ref segura) y el veredicto del Verificador (su input directo).
-      // Adjunta los `faltantes` de Armar Verificación (siempre ejecutó en las ramas que llegan acá)
-      // al objeto verificacion → viajan a la columna verificacion del log (observabilidad, sin plumbing).
       parameters: {
         jsCode: [
           "let ag = $('Agente').first().json.output ?? {};",
@@ -1133,9 +1073,6 @@ const flow = {
           "if (typeof ve === 'string') { try { ve = JSON.parse(ve); } catch (e) { ve = {}; } }",
           "// Regenerar ya no existe: cualquier acción que no sea 'aprobar' cae a 'corregir'.",
           "const accion = (ve.accion ? ve.accion === 'aprobar' : ve.aprobado === true) ? 'aprobar' : 'corregir';",
-          "let faltantes = [];",
-          "try { faltantes = $('Armar Verificación').first().json.faltantes || []; } catch (e) { faltantes = []; }",
-          "if (ve && typeof ve === 'object') ve.faltantes = faltantes;",
           "return [{ json: {",
           "  respuesta: audit.respuesta ?? '',",
           "  auditoria: audit,",
@@ -1323,7 +1260,7 @@ const flow = {
           "",
           "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
-          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL. Checks de POLÍTICA SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. COMPARACIÓN DE PRODUCTO (fusion_variantes / producto_inventado) SOLO si etapa ∈ {recomendacion, seguimiento}: ahí **Armar Verificación** inyecta las filas reales de **Traer Catálogo Real** (postgres); fuera de esas etapas no se trae catálogo (prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
+          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL de POLÍTICA/ROL (NO mira el catálogo real). Checks SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol, producto_no_declarado (cruce respuesta-vs-auditoría: afirma datos de catálogo de un producto que no declaró). **Armar Verificación** le pasa pedido + respuesta + auditoría (sin catálogo → prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
           "",
           "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.",
           "",
@@ -1334,7 +1271,7 @@ const flow = {
           "⚠️ VERIFICAR EN LA UI:",
           "1) Embeddings (Google Gemini) — LOS DOS sub-nodos (el de buscar_catalogo y el de consultar_info_negocio): credencial **Google Gemini(PaLM) API** (API key de Google AI Studio), modelo models/gemini-embedding-001 (el MISMO que la ingesta).",
           "2) Modelos de CHAT — TODOS los nodos Modelo (Modelo, Modelo · Verificador, Modelo · Corrector y, en Chatwoot, Modelo · Guardrails) pasaron a **Google Gemini nativo** (lmChatGoogleGemini, ya no OpenRouter): cableales la MISMA credencial Google Gemini(PaLM) API que los embeddings y confirmá el modelo (GEMINI_MODEL, hoy models/gemini-3.1-flash-lite).",
-          "3) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts). El pre-fetch del Verificador (Traer Catálogo Real) es un postgres normal, sin config de UI.",
+          "3) buscar_catalogo (PGVector): Table Name = bot.rag_catalog (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (scripts/rag-ingest.ts).",
           "4) consultar_info_negocio (PGVector): Table Name = bot.rag_business_info (schema-cualificado). Requiere db/schema-bot.sql aplicado y la tabla poblada (pnpm rag:ingest:info --apply, que lee de bot.business_info). Info del negocio (horario/dirección/pago/envíos/plazos/contacto/redes).",
         ].join("\n"),
         height: 560,
@@ -1364,14 +1301,13 @@ const flow = {
       ],
     },
     "Contexto Previo": { main: [[{ node: "Agente", type: "main", index: 0 }]] },
-    // Agente: main[0] = OK → pre-fetch del catálogo → Verificador; main[1] = ERROR → Fallback Agente.
+    // Agente: main[0] = OK → Verificador (Armar Verificación); main[1] = ERROR → Fallback Agente.
     Agente: {
       main: [
-        [{ node: "Traer Catálogo Real", type: "main", index: 0 }],
+        [{ node: "Armar Verificación", type: "main", index: 0 }],
         [{ node: "Fallback Agente", type: "main", index: 0 }],
       ],
     },
-    "Traer Catálogo Real": { main: [[{ node: "Armar Verificación", type: "main", index: 0 }]] },
     "Armar Verificación": { main: [[{ node: "Agente Verificador", type: "main", index: 0 }]] },
     "Fallback Agente": { main: [[{ node: "Preparar Respuesta", type: "main", index: 0 }]] },
     // Verificador: main[0] = OK → Leer Veredicto; main[1] = ERROR → Fallback Verificador (aprueba).
