@@ -108,9 +108,8 @@ y `DATABASE_URL` (`--apply`/consulta).
   precios). Marca fallas: `no_trabajado` (**Regla 0 autoritativa**: pisa la existencia en catálogo,
   así un sinónimo tramposo —ej. *fotocopias*— no excusa ofrecerlo; lista ampliable),
   `info_no_permitida` (plazos/envíos/stock/toma de pedidos inventados; la política oficial vía
-  `consultar_info_negocio` NO se marca), `derivacion_prematura`, `pedido_o_archivo_por_canal`,
-  `fuera_de_rol`, `producto_no_declarado` (cruce respuesta-vs-auditoría: afirma datos de catálogo de
-  un producto que no está en `productos_ofrecidos`; no valida contra el catálogo). **Armar
+  `consultar_info_negocio` NO se marca), `derivacion_prematura`, `pedido_o_archivo_por_canal` y
+  `fuera_de_rol`. **Armar
   Verificación** le pasa pedido + respuesta + auditoría en **UNA sola pasada** (sin tool, sin
   pre-fetch de catálogo → prompt corto y barato). Devuelve `{ aprobado, accion, fallas[], resumen }`
   con `accion` ∈ aprobar/corregir. Prompt con Fable + `prompt-master`.

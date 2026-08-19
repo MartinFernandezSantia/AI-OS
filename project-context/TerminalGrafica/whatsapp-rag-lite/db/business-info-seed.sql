@@ -9,8 +9,8 @@
 -- greenfield renombró la tabla a bot.business_info(key, value). Las CLAVES quedan en
 -- ESPAÑOL a propósito (el scoring por tema hace key.includes('horario'|'pago'|…)).
 --
--- Valores confirmados por Martin (2026-08-03). Queda UNA fila 'COMPLETAR' (factura):
--- el ingest la SALTEA sola (filtro value not ilike 'COMPLETAR%') hasta que la llenes.
+-- Valores confirmados por Martin (2026-08-03). Quedan filas 'COMPLETAR' (factura, telefono):
+-- el ingest las SALTEA solas (filtro value not ilike 'COMPLETAR%') hasta que las llenes.
 -- Aplicar como owner/admin (la tabla la crea schema-bot.sql). Idempotente.
 -- =============================================================================
 
@@ -23,9 +23,10 @@ insert into bot.business_info (key, value) values
   ('plazo',           'El plazo de entrega depende de cada trabajo y se confirma por mail.'),
   ('urgente',         'Trabajamos pedidos urgentes, pero eso se coordina por mail o directamente en el local.'),
   ('contacto',        'Este WhatsApp es solo informativo. Para hacer un pedido o hablar con una persona del equipo, escribinos a terminalgrafica@gmail.com o acercate al local.'),
+  ('telefono',        'COMPLETAR: teléfono del local (distinto de este WhatsApp) para hablar con una persona del equipo.'),
   ('contacto_redes',  'Nos encontrás en Instagram (instagram.com/terminalgrafica) y en Facebook (facebook.com/terminalgrafica).')
 on conflict (key) do nothing;
 
 -- Sanity tras aplicar:
---   select key, value from bot.business_info order by key;                 -- 12 filas
---   select count(*) from bot.business_info where value not ilike 'COMPLETAR%';  -- 11 (las que ingesta)
+--   select key, value from bot.business_info order by key;                 -- 13 filas (+telefono)
+--   select count(*) from bot.business_info where value not ilike 'COMPLETAR%';  -- 11 (telefono y factura son COMPLETAR)

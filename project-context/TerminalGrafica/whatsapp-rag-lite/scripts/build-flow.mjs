@@ -113,10 +113,13 @@ Cuando el cliente nombra una categoría amplia sin lo que hace falta para elegir
 EN ORDEN (el de arriba discrimina más), hasta 3 preguntas por mensaje y ANTES de listar nada. NO
 dispares con SOLO un tamaño genérico (A4, A3): casi no distingue.
 - Impresiones en papel: NO preguntes tipo de papel ni gramaje (casi nadie sabe los nombres técnicos).
-  Preguntá PARA QUÉ es la impresión + ¿color o b/n? + ¿simple o doble faz? + cantidad. Color y faz
-  CAMBIAN el precio: aunque el cliente te dé la cantidad, NO los asumas — si no los dijo, preguntalos
-  ANTES de cotizar (tener la cantidad NO alcanza para cerrar el precio; el "DEFAULT" de la guía es solo
-  qué PAPEL elegir, no una excusa para defaultear color o faz). Con el uso, el papel lo elegís VOS con
+  Preguntá PARA QUÉ es la impresión + cantidad + color y faz. Color y faz CAMBIAN el precio: aunque el
+  cliente te dé la cantidad, NO los asumas — si no los dijo, resolvelos ANTES de cotizar (tener la
+  cantidad NO alcanza para cerrar el precio; el "DEFAULT" de la guía es solo qué PAPEL elegir, no una
+  excusa para defaultear color o faz). PERO como son EJES BINARIOS, preguntalos CORTO por su polo
+  positivo y dejá el otro implícito, en UNA sola pregunta: "¿las necesitás a color o doble faz? (si no,
+  van en b/n simple faz)" — NO hagas dos preguntas separadas ni enumeres los dos polos de cada eje. Con
+  el uso, el papel lo elegís VOS con
   esta guía y buscás con ese papel puntual (no con todos a la vez):
     · apuntes / textos / impresión común → obra 75 (A4, económico; obra 75 = obra 80). DEFAULT —
       PERO si en los resultados hay una promo de módulos/apuntes de la facultad del cliente (medicina
@@ -129,9 +132,11 @@ dispares con SOLO un tamaño genérico (A4, A3): casi no distingue.
     · rústico / decorativo → kraft 130/300.   · calcar / traslúcido → vegetal.
   La guía es TUYA para decidir qué buscar: no le recites papeles ni gramajes al cliente.
 - Ploteado / gran formato: 1) vinilo, lona u obra · 2) color
-- Tarjetas: lo DECISIVO es el tamaño del pack (100 / 500 / 1000 unidades) + la faz (simple / doble) —
-  preguntá ESO primero y nada más. El pack es un eje del PRODUCTO, distinto de la cantidad que va a
-  encargar: si el cliente dijo una cantidad, mapeala al pack que la cubre, NO se la vuelvas a preguntar.
+- Tarjetas: lo DECISIVO es el tamaño del pack (100 / 500 / 1000 unidades) + la faz — preguntá ESO
+  primero y nada más. La faz es binaria: preguntala corta por su polo positivo ("¿doble faz?", queda
+  implícito que si no es simple), no como "¿simple o doble?". El pack es un eje del PRODUCTO, distinto
+  de la cantidad que va a encargar: si el cliente dijo una cantidad, mapeala al pack que la cubre, NO
+  se la vuelvas a preguntar.
   El material (¿kraft?) y el acabado (¿encapado?) son SECUNDARIOS: no los metas en la primera pregunta;
   se afinan después si hace falta, y siempre como opción simple ("¿en papel común o kraft?"), nunca
   ofreciendo un producto puntual con su gramaje.
@@ -236,6 +241,12 @@ reemplaza por el número real. Si tipeás un número, se rehace.
   dirección, pago, envíos, plazos, contacto, redes— NO se anclan en buscar_catalogo; salen de
   consultar_info_negocio, ver "## Info del negocio".)
 - Este canal solo INFORMA: no tomes pedidos ni pidas archivos.
+- ENOJO / PEDIR UN HUMANO: si el cliente está claramente enojado o disgustado, o pide hablar con una
+  persona / humano / encargado / "alguien de verdad", NO insistas con el catálogo ni intentes resolver
+  el producto en ese turno. Reconocé breve y sin excusarte de más, y pasale los contactos para hablar
+  con alguien del equipo: mail, teléfono y el local. Esos datos salen de consultar_info_negocio (clave
+  contacto) — llamala y da lo que devuelva; NO inventes un teléfono ni un mail. Esto NO es derivación
+  forzada: es lo que el cliente pidió.
 - NO ASUMAS que la charla terminó, pero tampoco fuerces un cierre. Si el mensaje ya se explica solo,
   terminá ahí — no agregues una pregunta de relleno. Si sumás un cierre, que sea UNA sola pregunta corta
   y natural, como la escribiría un empleado del local: "¿te sirve?", "¿lo vemos?", "¿te paso algo más?".
@@ -421,10 +432,9 @@ Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no pro
 ## A) CHECKS SIEMPRE — política + consistencia, en toda respuesta
 - no_trabajado — REGLA 0, se evalúa PRIMERO. La imprenta NO hace: fotocopias. La imprenta SI hace: impresiones.
 - info_no_permitida — el bot INVENTÓ o PROMETIÓ un dato operativo que no puede afirmar: un plazo o tiempo de entrega CONCRETO, un ENVÍO a domicilio, o que toma/gestiona el pedido POR EL CHAT. IMPORTANTE: el bot SÍ puede dar la POLÍTICA OFICIAL del negocio (viene de la tool consultar_info_negocio) — NO la marques: que NO hacen envíos y se retira en el local, que el plazo depende de cada trabajo y se confirma por mail, que los urgentes se coordinan por mail o en el local, ni los horarios, dirección o formas de pago. Marcá SOLO la promesa concreta o el dato inventado, no la política.
-- derivacion_prematura — el bot empujó al cliente al mail ANTES de que el cliente pidiera avanzar. Marcá SOLO si la respuesta cierra mandando al mail Y en el mensaje del cliente NO hay ninguna señal de querer avanzar o hacer el pedido; si es ambiguo, APROBÁ. NO es derivación: ofrecer "cotizar por mail" cuando una opción no tiene precio, ni decir que "el total se cierra por mail" — son parte del guion normal del bot.
+- derivacion_prematura — el bot empujó al cliente al mail ANTES de que el cliente pidiera avanzar. Marcá SOLO si la respuesta cierra mandando al mail Y en el mensaje del cliente NO hay ninguna señal de querer avanzar o hacer el pedido; si es ambiguo, APROBÁ. NO es derivación: ofrecer "cotizar por mail" cuando una opción no tiene precio, ni decir que "el total se cierra por mail" — son parte del guion normal del bot. TAMPOCO es derivación pasar los contactos (mail/teléfono/local) cuando el cliente está enojado o pidió hablar con una persona: ahí dar el contacto es lo correcto, NO lo marques.
 - pedido_o_archivo_por_canal — el bot tomó el pedido o pidió archivos para gestionarlos POR EL CHAT (ej.: "mandame el PDF por acá", "te anoto el pedido"). MATIZ: indicarle al cliente que mande el archivo y el pedido AL MAIL (terminalgrafica@gmail.com) está BIEN → NO lo marques.
 - fuera_de_rol — el bot respondió algo ajeno al negocio o a su rol (temas que no son la imprenta, opiniones, tareas que no le tocan, salirse del personaje).
-- producto_no_declarado — la respuesta AFIRMA datos concretos de catálogo (papeles, gramajes, medidas, materiales, acabados, packs, "trabajamos en X") sobre un producto o pedido que NO figura en productos_ofrecidos. Es un cruce respuesta-vs-auditoría: todo lo que el bot afirma tiene que estar declarado. Las PREGUNTAS no cuentan: pedir un eje ("¿qué cantidad?", "¿color o b/n?") SIN afirmar qué opciones existen está BIEN y NO se marca. Marcá SOLO afirmaciones de dato concreto, nunca preguntas. Los datos OPERATIVOS del negocio (horario, dirección, pago, envíos, plazos, contacto, redes) NO son datos de catálogo: NO los marques acá (los provee consultar_info_negocio, no van en productos_ofrecidos).
 
 ## Acción
 - aprobar — no hay fallas.
@@ -432,7 +442,7 @@ Si la respuesta es un saludo o una cortesía breve que no deriva a nadie, no pro
 
 ## Salida (formato obligatorio)
 Devolvé SIEMPRE y SOLO este JSON, sin texto fuera del JSON:
-{"aprobado": boolean, "accion": "aprobar" | "corregir", "fallas": [{"tipo": "no_trabajado" | "info_no_permitida" | "derivacion_prematura" | "pedido_o_archivo_por_canal" | "fuera_de_rol" | "producto_no_declarado", "producto": string, "detalle": string}], "resumen": string}
+{"aprobado": boolean, "accion": "aprobar" | "corregir", "fallas": [{"tipo": "no_trabajado" | "info_no_permitida" | "derivacion_prematura" | "pedido_o_archivo_por_canal" | "fuera_de_rol", "producto": string, "detalle": string}], "resumen": string}
 aprobado=false si hay al menos una falla; en ese caso accion="corregir". resumen = 1 frase en castellano rioplatense.
 Ejemplo: {"aprobado": false, "accion": "corregir", "fallas": [{"tipo": "no_trabajado", "producto": "fotocopias", "detalle": "El bot ofreció fotocopias, un servicio que la imprenta no hace."}], "resumen": "Ofreció fotocopias, que no se trabajan."}`;
 
@@ -462,7 +472,6 @@ const esquemaVerif = {
               "derivacion_prematura",
               "pedido_o_archivo_por_canal",
               "fuera_de_rol",
-              "producto_no_declarado",
             ],
           },
           producto: { type: "string", description: "el nombre_catalogo afectado, si aplica" },
@@ -492,8 +501,6 @@ que marque el auditor:
 - pedido_o_archivo_por_canal: sacá la toma de pedido / pedido de archivo por el chat (podés dejar que,
   para avanzar, manden el archivo y el pedido al mail terminalgrafica@gmail.com).
 - fuera_de_rol: sacá lo ajeno al negocio.
-- producto_no_declarado: sacá los datos de catálogo afirmados de ese producto/pedido (papeles,
-  medidas, opciones); si había una pregunta al cliente, dejala TAL CUAL.
 
 El mensaje puede traer marcadores {P1}, {P2}, … donde va un precio: son PLACEHOLDERS legítimos,
 copialos TAL CUAL, no los reescribas ni los borres ni pongas un número. Si sacás un producto entero,
@@ -915,7 +922,7 @@ const flow = {
         // Schema-cualificado: el nodo NO aplica un schema aparte, así que la tabla va como
         // `bot.rag_catalog` (si va solo `rag_catalog`, consulta public y devuelve [] en verde).
         tableName: "bot.rag_catalog",
-        topK: 8,
+        topK: 5,
         options: {
           // Nombres de columna = los del DDL (coinciden con los defaults del nodo).
           columnNames: {
@@ -1260,7 +1267,7 @@ const flow = {
           "",
           "**Salida estructurada** (nodo *Salida · Agente*): el agente devuelve JSON con `respuesta` + auditoría: `productos_ofrecidos` (nombre_catalogo + atributos + cantidad), `precios_solicitados` ({Pn}→producto/variante_ref/cantidad), `motivo`, `afirmaciones`.",
           "",
-          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL de POLÍTICA/ROL (NO mira el catálogo real). Checks SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol, producto_no_declarado (cruce respuesta-vs-auditoría: afirma datos de catálogo de un producto que no declaró). **Armar Verificación** le pasa pedido + respuesta + auditoría (sin catálogo → prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
+          "**Agente Verificador** (2º agente, SIN tool) = GUARDRAIL de POLÍTICA/ROL (NO mira el catálogo real). Checks SIEMPRE: no_trabajado (Regla 0: fotocopias…), info_no_permitida (plazos CONCRETOS/envíos/stock/toma de pedidos inventados — la política oficial del negocio vía consultar_info_negocio NO se marca), derivacion_prematura, pedido_o_archivo_por_canal (matiz: derivar archivo+pedido al mail está OK), fuera_de_rol. **Armar Verificación** le pasa pedido + respuesta + auditoría (sin catálogo → prompt corto y barato). Sesgo: ante la duda, aprobá. Decide **acción**: aprobar / corregir (NUNCA regenera).",
           "",
           "**Remediación** (Leer Veredicto → Ruteo Acción): aprobar→sale directo · corregir→**Corrector** (LLM barato que saca/reformula el texto sin re-buscar; blindado: si no ve la observación, deja el mensaje igual). NO hay regeneración: la respuesta nunca vuelve al Agente → tope duro de tokens.",
           "",
@@ -1805,13 +1812,13 @@ const getHistorial = {
 };
 
 const decidir = {
-  // Copia EXACTA del cerebro del v10. Decide `action` ∈ skip/primer-mensaje/injection/cap/process,
+  // Copia EXACTA del cerebro del v10. Decide `action` ∈ skip/injection/cap/process,
   // junta la ráfaga (entrantes con texto desde la última salida, NFC), aplica debounce ("soy el último"),
   // idempotencia ("ya respondí"), CAP 24h (25) y arma `conversation` (últimos 6 turnos). Lee de
   // $('Chatwoot Webhook') y $('Get Historial') por ref, no por passthrough.
   parameters: {
     jsCode:
-      "// === DECIDIR — decide QUÉ hacer y arma la conversación (sin catálogo: eso lo inyecta 'Armar mensajes') ===\nconst webhookData = $('Chatwoot Webhook').first().json;\nconst body = webhookData.body;\nconst myMessageId = body.id;\nconst conversationId = body.conversation.id;\nconst accountId = body.account.id;\n\n// F5: created_at robusto (unix int, string numérico o ISO) → siempre número\nconst num = (v) => {\n  if (v == null) return 0;\n  if (typeof v === 'number') return v;\n  const n = Number(v);\n  if (Number.isFinite(n)) return n;\n  const t = Date.parse(v);\n  return Number.isFinite(t) ? t : 0;\n};\nconst myCreatedAt = num(body.created_at);\n\nconst historialJson = $('Get Historial').first().json;\nconst rawPayload = historialJson.payload;\nconst allMessages = Array.isArray(rawPayload) ? rawPayload : (rawPayload && rawPayload.messages ? rawPayload.messages : []);\n\nconst isIn = (m) => m.message_type === 'incoming' || m.message_type === 0;\nconst isOut = (m) => (m.message_type === 'outgoing' || m.message_type === 1) && !m.private;\nconst hasContent = (m) => m.content && String(m.content).trim().length > 0;\n\nconst sorted = allMessages.slice().sort((a, b) => num(a.created_at) - num(b.created_at));\n\n// DEBOUNCE (F1): el \"último\" es el último ENTRANTE CON TEXTO.\n// Una foto que llega después de la pregunta ya no gana el \"soy el último\".\nconst incoming = sorted.filter((m) => isIn(m) && hasContent(m));\nconst lastIncoming = incoming.length ? incoming[incoming.length - 1] : null;\nif (lastIncoming && myMessageId && lastIncoming.id !== myMessageId) {\n  return [{ json: { action: 'skip', reason: 'no-soy-el-ultimo', conversationId, accountId } }];\n}\n\n// IDEMPOTENCIA (F5): ya hay respuesta posterior a mi mensaje → no repito\nconst repliedAfter = sorted.some((m) => isOut(m) && num(m.created_at) > myCreatedAt);\nif (repliedAfter) {\n  return [{ json: { action: 'skip', reason: 'ya-respondido', conversationId, accountId } }];\n}\n\n// Ráfaga del cliente = entrantes con texto desde la última salida\nlet lastOutIdx = -1;\nfor (let i = sorted.length - 1; i >= 0; i--) {\n  if (isOut(sorted[i])) { lastOutIdx = i; break; }\n}\nconst burst = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m)).map((m) => m.content);\n// v8.1 NFC: ningun lado normaliza Unicode. Un teclado iOS/macOS que emita acentos\n// DESCOMPUESTOS (\"impresio\\u0301n\") hace fallar todo match con acento, en silencio y\n// solo para algunos clientes. El catalogo esta en NFC; el mensaje del cliente, no.\nconst mergedUser = burst.join('\\n').normalize('NFC');\n\nif (!mergedUser) {\n  return [{ json: { action: 'skip', reason: 'sin-texto-nuevo', conversationId, accountId } }];\n}\n\n// INJECTION: regex sobre el texto agregado (red barata; Tier-1 lo duplicará)\nconst INJECTION_PATTERNS = [\n  /ignor[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /olvid[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /\\bnuevo rol\\b/i,\n  /ignore (previous|instructions|your)/i,\n  /system prompt/i,\n  /jailbreak/i,\n  /\\bDAN\\b/,\n  /pretend you are/i,\n  /do anything now/i,\n  /forget your instructions/i\n];\nif (INJECTION_PATTERNS.some((p) => p.test(mergedUser))) {\n  return [{ json: { action: 'injection', conversationId, accountId } }];\n}\n\n// PRIMER MENSAJE (F3): saludo enlatado SOLO si el texto es un saludo puro.\n// Primer mensaje con pregunta → process (lo contesta el LLM).\nconst hasOutgoing = sorted.some(isOut);\nfunction isGreetingOnly(text) {\n  const t = (text || '')\n    .toLowerCase()\n    .replace(/[¡!¿?.,;:()\"']/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  if (!t) return false;\n  const G = '(hola|holis|buenas|buen dia|buen día|buenos dias|buenos días|buenas tardes|buenas noches|hey|que tal|qué tal|como andas|cómo andás|como va|cómo va|todo bien)';\n  const re = new RegExp('^' + G + '( ' + G + ')*$');\n  return re.test(t);\n}\nif (!hasOutgoing && isGreetingOnly(mergedUser)) {\n  return [{ json: { action: 'primer-mensaje', conversationId, accountId } }];\n}\n\n// CAP DE RESPUESTAS POR CONVERSACIÓN (ventana rodante 24h): tope duro para floods sostenidos.\nconst CAP_RESPUESTAS = 25;\nconst nowMs = Date.now();\nconst botOut = sorted.filter((m) => isOut(m) && hasContent(m));\nconst botOut24 = botOut.filter((m) => nowMs - num(m.created_at) < 86400000);\nconst CAP_MARK = 'muchos mensajes en esta conversación';\nif (botOut24.length >= CAP_RESPUESTAS) {\n  const capYaAvisado = botOut24.some((m) => String(m.content).toLowerCase().includes(CAP_MARK));\n  if (capYaAvisado) {\n    return [{ json: { action: 'skip', reason: 'cap-ya-avisado', conversationId, accountId } }];\n  }\n  return [{ json: { action: 'cap', conversationId, accountId } }];\n}\n\n// PROCESS: armar la conversación (sin system, sin catálogo). 'Armar mensajes' le prepende el system+catálogo.\n// ¿ya se le avisó al cliente que el canal es solo informativo? (buscamos el email del negocio en salientes del bot)\nconst avisoDado = sorted.some((m) => isOut(m) && hasContent(m) && String(m.content).toLowerCase().includes('terminalgrafica@gmail.com'));\n// Últimas 3 respuestas del bot → el LLM las usa para no repetirse (action noop)\nconst lastBotReplies = botOut.slice(-3).map((m) => String(m.content));\n\n// REPLY CITADO (Chatwoot): si el cliente responde CITANDO un mensaje, WhatsApp solo nos manda el\n// texto de la respuesta, no a qué mensaje responde. Resolvemos el citado por content_attributes\n// (in_reply_to = id interno / in_reply_to_external_id = source id) contra los mensajes de Get\n// Historial y lo anteponemos INLINE al mensaje. Best-effort: si no viene, es no-op (finalUser = mergedUser).\nconst burstMsgs = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m));\nlet citado = null;\nfor (const bm of burstMsgs) {\n  const ca = bm.content_attributes || {};\n  const refId = ca.in_reply_to, refExt = ca.in_reply_to_external_id;\n  if (refId == null && refExt == null) continue;\n  const q = allMessages.find((x) => (refId != null && x.id === refId) || (refExt != null && (x.source_id === refExt || String(x.source_id) === String(refExt))));\n  if (q && hasContent(q)) { citado = { quien: isOut(q) ? 'tu mensaje' : 'un mensaje suyo', texto: String(q.content).trim() }; break; }\n}\nconst finalUser = citado ? '(Responde citando ' + citado.quien + ': \"' + citado.texto + '\")\\n' + mergedUser : mergedUser;\n\nconst conversation = [];\nconst history = sorted.slice(0, lastOutIdx + 1).slice(-6);\nfor (const m of history) {\n  if (isIn(m) && hasContent(m)) {\n    conversation.push({ role: 'user', content: m.content });\n  } else if (isOut(m) && hasContent(m)) {\n    conversation.push({ role: 'assistant', content: m.content });\n  }\n}\nconversation.push({ role: 'user', content: finalUser });\n\nreturn [{ json: { action: 'process', conversation, userMessage: finalUser, avisoDado, lastBotReplies, conversationId, accountId } }];\n",
+      "// === DECIDIR — decide QUÉ hacer y arma la conversación (sin catálogo: eso lo inyecta 'Armar mensajes') ===\nconst webhookData = $('Chatwoot Webhook').first().json;\nconst body = webhookData.body;\nconst myMessageId = body.id;\nconst conversationId = body.conversation.id;\nconst accountId = body.account.id;\n\n// F5: created_at robusto (unix int, string numérico o ISO) → siempre número\nconst num = (v) => {\n  if (v == null) return 0;\n  if (typeof v === 'number') return v;\n  const n = Number(v);\n  if (Number.isFinite(n)) return n;\n  const t = Date.parse(v);\n  return Number.isFinite(t) ? t : 0;\n};\nconst myCreatedAt = num(body.created_at);\n\nconst historialJson = $('Get Historial').first().json;\nconst rawPayload = historialJson.payload;\nconst allMessages = Array.isArray(rawPayload) ? rawPayload : (rawPayload && rawPayload.messages ? rawPayload.messages : []);\n\nconst isIn = (m) => m.message_type === 'incoming' || m.message_type === 0;\nconst isOut = (m) => (m.message_type === 'outgoing' || m.message_type === 1) && !m.private;\nconst hasContent = (m) => m.content && String(m.content).trim().length > 0;\n\nconst sorted = allMessages.slice().sort((a, b) => num(a.created_at) - num(b.created_at));\n\n// DEBOUNCE (F1): el \"último\" es el último ENTRANTE CON TEXTO.\n// Una foto que llega después de la pregunta ya no gana el \"soy el último\".\nconst incoming = sorted.filter((m) => isIn(m) && hasContent(m));\nconst lastIncoming = incoming.length ? incoming[incoming.length - 1] : null;\nif (lastIncoming && myMessageId && lastIncoming.id !== myMessageId) {\n  return [{ json: { action: 'skip', reason: 'no-soy-el-ultimo', conversationId, accountId } }];\n}\n\n// IDEMPOTENCIA (F5): ya hay respuesta posterior a mi mensaje → no repito\nconst repliedAfter = sorted.some((m) => isOut(m) && num(m.created_at) > myCreatedAt);\nif (repliedAfter) {\n  return [{ json: { action: 'skip', reason: 'ya-respondido', conversationId, accountId } }];\n}\n\n// Ráfaga del cliente = entrantes con texto desde la última salida\nlet lastOutIdx = -1;\nfor (let i = sorted.length - 1; i >= 0; i--) {\n  if (isOut(sorted[i])) { lastOutIdx = i; break; }\n}\nconst burst = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m)).map((m) => m.content);\n// v8.1 NFC: ningun lado normaliza Unicode. Un teclado iOS/macOS que emita acentos\n// DESCOMPUESTOS (\"impresio\\u0301n\") hace fallar todo match con acento, en silencio y\n// solo para algunos clientes. El catalogo esta en NFC; el mensaje del cliente, no.\nconst mergedUser = burst.join('\\n').normalize('NFC');\n\nif (!mergedUser) {\n  return [{ json: { action: 'skip', reason: 'sin-texto-nuevo', conversationId, accountId } }];\n}\n\n// INJECTION: regex sobre el texto agregado (red barata; Tier-1 lo duplicará)\nconst INJECTION_PATTERNS = [\n  /ignor[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /olvid[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /\\bnuevo rol\\b/i,\n  /ignore (previous|instructions|your)/i,\n  /system prompt/i,\n  /jailbreak/i,\n  /\\bDAN\\b/,\n  /pretend you are/i,\n  /do anything now/i,\n  /forget your instructions/i\n];\nif (INJECTION_PATTERNS.some((p) => p.test(mergedUser))) {\n  return [{ json: { action: 'injection', conversationId, accountId } }];\n}\n\n// SALUDO: el saludo puro ya NO usa enlatado fijo. Cae a 'process' como cualquier mensaje\n// y lo contesta el LLM (etapa SALUDO del prompt del Agente), así la bienvenida varía y se\n// presenta solo si es el primer contacto. Antes se ruteaba a un enlatado FIJO; se retiró\n// a pedido del dueño.\n\n// CAP DE RESPUESTAS POR CONVERSACIÓN (ventana rodante 24h): tope duro para floods sostenidos.\nconst CAP_RESPUESTAS = 25;\nconst nowMs = Date.now();\nconst botOut = sorted.filter((m) => isOut(m) && hasContent(m));\nconst botOut24 = botOut.filter((m) => nowMs - num(m.created_at) < 86400000);\nconst CAP_MARK = 'muchos mensajes en esta conversación';\nif (botOut24.length >= CAP_RESPUESTAS) {\n  const capYaAvisado = botOut24.some((m) => String(m.content).toLowerCase().includes(CAP_MARK));\n  if (capYaAvisado) {\n    return [{ json: { action: 'skip', reason: 'cap-ya-avisado', conversationId, accountId } }];\n  }\n  return [{ json: { action: 'cap', conversationId, accountId } }];\n}\n\n// PROCESS: armar la conversación (sin system, sin catálogo). 'Armar mensajes' le prepende el system+catálogo.\n// ¿ya se le avisó al cliente que el canal es solo informativo? (buscamos el email del negocio en salientes del bot)\nconst avisoDado = sorted.some((m) => isOut(m) && hasContent(m) && String(m.content).toLowerCase().includes('terminalgrafica@gmail.com'));\n// Últimas 3 respuestas del bot → el LLM las usa para no repetirse (action noop)\nconst lastBotReplies = botOut.slice(-3).map((m) => String(m.content));\n\n// REPLY CITADO (Chatwoot): si el cliente responde CITANDO un mensaje, WhatsApp solo nos manda el\n// texto de la respuesta, no a qué mensaje responde. Resolvemos el citado por content_attributes\n// (in_reply_to = id interno / in_reply_to_external_id = source id) contra los mensajes de Get\n// Historial y lo anteponemos INLINE al mensaje. Best-effort: si no viene, es no-op (finalUser = mergedUser).\nconst burstMsgs = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m));\nlet citado = null;\nfor (const bm of burstMsgs) {\n  const ca = bm.content_attributes || {};\n  const refId = ca.in_reply_to, refExt = ca.in_reply_to_external_id;\n  if (refId == null && refExt == null) continue;\n  const q = allMessages.find((x) => (refId != null && x.id === refId) || (refExt != null && (x.source_id === refExt || String(x.source_id) === String(refExt))));\n  if (q && hasContent(q)) { citado = { quien: isOut(q) ? 'tu mensaje' : 'un mensaje suyo', texto: String(q.content).trim() }; break; }\n}\nconst finalUser = citado ? '(Responde citando ' + citado.quien + ': \"' + citado.texto + '\")\\n' + mergedUser : mergedUser;\n\nconst conversation = [];\nconst history = sorted.slice(0, lastOutIdx + 1).slice(-6);\nfor (const m of history) {\n  if (isIn(m) && hasContent(m)) {\n    conversation.push({ role: 'user', content: m.content });\n  } else if (isOut(m) && hasContent(m)) {\n    conversation.push({ role: 'assistant', content: m.content });\n  }\n}\nconversation.push({ role: 'user', content: finalUser });\n\nreturn [{ json: { action: 'process', conversation, userMessage: finalUser, avisoDado, lastBotReplies, conversationId, accountId } }];\n",
   },
   id: "rag-decidir",
   name: "Decidir",
@@ -1821,13 +1828,12 @@ const decidir = {
 };
 
 const switchRuteo = {
-  // Rutea por `action` de Decidir. 5 salidas (skip/greeting/injection/process/cap); sin fallback:
-  // Decidir siempre devuelve una de esas acciones.
+  // Rutea por `action` de Decidir. 4 salidas (skip/injection/process/cap); sin fallback:
+  // Decidir siempre devuelve una de esas acciones. (El saludo puro cae a process → LLM.)
   parameters: {
     rules: {
       values: [
         mkRule("rt-skip", "skip", "skip"),
-        mkRule("rt-greeting", "primer-mensaje", "greeting"),
         mkRule("rt-injection", "injection", "injection"),
         mkRule("rt-process", "process", "process"),
         mkRule("rt-cap", "cap", "cap"),
@@ -1850,7 +1856,6 @@ const descartarDebounce = {
   typeVersion: 1,
   position: [880, -340],
 };
-const saludoBienvenida = cannedDecidir("rag-saludo", "Saludo Bienvenida", [880, -220], "Hola! Buenas, ¿en qué te podemos ayudar?");
 const mensajeAntiInjection = cannedDecidir("rag-anti-injection", "Mensaje Anti-Injection", [880, -100], "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?");
 const mensajeCapEmail = cannedDecidir("rag-cap-email", "Mensaje Cap Email", [880, 200], "Uy, venimos con muchos mensajes en esta conversación y no quiero que se nos escape nada. Para seguir bien con tu consulta o pedido, escribinos por email a terminalgrafica@gmail.com con el detalle, o pasá por el local (Rodríguez Peña 3865, Mar del Plata). ¡Gracias!");
 const labelCap = {
@@ -2065,7 +2070,6 @@ flowCw.nodes.unshift(
   decidir,
   switchRuteo,
   descartarDebounce,
-  saludoBienvenida,
   mensajeAntiInjection,
   mensajeCapEmail,
   labelCap,
@@ -2126,10 +2130,9 @@ flowCw.connections["Decidir"] = { main: [[{ node: "Switch Ruteo", type: "main", 
 flowCw.connections["Switch Ruteo"] = {
   main: [
     [{ node: "Descartar (debounce/dup)", type: "main", index: 0 }], // 0 skip
-    [{ node: "Saludo Bienvenida", type: "main", index: 0 }], // 1 greeting (primer-mensaje)
-    [{ node: "Mensaje Anti-Injection", type: "main", index: 0 }], // 2 injection
-    [{ node: "Guardrails Tier-2", type: "main", index: 0 }], // 3 process → F5 antes del medio
-    [{ node: "Mensaje Cap Email", type: "main", index: 0 }], // 4 cap
+    [{ node: "Mensaje Anti-Injection", type: "main", index: 0 }], // 1 injection
+    [{ node: "Guardrails Tier-2", type: "main", index: 0 }], // 2 process → F5 antes del medio
+    [{ node: "Mensaje Cap Email", type: "main", index: 0 }], // 3 cap
   ],
 };
 // F5 — Firewall Tier-2 (LLM guard). ¿Violación Real? [no] → sigue al medio (Cuando llega un mensaje).
