@@ -71,6 +71,24 @@ create policy curator_all on bot.job_variant          for all to bot_curator usi
 drop policy if exists curator_all on bot.job_variant_material;
 create policy curator_all on bot.job_variant_material for all to bot_curator using (true) with check (true);
 
+-- Fuente public: bot_curator es un rol Postgres directo (no pasa por Supabase Auth), así que las policies
+-- de quote-automation (admin/employee vía profiles + auth.uid()) lo frenan con "permission denied for
+-- table profiles". Grant SELECT + una policy propia de solo-lectura (RLS combina con OR) lo dejan LEER sin
+-- tocar profiles ni las policies existentes; sigue sin poder escribir public. pricing_rules/targets las
+-- necesita el export v5 para resolver precios.
+grant select on public.products, public.product_variants, public.categories,
+                public.pricing_rules, public.pricing_rule_targets to bot_curator;
+do $cur$
+declare t text;
+begin
+  foreach t in array array[
+    'products','product_variants','categories','pricing_rules','pricing_rule_targets'
+  ] loop
+    execute format('drop policy if exists curator_read on public.%I', t);
+    execute format('create policy curator_read on public.%I for select to bot_curator using (true)', t);
+  end loop;
+end $cur$;
+
 -- -----------------------------------------------------------------------------
 -- PASO 2 — RE-CURACIÓN del encartonado (MANUAL, en el dashboard catalog-curator).
 -- En la pantalla de Trabajos → Encartonado, crear las variantes-de-trabajo y asignar

@@ -276,7 +276,27 @@ grant usage on schema bot to bot_curator;
 grant select, insert, update, delete on bot.product, bot.variant to bot_curator;
 grant select, insert, update, delete on bot.job, bot.job_variant, bot.job_variant_material to bot_curator;
 grant usage on schema public to bot_curator;
-grant select on public.products, public.product_variants, public.categories to bot_curator;
+-- El dashboard lee products/variants/categories; el export (curador-export-v5) además resuelve precios
+-- desde pricing_rules/pricing_rule_targets. bot_curator NUNCA escribe public (solo select).
+grant select on public.products, public.product_variants, public.categories,
+                public.pricing_rules, public.pricing_rule_targets to bot_curator;
+
+-- RLS de solo-lectura para bot_curator en la fuente public. Esas tablas ya tienen policies de
+-- quote-automation (admin/employee vía profiles + auth.uid()); bot_curator es un rol Postgres directo
+-- (auth.uid() null y sin acceso a profiles) → esas policies lo frenan con "permission denied for table
+-- profiles". La RLS combina policies con OR, así que una policy propia `to bot_curator using (true)`
+-- lo deja LEER sin tocar las de quote-automation ni la tabla profiles. Sigue sin poder escribir public
+-- (no hay grant insert/update ni policy with_check). Idempotente vía drop-if.
+do $cur$
+declare t text;
+begin
+  foreach t in array array[
+    'products','product_variants','categories','pricing_rules','pricing_rule_targets'
+  ] loop
+    execute format('drop policy if exists curator_read on public.%I', t);
+    execute format('create policy curator_read on public.%I for select to bot_curator using (true)', t);
+  end loop;
+end $cur$;
 
 -- ---- bot_runtime: lee los vectores, escribe el log/errores ----
 grant usage on schema bot to bot_runtime;
