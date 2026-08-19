@@ -278,6 +278,10 @@ grant select, insert, update, delete on bot.job, bot.job_variant, bot.job_varian
 -- Ingesta del catálogo al RAG desde el dashboard (botón "Ingestar al bot"): reescribe rag_catalog con
 -- DELETE+INSERT (no truncate → no necesita ser owner). bot_runtime la sigue leyendo (runtime_select).
 grant select, insert, delete on bot.rag_catalog to bot_curator;
+-- Sección "Negocio" del dashboard: edita la fuente business_info (RW) y reingesta rag_business_info (W,
+-- delete+insert). Antes owner-only; ahora curable desde la app como los demás.
+grant select, insert, update, delete on bot.business_info to bot_curator;
+grant select, insert, delete on bot.rag_business_info to bot_curator;
 grant usage on schema public to bot_curator;
 -- El dashboard lee products/variants/categories; el export (curador-export-v5) además resuelve precios
 -- desde pricing_rules/pricing_rule_targets. bot_curator NUNCA escribe public (solo select).
@@ -354,6 +358,12 @@ create policy runtime_select on bot.rag_business_info for select to bot_runtime 
 drop policy if exists curator_rag on bot.rag_catalog;
 create policy curator_rag on bot.rag_catalog for all to bot_curator using (true) with check (true);
 
+-- bot_curator cura la info del negocio desde el dashboard: RW sobre la fuente + reingesta al RAG.
+drop policy if exists curator_all on bot.business_info;
+create policy curator_all on bot.business_info for all to bot_curator using (true) with check (true);
+drop policy if exists curator_rag on bot.rag_business_info;
+create policy curator_rag on bot.rag_business_info for all to bot_curator using (true) with check (true);
+
 -- bot.log: INSERT (Log Decisión) + SELECT (read-back de memoria) + UPDATE (Log Turno).
 drop policy if exists runtime_all on bot.log;
 create policy runtime_all on bot.log for all to bot_runtime using (true) with check (true);
@@ -361,9 +371,9 @@ create policy runtime_all on bot.log for all to bot_runtime using (true) with ch
 drop policy if exists runtime_write on bot.errors;
 create policy runtime_write on bot.errors for all to bot_runtime using (true) with check (true);
 
--- business_info: sin policy → owner-only. La ingesta --info lo lee como owner
--- (DATABASE_URL). Si el dashboard alguna vez curara la info, sumar una policy
--- for all to bot_curator + su grant (follow-up, no en este plan).
+-- business_info: además del owner (ingesta --info por CLI vía DATABASE_URL), bot_curator la cura desde
+-- la sección "Negocio" del dashboard (grant + curator_all arriba). La ingesta a rag_business_info también
+-- puede correr desde la app (delete+insert). La rama --info del CLI sigue funcionando en paralelo.
 
 -- =============================================================================
 -- 5. FIREWALL — actualizar bot.fw_log al log unificado
