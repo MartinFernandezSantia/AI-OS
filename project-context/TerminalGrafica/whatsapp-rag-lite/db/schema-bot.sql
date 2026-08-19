@@ -282,6 +282,11 @@ grant select, insert, delete on bot.rag_catalog to bot_curator;
 -- delete+insert). Antes owner-only; ahora curable desde la app como los demás.
 grant select, insert, update, delete on bot.business_info to bot_curator;
 grant select, insert, delete on bot.rag_business_info to bot_curator;
+-- pgvector vive en el schema `extensions`. La ingesta desde la app inserta embeddings con cast a
+-- extensions.vector; sin usage sobre ese schema, bot_curator no puede referenciar el tipo ("type vector
+-- does not exist"). (Igual que bot_runtime abajo, pero curator solo necesita el usage, no el search_path:
+-- el insert califica el tipo con schema explícito.)
+grant usage on schema extensions to bot_curator;
 grant usage on schema public to bot_curator;
 -- El dashboard lee products/variants/categories; el export (curador-export-v5) además resuelve precios
 -- desde pricing_rules/pricing_rule_targets. bot_curator NUNCA escribe public (solo select).

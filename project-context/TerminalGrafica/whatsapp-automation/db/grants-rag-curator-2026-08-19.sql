@@ -19,6 +19,11 @@ grant select, insert, delete on bot.rag_catalog to bot_curator;
 drop policy if exists curator_rag on bot.rag_catalog;
 create policy curator_rag on bot.rag_catalog for all to bot_curator using (true) with check (true);
 
+-- pgvector vive en el schema `extensions`. La app inserta los embeddings con cast a extensions.vector;
+-- sin usage sobre ese schema, bot_curator no puede referenciar el tipo → "type vector does not exist".
+-- (bot_runtime ya lo tiene; a curator le faltaba.) Necesario también para la sección Negocio.
+grant usage on schema extensions to bot_curator;
+
 -- Verificación:
 --   select grantee, privilege_type from information_schema.role_table_grants
 --    where table_schema='bot' and table_name='rag_catalog' and grantee='bot_curator';
