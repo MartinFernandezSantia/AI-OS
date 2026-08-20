@@ -9,7 +9,8 @@
       "mcp__mcp-registry__search_mcp_registry",
       "Glob",
       "mcp__claude_ai_Context7__query-docs",
-      "Skill(agent-browser)"
+      "Skill(agent-browser)",
+      "mcp__claude_ai_Context7__resolve-library-id"
     ],
     "deny": [
       "Bash(rm *)",
