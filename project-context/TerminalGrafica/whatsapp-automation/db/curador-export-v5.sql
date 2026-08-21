@@ -145,9 +145,11 @@ select json_build_object(
 
   -- un objeto por TRABAJO (combo) VISIBLE con al menos una variante-de-trabajo exportable. Cada trabajo
   -- tiene sus VARIANTES CERRADAS propias (bot.job_variant, ordenadas por position → ref [tN]); cada una
-  -- lista sus 'componentes' concretos (las bot.variant que van JUNTAS). NO se emite precio: lo suma TS
-  -- (chunkTrabajo) por variante-de-trabajo. El objeto de componente es una copia EXACTA del json de item
-  -- de producto (arriba) → OJO: cambio de campos = tocar los DOS bloques.
+  -- lista sus 'componentes' concretos (las bot.variant que van JUNTAS), cada uno con su 'cantidad'
+  -- (bot.job_variant_material.quantity) que multiplica su precio_lista al sumar (chunkTrabajo). NO se
+  -- emite el precio ya sumado: lo calcula TS por variante-de-trabajo. El objeto de componente es una
+  -- copia del json de item de producto (arriba) MÁS el campo 'cantidad', que items de producto no tiene
+  -- → OJO: cambio de campos compartidos = tocar los DOS bloques; 'cantidad' es SOLO de este bloque.
   'trabajos', (
     select coalesce(json_agg(job order by job->>'nombre_bot'), '[]'::json)
     from (
@@ -185,7 +187,8 @@ select json_build_object(
                     'mostrable',          pr.mostrable,
                     'tiene_override',     pr.tiene_override,
                     'solo_descuentos',    pr.solo_descuentos,
-                    'n_reglas_cantidad',  pr.n_reglas_cantidad
+                    'n_reglas_cantidad',  pr.n_reglas_cantidad,
+                    'cantidad',           jvm.quantity
                   ) order by coalesce(bv.bot_name, pr.variante_origen)), '[]'::json)
                 from bot.job_variant_material jvm
                 join bot.variant bv on bv.id = jvm.bot_variant_id

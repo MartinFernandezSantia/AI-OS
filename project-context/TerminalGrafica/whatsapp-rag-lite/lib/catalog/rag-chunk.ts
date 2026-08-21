@@ -137,15 +137,19 @@ function itemVarianteTrabajo(producto_id: string, ref_pos: number, total: number
 }
 
 /** Hornea el PrecioVariante de una variante-de-trabajo. Su precio = Σ del precio_lista de sus
- *  componentes; es cobrable SOLO si tiene componentes y TODOS son confiables (precio simple, sin
- *  override/escalera): si alguno es dudoso, la variante-de-trabajo se lista sin precio (a confirmar por
- *  mail). El nombre visible es el nombre_bot de la variante-de-trabajo, no "Total". */
+ *  componentes, cada uno multiplicado por su `cantidad` (default 1 si no viene); es cobrable SOLO si
+ *  tiene componentes y TODOS son confiables (precio simple, sin override/escalera): si alguno es dudoso,
+ *  la variante-de-trabajo se lista sin precio (a confirmar por mail). El nombre visible es el nombre_bot
+ *  de la variante-de-trabajo, no "Total". */
 function precioVarianteTrabajo(vt: VarianteTrabajo): PrecioVariante {
   const ref = `t${vt.ref_pos}`;
   const nombre = (vt.nombre_bot || "").trim();
   const componentes = (vt.componentes || []).filter(conNombre);
   const confiable = componentes.length > 0 && componentes.every(itemPrecioConfiable);
-  const suma = componentes.reduce((acc, it) => acc + (Number(it.precio_lista) || 0), 0);
+  const suma = componentes.reduce(
+    (acc, it) => acc + (Number(it.precio_lista) || 0) * (Number(it.cantidad) || 1),
+    0,
+  );
   const pv = precioVariante(itemVarianteTrabajo("", vt.ref_pos, confiable ? suma : 0), ref);
   return { ...pv, variante: nombre, cobrable: confiable && suma > 0 };
 }

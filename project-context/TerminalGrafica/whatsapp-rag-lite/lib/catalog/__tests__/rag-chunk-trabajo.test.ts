@@ -129,6 +129,54 @@ describe("chunkTrabajo: una sola variante-de-trabajo", () => {
   });
 });
 
+describe("chunkTrabajo: cantidad fraccionaria multiplica el precio_lista del componente", () => {
+  it("0.5 de un componente de $1.200 suma $600 al total de la variante-de-trabajo", () => {
+    const c = chunkTrabajo(
+      trabajoBase({
+        variantes: [
+          vt("A3", 1, [
+            matBase({ nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+            matBase({ nombre_variante_bot: "Encapsulado por metro", precio_lista: 1200, cantidad: 0.5 }),
+          ]),
+        ],
+      }),
+    );
+    // 3500 + (1200 * 0.5) = 4100, no 4700
+    expect(c.texto).toContain("- [t1] A3 ($4.100 por trabajo).");
+    const a3 = c.meta.precios.find((p) => p.ref === "t1")!;
+    expect(a3.precio_lista).toBe(4100);
+  });
+
+  it("cantidad ausente (undefined) sigue sumando como 1 (compat hacia atrás)", () => {
+    const c = chunkTrabajo(
+      trabajoBase({
+        variantes: [
+          vt("A3", 1, [
+            matBase({ nombre_variante_bot: "Encartonado A3", precio_lista: 3500 }),
+            matBase({ nombre_variante_bot: "Encapsulado A3", precio_lista: 750 }), // sin `cantidad`
+          ]),
+        ],
+      }),
+    );
+    expect(c.meta.precios.find((p) => p.ref === "t1")!.precio_lista).toBe(4250);
+  });
+
+  it("cantidad decimal libre (1.25) sobre múltiples componentes", () => {
+    const c = chunkTrabajo(
+      trabajoBase({
+        variantes: [
+          vt("Grande", 1, [
+            matBase({ nombre_variante_bot: "Base", precio_lista: 1000, cantidad: 1.25 }),
+            matBase({ nombre_variante_bot: "Extra", precio_lista: 400, cantidad: 3 }),
+          ]),
+        ],
+      }),
+    );
+    // (1000*1.25) + (400*3) = 1250 + 1200 = 2450
+    expect(c.meta.precios.find((p) => p.ref === "t1")!.precio_lista).toBe(2450);
+  });
+});
+
 describe("chunkTrabajo: variante-de-trabajo con componente no cobrable", () => {
   it("esa variante-de-trabajo se lista SIN precio; las demás sí lo traen", () => {
     const c = chunkTrabajo(

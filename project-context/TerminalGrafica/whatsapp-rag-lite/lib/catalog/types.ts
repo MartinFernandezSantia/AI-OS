@@ -47,6 +47,7 @@ export interface ItemBot {
   tiene_override: boolean | null;
   solo_descuentos: boolean | null;
   n_reglas_cantidad: number | null;
+  cantidad?: number; // solo relevante para MaterialBot (componente de trabajo); undefined = 1.
 }
 
 export interface ProductoBot {
@@ -63,7 +64,7 @@ export interface ProductoBot {
 /** Un componente de una variante-de-trabajo: es una variante ya curada del catálogo (mismo shape que
  *  ItemBot), con su cobro/precio resuelto por el export. Va referenciada desde bot.job_variant_material.
  *  Todos los componentes de una variante-de-trabajo van JUNTOS (no son alternativas): el precio de la
- *  variante-de-trabajo es la suma de ellos. */
+ *  variante-de-trabajo es la suma de ellos, cada uno multiplicado por su `cantidad` (default 1). */
 export type MaterialBot = ItemBot;
 
 /** Una VARIANTE-DE-TRABAJO: una combinación CERRADA y válida del trabajo (ej. "A3", "100x70"), con sus

@@ -170,14 +170,26 @@ create index if not exists bot_job_variant_job_idx on bot.job_variant (job_id);
 
 -- Componentes de una variante-de-trabajo: cada uno ES una variante ya curada del catálogo → reusa su
 -- cobro/precio (sale_unit, pack_units, precio de public). TODOS los de una variante-de-trabajo van
--- JUNTOS (no son alternativas): el precio de la variante-de-trabajo es la suma de ellos.
+-- JUNTOS (no son alternativas): el precio de la variante-de-trabajo es la suma de ellos, cada uno
+-- multiplicado por su quantity (default 1; ej. 0.5 = medio metro de un componente vendido por metro).
 create table if not exists bot.job_variant_material (
   id             uuid primary key default gen_random_uuid(),
   job_variant_id uuid not null references bot.job_variant(id) on delete cascade,
   bot_variant_id uuid not null references bot.variant(id)     on delete cascade,
+  quantity       numeric not null default 1
+    constraint bot_job_variant_material_quantity_check check (quantity > 0),
   unique (job_variant_id, bot_variant_id)
 );
 create index if not exists bot_job_variant_material_jv_idx on bot.job_variant_material (job_variant_id);
+-- Idempotente para bases YA creadas (mismo patrón que bot.log.denied_products, más abajo): el
+-- `create table if not exists` de arriba es no-op sobre una tabla existente, así que la columna nueva
+-- se agrega acá aparte. El check va nombrado igual al del CREATE TABLE para que en una base nueva (donde
+-- el check ya viene puesto) el drop+add de abajo sea no-op limpio, no un segundo check duplicado.
+alter table bot.job_variant_material add column if not exists quantity numeric not null default 1;
+alter table bot.job_variant_material drop constraint if exists bot_job_variant_material_quantity_check;
+alter table bot.job_variant_material add constraint bot_job_variant_material_quantity_check check (quantity > 0);
+comment on column bot.job_variant_material.quantity is
+  'Cuánto de este componente usa la variante-de-trabajo (ej. 0.5 = medio metro). Multiplica su precio_lista antes de sumar. Default 1.';
 
 -- =============================================================================
 -- 3. RUNTIME DEL BOT
