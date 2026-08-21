@@ -372,7 +372,7 @@
     },
     {
       "parameters": {
-        "amount": 15
+        "amount": "={{ (() => { const raw = $('Chatwoot Webhook').first().json.body.created_at; const VENTANA = 15; let ms = null; if (typeof raw === 'number' || (raw != null && String(raw).trim() !== '' && Number.isFinite(Number(raw)))) { const n = Number(raw); ms = n > 1e11 ? n : n * 1000; } else if (raw != null) { const t = Date.parse(raw); if (Number.isFinite(t)) ms = t; } if (ms == null) return VENTANA; const transcurrido = (Date.now() - ms) / 1000; if (!Number.isFinite(transcurrido) || transcurrido < 0) return VENTANA; return Math.max(0, Math.min(VENTANA, VENTANA - transcurrido)); })() }}"
       },
       "id": "rag-wait-debounce",
       "name": "Wait — Debounce",
