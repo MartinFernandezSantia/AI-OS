@@ -37,6 +37,7 @@ base a seguir y expandir, puede que haya que rehacerlo.
 | Quién calcula | **El LLM**, con instrucciones precisas y datos correctos en el chunk. No motor determinista (todavía). |
 | Ingesta v1 | **Script CLI local** contra el .xlsx. Drive/cron y pantalla de subida quedan para después. |
 | Canal v1 | **Chat Trigger + memoria de n8n.** Sin Chatwoot ni WhatsApp — para testear rápido. |
+| Catálogo de la v1 | **Solo las 39 filas de Lista de precios.** No se agregan productos desde otras hojas. Modos `pliego` y `m2` únicamente. |
 | Validación del Excel | **Fuera de alcance.** Happy path primero. Se arregla sobre la marcha. |
 | System prompt | **No se toca todavía.** Primero acomodar el Excel, después el workflow. |
 
@@ -87,15 +88,16 @@ tarifa $/m² → redondear.
 
 Analizado con lectura directa del .xlsx (9 hojas).
 
-**VA (curado, listo para producción):**
-- **Lista de precios** — 39 filas de producto en 4 colecciones. La única realmente curada.
-- **Pliegos A3** — escalas por pliego, geometría (área imprimible, separación), tabla de
-  piezas por pliego.
-- **Escalas por unidad** — sobres oficio inglés + carpetas A4 (laminadas / sin laminar).
-- **Colecciones** — las que usa Lista de precios.
+**VA:**
+- **Lista de precios** — 39 filas en 4 colecciones. **La única fuente de verdad de qué
+  productos existen.**
+- **Pliegos A3** — escalas por pliego + geometría (área imprimible, separación) + tabla de
+  piezas por pliego. Alimenta a los 20 productos en modo `pliego`.
+- **Colecciones** — las 4 que usa Lista de precios.
 
-**NO VA:** Instrucciones (es guía de armado), Productos (sin curar), Lista maestra (sin
-curar), Presupuestos (crudo), Productos reales.
+**NO VA:** Instrucciones (guía de armado), Productos (sin curar), Lista maestra (sin
+curar), Presupuestos (crudo), Productos reales, **Escalas por unidad** (sus escalas son de
+sobres y carpetas, que no están en Lista de precios → ningún producto de la v1 las usa).
 
 **Cambio ya hecho por Martín:** se eliminó la columna `Tamaño` ("3x3 cm") de Lista de
 precios — redundante con `Ancho (cm)` + `Alto (cm)`.
@@ -117,17 +119,25 @@ Y valida el **esquema dinámico**: la ingesta lee los headers del Excel, no un s
 Si el cliente agrega "Gramaje" o "Plazo de entrega", entra sola — sin ALTER TABLE, sin
 deploy, sin intervención de Martín. Era exactamente el problema del modelo actual.
 
-### Hueco detectado: falta Papelería comercial
+### Alcance congelado: solo lo que está en Lista de precios
 
-Las 4 colecciones en Lista de precios son Stickers con forma (20), Stickers para exterior
-(6), Carteles y vidrieras (8), Banners y lonas (5).
+Las 4 colecciones son Stickers con forma (20), Stickers para exterior (6), Carteles y
+vidrieras (8), Banners y lonas (5). **39 filas, dos modos (`pliego` y `m2`). Eso es todo
+el catálogo de la v1.**
 
-**Papelería comercial no está.** Tarjetas, sobres, carpetas, talonarios, hojas membretadas
-viven en la hoja "Productos", que se descarta por no estar curada. Pero sobres y carpetas
-**sí tienen escalas** en "Escalas por unidad" (confirmadas con el sistema el 19/08).
+**Papelería comercial NO entra.** Tarjetas, sobres, carpetas, talonarios y hojas
+membretadas están en la hoja "Productos" (sin curar), y sobres/carpetas tienen escalas
+confirmadas en "Escalas por unidad" — pero **no se migran**. Decisión explícita de Martín:
+no se agregan productos desde otras hojas por más que haya precios disponibles en ellas.
 
-→ Hay que decidir: se migran esos productos a Lista de precios con `Modo = unidad`, o
-Papelería queda fuera de la v1. **Pendiente de Martín.**
+**Regla de alcance:** Lista de precios es la única fuente de verdad de qué productos
+existen. Se puede modificar la **estructura** (orden de columnas, nombres, cuáles se
+conservan); **no se agrega contenido**. El cliente re-cura la hoja más adelante y ahí
+podrá sumar lo que quiera — incluida Papelería, si decide.
+
+Consecuencia para el diseño: el modo `unidad` **no existe en la v1**. El parser solo
+necesita soportar `pliego` y `m2`. Que aparezca un tercer modo es un cambio futuro, no un
+requisito de ahora.
 
 ---
 
@@ -135,15 +145,36 @@ Papelería queda fuera de la v1. **Pendiente de Martín.**
 
 ### Fase 1 — Acomodar el Excel (primero, antes que nada)
 
-1. **Hoja Materiales nueva.** Martín saca los materiales con SQL manual del sistema de
-   presupuestos, los cura a mano, los pega. Cada material: nombre, unidad de cobro, precio
-   o escala por cantidad, mínimo.
+1. **Hoja Materiales nueva.** No hace falta SQL del sistema de presupuestos: **los 7
+   materiales que usa la v1 ya están en el Excel**, repartidos en dos lugares. La tarea es
+   juntarlos en una hoja. Verificado sobre las 39 filas:
+
+   | Modo | Material | Productos | Precio | Dónde está hoy |
+   |---|---|---|---|---|
+   | pliego | Papel autoadhesivo troquelado o medio corte | 13 | escala 5 tramos | Pliegos A3 |
+   | pliego | OPP brillo troquelado | 4 | escala 3 tramos | Pliegos A3 |
+   | pliego | OPP plata, holográfico, cristal o mate troquelado | 3 | escala 3 tramos | Pliegos A3 |
+   | m² | Vinilo UV troquelado | 6 | $28.000/m² · mín 0,5 | Lista de precios (tope) |
+   | m² | Vinilo y lona UV | 4 | $21.000/m² · mín 0,5 | Lista de precios (tope) |
+   | m² | Vinilo UV montado en corrugado | 4 | $30.000/m² · mín 0,5 | Lista de precios (tope) |
+   | m² | Lona | 5 | $16.000/m² · mín 0,5 | Lista de precios (tope) |
+
+   **Ojo con la forma del precio:** los de `pliego` son **escalas por tramos** (1-1 $2.500,
+   2-10 $2.200, 11-50 $2.000…); los de `m2` son **tarifa plana + mínimo facturable**. Si la
+   hoja los unifica, las columnas tienen que servir para ambas formas.
+
+   **Sobrantes a decidir** (existen en el Excel, ningún producto los usa):
+   - `Papel autoadhesivo solo impresión`, `OPP brillo`, `OPP plata/holográfico/cristal/mate`
+     — las versiones **sin troquelar**. Ningún producto de la v1 las referencia.
+   - `Vinilo y lona UV con blanco o barniz` ($26.000/m²) — **caso aparte**: ningún producto
+     lo usa, pero dos descripciones lo mencionan ("Consultá la opción con blanco o barniz").
+     El bot podría necesitarlo para contestar aunque no cotice un producto con él.
 2. **Lista de precios apunta a Materiales.** La columna `Línea de precio` pasa a ser un
    dropdown contra la hoja Materiales (ya funciona así hoy con validación de datos).
-3. **Resolver Papelería comercial** — migrar con `Modo = unidad`, o dejar fuera de v1.
-4. **Consolidar las escalas.** Hoy viven en 3 lugares (Pliegos A3, Escalas por unidad, y
-   las tarifas por m² dentro de Lista de precios). Decidir si se unifican en la hoja
-   Materiales o quedan separadas por modo.
+3. **Consolidar las escalas de los dos modos.** Las de `pliego` están en la hoja Pliegos A3;
+   las de `m2` son las tarifas al tope de Lista de precios. Decidir si se unifican en la
+   hoja Materiales (una escala por material) o quedan separadas por modo. Las de "Escalas
+   por unidad" (sobres/carpetas) **no se tocan**: ningún producto de la v1 las usa.
 
 ### Fase 2 — Parser + ingesta CLI
 
