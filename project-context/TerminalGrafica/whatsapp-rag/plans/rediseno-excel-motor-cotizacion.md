@@ -38,6 +38,12 @@ base a seguir y expandir, puede que haya que rehacerlo.
 | Ingesta v1 | **Script CLI local** contra el .xlsx. Drive/cron y pantalla de subida quedan para después. |
 | Canal v1 | **Chat Trigger + memoria de n8n.** Sin Chatwoot ni WhatsApp — para testear rápido. |
 | Catálogo de la v1 | **Solo las 39 filas de Lista de precios.** No se agregan productos desde otras hojas. Modos `pliego` y `m2` únicamente. |
+| `Cant.` y `PRECIO` | **Se sacan del producto.** El producto es el framework (medida + material + conversión); la cantidad la pone el cliente y el precio lo calcula el bot. Las 39 filas quedan como casos de prueba. |
+| Sinónimos | **No se agregan todavía.** Probar primero con nombre + descripción, que deberían alcanzar. Se suman solo si el RAG falla. |
+| Upsell | **Dentro de la descripción**, mejor acomodado. Ver cómo lo toma el bot antes de darle columna propia. |
+| Info del negocio | **Fuera de alcance por ahora.** Sigue en `bot.business_info`. |
+| Materiales sin troquelar | **Entran** a la hoja Materiales aunque ningún producto los use hoy. |
+| Piezas por pliego | **Precalculado en el chunk** (opción A). El bot no calcula geometría: lee el número y hace `ceil(cantidad ÷ piezas)`. Medidas fuera de tabla → "consultanos". |
 | Validación del Excel | **Fuera de alcance.** Happy path primero. Se arregla sobre la marcha. |
 | System prompt | **No se toca todavía.** Primero acomodar el Excel, después el workflow. |
 
