@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# Verificación end-to-end contra el xlsx real: necesita fs, corre suelta desde scratchpad.
+e2e-tmp.test.ts

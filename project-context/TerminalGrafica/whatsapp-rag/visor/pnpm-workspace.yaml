@@ -1,0 +1,5 @@
+# Raíz propia: corta la herencia del workspace del AIOS, que si no se lleva este
+# subdirectorio y no instala nada acá. Mismo patrón que whatsapp-rag-lite.
+allowBuilds:
+  '@tailwindcss/oxide': true
+  sharp: true
