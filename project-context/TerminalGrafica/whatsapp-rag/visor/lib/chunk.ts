@@ -22,6 +22,16 @@ export interface Chunk {
 
 /** Columnas de Productos que tienen lugar propio en la plantilla del chunk. Cualquier otra
  *  se emite genérica al final del ítem — así una columna nueva del cliente entra sin código. */
+/** Cuántas piezas salen de UNA unidad de cobro (un pliego, una plancha, una bobina…).
+ *  Se llamaba "Piezas por pliego", pero el concepto no es exclusivo del pliego: es el factor
+ *  de conversión entre lo que pide el cliente y lo que se cobra. El nombre viejo se sigue
+ *  aceptando como alias para no romper un Excel que todavía no se migró. */
+export const COL_RINDE = "Piezas por unidad de cobro";
+const COL_RINDE_VIEJA = "Piezas por pliego";
+
+/** El rinde de un producto, venga con el nombre nuevo o el viejo. */
+const rindeDe = (p: Fila): string | undefined => p[COL_RINDE] ?? p[COL_RINDE_VIEJA];
+
 const CONOCIDAS = new Set([
   "Colección",
   "Producto",
@@ -29,7 +39,8 @@ const CONOCIDAS = new Set([
   "Material",
   "Ancho (cm)",
   "Alto (cm)",
-  "Piezas por pliego",
+  COL_RINDE,
+  COL_RINDE_VIEJA,
 ]);
 
 const money = (n: number): string => "$" + n.toLocaleString("es-AR");
@@ -79,11 +90,10 @@ function itemProducto(p: Fila, unidad: string): string[] {
   const h = p["Alto (cm)"];
   if (a && h) partes.push(`${a}x${h} cm`);
 
-  // Solo en modo pliego el producto trae rinde. En m2 la columna viene vacía y no entra.
-  // La unidad sale del material ("pliego A3"), no de un literal.
-  if (p["Piezas por pliego"]) {
-    partes.push(`entran ${p["Piezas por pliego"]} por ${unidad || "pliego"}`);
-  }
+  // El rinde solo aparece donde hace falta convertir piezas → unidades de cobro (modo pliego
+  // y similares). En m2 la columna viene vacía y no entra. La unidad sale del material.
+  const rinde = rindeDe(p);
+  if (rinde) partes.push(`entran ${rinde} por ${unidad || "unidad"}`);
 
   const lineas = [partes.join(" · ") + "."];
   if (p["Descripción"]) lineas.push(`  ${p["Descripción"]}`);
@@ -213,9 +223,8 @@ function chunksProducto(datos: Datos): Chunk[] {
     const a = p["Ancho (cm)"];
     const h = p["Alto (cm)"];
     if (a && h) L.push(`Medida: ${a}x${h} cm.`);
-    if (p["Piezas por pliego"]) {
-      L.push(`Entran ${p["Piezas por pliego"]} por ${unidad || "pliego"}.`);
-    }
+    const rinde = rindeDe(p);
+    if (rinde) L.push(`Entran ${rinde} por ${unidad || "unidad"}.`);
 
     for (const k of Object.keys(p).filter((k) => !CONOCIDAS.has(k))) L.push(`${k}: ${p[k]}.`);
 
@@ -231,7 +240,7 @@ function chunksProducto(datos: Datos): Chunk[] {
         material: mat,
         unidad,
         modo: modoDe(unidad),
-        piezas_por_pliego: num(p["Piezas por pliego"]),
+        piezas_por_unidad: num(rindeDe(p)),
       },
     };
   });

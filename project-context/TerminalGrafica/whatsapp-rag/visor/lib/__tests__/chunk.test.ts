@@ -179,6 +179,54 @@ describe("chunks — producto", () => {
   });
 });
 
+describe("el rinde: nombre nuevo y alias viejo", () => {
+  /** El fixture usa el nombre VIEJO. Este arma el mismo dato con el nombre nuevo. */
+  const conNombreNuevo: Datos = {
+    ...datos,
+    productos: datos.productos.map((p) => {
+      if (!p["Piezas por pliego"]) return p;
+      const { "Piezas por pliego": v, ...resto } = p;
+      return { ...resto, "Piezas por unidad de cobro": v };
+    }),
+  };
+
+  it("los dos nombres producen el MISMO texto", () => {
+    const viejo = chunks(datos, "coleccion-material")[0].texto;
+    const nuevo = chunks(conNombreNuevo, "coleccion-material")[0].texto;
+    expect(nuevo).toBe(viejo);
+    expect(nuevo).toContain("entran 104 por pliego A3");
+  });
+
+  it("el nombre nuevo no se filtra al chunk como columna desconocida", () => {
+    // Si no estuviera en CONOCIDAS, saldría como "Piezas por unidad de cobro: 104".
+    expect(chunks(conNombreNuevo, "coleccion-material")[0].texto).not.toContain(
+      "Piezas por unidad de cobro:",
+    );
+  });
+
+  it("el rinde sirve para cualquier unidad, no solo pliego", () => {
+    const bobina: Datos = {
+      colecciones: [{ "Colección": "Cintas", "Descripción": "Cintas impresas." }],
+      productos: [
+        {
+          "Colección": "Cintas",
+          Producto: "Cinta 2 cm",
+          Material: "Bobina 50 m",
+          "Piezas por unidad de cobro": "200",
+        },
+      ],
+      materiales: [
+        { Material: "Bobina 50 m", Unidad: "bobina", Desde: "1", "Precio por unidad": "45000" },
+      ],
+      parametros: [],
+      hojas: [],
+    };
+    const t = chunks(bobina, "coleccion-material")[0].texto;
+    expect(t).toContain("entran 200 por bobina");
+    expect(t).not.toContain("pliego");
+  });
+});
+
 describe("columnas nuevas del cliente", () => {
   it("una columna desconocida aparece SOLO en el producto que la tiene", () => {
     const conGramaje: Datos = {
