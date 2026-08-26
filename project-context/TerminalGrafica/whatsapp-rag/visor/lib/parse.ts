@@ -77,9 +77,23 @@ export function escalaDe(materiales: Fila[], material: string): Tramo[] {
     .sort((a, b) => a.desde - b.desde);
 }
 
-/** Unidad de cobro de un material ('pliego' | 'm2'). Deriva el MODO de cálculo. */
+/** Unidad de cobro TAL CUAL la escribió el cliente ("pliego A3", "m2", "plancha 30x40"…). */
 export function unidadDe(materiales: Fila[], material: string): string {
   return materiales.find((m) => m["Material"] === material)?.["Unidad"] ?? "";
+}
+
+/**
+ * Modo de cálculo derivado de la unidad. Es lo que decide la rama del cálculo, mientras que
+ * la unidad se muestra tal cual (el tamaño del pliego lo pone el cliente, no el código).
+ *
+ * Se matchea por PREFIJO: "pliego A3", "pliego A4" y "pliego" son todos modo pliego. Si se
+ * comparara por igualdad, un "pliego A4" nuevo caería en silencio al modo m2 y cotizaría mal.
+ */
+export function modoDe(unidad: string): "pliego" | "m2" | "otro" {
+  const u = unidad.trim().toLowerCase();
+  if (u.startsWith("pliego")) return "pliego";
+  if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
+  return "otro";
 }
 
 /** Arma los Datos desde las hojas crudas. Hojas ausentes quedan como lista vacía. */

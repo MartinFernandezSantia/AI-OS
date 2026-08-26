@@ -8,7 +8,7 @@
 // rinde de cada medida. El modelo es otro; no hay nada que reusar de allá salvo la idea de
 // que el chunk es una unidad semántica autocontenida.
 
-import { escalaDe, num, unidadDe, type Datos, type Fila, type Tramo } from "./parse";
+import { escalaDe, modoDe, num, unidadDe, type Datos, type Fila, type Tramo } from "./parse";
 
 export type Estrategia = "coleccion-material" | "coleccion" | "producto";
 
@@ -57,20 +57,22 @@ export function escalaTexto(tramos: Tramo[]): string {
 /**
  * La línea de precio de un material. El MODO sale de la unidad del material
  * (no hay columna "Modo" en el Excel — se sacó a propósito para no tener dos fuentes).
+ *
+ * La unidad se imprime TAL CUAL viene del Excel: si el cliente escribe "pliego A3", el chunk
+ * dice A3; si mañana escribe "pliego A4", dice A4. El tamaño del pliego es un dato del
+ * cliente, no un literal del código.
  */
 export function lineaPrecio(material: string, tramos: Tramo[]): string {
   if (!tramos.length) return "";
-  const u = tramos[0].unidad;
-  if (u === "pliego") {
-    return `Precio por pliego A3 — ${material}: ${escalaTexto(tramos)}.`;
-  }
+  const unidad = tramos[0].unidad;
   const min = tramos[0].minimo;
-  const cola = min !== null ? `. Mínimo facturable ${numTexto(min)} m2` : "";
-  return `Precio por m2 — ${material}: ${escalaTexto(tramos)}${cola}.`;
+  // El mínimo facturable se expresa en la misma unidad de cobro (0,5 m2, 1 pliego…).
+  const cola = min !== null ? `. Mínimo facturable ${numTexto(min)} ${unidad}` : "";
+  return `Precio por ${unidad} — ${material}: ${escalaTexto(tramos)}${cola}.`;
 }
 
-/** Las líneas de un producto dentro de la lista de medidas. */
-function itemProducto(p: Fila): string[] {
+/** Las líneas de un producto dentro de la lista de medidas. `unidad` viene del material. */
+function itemProducto(p: Fila, unidad: string): string[] {
   const partes = [`- ${p["Producto"] ?? "(sin nombre)"}`];
 
   const a = p["Ancho (cm)"];
@@ -78,7 +80,10 @@ function itemProducto(p: Fila): string[] {
   if (a && h) partes.push(`${a}x${h} cm`);
 
   // Solo en modo pliego el producto trae rinde. En m2 la columna viene vacía y no entra.
-  if (p["Piezas por pliego"]) partes.push(`entran ${p["Piezas por pliego"]} por pliego A3`);
+  // La unidad sale del material ("pliego A3"), no de un literal.
+  if (p["Piezas por pliego"]) {
+    partes.push(`entran ${p["Piezas por pliego"]} por ${unidad || "pliego"}`);
+  }
 
   const lineas = [partes.join(" · ") + "."];
   if (p["Descripción"]) lineas.push(`  ${p["Descripción"]}`);
@@ -128,10 +133,11 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       // Con un solo material, el nombre del material no agrega nada al título.
       const titulo = mats.length > 1 ? `${col} — ${mat}` : col;
 
+      const unidad = unidadDe(datos.materiales, mat);
       const L: string[] = [titulo];
       if (desc) L.push(desc);
       L.push("", "Medidas disponibles:");
-      for (const p of suyos) L.push(...itemProducto(p));
+      for (const p of suyos) L.push(...itemProducto(p, unidad));
       const precio = lineaPrecio(mat, tramos);
       if (precio) L.push("", precio);
 
@@ -142,7 +148,8 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           estrategia: "coleccion-material",
           coleccion: col,
           material: mat,
-          unidad: unidadDe(datos.materiales, mat),
+          unidad,
+          modo: modoDe(unidad),
           productos: suyos.length,
         },
       });
@@ -165,7 +172,8 @@ function chunksColeccion(datos: Datos): Chunk[] {
     const L: string[] = [col];
     if (desc) L.push(desc);
     L.push("", "Productos disponibles:");
-    for (const p of items) L.push(...itemProducto(p));
+    // Acá conviven productos de materiales distintos: la unidad se resuelve por producto.
+    for (const p of items) L.push(...itemProducto(p, unidadDe(datos.materiales, p["Material"] ?? "")));
 
     const mats = materialesDe(items);
     const precios = mats
@@ -195,6 +203,7 @@ function chunksProducto(datos: Datos): Chunk[] {
   return datos.productos.map((p) => {
     const mat = p["Material"] ?? "";
     const tramos = escalaDe(datos.materiales, mat);
+    const unidad = unidadDe(datos.materiales, mat);
     const nombre = p["Producto"] ?? "(sin nombre)";
 
     const L: string[] = [nombre];
@@ -204,7 +213,9 @@ function chunksProducto(datos: Datos): Chunk[] {
     const a = p["Ancho (cm)"];
     const h = p["Alto (cm)"];
     if (a && h) L.push(`Medida: ${a}x${h} cm.`);
-    if (p["Piezas por pliego"]) L.push(`Entran ${p["Piezas por pliego"]} por pliego A3.`);
+    if (p["Piezas por pliego"]) {
+      L.push(`Entran ${p["Piezas por pliego"]} por ${unidad || "pliego"}.`);
+    }
 
     for (const k of Object.keys(p).filter((k) => !CONOCIDAS.has(k))) L.push(`${k}: ${p[k]}.`);
 
@@ -218,7 +229,8 @@ function chunksProducto(datos: Datos): Chunk[] {
         estrategia: "producto",
         coleccion: p["Colección"] ?? null,
         material: mat,
-        unidad: unidadDe(datos.materiales, mat),
+        unidad,
+        modo: modoDe(unidad),
         piezas_por_pliego: num(p["Piezas por pliego"]),
       },
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escalaDe, num, objetos, unidadDe, type Fila } from "../parse";
+import { escalaDe, modoDe, num, objetos, unidadDe, type Fila } from "../parse";
 
 describe("objetos — headers dinámicos", () => {
   it("descarta las columnas sin dato: un producto m2 no genera 'Piezas por pliego'", () => {
@@ -47,10 +47,10 @@ describe("num", () => {
 describe("escalaDe", () => {
   const materiales: Fila[] = [
     // A propósito desordenados: el orden lo garantiza el código, no el Excel.
-    { Material: "Papel", Unidad: "pliego", Desde: "11", Hasta: "50", "Precio por unidad": "2000" },
-    { Material: "Papel", Unidad: "pliego", Desde: "1", Hasta: "1", "Precio por unidad": "2500" },
-    { Material: "Papel", Unidad: "pliego", Desde: "101", "Precio por unidad": "1710" },
-    { Material: "Papel", Unidad: "pliego", Desde: "2", Hasta: "10", "Precio por unidad": "2200" },
+    { Material: "Papel", Unidad: "pliego A3", Desde: "11", Hasta: "50", "Precio por unidad": "2000" },
+    { Material: "Papel", Unidad: "pliego A3", Desde: "1", Hasta: "1", "Precio por unidad": "2500" },
+    { Material: "Papel", Unidad: "pliego A3", Desde: "101", "Precio por unidad": "1710" },
+    { Material: "Papel", Unidad: "pliego A3", Desde: "2", Hasta: "10", "Precio por unidad": "2200" },
     { Material: "Lona", Unidad: "m2", Desde: "1", "Precio por unidad": "16000", "Mínimo facturable": "0.5" },
   ];
 
@@ -76,8 +76,31 @@ describe("escalaDe", () => {
     expect(escalaDe(materiales, "Cartón")).toEqual([]);
   });
 
-  it("unidadDe deriva el modo de cálculo", () => {
-    expect(unidadDe(materiales, "Papel")).toBe("pliego");
+  it("unidadDe devuelve la unidad tal cual la escribió el cliente", () => {
+    expect(unidadDe(materiales, "Papel")).toBe("pliego A3");
     expect(unidadDe(materiales, "Lona")).toBe("m2");
+  });
+});
+
+describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
+  it("cualquier pliego es modo pliego, sin importar el tamaño", () => {
+    expect(modoDe("pliego")).toBe("pliego");
+    expect(modoDe("pliego A3")).toBe("pliego");
+    // El caso que motivó el cambio: con igualdad estricta, un A4 nuevo caía en silencio a m2.
+    expect(modoDe("pliego A4")).toBe("pliego");
+  });
+
+  it("reconoce m2 y m²", () => {
+    expect(modoDe("m2")).toBe("m2");
+    expect(modoDe("m²")).toBe("m2");
+  });
+
+  it("ignora mayúsculas y espacios", () => {
+    expect(modoDe("  Pliego A3  ")).toBe("pliego");
+  });
+
+  it("una unidad desconocida no se hace pasar por ninguna de las dos", () => {
+    expect(modoDe("plancha 30x40")).toBe("otro");
+    expect(modoDe("")).toBe("otro");
   });
 });

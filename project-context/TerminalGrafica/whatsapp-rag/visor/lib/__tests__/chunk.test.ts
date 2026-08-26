@@ -36,10 +36,10 @@ const datos: Datos = {
     },
   ],
   materiales: [
-    { Material: "Papel autoadhesivo", Unidad: "pliego", Desde: "1", Hasta: "1", "Precio por unidad": "2500" },
-    { Material: "Papel autoadhesivo", Unidad: "pliego", Desde: "2", Hasta: "10", "Precio por unidad": "2200" },
-    { Material: "Papel autoadhesivo", Unidad: "pliego", Desde: "11", "Precio por unidad": "2000" },
-    { Material: "OPP brillo", Unidad: "pliego", Desde: "1", Hasta: "9", "Precio por unidad": "2800" },
+    { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "1", Hasta: "1", "Precio por unidad": "2500" },
+    { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "2", Hasta: "10", "Precio por unidad": "2200" },
+    { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "11", "Precio por unidad": "2000" },
+    { Material: "OPP brillo", Unidad: "pliego A3", Desde: "1", Hasta: "9", "Precio por unidad": "2800" },
     { Material: "Lona", Unidad: "m2", Desde: "1", "Precio por unidad": "16000", "Mínimo facturable": "0.5" },
   ],
   parametros: [],
@@ -60,8 +60,8 @@ describe("escalaTexto", () => {
   });
 });
 
-describe("lineaPrecio — el modo sale de la unidad del material", () => {
-  it("pliego habla de pliego A3 y no menciona m2", () => {
+describe("lineaPrecio — la unidad se imprime tal cual viene del Excel", () => {
+  it("pliego usa la unidad del material y no menciona m2", () => {
     const l = lineaPrecio("Papel autoadhesivo", escalaDe(datos.materiales, "Papel autoadhesivo"));
     expect(l).toContain("Precio por pliego A3");
     expect(l).not.toContain("m2");
@@ -72,6 +72,24 @@ describe("lineaPrecio — el modo sale de la unidad del material", () => {
     expect(l).toContain("Precio por m2");
     expect(l).toContain("Mínimo facturable 0,5 m2");
     expect(l).not.toContain("pliego");
+  });
+
+  it("el tamaño del pliego sale del dato: cambiarlo a A4 cambia el texto", () => {
+    const a4 = escalaDe(
+      [{ Material: "Papel A4", Unidad: "pliego A4", Desde: "1", "Precio por unidad": "900" }],
+      "Papel A4",
+    );
+    const l = lineaPrecio("Papel A4", a4);
+    expect(l).toContain("Precio por pliego A4");
+    expect(l).not.toContain("A3"); // ← el literal viejo lo habría forzado a A3
+  });
+
+  it("una unidad inventada por el cliente se respeta igual", () => {
+    const plancha = escalaDe(
+      [{ Material: "Plancha", Unidad: "plancha 30x40", Desde: "1", "Precio por unidad": "5000" }],
+      "Plancha",
+    );
+    expect(lineaPrecio("Plancha", plancha)).toContain("Precio por plancha 30x40");
   });
 
   it("material sin escala no genera línea", () => {
@@ -109,15 +127,29 @@ describe("chunks — coleccion-material", () => {
     expect(cs.at(-1)!.texto).not.toContain("pliego");
   });
 
-  it("el chunk pliego trae el rinde de cada medida", () => {
+  it("el chunk pliego trae el rinde de cada medida, con la unidad del material", () => {
     expect(cs[0].texto).toContain("entran 104 por pliego A3");
+  });
+
+  it("el rinde también sigue al dato: con 'pliego A4' el texto dice A4", () => {
+    const a4: Datos = {
+      ...datos,
+      materiales: datos.materiales.map((m) =>
+        m["Unidad"] === "pliego A3" ? { ...m, Unidad: "pliego A4" } : m,
+      ),
+    };
+    const t = chunks(a4, "coleccion-material")[0].texto;
+    expect(t).toContain("entran 104 por pliego A4");
+    expect(t).toContain("Precio por pliego A4");
+    expect(t).not.toContain("A3");
   });
 
   it("la meta lleva lo que la Fase 2 va a escribir en metadata", () => {
     expect(cs[0].meta).toMatchObject({
       coleccion: "Stickers con forma",
       material: "Papel autoadhesivo",
-      unidad: "pliego",
+      unidad: "pliego A3",
+      modo: "pliego",
       productos: 1,
     });
   });
