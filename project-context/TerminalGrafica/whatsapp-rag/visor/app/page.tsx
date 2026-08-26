@@ -3,14 +3,18 @@
 import { useMemo, useState } from "react";
 import { ChunkCard } from "@/components/chunk-card";
 import { Dropzone } from "@/components/dropzone";
+import { IngestDialog } from "@/components/ingest-dialog";
 import { StatsBar } from "@/components/stats-bar";
+import type { Hojas } from "@/lib/actions";
 import { chunks, type Estrategia } from "@/lib/chunk";
-import { datosDeHojas, type Datos } from "@/lib/parse";
+import { datosDeHojas } from "@/lib/parse";
 import { stats } from "@/lib/tokens";
 import { leerXlsx } from "@/lib/xlsx";
 
 export default function Page() {
-  const [datos, setDatos] = useState<Datos | null>(null);
+  // Se guardan las hojas CRUDAS (no solo los datos parseados): la ingesta las manda al server,
+  // que rearma los chunks con los mismos módulos puros en vez de confiar en lo que venga del browser.
+  const [hojas, setHojas] = useState<Hojas | null>(null);
   const [nombre, setNombre] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -20,18 +24,19 @@ export default function Page() {
     setCargando(true);
     setError(null);
     try {
-      const hojas = await leerXlsx(await f.arrayBuffer());
-      setDatos(datosDeHojas(hojas));
+      setHojas(await leerXlsx(await f.arrayBuffer()));
       setNombre(f.name);
     } catch (e) {
       // Herramienta interna: el mensaje crudo sirve más que un texto amable.
       setError(e instanceof Error ? e.message : String(e));
-      setDatos(null);
+      setHojas(null);
       setNombre(null);
     } finally {
       setCargando(false);
     }
   }
+
+  const datos = useMemo(() => (hojas ? datosDeHojas(hojas) : null), [hojas]);
 
   // Las tres estrategias salen de los mismos datos: cambiar de tab no re-parsea el archivo.
   const todas = useMemo(() => {
@@ -64,7 +69,7 @@ export default function Page() {
         </div>
       )}
 
-      {datos && todas && (
+      {datos && todas && hojas && (
         <>
           <div className="mt-6">
             <StatsBar
@@ -86,11 +91,20 @@ export default function Page() {
               Materiales con esos nombres?
             </p>
           ) : (
-            <div className="mt-4 space-y-3">
-              {actuales.map((c, i) => (
-                <ChunkCard key={`${estrategia}-${i}`} chunk={c} indice={i} />
-              ))}
-            </div>
+            <>
+              <div className="mt-6 flex items-center justify-between gap-4">
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Esto es lo que va a leer el bot.
+                </p>
+                <IngestDialog hojas={hojas} estrategia={estrategia} nChunks={actuales.length} />
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {actuales.map((c, i) => (
+                  <ChunkCard key={`${estrategia}-${i}`} chunk={c} indice={i} />
+                ))}
+              </div>
+            </>
           )}
         </>
       )}
