@@ -5,5 +5,5 @@ out/
 next-env.d.ts
 .DS_Store
 
-# Verificación end-to-end contra el xlsx real: necesita fs, corre suelta desde scratchpad.
-e2e-tmp.test.ts
+# Verificaciones contra el xlsx real: necesitan fs, se copian desde scratchpad a mano.
+*-tmp.test.ts
