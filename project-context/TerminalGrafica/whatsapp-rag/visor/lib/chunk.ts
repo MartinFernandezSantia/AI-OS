@@ -4,11 +4,22 @@
 // OJO, no confundir con el chunk del bot lite (whatsapp-rag-lite/lib/catalog/rag-chunk.ts):
 // aquel modela producto-bot → variantes → refs [vN] → metadata.precios, porque ahí el LLM
 // NO calculaba (elegía una opción y un nodo determinista inyectaba el monto en {Pn}).
-// Acá el bot CALCULA: el chunk no lleva precios cerrados, lleva la ESCALA del material y el
-// rinde de cada medida. El modelo es otro; no hay nada que reusar de allá salvo la idea de
-// que el chunk es una unidad semántica autocontenida.
+// Acá el bot CALCULA: el chunk no lleva precios cerrados, lleva la ESCALA del material, la
+// GEOMETRÍA de la unidad de cobro (para cotizar cualquier medida, no solo las de referencia)
+// y el rinde calculado de cada medida de referencia. El modelo es otro; no hay nada que
+// reusar de allá salvo la idea de que el chunk es una unidad semántica autocontenida.
 
-import { escalaDe, modoDe, num, unidadDe, type Datos, type Fila, type Tramo } from "./parse";
+import { rinde, type Geometria } from "./geometria";
+import {
+  escalaDe,
+  geometriaDe,
+  modoDe,
+  num,
+  unidadDe,
+  type Datos,
+  type Fila,
+  type Tramo,
+} from "./parse";
 
 export type Estrategia = "coleccion-material" | "coleccion" | "producto";
 
@@ -23,14 +34,10 @@ export interface Chunk {
 /** Columnas de Productos que tienen lugar propio en la plantilla del chunk. Cualquier otra
  *  se emite genérica al final del ítem — así una columna nueva del cliente entra sin código. */
 /** Cuántas piezas salen de UNA unidad de cobro (un pliego, una plancha, una bobina…).
- *  Se llamaba "Piezas por pliego", pero el concepto no es exclusivo del pliego: es el factor
- *  de conversión entre lo que pide el cliente y lo que se cobra. El nombre viejo se sigue
- *  aceptando como alias para no romper un Excel que todavía no se migró. */
+ *  Para las unidades geométricas (pliego) YA NO se carga a mano: se calcula desde la
+ *  geometría del material. La columna queda para unidades donde el rinde es dato del
+ *  taller (una bobina, una plancha) — y si viene cargada, gana sobre el cálculo. */
 export const COL_RINDE = "Piezas por unidad de cobro";
-const COL_RINDE_VIEJA = "Piezas por pliego";
-
-/** El rinde de un producto, venga con el nombre nuevo o el viejo. */
-const rindeDe = (p: Fila): string | undefined => p[COL_RINDE] ?? p[COL_RINDE_VIEJA];
 
 const CONOCIDAS = new Set([
   "Colección",
@@ -40,8 +47,22 @@ const CONOCIDAS = new Set([
   "Ancho (cm)",
   "Alto (cm)",
   COL_RINDE,
-  COL_RINDE_VIEJA,
 ]);
+
+/**
+ * El rinde efectivo de un producto: la columna cargada (dato del taller) manda; si no
+ * está y hay geometría + medidas, se calcula; si no hay nada, null. Un 0 calculado
+ * significa "no entra en el área útil" — se devuelve tal cual para que `avisos` lo vea,
+ * pero el chunk no lo emite (0 es falsy en los call sites).
+ */
+export function rindeEfectivo(p: Fila, geo: Geometria | null): number | null {
+  const cargado = num(p[COL_RINDE]);
+  if (cargado !== null) return cargado;
+  const a = num(p["Ancho (cm)"]);
+  const h = num(p["Alto (cm)"]);
+  if (geo && a !== null && h !== null) return rinde(a, h, geo);
+  return null;
+}
 
 const money = (n: number): string => "$" + n.toLocaleString("es-AR");
 
@@ -82,8 +103,9 @@ export function lineaPrecio(material: string, tramos: Tramo[]): string {
   return `Precio por ${unidad} — ${material}: ${escalaTexto(tramos)}${cola}.`;
 }
 
-/** Las líneas de un producto dentro de la lista de medidas. `unidad` viene del material. */
-function itemProducto(p: Fila, unidad: string): string[] {
+/** Las líneas de un producto dentro de la lista de medidas. `unidad` y `geo` vienen del
+ *  material. */
+function itemProducto(p: Fila, unidad: string, geo: Geometria | null): string[] {
   const partes = [`- ${p["Producto"] ?? "(sin nombre)"}`];
 
   const a = p["Ancho (cm)"];
@@ -91,9 +113,9 @@ function itemProducto(p: Fila, unidad: string): string[] {
   if (a && h) partes.push(`${a}x${h} cm`);
 
   // El rinde solo aparece donde hace falta convertir piezas → unidades de cobro (modo pliego
-  // y similares). En m2 la columna viene vacía y no entra. La unidad sale del material.
-  const rinde = rindeDe(p);
-  if (rinde) partes.push(`entran ${rinde} por ${unidad || "unidad"}`);
+  // y similares). En m2 no hay ni columna ni geometría y no entra. La unidad sale del material.
+  const r = rindeEfectivo(p, geo);
+  if (r) partes.push(`entran ${numTexto(r)} por ${unidad || "unidad"}`);
 
   const lineas = [partes.join(" · ") + "."];
   if (p["Descripción"]) lineas.push(`  ${p["Descripción"]}`);
@@ -103,6 +125,25 @@ function itemProducto(p: Fila, unidad: string): string[] {
   for (const k of extras) lineas.push(`  ${k}: ${p[k]}`);
 
   return lineas;
+}
+
+/**
+ * Las líneas que habilitan la medida libre. El chunk lleva los DATOS que la fórmula de
+ * encaje consume (área útil, separación, unidad); la fórmula general vive en la hoja
+ * Instrucciones → el system prompt del bot, para no repetirla (y desalinearla) por chunk.
+ */
+function lineasMotor(modo: string, unidad: string, geo: Geometria | null): string[] {
+  if (modo === "pliego" && geo) {
+    const sep = geo.separacion
+      ? `separación entre piezas: ${numTexto(geo.separacion)} cm`
+      : "sin separación entre piezas";
+    return [
+      "Se cotiza CUALQUIER medida en cm; las de abajo son referencias de tamaños populares.",
+      `Área útil del ${unidad || "pliego"}: ${numTexto(geo.utilAncho)}x${numTexto(geo.utilAlto)} cm · ${sep}.`,
+    ];
+  }
+  if (modo === "m2") return ["Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000)."];
+  return [];
 }
 
 /** Descripción de una colección por nombre. */
@@ -144,10 +185,14 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       const titulo = mats.length > 1 ? `${col} — ${mat}` : col;
 
       const unidad = unidadDe(datos.materiales, mat);
+      const modo = modoDe(unidad);
+      const geo = geometriaDe(datos.materiales, mat);
       const L: string[] = [titulo];
       if (desc) L.push(desc);
-      L.push("", "Medidas disponibles:");
-      for (const p of suyos) L.push(...itemProducto(p, unidad));
+      const motor = lineasMotor(modo, unidad, geo);
+      if (motor.length) L.push("", ...motor);
+      L.push("", "Medidas de referencia:");
+      for (const p of suyos) L.push(...itemProducto(p, unidad, geo));
       const precio = lineaPrecio(mat, tramos);
       if (precio) L.push("", precio);
 
@@ -159,8 +204,15 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           coleccion: col,
           material: mat,
           unidad,
-          modo: modoDe(unidad),
+          modo,
           productos: suyos.length,
+          ...(geo && {
+            geometria: {
+              util_ancho: geo.utilAncho,
+              util_alto: geo.utilAlto,
+              separacion: geo.separacion,
+            },
+          }),
         },
       });
     }
@@ -183,7 +235,10 @@ function chunksColeccion(datos: Datos): Chunk[] {
     if (desc) L.push(desc);
     L.push("", "Productos disponibles:");
     // Acá conviven productos de materiales distintos: la unidad se resuelve por producto.
-    for (const p of items) L.push(...itemProducto(p, unidadDe(datos.materiales, p["Material"] ?? "")));
+    for (const p of items) {
+      const mat = p["Material"] ?? "";
+      L.push(...itemProducto(p, unidadDe(datos.materiales, mat), geometriaDe(datos.materiales, mat)));
+    }
 
     const mats = materialesDe(items);
     const precios = mats
@@ -214,6 +269,7 @@ function chunksProducto(datos: Datos): Chunk[] {
     const mat = p["Material"] ?? "";
     const tramos = escalaDe(datos.materiales, mat);
     const unidad = unidadDe(datos.materiales, mat);
+    const geo = geometriaDe(datos.materiales, mat);
     const nombre = p["Producto"] ?? "(sin nombre)";
 
     const L: string[] = [nombre];
@@ -223,8 +279,8 @@ function chunksProducto(datos: Datos): Chunk[] {
     const a = p["Ancho (cm)"];
     const h = p["Alto (cm)"];
     if (a && h) L.push(`Medida: ${a}x${h} cm.`);
-    const rinde = rindeDe(p);
-    if (rinde) L.push(`Entran ${rinde} por ${unidad || "unidad"}.`);
+    const r = rindeEfectivo(p, geo);
+    if (r) L.push(`Entran ${numTexto(r)} por ${unidad || "unidad"}.`);
 
     for (const k of Object.keys(p).filter((k) => !CONOCIDAS.has(k))) L.push(`${k}: ${p[k]}.`);
 
@@ -240,7 +296,7 @@ function chunksProducto(datos: Datos): Chunk[] {
         material: mat,
         unidad,
         modo: modoDe(unidad),
-        piezas_por_unidad: num(rindeDe(p)),
+        piezas_por_unidad: r,
       },
     };
   });
@@ -256,4 +312,44 @@ export function chunks(datos: Datos, estrategia: Estrategia): Chunk[] {
     case "producto":
       return chunksProducto(datos);
   }
+}
+
+/**
+ * Problemas del catálogo que el chunk NO puede mostrar (saldría "un chunk que parece
+ * completo y no lo está"). Se muestran en el visor antes de ingestar; no bloquean.
+ */
+export function avisos(datos: Datos): string[] {
+  const out: string[] = [];
+  for (const p of datos.productos) {
+    const mat = p["Material"] ?? "";
+    const unidad = unidadDe(datos.materiales, mat);
+    if (modoDe(unidad) !== "pliego") continue;
+
+    const nombre = p["Producto"] ?? "(sin nombre)";
+    const geo = geometriaDe(datos.materiales, mat);
+    const cargado = num(p[COL_RINDE]);
+    const a = num(p["Ancho (cm)"]);
+    const h = num(p["Alto (cm)"]);
+    const calculado = geo && a !== null && h !== null ? rinde(a, h, geo) : null;
+
+    if (cargado === null && calculado === null) {
+      // Sin columna ni geometría: el chunk sale con precio pero sin rinde, y el bot inventa.
+      out.push(
+        `${nombre}: sin rinde — el material "${mat}" no tiene geometría (área útil + separación) ` +
+          `y la columna "${COL_RINDE}" está vacía. El bot no va a poder cotizarlo.`,
+      );
+    } else if (cargado !== null && calculado !== null && cargado !== calculado) {
+      // Dos fuentes que no coinciden: gana el dato cargado (lo puso un humano a propósito).
+      out.push(
+        `${nombre}: la columna dice ${cargado} pero la geometría de "${mat}" calcula ${calculado}. ` +
+          `Se usa ${cargado}; revisar cuál está mal.`,
+      );
+    } else if (cargado === null && calculado === 0) {
+      out.push(
+        `${nombre} (${a}x${h} cm): no entra en el área útil de "${mat}" en ninguna orientación. ` +
+          `La referencia sale sin rinde; el bot debe derivar a consulta.`,
+      );
+    }
+  }
+  return out;
 }

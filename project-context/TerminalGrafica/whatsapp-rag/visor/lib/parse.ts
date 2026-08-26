@@ -5,6 +5,8 @@
 // Y al revés: una columna sin dato NO genera propiedad, así el chunk de vinilos nunca
 // menciona "piezas por pliego". Eso es el "chunk disperso" del plan.
 
+import type { Geometria } from "./geometria";
+
 /** Una fila de cualquier hoja, ya normalizada. Solo lleva las columnas CON dato. */
 export type Fila = Record<string, string>;
 
@@ -80,6 +82,24 @@ export function escalaDe(materiales: Fila[], material: string): Tramo[] {
 /** Unidad de cobro TAL CUAL la escribió el cliente ("pliego A3", "m2", "plancha 30x40"…). */
 export function unidadDe(materiales: Fila[], material: string): string {
   return materiales.find((m) => m["Material"] === material)?.["Unidad"] ?? "";
+}
+
+/**
+ * Geometría de la unidad de cobro de un material: área útil + separación entre piezas.
+ * Se carga UNA vez por material, en su primera fila (como la unidad) — repetirla por tramo
+ * invitaría al drift. Sin ambas áreas útiles no hay geometría (null): los materiales m2
+ * dejan las columnas vacías y el chunk disperso hace el resto.
+ */
+export function geometriaDe(materiales: Fila[], material: string): Geometria | null {
+  const fila = materiales.find(
+    (m) => m["Material"] === material && m["Área útil ancho (cm)"] && m["Área útil alto (cm)"],
+  );
+  if (!fila) return null;
+  const utilAncho = num(fila["Área útil ancho (cm)"]);
+  const utilAlto = num(fila["Área útil alto (cm)"]);
+  if (utilAncho === null || utilAlto === null) return null;
+  // Separación ausente = 0: "solo impresión" puede dejar la celda vacía o cargar 0 explícito.
+  return { utilAncho, utilAlto, separacion: num(fila["Separación (cm)"]) ?? 0 };
 }
 
 /**

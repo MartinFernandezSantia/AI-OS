@@ -6,7 +6,7 @@ import { Dropzone } from "@/components/dropzone";
 import { IngestDialog } from "@/components/ingest-dialog";
 import { StatsBar } from "@/components/stats-bar";
 import type { Hojas } from "@/lib/actions";
-import { chunks, type Estrategia } from "@/lib/chunk";
+import { avisos, chunks, type Estrategia } from "@/lib/chunk";
 import { datosDeHojas } from "@/lib/parse";
 import { stats } from "@/lib/tokens";
 import { leerXlsx } from "@/lib/xlsx";
@@ -50,6 +50,9 @@ export default function Page() {
 
   const actuales = todas?.[estrategia] ?? [];
 
+  // Problemas que el chunk no puede mostrar (rinde faltante, drift, pieza que no entra).
+  const problemas = useMemo(() => (datos ? avisos(datos) : []), [datos]);
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <header className="mb-6">
@@ -71,6 +74,23 @@ export default function Page() {
 
       {datos && todas && hojas && (
         <>
+          {problemas.length > 0 && (
+            <div className="mt-4 rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-soft)] p-4">
+              <p className="text-sm font-medium text-[var(--color-warning)]">
+                {problemas.length === 1
+                  ? "1 problema que el chunk no muestra"
+                  : `${problemas.length} problemas que los chunks no muestran`}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {problemas.map((a, i) => (
+                  <li key={i} className="text-xs text-[var(--color-warning)]">
+                    {a}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="mt-6">
             <StatsBar
               hojas={datos.hojas}

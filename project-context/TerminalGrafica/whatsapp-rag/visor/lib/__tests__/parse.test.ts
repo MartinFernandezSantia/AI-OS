@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escalaDe, modoDe, num, objetos, unidadDe, type Fila } from "../parse";
+import { escalaDe, geometriaDe, modoDe, num, objetos, unidadDe, type Fila } from "../parse";
 
 describe("objetos — headers dinámicos", () => {
   it("descarta las columnas sin dato: un producto m2 no genera 'Piezas por pliego'", () => {
@@ -82,6 +82,63 @@ describe("escalaDe", () => {
   });
 });
 
+describe("geometriaDe — la geometría vive en la primera fila del material", () => {
+  const materiales: Fila[] = [
+    // Solo la primera fila del material lleva la geometría (como la unidad).
+    {
+      Material: "Papel troquelado",
+      Unidad: "pliego A3",
+      Desde: "1",
+      "Precio por unidad": "2500",
+      "Área útil ancho (cm)": "28",
+      "Área útil alto (cm)": "44",
+      "Separación (cm)": "0,3",
+    },
+    { Material: "Papel troquelado", Unidad: "pliego A3", Desde: "2", "Precio por unidad": "2200" },
+    {
+      Material: "Papel solo impresión",
+      Unidad: "pliego A3",
+      Desde: "1",
+      "Precio por unidad": "1800",
+      "Área útil ancho (cm)": "31",
+      "Área útil alto (cm)": "46",
+      // sin "Separación (cm)": vale 0
+    },
+    { Material: "Lona", Unidad: "m2", Desde: "1", "Precio por unidad": "16000" },
+  ];
+
+  it("lee área útil y separación, con coma decimal", () => {
+    expect(geometriaDe(materiales, "Papel troquelado")).toEqual({
+      utilAncho: 28,
+      utilAlto: 44,
+      separacion: 0.3,
+    });
+  });
+
+  it("separación ausente vale 0 (solo impresión)", () => {
+    expect(geometriaDe(materiales, "Papel solo impresión")).toEqual({
+      utilAncho: 31,
+      utilAlto: 46,
+      separacion: 0,
+    });
+  });
+
+  it("un material sin geometría (m2) da null", () => {
+    expect(geometriaDe(materiales, "Lona")).toBeNull();
+  });
+
+  it("un material inexistente da null", () => {
+    expect(geometriaDe(materiales, "Cartón")).toBeNull();
+  });
+
+  it("con un solo lado del área útil no hay geometría (null, no un dato a medias)", () => {
+    const aMedias: Fila[] = [
+      { Material: "Papel", Unidad: "pliego A3", Desde: "1", "Área útil ancho (cm)": "28" },
+    ];
+    expect(geometriaDe(aMedias, "Papel")).toBeNull();
+  });
+});
+
 describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
   it("cualquier pliego es modo pliego, sin importar el tamaño", () => {
     expect(modoDe("pliego")).toBe("pliego");
@@ -101,6 +158,18 @@ describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
 
   it("una unidad desconocida no se hace pasar por ninguna de las dos", () => {
     expect(modoDe("plancha 30x40")).toBe("otro");
+    expect(modoDe("unidad")).toBe("otro");
+    expect(modoDe("metro lineal")).toBe("otro");
     expect(modoDe("")).toBe("otro");
+  });
+
+  // LA TRAMPA documentada en Instrucciones: el prefijo agarra de más y de menos.
+  it("'m2 con laminado' y 'pliego doble' caen en su modo aunque se cobren distinto", () => {
+    expect(modoDe("m2 con laminado")).toBe("m2");
+    expect(modoDe("pliego doble")).toBe("pliego");
+  });
+
+  it("'metro cuadrado' NO es 'm2': queda huérfano, sin fórmula", () => {
+    expect(modoDe("metro cuadrado")).toBe("otro");
   });
 });

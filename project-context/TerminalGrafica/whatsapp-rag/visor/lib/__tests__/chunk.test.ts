@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { chunks, escalaTexto, lineaPrecio } from "../chunk";
+import { avisos, chunks, escalaTexto, lineaPrecio, rindeEfectivo } from "../chunk";
 import { escalaDe, type Datos } from "../parse";
 
-/** Fixture chico armado a mano: dos colecciones, tres materiales, los dos modos. */
+/** Fixture chico armado a mano: dos colecciones, tres materiales, los dos modos.
+ *  Mundo nuevo: los productos pliego NO cargan rinde — sale calculado de la geometría
+ *  del material (área útil + separación en su primera fila). */
 const datos: Datos = {
   colecciones: [
     { "Colección": "Stickers con forma", "Descripción": "Stickers cortados con forma, para interior." },
@@ -16,7 +18,7 @@ const datos: Datos = {
       Material: "Papel autoadhesivo",
       "Ancho (cm)": "3",
       "Alto (cm)": "3",
-      "Piezas por pliego": "104",
+      // sin rinde cargado: se calcula (104 con 28x44 y sep 0,3)
     },
     {
       "Colección": "Stickers con forma",
@@ -24,7 +26,7 @@ const datos: Datos = {
       Material: "OPP brillo",
       "Ancho (cm)": "5",
       "Alto (cm)": "5",
-      "Piezas por pliego": "40",
+      // se calcula: 40
     },
     {
       "Colección": "Banners y lonas",
@@ -32,14 +34,32 @@ const datos: Datos = {
       Material: "Lona",
       "Ancho (cm)": "100",
       "Alto (cm)": "100",
-      // sin "Piezas por pliego": es modo m2
+      // sin rinde ni geometría: es modo m2
     },
   ],
   materiales: [
-    { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "1", Hasta: "1", "Precio por unidad": "2500" },
+    {
+      Material: "Papel autoadhesivo",
+      Unidad: "pliego A3",
+      Desde: "1",
+      Hasta: "1",
+      "Precio por unidad": "2500",
+      "Área útil ancho (cm)": "28",
+      "Área útil alto (cm)": "44",
+      "Separación (cm)": "0,3",
+    },
     { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "2", Hasta: "10", "Precio por unidad": "2200" },
     { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "11", "Precio por unidad": "2000" },
-    { Material: "OPP brillo", Unidad: "pliego A3", Desde: "1", Hasta: "9", "Precio por unidad": "2800" },
+    {
+      Material: "OPP brillo",
+      Unidad: "pliego A3",
+      Desde: "1",
+      Hasta: "9",
+      "Precio por unidad": "2800",
+      "Área útil ancho (cm)": "28",
+      "Área útil alto (cm)": "44",
+      "Separación (cm)": "0,3",
+    },
     { Material: "Lona", Unidad: "m2", Desde: "1", "Precio por unidad": "16000", "Mínimo facturable": "0.5" },
   ],
   parametros: [],
@@ -127,8 +147,33 @@ describe("chunks — coleccion-material", () => {
     expect(cs.at(-1)!.texto).not.toContain("pliego");
   });
 
-  it("el chunk pliego trae el rinde de cada medida, con la unidad del material", () => {
+  it("el chunk pliego trae el rinde CALCULADO de cada medida, con la unidad del material", () => {
     expect(cs[0].texto).toContain("entran 104 por pliego A3");
+    expect(cs[1].texto).toContain("entran 40 por pliego A3");
+  });
+
+  it("el chunk pliego habilita la medida libre y publica la geometría", () => {
+    expect(cs[0].texto).toContain("Se cotiza CUALQUIER medida en cm");
+    expect(cs[0].texto).toContain("Área útil del pliego A3: 28x44 cm · separación entre piezas: 0,3 cm.");
+  });
+
+  it("el encabezado de la lista dice 'Medidas de referencia', no 'disponibles'", () => {
+    expect(cs[0].texto).toContain("Medidas de referencia:");
+    expect(cs[0].texto).not.toContain("Medidas disponibles");
+  });
+
+  it("el chunk m2 habilita cualquier medida con su conversión", () => {
+    expect(cs.at(-1)!.texto).toContain("Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).");
+  });
+
+  it("con separación 0, la línea dice 'sin separación entre piezas'", () => {
+    const sinSep: Datos = {
+      ...datos,
+      materiales: datos.materiales.map((m) =>
+        m["Separación (cm)"] ? { ...m, "Separación (cm)": "0" } : m,
+      ),
+    };
+    expect(chunks(sinSep, "coleccion-material")[0].texto).toContain("sin separación entre piezas.");
   });
 
   it("el rinde también sigue al dato: con 'pliego A4' el texto dice A4", () => {
@@ -151,7 +196,12 @@ describe("chunks — coleccion-material", () => {
       unidad: "pliego A3",
       modo: "pliego",
       productos: 1,
+      geometria: { util_ancho: 28, util_alto: 44, separacion: 0.3 },
     });
+  });
+
+  it("el chunk m2 no lleva geometría en la meta", () => {
+    expect(cs.at(-1)!.meta).not.toHaveProperty("geometria");
   });
 });
 
@@ -179,32 +229,45 @@ describe("chunks — producto", () => {
   });
 });
 
-describe("el rinde: nombre nuevo y alias viejo", () => {
-  /** El fixture usa el nombre VIEJO. Este arma el mismo dato con el nombre nuevo. */
-  const conNombreNuevo: Datos = {
-    ...datos,
-    productos: datos.productos.map((p) => {
-      if (!p["Piezas por pliego"]) return p;
-      const { "Piezas por pliego": v, ...resto } = p;
-      return { ...resto, "Piezas por unidad de cobro": v };
-    }),
-  };
-
-  it("los dos nombres producen el MISMO texto", () => {
-    const viejo = chunks(datos, "coleccion-material")[0].texto;
-    const nuevo = chunks(conNombreNuevo, "coleccion-material")[0].texto;
-    expect(nuevo).toBe(viejo);
-    expect(nuevo).toContain("entran 104 por pliego A3");
-  });
-
-  it("el nombre nuevo no se filtra al chunk como columna desconocida", () => {
+describe("el rinde: columna cargada vs geometría", () => {
+  it("la columna no se filtra al chunk como columna desconocida", () => {
+    const conColumna: Datos = {
+      ...datos,
+      productos: [{ ...datos.productos[0], "Piezas por unidad de cobro": "104" }],
+    };
     // Si no estuviera en CONOCIDAS, saldría como "Piezas por unidad de cobro: 104".
-    expect(chunks(conNombreNuevo, "coleccion-material")[0].texto).not.toContain(
+    expect(chunks(conColumna, "coleccion-material")[0].texto).not.toContain(
       "Piezas por unidad de cobro:",
     );
   });
 
-  it("el rinde sirve para cualquier unidad, no solo pliego", () => {
+  it("el alias viejo 'Piezas por pliego' YA NO se acepta: sale como columna desconocida", () => {
+    const conAlias: Datos = {
+      ...datos,
+      productos: [{ ...datos.productos[0], "Piezas por pliego": "104" }],
+    };
+    expect(chunks(conAlias, "coleccion-material")[0].texto).toContain("Piezas por pliego: 104");
+  });
+
+  it("la columna cargada GANA sobre el cálculo (dato del taller)", () => {
+    const p = { ...datos.productos[0], "Piezas por unidad de cobro": "99" };
+    expect(rindeEfectivo(p, { utilAncho: 28, utilAlto: 44, separacion: 0.3 })).toBe(99);
+    const conColumna: Datos = { ...datos, productos: [p, datos.productos[1]] };
+    expect(chunks(conColumna, "coleccion-material")[0].texto).toContain("entran 99 por pliego A3");
+  });
+
+  it("sin columna ni geometría no hay rinde (null) y el ítem no dice 'entran'", () => {
+    const sinGeo: Datos = {
+      ...datos,
+      materiales: datos.materiales.map(
+        ({ "Área útil ancho (cm)": _a, "Área útil alto (cm)": _h, "Separación (cm)": _s, ...m }) => m,
+      ),
+    };
+    expect(rindeEfectivo(datos.productos[0], null)).toBeNull();
+    expect(chunks(sinGeo, "coleccion-material")[0].texto).not.toContain("entran");
+  });
+
+  it("el rinde cargado sirve para cualquier unidad, no solo pliego", () => {
     const bobina: Datos = {
       colecciones: [{ "Colección": "Cintas", "Descripción": "Cintas impresas." }],
       productos: [
@@ -224,6 +287,62 @@ describe("el rinde: nombre nuevo y alias viejo", () => {
     const t = chunks(bobina, "coleccion-material")[0].texto;
     expect(t).toContain("entran 200 por bobina");
     expect(t).not.toContain("pliego");
+    // Una unidad "otro" no tiene fórmula de medida libre: sin línea habilitante.
+    expect(t).not.toContain("Se cotiza");
+  });
+});
+
+describe("avisos — lo que el chunk no puede mostrar", () => {
+  it("con el fixture sano no hay avisos", () => {
+    expect(avisos(datos)).toEqual([]);
+  });
+
+  it("producto pliego sin geometría ni rinde cargado: el bot no va a poder cotizar", () => {
+    const sinGeo: Datos = {
+      ...datos,
+      materiales: datos.materiales.map(
+        ({ "Área útil ancho (cm)": _a, "Área útil alto (cm)": _h, "Separación (cm)": _s, ...m }) => m,
+      ),
+    };
+    const a = avisos(sinGeo);
+    expect(a).toHaveLength(2); // los dos productos pliego del fixture
+    expect(a[0]).toContain("Stickers 3x3 cm");
+    expect(a[0]).toContain("no va a poder cotizarlo");
+  });
+
+  it("columna cargada y geometría que no coinciden: drift, gana el dato cargado", () => {
+    const conDrift: Datos = {
+      ...datos,
+      productos: [{ ...datos.productos[0], "Piezas por unidad de cobro": "99" }],
+    };
+    const a = avisos(conDrift);
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("la columna dice 99");
+    expect(a[0]).toContain("calcula 104");
+  });
+
+  it("pieza que no entra en el área útil: rinde 0, derivar a consulta", () => {
+    const gigante: Datos = {
+      ...datos,
+      productos: [
+        {
+          "Colección": "Stickers con forma",
+          Producto: "Sticker 30x45 cm",
+          Material: "Papel autoadhesivo",
+          "Ancho (cm)": "30",
+          "Alto (cm)": "45",
+        },
+      ],
+    };
+    const a = avisos(gigante);
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("no entra en el área útil");
+    // Y el chunk no dice "entran 0": el ítem sale sin rinde.
+    expect(chunks(gigante, "coleccion-material")[0].texto).not.toContain("entran 0");
+  });
+
+  it("los productos m2 no generan avisos aunque no tengan rinde", () => {
+    expect(avisos({ ...datos, productos: [datos.productos[2]] })).toEqual([]);
   });
 });
 

@@ -18,6 +18,8 @@
   --text-faint: oklch(0.6 0 0);
   --danger: oklch(0.577 0.245 27.325);
   --danger-soft: oklch(0.577 0.245 27.325 / 10%);
+  --warning: oklch(0.55 0.13 75);
+  --warning-soft: oklch(0.55 0.13 75 / 10%);
   --radius: 0.625rem;
 }
 
@@ -37,6 +39,8 @@
   --color-text-faint: var(--text-faint);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
