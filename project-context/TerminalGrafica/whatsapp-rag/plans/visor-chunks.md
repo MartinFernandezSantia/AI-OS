@@ -15,7 +15,10 @@ escribir nada a la base conviene ver, con los ojos, **qué texto exacto va a lee
 Un chunk mal armado no falla ruidosamente: el bot contesta cualquier cosa y nadie se entera.
 
 Esta UI es esa inspección. Interna, para Martín y Claude. Sube el .xlsx, lo parsea en
-memoria y muestra los bloques de texto de cada embedding. **No escribe a ninguna base.**
+memoria y muestra los bloques de texto de cada embedding.
+
+> **Nota (2026-08-26):** el alcance original era solo-lectura. Se amplió: ahora la ingesta
+> también se ejecuta desde la app — ver "Ampliación" al final.
 
 El valor secundario, y no menor: `lib/parse.ts` y `lib/chunk.ts` son los **mismos
 módulos** que después importa el CLI de ingesta. Lo que se valide acá visualmente es
@@ -252,10 +255,45 @@ En el browser, con `Catalogo-TG-v2.xlsx`:
 
 ---
 
+## Ampliación 2026-08-26 — la ingesta se ejecuta desde la app
+
+El alcance original decía "no escribe a ninguna base". **Se levantó a pedido de Martín**: el
+visor ahora también ingesta a `bot.rag_catalog`, así que absorbe la Fase 2 del plan madre —
+ya no hace falta un CLI aparte.
+
+| Tema | Decisión |
+|---|---|
+| Base destino | La única que diga `BOT_DB` en `.env.local`. La app muestra el host ANTES de confirmar. |
+| Confirmación | Preview + confirmar. Un botón abre el resumen; recién ahí se escribe. |
+| Estrategia | Reemplazo total en una transacción. Lo que se ve en el visor es lo que queda. |
+
+Archivos nuevos, todos server-only:
+
+- **`lib/embeddings.ts`** — Gemini `gemini-embedding-001`, `taskType: RETRIEVAL_DOCUMENT`.
+  Tiene que ser el MISMO modelo que el nodo de n8n usa al consultar, o los vectores no son
+  comparables y el retrieval devuelve cualquier cosa.
+- **`lib/db.ts`** — `delete` + `insert` en UNA transacción. **No `truncate`**: en Postgres
+  requiere ser dueño de la tabla y no se puede otorgar por grant, y el rol `bot_curator` solo
+  tiene `select/insert/delete`. Mismo efecto dentro de la transacción.
+- **`lib/actions.ts`** — los server actions. El cliente manda las **hojas crudas**, no los
+  chunks ya armados: el server los rearma con los mismos módulos puros, así lo que se ingesta
+  es reproducible desde el archivo y no depende de que el browser mande algo coherente.
+- **`components/ingest-dialog.tsx`** — el preview: destino, filas que se pisan, chunks a
+  insertar, costo estimado.
+
+Config en `env.example.txt` → copiar a `.env.local`: `BOT_DB` (rol `bot_curator`, session
+pooler de Supabase puerto 5432) y `GEMINI_API_KEY`. Sin eso el visor sigue funcionando para
+mirar; solo la ingesta pide credenciales.
+
+Verificado que `BOT_DB`, `GEMINI_API_KEY`, la URL de embeddings y `pg` **no** aparecen en el
+bundle del cliente.
+
+---
+
 ## Fuera de alcance
 
-- Escribir a `bot.rag_catalog` o a cualquier base — es lo que esta UI explícitamente no hace.
-- Generar embeddings o llamar a la API de Gemini.
+- Generar embeddings de `bot.rag_business_info` (la info del negocio sigue fuera de alcance,
+  como dice el plan madre).
 - Editar el Excel desde la UI. Se edita en Excel; acá solo se mira.
 - Verificador de los 39 casos y chequeos de integridad — evaluados y descartados para esta
   pasada. Si la ingesta empieza a romper, el verificador es lo primero que vuelve (la lógica
