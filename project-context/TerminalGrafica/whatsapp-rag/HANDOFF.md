@@ -119,6 +119,11 @@ inyectar texto al catálogo del bot. No cambiar esto por comodidad.
 tabla, y TRUNCATE en Postgres exige propiedad — no se puede otorgar por grant. Se borra con
 `delete` dentro de la transacción; mismo efecto.
 
+**`type "vector" does not exist` al ingestar.** En Supabase pgvector vive en el schema
+`extensions` y el search_path del rol (`"$user", public`) no lo incluye: el cast `::vector`
+sin calificar no resuelve. Fix en `db.ts`: `set local search_path = public, extensions`
+dentro de la transacción (muere con ella).
+
 **El .xlsx se edita con scripts, no a mano.** `visor/scripts/*.mjs` hacen sustitución
 quirúrgica sobre el ZIP (todos con dry run por defecto y `--apply` para escribir; el manejo
 del ZIP y sharedStrings está compartido en `scripts/lib-xlsx.mjs`, que también chequea el

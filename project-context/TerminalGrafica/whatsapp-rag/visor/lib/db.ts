@@ -68,6 +68,10 @@ export async function reemplazarCatalogo(filas: FilaIngesta[]): Promise<number> 
   const cli = await conectar();
   try {
     await cli.query("begin");
+    // En Supabase pgvector vive en el schema `extensions`, y el search_path del rol
+    // (`"$user", public`) no lo incluye: el cast `::vector` sin calificar falla con
+    // `type "vector" does not exist`. SET LOCAL muere con la transacción.
+    await cli.query("set local search_path = public, extensions");
     await cli.query(`delete from ${TABLA}`);
     for (const f of filas) {
       await cli.query(
