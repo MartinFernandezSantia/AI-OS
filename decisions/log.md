@@ -626,3 +626,13 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** proteger el caveat con un guard de texto (rompe en cuanto el verificador reformule, y reformular está autorizado) · solo el párrafo en el prompt sin guard (es la misma clase de agujero que costó cerrar con la plata en v8/v9) · empujar solo la promo (Martin: se muestran ambas, el cliente compara) · cotizar el total con el precio de la promo (sub-cotizaría 1,3x, es el bug que el `continue` viejo evitaba bien).
 
 **Owner:** Martin.
+
+## 2026-08-27 — Backup diario local en el VPS mientras R2 sigue bloqueado
+
+**Decision:** se configura en el VPS de TG un cron diario (03:30 AR) que dumpea la base Supabase Free a `/opt/backups/supabase/` con `pg_dump -Fc` dockerizado y rotación local de 7 días (script `/usr/local/bin/backup-supabase.sh` + `/etc/cron.d/backup-supabase`). El dump manual pre-greenfield del 2026-08-17 se renombró a `keep-pre-greenfield-20260817.dump` para excluirlo de la rotación. El off-site a R2 (rclone + dead-man's-switch de Kuma) queda como siguiente paso, no como reemplazo.
+
+**Why:** el plan original era ir directo a R2, pero está DIFERIDO porque TG no cargó método de pago en Cloudflare (R2 lo exige aunque el free tier no cobre). Mientras tanto el único backup era un dump manual de hace 10 días, anterior a la ingesta del catálogo del motor de medida libre: todo lo curado desde entonces estaba sin respaldo. Un backup local no protege contra la pérdida del VPS, pero sí contra los riesgos más probables hoy (borrado/corrupción lógica en Supabase, un schema change que sale mal), y deja la plomería lista: cuando TG cargue la tarjeta, R2 es agregar una línea de rclone al script existente.
+
+**Alternatives considered:** esperar a R2 (deja la ventana sin respaldo abierta indefinidamente, dependiendo de un trámite del cliente) · Backblaze B2 como off-site interino (10 GB free, pero suma plomería para algo que R2 va a reemplazar) · snapshots de Hostinger (imagen completa del VPS, no cubren la base Supabase que vive afuera).
+
+**Owner:** Martin.

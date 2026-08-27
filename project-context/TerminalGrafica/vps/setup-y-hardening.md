@@ -204,7 +204,8 @@ Docker arranca al boot (`systemctl is-enabled docker` = enabled) y los contenedo
 - [x] Cron de reboot domingos 04:00 AR, solo si `/var/run/reboot-required` (2026-08-17).
 - [ ] Cron mensual que re-corre el loop de rangos de Cloudflare (los CIDR cambian de vez en cuando).
 - [ ] `fail2ban` — evaluado y DESPRIORIZADO: SSH ya es solo-clave (no hay password que forzar) y todo lo web entra por Cloudflare (el host solo ve IPs de CF → banear = cortarse solo). Marginal.
-- [ ] **Backups off-site a R2** (`pg_dump` + `rclone`) — lo más crítico que falta. DIFERIDO: el cliente todavía no cargó método de pago en Cloudflare (R2 lo exige aunque el free tier no cobre).
+- [x] **Backup diario LOCAL de la base Supabase** (2026-08-27): script `/usr/local/bin/backup-supabase.sh` (chmod 700, root) + cron `/etc/cron.d/backup-supabase` (`30 3 * * * root`, antes de la ventana de reboot del domingo 04:00). Hace `pg_dump -Fc --no-owner --no-privileges` dockerizado (`postgres:17-alpine`, credencial `--env-file /opt/backups/supabase/db.env`) → `/opt/backups/supabase/tg-supabase-<fecha>.dump`, rotación 7 días con `find -mtime +7 -delete`. El dump pre-greenfield del 2026-08-17 se renombró `keep-pre-greenfield-20260817.dump` para que la rotación no lo borre.
+- [ ] **Backups off-site a R2** (`rclone` en el mismo script + ping a dead-man's-switch de Kuma) — sigue siendo lo más crítico que falta: un backup en el mismo VPS no es backup. DIFERIDO: el cliente todavía no cargó método de pago en Cloudflare (R2 lo exige aunque el free tier no cobre). Ojo: el cron local NO cubre los volúmenes del VPS (Postgres de Chatwoot/n8n, encryption key de n8n).
 
 **Funcional (el bot):**
 - [x] Super-admin de Chatwoot y owner de n8n creados.

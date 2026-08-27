@@ -10,7 +10,10 @@ puntas**; falta Gemini + datos del catálogo (ver "Pendiente").
 
 ## 1. Backup de la base (SIEMPRE antes de tocar prod)
 
-Supabase Free **no tiene backups**. Antes de aplicar cambios de schema, dump a un dir del VPS:
+Supabase Free **no tiene backups**. Desde 2026-08-27 hay un **cron diario** en el VPS que dumpea solo
+(`/etc/cron.d/backup-supabase`, 03:30 AR → `/opt/backups/supabase/`, rotación 7 días; detalle en
+`../vps/setup-y-hardening.md` §6). Igual, antes de tocar schema en prod, correr un dump a mano
+(`sudo /usr/local/bin/backup-supabase.sh`) para tener uno fresco de ese instante:
 
 - Credencial en `/opt/backups/supabase/db.env` (chmod 600, root): `PGHOST/PGPORT/PGUSER/PGDATABASE/PGPASSWORD`
   del **Session pooler** de Supabase (Dashboard → Database → Connection string → Session, puerto **5432**;
