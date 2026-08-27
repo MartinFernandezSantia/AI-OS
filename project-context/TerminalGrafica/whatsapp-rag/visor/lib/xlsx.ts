@@ -97,14 +97,16 @@ function sharedStrings(xml: string | undefined): string[] {
   return out;
 }
 
-/** Una worksheet → matriz. Las celdas vacías NO aparecen en el XML: se reconstruyen por `r`. */
+/** Una worksheet → matriz. Las celdas vacías NO aparecen en el XML: se reconstruyen por `r`.
+ *  OJO con los tags SELF-CLOSING (`<c r="G2" s="11"/>`, `<row r="5"/>`): si el regex no los
+ *  contempla, `[\s\S]*?` se traga hasta el próximo cierre y desalinea todo lo que sigue. */
 function matriz(xml: string, ss: string[]): string[][] {
   const rows: string[][] = [];
-  for (const rr of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+  for (const rr of xml.matchAll(/<row[^>]*\/>|<row[^>]*>([\s\S]*?)<\/row>/g)) {
     const cells: string[] = [];
-    for (const cm of rr[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)) {
-      const attrs = cm[1];
-      const cuerpo = cm[2];
+    for (const cm of (rr[1] ?? "").matchAll(/<c([^>]*)\/>|<c([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const attrs = cm[1] ?? cm[2];
+      const cuerpo = cm[3] ?? "";
       const ref = attrs.match(/r="([A-Z]+\d+)"/)?.[1] ?? "A1";
       const tipo = attrs.match(/t="([^"]+)"/)?.[1];
       let valor = "";
