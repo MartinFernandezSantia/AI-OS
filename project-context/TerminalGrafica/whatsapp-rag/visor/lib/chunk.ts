@@ -212,12 +212,27 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       const unidad = unidadDe(datos.materiales, mat);
       const modo = modoDe(unidad);
       const geo = geometriaDe(datos.materiales, mat);
-      // Solo se anuncia la base donde hay algo que elegir: con un material único la
-      // línea sería ruido (y "la opción base" no significa nada si no hay alternativa).
-      const esBase = mats.length > 1 && base === mat;
+      // Solo hay base donde hay algo que elegir: con un material único la línea sería
+      // ruido (y "el material base" no significa nada si no hay alternativa).
+      const varios = mats.length > 1;
+      const esBase = varios && base === mat;
+      const otros = mats.filter((m) => m !== mat);
+
       const L: string[] = [titulo];
       if (desc) L.push(desc);
-      if (esBase) L.push("Es la opción BASE de la colección: se cotiza esta salvo que el cliente pida otra.");
+      // Los dos ejes por SEPARADO. El título los junta con un guion y el bot no tiene
+      // cómo saber dónde termina uno y empieza el otro: sin esta línea, "la colección"
+      // de las de abajo se queda sin referente claro.
+      if (varios) L.push(`Colección: ${col}. Material: ${mat}.`);
+      // La colección se nombra explícita (no "la colección") por lo mismo. Y cada chunk
+      // lleva a sus hermanos: si el retrieval trae uno solo, el bot igual puede sugerir
+      // alternativas sin inventarlas ni depender de la prosa de la descripción.
+      if (esBase) {
+        L.push(`Es el material BASE de "${col}": se cotiza este salvo que el cliente pida otro.`);
+        if (otros.length) L.push(`También hay en: ${otros.join(" · ")}.`);
+      } else if (varios && base) {
+        L.push(`El material base de "${col}" es ${base}.`);
+      }
       const motor = lineasMotor(modo, unidad, geo);
       if (motor.length) L.push("", ...motor);
       L.push("", "Medidas de referencia:");
@@ -269,7 +284,7 @@ function chunksColeccion(datos: Datos): Chunk[] {
     const L: string[] = [col];
     if (desc) L.push(desc);
     if (base && materialesDe(items).length > 1) {
-      L.push(`Opción BASE de la colección: ${base} (se cotiza esta salvo que el cliente pida otra).`);
+      L.push(`Material base de "${col}": ${base} (se cotiza este salvo que el cliente pida otro).`);
     }
     L.push("", "Productos disponibles:");
     // Acá conviven productos de materiales distintos: la unidad se resuelve por producto.

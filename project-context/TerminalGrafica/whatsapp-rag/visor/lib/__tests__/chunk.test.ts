@@ -223,17 +223,28 @@ describe("chunks — coleccion-material", () => {
     ]);
   });
 
-  it("el material base se anuncia en su chunk y se marca en la meta", () => {
-    expect(cs[0].texto).toContain("Es la opción BASE de la colección");
+  it("el material base se anuncia con la colección NOMBRADA y se marca en la meta", () => {
+    // El título junta los dos ejes con un guion: sin nombrar la colección, "la colección"
+    // se queda sin referente y el bot puede leerla como el título entero.
+    expect(cs[0].texto).toContain('Es el material BASE de "Stickers con forma"');
+    expect(cs[0].texto).not.toContain("BASE de la colección:");
     expect(cs[0].meta.es_base).toBe(true);
   });
 
-  it("el material NO base de la misma colección no se anuncia", () => {
-    expect(cs[1].texto).not.toContain("BASE");
-    expect(cs[1].meta.es_base).toBe(false);
+  it("los dos ejes se declaran por separado, no solo pegados en el título", () => {
+    expect(cs[0].texto).toContain("Colección: Stickers con forma. Material: Papel autoadhesivo.");
   });
 
-  it("con un solo material no se anuncia base: no hay nada que elegir", () => {
+  it("el chunk base lista a sus hermanos: el bot puede sugerir alternativas con un solo chunk", () => {
+    expect(cs[0].texto).toContain("También hay en: OPP brillo.");
+  });
+
+  it("el material NO base nombra cuál es la base, para no cotizarse a sí mismo por default", () => {
+    expect(cs[1].meta.es_base).toBe(false);
+    expect(cs[1].texto).toContain('El material base de "Stickers con forma" es Papel autoadhesivo.');
+  });
+
+  it("con un solo material no hay base ni ejes separados: no hay nada que elegir", () => {
     const conBase = {
       ...datos,
       colecciones: [
@@ -243,6 +254,7 @@ describe("chunks — coleccion-material", () => {
     };
     const lona = chunks(conBase, "coleccion-material").at(-1)!;
     expect(lona.texto).not.toContain("BASE");
+    expect(lona.texto).not.toContain("Colección:");
     expect(lona.meta.es_base).toBe(false);
   });
 });
