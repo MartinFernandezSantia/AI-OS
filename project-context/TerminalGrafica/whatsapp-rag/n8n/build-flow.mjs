@@ -26,7 +26,7 @@ const SOLO_TEST = process.argv.includes("--test");
 const GEMINI_MODEL = "models/gemini-3.1-flash-lite";
 const EMBEDDING_MODEL = "models/gemini-embedding-001"; // el MISMO que la ingesta del visor
 const TABLA_RAG = "bot.rag_catalog"; // schema-cualificada: sin schema consulta public y devuelve [] EN VERDE
-const TOP_K = 3; // 7 chunks en total; ver en Fase 4 si el material correcto entra siempre
+const TOP_K = 5; // de 7 chunks en total; subido a mano en n8n antes del humo. Revisar en Fase 4.
 /** Credencial Postgres. Se re-cablea en la UI al importar; el id acá es el del n8n de dev. */
 const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
 
@@ -675,11 +675,16 @@ const flow = {
         tableName: TABLA_RAG,
         topK: TOP_K,
         options: {
+          // OJO: el nodo espera los nombres anidados bajo `values`. Sin ese nivel n8n los
+          // DESCARTA al importar (options queda {}) sin decir nada. Pasó en la v1: se salvó
+          // de casualidad porque los defaults del nodo son estos mismos cuatro nombres.
           columnNames: {
-            idColumnName: "id",
-            vectorColumnName: "embedding",
-            contentColumnName: "text",
-            metadataColumnName: "metadata",
+            values: {
+              idColumnName: "id",
+              vectorColumnName: "embedding",
+              contentColumnName: "text",
+              metadataColumnName: "metadata",
+            },
           },
         },
       },

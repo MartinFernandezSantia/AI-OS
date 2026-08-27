@@ -139,13 +139,15 @@
         "toolName": "buscar_catalogo",
         "toolDescription": "Busca en el catálogo real de Terminal Gráfica por significado. Devuelve, por colección y material: la descripción, las medidas de referencia con su rinde, la geometría de la unidad de cobro (área útil y separación) y la escala de precios por tramo. Pasale lo que pide el cliente en sus palabras (ej.: 'stickers redondos para autos', 'cartel para vidriera').",
         "tableName": "bot.rag_catalog",
-        "topK": 3,
+        "topK": 5,
         "options": {
           "columnNames": {
-            "idColumnName": "id",
-            "vectorColumnName": "embedding",
-            "contentColumnName": "text",
-            "metadataColumnName": "metadata"
+            "values": {
+              "idColumnName": "id",
+              "vectorColumnName": "embedding",
+              "contentColumnName": "text",
+              "metadataColumnName": "metadata"
+            }
           }
         }
       },
