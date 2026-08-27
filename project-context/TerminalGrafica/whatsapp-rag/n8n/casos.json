@@ -1,0 +1,396 @@
+[
+  {
+    "Pedido": "250 stickers 3x3 cm",
+    "Cantidad": "250",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "3",
+    "Alto (cm)": "3",
+    "Piezas por unidad de cobro": "104",
+    "Precio correcto": "6600"
+  },
+  {
+    "Pedido": "250 etiquetas para frascos 6x3 cm",
+    "Cantidad": "250",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "6",
+    "Alto (cm)": "3",
+    "Piezas por unidad de cobro": "56",
+    "Precio correcto": "11000"
+  },
+  {
+    "Pedido": "100 stickers 5x5 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "6600"
+  },
+  {
+    "Pedido": "100 stickers redondos de 5 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "6600"
+  },
+  {
+    "Pedido": "100 stickers en OPP brillo 5x5 cm",
+    "Cantidad": "100",
+    "Material": "OPP brillo troquelado",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "8400"
+  },
+  {
+    "Pedido": "100 stickers holográficos 5x5 cm",
+    "Cantidad": "100",
+    "Material": "OPP plata, holográfico, cristal o mate troquelado",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "9000"
+  },
+  {
+    "Pedido": "250 stickers 5x5 cm",
+    "Cantidad": "250",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "15400"
+  },
+  {
+    "Pedido": "250 stickers redondos de 5 cm",
+    "Cantidad": "250",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "15400"
+  },
+  {
+    "Pedido": "500 stickers 5x5 cm",
+    "Cantidad": "500",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "40",
+    "Precio correcto": "26000"
+  },
+  {
+    "Pedido": "100 etiquetas 9x5 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "24",
+    "Precio correcto": "11000"
+  },
+  {
+    "Pedido": "100 etiquetas en OPP brillo 9x5 cm",
+    "Cantidad": "100",
+    "Material": "OPP brillo troquelado",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Piezas por unidad de cobro": "24",
+    "Precio correcto": "14000"
+  },
+  {
+    "Pedido": "100 stickers 7x7 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "7",
+    "Alto (cm)": "7",
+    "Piezas por unidad de cobro": "18",
+    "Precio correcto": "13200"
+  },
+  {
+    "Pedido": "100 stickers en OPP brillo 7x7 cm",
+    "Cantidad": "100",
+    "Material": "OPP brillo troquelado",
+    "Ancho (cm)": "7",
+    "Alto (cm)": "7",
+    "Piezas por unidad de cobro": "18",
+    "Precio correcto": "16800"
+  },
+  {
+    "Pedido": "100 stickers holográficos 7x7 cm",
+    "Cantidad": "100",
+    "Material": "OPP plata, holográfico, cristal o mate troquelado",
+    "Ancho (cm)": "7",
+    "Alto (cm)": "7",
+    "Piezas por unidad de cobro": "18",
+    "Precio correcto": "18000"
+  },
+  {
+    "Pedido": "250 stickers 7x7 cm",
+    "Cantidad": "250",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "7",
+    "Alto (cm)": "7",
+    "Piezas por unidad de cobro": "18",
+    "Precio correcto": "28000"
+  },
+  {
+    "Pedido": "100 stickers 10x10 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "10",
+    "Piezas por unidad de cobro": "8",
+    "Precio correcto": "26000"
+  },
+  {
+    "Pedido": "100 stickers en OPP brillo 10x10 cm",
+    "Cantidad": "100",
+    "Material": "OPP brillo troquelado",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "10",
+    "Piezas por unidad de cobro": "8",
+    "Precio correcto": "32800"
+  },
+  {
+    "Pedido": "100 stickers holográficos 10x10 cm",
+    "Cantidad": "100",
+    "Material": "OPP plata, holográfico, cristal o mate troquelado",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "10",
+    "Piezas por unidad de cobro": "8",
+    "Precio correcto": "35100"
+  },
+  {
+    "Pedido": "50 etiquetas 14x10 cm",
+    "Cantidad": "50",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "14",
+    "Alto (cm)": "10",
+    "Piezas por unidad de cobro": "6",
+    "Precio correcto": "19800"
+  },
+  {
+    "Pedido": "100 etiquetas 14x10 cm",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "14",
+    "Alto (cm)": "10",
+    "Piezas por unidad de cobro": "6",
+    "Precio correcto": "34000"
+  },
+  {
+    "Pedido": "100 stickers en vinilo UV 5x5 cm",
+    "Cantidad": "100",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Precio correcto": "14000"
+  },
+  {
+    "Pedido": "250 stickers en vinilo UV 5x5 cm",
+    "Cantidad": "250",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "5",
+    "Precio correcto": "17500"
+  },
+  {
+    "Pedido": "100 stickers en vinilo UV 7x7 cm",
+    "Cantidad": "100",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "7",
+    "Alto (cm)": "7",
+    "Precio correcto": "14000"
+  },
+  {
+    "Pedido": "100 stickers en vinilo UV 10x10 cm",
+    "Cantidad": "100",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "10",
+    "Precio correcto": "28000"
+  },
+  {
+    "Pedido": "50 etiquetas en vinilo UV 14x10 cm",
+    "Cantidad": "50",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "14",
+    "Alto (cm)": "10",
+    "Precio correcto": "19600"
+  },
+  {
+    "Pedido": "100 etiquetas en vinilo UV 14x10 cm",
+    "Cantidad": "100",
+    "Material": "Vinilo UV troquelado",
+    "Ancho (cm)": "14",
+    "Alto (cm)": "10",
+    "Precio correcto": "39200"
+  },
+  {
+    "Pedido": "Cartel adhesivo 50x70 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo y lona UV",
+    "Ancho (cm)": "50",
+    "Alto (cm)": "70",
+    "Precio correcto": "10500"
+  },
+  {
+    "Pedido": "Cartel rígido 50x70 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo UV montado en corrugado",
+    "Ancho (cm)": "50",
+    "Alto (cm)": "70",
+    "Precio correcto": "15000"
+  },
+  {
+    "Pedido": "Cartel adhesivo 70x100 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo y lona UV",
+    "Ancho (cm)": "70",
+    "Alto (cm)": "100",
+    "Precio correcto": "14700"
+  },
+  {
+    "Pedido": "Cartel rígido 70x100 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo UV montado en corrugado",
+    "Ancho (cm)": "70",
+    "Alto (cm)": "100",
+    "Precio correcto": "21000"
+  },
+  {
+    "Pedido": "Vinilo para vidriera 1x1 m",
+    "Cantidad": "1",
+    "Material": "Vinilo y lona UV",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "100",
+    "Precio correcto": "21000"
+  },
+  {
+    "Pedido": "Cartel rígido 1x1 m",
+    "Cantidad": "1",
+    "Material": "Vinilo UV montado en corrugado",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "100",
+    "Precio correcto": "30000"
+  },
+  {
+    "Pedido": "Cartel rígido 1,5x1 m",
+    "Cantidad": "1",
+    "Material": "Vinilo UV montado en corrugado",
+    "Ancho (cm)": "150",
+    "Alto (cm)": "100",
+    "Precio correcto": "45000"
+  },
+  {
+    "Pedido": "Vinilo para vidriera 1x2 m",
+    "Cantidad": "1",
+    "Material": "Vinilo y lona UV",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "200",
+    "Precio correcto": "42000"
+  },
+  {
+    "Pedido": "Banner de lona 1x1 m",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "100",
+    "Precio correcto": "16000"
+  },
+  {
+    "Pedido": "Banner de lona 1,5x0,7 m",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "150",
+    "Alto (cm)": "70",
+    "Precio correcto": "16800"
+  },
+  {
+    "Pedido": "Banner de lona 2x1 m",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "200",
+    "Alto (cm)": "100",
+    "Precio correcto": "32000"
+  },
+  {
+    "Pedido": "Banner de lona 3x1 m",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "300",
+    "Alto (cm)": "100",
+    "Precio correcto": "48000"
+  },
+  {
+    "Pedido": "Banner de lona 4x1 m",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "400",
+    "Alto (cm)": "100",
+    "Precio correcto": "64000"
+  },
+  {
+    "Pedido": "500 stickers 2x2 cm (medida libre)",
+    "Cantidad": "500",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "2",
+    "Alto (cm)": "2",
+    "Piezas por unidad de cobro": "228",
+    "Precio correcto": "6600"
+  },
+  {
+    "Pedido": "100 etiquetas 5x8 cm (medida libre)",
+    "Cantidad": "100",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "8",
+    "Piezas por unidad de cobro": "25",
+    "Precio correcto": "8800"
+  },
+  {
+    "Pedido": "80 etiquetas 20x6 cm (gana la orientación rotada)",
+    "Cantidad": "80",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "20",
+    "Alto (cm)": "6",
+    "Piezas por unidad de cobro": "8",
+    "Precio correcto": "22000"
+  },
+  {
+    "Pedido": "300 etiquetas 4x4 cm solo impresión (sin separación)",
+    "Cantidad": "300",
+    "Material": "Papel autoadhesivo solo impresión",
+    "Ancho (cm)": "4",
+    "Alto (cm)": "4",
+    "Piezas por unidad de cobro": "77",
+    "Precio correcto": "7200"
+  },
+  {
+    "Pedido": "20 stickers 30x45 cm (no entra en el pliego)",
+    "Cantidad": "20",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "30",
+    "Alto (cm)": "45",
+    "Piezas por unidad de cobro": "0",
+    "Precio correcto": "Derivar a consulta: no entra en el pliego"
+  },
+  {
+    "Pedido": "10 stickers 3x3 cm (activa el mínimo por trabajo)",
+    "Cantidad": "10",
+    "Material": "Papel autoadhesivo troquelado o medio corte",
+    "Ancho (cm)": "3",
+    "Alto (cm)": "3",
+    "Piezas por unidad de cobro": "104",
+    "Precio correcto": "4000"
+  },
+  {
+    "Pedido": "1 lona de 90x60 cm (activa el redondeo)",
+    "Cantidad": "1",
+    "Material": "Lona",
+    "Ancho (cm)": "90",
+    "Alto (cm)": "60",
+    "Precio correcto": "8600"
+  }
+]

@@ -4,11 +4,12 @@
 //
 // Corre "Auditar Cotización", "Materiales Declarados" y "Responder" TAL CUAL quedaron en el
 // JSON, con un $input/$() falsos que imitan a n8n. Cubre lo que el harness del builder no
-// puede: leer la metadata que llega de Postgres y compararla contra lo que declaró el modelo.
+// puede: leer la metadata que llega de Postgres y armar el mensaje final.
 //
-// `build-flow.mjs --test` prueba la ARITMÉTICA (46 casos del Excel). Esto prueba el CABLEADO:
-// formas de dato raras (metadata como string, salida sin .output), turnos sin cotizaciones,
-// materiales inventados, y que el veredicto llegue al mensaje del chat.
+// `build-flow.mjs --test` prueba la ARITMÉTICA (46 casos del Excel). Esto prueba el CABLEADO
+// y, desde v2, LO QUE SALE AL CHAT: el precio ya no lo escribe el modelo, así que lo que hay
+// que verificar es que el número correcto llegue al mensaje y que un marcador sin precio
+// NUNCA salga crudo.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -59,140 +60,184 @@ const MD_LONA = {
   escala: [{ desde: 1, hasta: null, precio: 16000, minimo_facturable: 0.5 }],
 };
 
+/** El modelo ahora declara SOLO qué cotizar: material, medida de una pieza y cantidad. */
+const cot = (material, ancho_cm, alto_cm, cantidad) => ({
+  material_catalogo: material,
+  ancho_cm,
+  alto_cm,
+  cantidad,
+});
+
 const casos = [
   {
-    nombre: "250 stickers 3x3 — el bot acierta",
+    nombre: "250 stickers 3x3 → el nodo calcula $6.600",
     agente: {
       output: {
-        respuesta: "250 stickers de 3x3 te salen $6.600.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 104, unidades_cobradas: 3, precio_tramo: 2200, aplico_minimo: false, aplico_redondeo: false, total: 6600 }],
+        respuesta: "250 stickers de 3x3 te salen {P1}.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)],
       },
     },
     filas: [{ metadata: MD_PAPEL }],
     esperaOk: true,
+    esperaEnMensaje: ["$6.600"],
   },
   {
-    nombre: "el bot se equivoca de RINDE (declara 40 en vez de 104)",
+    nombre: "lona 90x60 → redondeo al múltiplo más cercano ($8.600, no $8.700)",
     agente: {
-      output: {
-        respuesta: "250 stickers de 3x3: $15.400.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 40, unidades_cobradas: 7, precio_tramo: 2200, aplico_minimo: false, aplico_redondeo: false, total: 15400 }],
-      },
-    },
-    filas: [{ metadata: MD_PAPEL }],
-    esperaOk: false,
-  },
-  {
-    nombre: "el bot busca el TRAMO por piezas en vez de por pliegos",
-    agente: {
-      output: {
-        respuesta: "250 stickers de 3x3: $5.130.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 104, unidades_cobradas: 3, precio_tramo: 1710, aplico_minimo: false, aplico_redondeo: false, total: 5130 }],
-      },
-    },
-    filas: [{ metadata: MD_PAPEL }],
-    esperaOk: false,
-  },
-  {
-    nombre: "lona 90x60 — redondeo correcto ($8.600)",
-    agente: {
-      output: {
-        respuesta: "La lona de 90x60 sale $8.600.",
-        cotizaciones: [{ material_catalogo: "Lona", modo: "m2", ancho_cm: 90, alto_cm: 60, cantidad: 1, rinde: 0, unidades_cobradas: 0.54, precio_tramo: 16000, aplico_minimo: false, aplico_redondeo: true, total: 8600 }],
-      },
+      output: { respuesta: "La lona de 90x60 sale {P1}.", cotizaciones: [cot("Lona", 90, 60, 1)] },
     },
     filas: [{ metadata: MD_LONA }],
     esperaOk: true,
+    esperaEnMensaje: ["$8.600"],
+    noEsperaEnMensaje: ["$8.700", "$8.640"],
   },
   {
-    nombre: "10 stickers 3x3 — mínimo por trabajo ($4.000)",
+    nombre: "10 stickers 3x3 → mínimo por trabajo ($4.000)",
     agente: {
       output: {
-        respuesta: "Salen $4.000, y por ese precio te llevás hasta 104 de esa medida.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 10, rinde: 104, unidades_cobradas: 1, precio_tramo: 2500, aplico_minimo: true, aplico_redondeo: false, total: 4000 }],
+        respuesta: "Salen {P1}, y por ese precio te llevás hasta 104 de esa medida.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 10)],
       },
     },
     filas: [{ metadata: MD_PAPEL }],
     esperaOk: true,
+    esperaEnMensaje: ["$4.000", "hasta 104"],
   },
   {
-    nombre: "material INVENTADO por el modelo",
+    nombre: "100 stickers vinilo UV 5x5 → mínimo facturable del material",
+    agente: {
+      output: { respuesta: "Salen {P1}.", cotizaciones: [cot("Lona", 5, 5, 100)] },
+    },
+    filas: [{ metadata: MD_LONA }],
+    esperaOk: true,
+    // 0,25 m2 < mínimo 0,5 → 0,5 × 16.000 = $8.000
+    esperaEnMensaje: ["$8.000"],
+  },
+
+  // ── Los casos donde NO puede salir un precio ────────────────────────────────────────
+  {
+    nombre: "pieza que NO entra (30x45) → deriva a consulta, sin número",
+    agente: {
+      output: { respuesta: "20 stickers de 30x45 salen {P1}.", cotizaciones: [cot(MD_PAPEL.material, 30, 45, 20)] },
+    },
+    filas: [{ metadata: MD_PAPEL }],
+    esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    // El fallo de la Fase 4: el bot dijo "$5.000" por algo que no entra en el pliego.
+    noEsperaEnMensaje: ["{P1}", "$"],
+  },
+  {
+    nombre: "material INVENTADO por el modelo → deriva, no cotiza",
     agente: {
       output: {
-        respuesta: "Los stickers en vinilo espejado salen $9.000.",
-        cotizaciones: [{ material_catalogo: "Vinilo espejado premium", modo: "pliego", ancho_cm: 5, alto_cm: 5, cantidad: 100, rinde: 40, unidades_cobradas: 3, precio_tramo: 3000, aplico_minimo: false, aplico_redondeo: false, total: 9000 }],
+        respuesta: "Los stickers en vinilo espejado salen {P1}.",
+        cotizaciones: [cot("Vinilo espejado premium", 5, 5, 100)],
       },
     },
     filas: [{}], // alwaysOutputData: item vacío, sin metadata
     esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    noEsperaEnMensaje: ["{P1}"],
   },
+
+  // ── El modelo saliéndose del contrato ───────────────────────────────────────────────
   {
-    nombre: "pieza que NO entra (30x45) y el bot igual cotiza",
+    nombre: "el modelo escribe el precio A MANO en vez del marcador",
     agente: {
       output: {
-        respuesta: "20 stickers de 30x45 salen $12.000.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 30, alto_cm: 45, cantidad: 20, rinde: 1, unidades_cobradas: 20, precio_tramo: 2000, aplico_minimo: false, aplico_redondeo: false, total: 12000 }],
+        respuesta: "250 stickers de 3x3 te salen $7.000.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)],
+      },
+    },
+    filas: [{ metadata: MD_PAPEL }],
+    esperaOk: false, // el hallazgo tiene que aparecer: es un número sin respaldo
+    // Y además NO puede salir: un precio que no pasó por el cálculo es justo lo que este
+    // rediseño elimina. Sin esto el bot volvería a mandar el número inventado del modelo.
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    noEsperaEnMensaje: ["$7.000"],
+  },
+  {
+    nombre: "marcadores y cotizaciones no cuadran (dos {Pn}, una cotización)",
+    agente: {
+      output: {
+        respuesta: "Los stickers salen {P1} y las etiquetas {P2}.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)],
       },
     },
     filas: [{ metadata: MD_PAPEL }],
     esperaOk: false,
+    // {P2} no tiene cotización → no puede salir crudo al chat.
+    noEsperaEnMensaje: ["{P2}"],
   },
+
+  // ── Turnos que no cotizan ──────────────────────────────────────────────────────────
   {
-    nombre: "saludo — sin cotizaciones, no hay nada que auditar",
+    nombre: "saludo — sin cotizaciones ni marcadores",
     agente: { output: { respuesta: "¡Hola! Soy el asistente de Terminal Gráfica. ¿Qué necesitás?", cotizaciones: [] } },
     filas: [{ material: null, sin_cotizaciones: true }],
     esperaOk: true,
+    esperaEnMensaje: ["Terminal Gráfica"],
   },
   {
-    nombre: "precio en el TEXTO sin desglose (el caso que más queremos ver)",
-    agente: { output: { respuesta: "Eso te sale $12.000 aproximadamente.", cotizaciones: [] } },
+    nombre: "repregunta — pide el dato que falta, sin precio",
+    agente: { output: { respuesta: "¿De qué medida los necesitás?", cotizaciones: [] } },
     filas: [{ material: null, sin_cotizaciones: true }],
-    esperaOk: false,
+    esperaOk: true,
+    esperaEnMensaje: ["¿De qué medida"],
   },
-  {
-    nombre: "total por debajo del mínimo (sanity floor)",
-    agente: {
-      output: {
-        respuesta: "Salen $900.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 5, rinde: 104, unidades_cobradas: 1, precio_tramo: 900, aplico_minimo: false, aplico_redondeo: false, total: 900 }],
-      },
-    },
-    filas: [{ metadata: MD_PAPEL }],
-    esperaOk: false,
-  },
+
+  // ── Formas de dato raras (el cableado real de n8n) ─────────────────────────────────
   {
     nombre: "metadata como STRING JSON (algunos drivers la devuelven así)",
     agente: {
-      output: {
-        respuesta: "250 stickers de 3x3 te salen $6.600.",
-        cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 104, unidades_cobradas: 3, precio_tramo: 2200, aplico_minimo: false, aplico_redondeo: false, total: 6600 }],
-      },
+      output: { respuesta: "Salen {P1}.", cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)] },
     },
     filas: [{ metadata: JSON.stringify(MD_PAPEL) }],
     esperaOk: true,
+    esperaEnMensaje: ["$6.600"],
   },
   {
     nombre: "salida PLANA (sin .output) — el parser a veces no anida",
     agente: {
-      respuesta: "250 stickers de 3x3 te salen $6.600.",
-      cotizaciones: [{ material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 104, unidades_cobradas: 3, precio_tramo: 2200, aplico_minimo: false, aplico_redondeo: false, total: 6600 }],
+      respuesta: "Salen {P1}.",
+      cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)],
     },
     filas: [{ metadata: MD_PAPEL }],
     esperaOk: true,
+    esperaEnMensaje: ["$6.600"],
   },
   {
-    nombre: "DOS productos en un turno (uno bien, uno mal)",
+    nombre: "DOS productos en un turno → cada marcador su precio, en orden",
     agente: {
       output: {
-        respuesta: "250 stickers 3x3: $6.600. La lona 90x60: $9.000.",
-        cotizaciones: [
-          { material_catalogo: MD_PAPEL.material, modo: "pliego", ancho_cm: 3, alto_cm: 3, cantidad: 250, rinde: 104, unidades_cobradas: 3, precio_tramo: 2200, aplico_minimo: false, aplico_redondeo: false, total: 6600 },
-          { material_catalogo: "Lona", modo: "m2", ancho_cm: 90, alto_cm: 60, cantidad: 1, rinde: 0, unidades_cobradas: 0.54, precio_tramo: 16000, aplico_minimo: false, aplico_redondeo: true, total: 9000 },
-        ],
+        respuesta: "Los stickers salen {P1} y la lona {P2}.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250), cot("Lona", 90, 60, 1)],
       },
     },
     filas: [{ metadata: MD_PAPEL }, { metadata: MD_LONA }],
+    esperaOk: true,
+    esperaEnMensaje: ["stickers salen $6.600", "lona $8.600"],
+  },
+  {
+    nombre: "DOS productos, el segundo no cotizable → deriva TODO el mensaje",
+    agente: {
+      output: {
+        respuesta: "Los stickers salen {P1} y los grandes {P2}.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250), cot(MD_PAPEL.material, 30, 45, 20)],
+      },
+    },
+    filas: [{ metadata: MD_PAPEL }],
     esperaOk: false,
+    // Media respuesta con precio y media sin es peor que derivar entera.
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    noEsperaEnMensaje: ["$6.600", "{P2}"],
+  },
+  {
+    nombre: "respuesta VACÍA del agente → texto seguro, nunca un mensaje en blanco",
+    agente: { output: { respuesta: "", cotizaciones: [] } },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: true,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
   },
 ];
 
@@ -207,20 +252,42 @@ for (const c of casos) {
     continue;
   }
   const a = r[0].json.auditoria;
-  const bien = a.ok === c.esperaOk;
-  if (!bien) fallos++;
-  console.log(`${bien ? "✓" : "✗"} ${c.nombre}`);
-  console.log(`    ok=${a.ok}${a.hallazgos.length ? "  →  " + a.hallazgos.join(" · ") : ""}`);
+  const problemas = [];
+  if (a.ok !== c.esperaOk) problemas.push(`esperaba ok=${c.esperaOk}, dio ok=${a.ok}`);
 
-  // Y el nodo Responder, con la salida real del auditor.
-  const resp = correrCode(codigoResp, { items: r });
-  const out = resp[0].json.output;
-  if (!a.ok && !out.includes("⚠ auditoría:")) { console.log("    ✗ el veredicto NO llegó al mensaje"); fallos++; }
+  // El nodo Responder, con la salida real del auditor. ESTO es lo que ve el cliente.
+  let out;
+  try {
+    out = correrCode(codigoResp, { items: r })[0].json.output;
+  } catch (e) {
+    console.log(`✗ ${c.nombre}\n    Responder EXPLOTÓ: ${e.message}`);
+    fallos++;
+    continue;
+  }
+
+  // El mensaje SIN la cola de auditoría: eso es lo que iría a producción.
+  const limpio = out.split("\n\n⚠ auditoría:")[0].split("\n(marcadores sin precio:")[0];
+
+  for (const t of c.esperaEnMensaje ?? []) {
+    if (!limpio.includes(t)) problemas.push(`el mensaje no dice "${t}"`);
+  }
+  for (const t of c.noEsperaEnMensaje ?? []) {
+    if (limpio.includes(t)) problemas.push(`el mensaje NO debería decir "${t}"`);
+  }
+  // Invariante global: ningún marcador crudo puede llegar al chat, pase lo que pase.
+  if (/\{P\d+\}/.test(limpio)) problemas.push("quedó un marcador {Pn} sin sustituir");
+  if (!a.ok && !out.includes("⚠ auditoría:")) problemas.push("el veredicto NO llegó al mensaje");
+
+  if (problemas.length) fallos++;
+  console.log(`${problemas.length ? "✗" : "✓"} ${c.nombre}`);
+  console.log(`    ok=${a.ok}${a.hallazgos.length ? "  →  " + a.hallazgos.join(" · ") : ""}`);
+  console.log(`    mensaje: ${limpio.replace(/\n/g, " ⏎ ")}`);
+  for (const p of problemas) console.log(`    ✗ ${p}`);
 }
 
 // El nodo "Materiales Declarados" por separado.
 console.log("\n— Materiales Declarados —");
-const dosProd = casos.at(-1).agente;
+const dosProd = casos.find((c) => c.nombre.startsWith("DOS productos en un turno")).agente;
 const mats = correrCode(codigoMat, { items: [{ json: dosProd }] });
 console.log(`  2 productos → ${mats.length} items: ${mats.map((m) => m.json.material).join(" | ")}`);
 if (mats.length !== 2) fallos++;
@@ -231,5 +298,5 @@ const dup = correrCode(codigoMat, { items: [{ json: { output: { cotizaciones: [{
 console.log(`  mismo material x2 → ${dup.length} item (dedup)`);
 if (dup.length !== 1) fallos++;
 
-console.log(fallos ? `\n✗ ${fallos} FALLOS` : "\n✓ todo el camino del auditor anda");
+console.log(fallos ? `\n✗ ${fallos} FALLOS` : "\n✓ todo el camino del cotizador anda");
 process.exitCode = fallos ? 1 : 0;

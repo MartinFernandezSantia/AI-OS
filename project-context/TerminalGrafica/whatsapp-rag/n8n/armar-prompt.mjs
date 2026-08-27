@@ -43,45 +43,38 @@ function filas(nombreHoja) {
   return out;
 }
 
-// ── {{INSTRUCCIONES_PARTE_1}}: entre los dos separadores ═══ ──────────────────────────
+// ── La PARTE 1 (la fórmula de cotización) YA NO VA AL PROMPT ─────────────────────────
+// Desde v2 el LLM no calcula: declara qué cotizar y el nodo Code hace la cuenta (ver el
+// auditor en build-flow.mjs). La fórmula sigue viviendo en el Excel y la sigue consumiendo
+// el auditor a través de FUENTE_COTIZAR — pero el modelo ya no la necesita.
+//
+// Se sigue LEYENDO y validando igual: si el cliente reescribe esas líneas, el build tiene
+// que romper. La PARTE 1 es la especificación del cálculo, y `build-flow.mjs` verifica que
+// el auditor la reproduzca contra los 46 casos. Perder la validación sería perder el aviso
+// de que la fuente de verdad cambió.
 const instr = filas("Instrucciones").map((f) => f[0]);
 const ini = instr.findIndex((l) => /PARTE 1/.test(l));
 const fin = instr.findIndex((l) => /PARTE 2/.test(l));
 if (ini < 0 || fin < 0) throw new Error("no encontré los separadores de PARTE 1/2");
-// La PARTE 1 está escrita para QUIEN EDITA EL EXCEL: habla de hojas y columnas. El bot no
-// ve hojas — ve el texto de los chunks. Se re-apunta cada referencia a dónde el bot la
-// encuentra de verdad. Mismo problema que los deícticos del chunk: el destinatario cambió.
-const REAPUNTAR = [
-  [/hoja Materiales: '([^']+)' y '([^']+)'/g, "el catálogo publica su '$1' y su '$2'"],
-  [/Buscar en Materiales el tramo/g, "Buscar en la escala del material el tramo"],
-  [/el mínimo por trabajo de la hoja Parámetros/g, "el mínimo por trabajo (ver Parámetros vigentes)"],
-  [/Redondear al múltiplo indicado en Parámetros/g, "Redondear al múltiplo indicado en Parámetros vigentes"],
+const ESPERADAS = [
+  /hoja Materiales: '([^']+)' y '([^']+)'/,
+  /Buscar en Materiales el tramo/,
+  /el mínimo por trabajo de la hoja Parámetros/,
+  /Redondear al múltiplo indicado en Parámetros/,
 ];
-let PARTE_1 = instr.slice(ini + 1, fin).join("\n").trim();
-for (const [re, rep] of REAPUNTAR) {
-  const antes = PARTE_1;
-  PARTE_1 = PARTE_1.replace(re, rep);
-  // Si el cliente reescribe la PARTE 1, este reemplazo deja de aplicar en silencio y el
-  // prompt vuelve a hablarle al bot de hojas de cálculo. Mejor que falle el build.
-  if (PARTE_1 === antes) throw new Error(`la PARTE 1 ya no dice: ${re}`);
+const PARTE_1 = instr.slice(ini + 1, fin).join("\n").trim();
+for (const re of ESPERADAS) {
+  if (!re.test(PARTE_1)) throw new Error(`la PARTE 1 ya no dice: ${re}`);
 }
 
 // ── {{PARAMETROS}} ─────────────────────────────────────────────────────────────────────
+// Van al prompt solo para que el bot pueda EXPLICARLOS si el cliente pregunta. Aplicarlos
+// es tarea del nodo Code, que los tiene horneados desde la misma hoja.
 const PARAMETROS = filas("Parámetros").slice(1).map(([p, v, nota]) => `- ${p}: ${v}${nota ? ` (${nota})` : ""}`).join("\n");
-
-// ── {{CASOS_PARAMETROS}}: las filas marcadas "(activa el …)" ───────────────────────────
-const CASOS = filas("Casos de prueba")
-  .slice(1)
-  .filter((f) => /\(activa el/.test(f[0]))
-  .map((f) => `- ${f[0].replace(/\s*\(activa el.*\)/, "")} → $${Number(f.at(-1)).toLocaleString("es-AR")}`)
-  .join("\n");
 
 const PLANTILLA = fs.readFileSync(path.join(AQUI, "../plans/system-prompt-v1.md"), "utf8");
 
-const prompt = PLANTILLA
-  .replace("{{INSTRUCCIONES_PARTE_1}}", PARTE_1)
-  .replace("{{PARAMETROS}}", PARAMETROS)
-  .replace("{{CASOS_PARAMETROS}}", CASOS);
+const prompt = PLANTILLA.replace("{{PARAMETROS}}", PARAMETROS);
 
 const sinResolver = prompt.match(/\{\{[A-Z_]+\}\}/g);
 if (sinResolver) throw new Error(`placeholders sin resolver: ${sinResolver.join(" ")}`);
@@ -89,7 +82,7 @@ if (sinResolver) throw new Error(`placeholders sin resolver: ${sinResolver.join(
 const tokens = Math.round(prompt.length / CHARS_POR_TOKEN);
 fs.writeFileSync(path.join(AQUI, "prompt-final.txt"), prompt);
 
-console.log(`PARTE_1: ${PARTE_1.length} ch · PARAMETROS: ${PARAMETROS.length} ch · CASOS: ${CASOS.length} ch`);
+console.log(`PARTE_1: ${PARTE_1.length} ch (validada, NO inyectada) · PARAMETROS: ${PARAMETROS.length} ch`);
 console.log(`\nprompt: ${prompt.length} chars · ~${tokens} tokens → n8n/prompt-final.txt`);
 if (tokens > TOPE_TOKENS) {
   console.error(`\n✗ ABORTADO: ${tokens} tokens supera el techo de ${TOPE_TOKENS}.`);
