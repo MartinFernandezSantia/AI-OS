@@ -90,7 +90,9 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
    contrato de la salida estructurada, el auditor, los casos de humo y las trampas.
 
    Lo que queda, en orden:
-   1. **RE-INGESTAR desde el visor** (sigue pendiente, y todo lo demás depende de esto).
+   1. ~~RE-INGESTAR desde el visor~~ — **hecho** (Martín, 2026-08-27). `bot.rag_catalog`
+      ya tiene los chunks con `escala` + `es_base` en la metadata. Igual conviene
+      verificarlo en el primer retrieval antes de culpar al cálculo.
    2. Importar `n8n/flows/cotizador-v1.json` y cablear 2 credenciales (el flow trae una
       Nota con el detalle): Google Gemini(PaLM) API — la MISMA para chat y embeddings — y
       BOT_DB. **Ojo: son 2, no 3** — el chat quedó en Gemini nativo, no OpenRouter (ver
@@ -142,9 +144,9 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
      la base lo dice en el texto y en `meta.es_base`, y `meta.escala` publica los tramos
      + `minimo_facturable` para el auditor. 2 avisos nuevos (colección multi-material sin
      base; base que apunta a un material que no usa). 110 tests en verde.
-   - **PENDIENTE antes del flow: RE-INGESTAR** desde el visor. El chunk cambió
-     (8.767 chars vs 7.822) y `bot.rag_catalog` todavía tiene la versión vieja, sin
-     `escala` ni `es_base` en la metadata.
+   - ~~PENDIENTE antes del flow: RE-INGESTAR~~ — **hecho**. El chunk había cambiado
+     (8.767 chars vs 7.822); `bot.rag_catalog` ya tiene la versión con `escala` y
+     `es_base` en la metadata.
    - **Gotcha que encontró Martín, ya arreglado**: el chunk decía "es la opción base de
      la colección", pero el título junta los dos ejes con un guion (`Stickers con forma
      — Papel autoadhesivo…`) y "la colección" se quedaba sin referente: el bot puede

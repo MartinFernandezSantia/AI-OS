@@ -26,10 +26,8 @@ Flow: **12 nodos**. Auditor: **46/46 casos del Excel** + los 11 rindes históric
 
 ## Lo primero de la próxima sesión
 
-1. **RE-INGESTAR** desde el visor (`cd visor && pnpm dev`, subir el .xlsx, ingestar).
-   `bot.rag_catalog` todavía tiene los chunks viejos: sin `escala` ni `es_base` en la
-   metadata, y sin las líneas de colección/material/hermanos. **El auditor y la etapa
-   COTIZAR del prompt dependen de esto.**
+1. ~~RE-INGESTAR desde el visor~~ — **hecho**: `bot.rag_catalog` ya tiene los chunks con
+   `escala` + `es_base` en la metadata y las líneas de colección/material/hermanos.
 2. Importar `flows/cotizador-v1.json` en n8n, cablear credenciales (ver la Nota del propio
    flow), smoke test de retrieval.
 3. Los 4 casos de humo (abajo).
