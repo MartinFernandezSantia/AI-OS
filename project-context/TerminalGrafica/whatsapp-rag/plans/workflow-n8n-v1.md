@@ -289,8 +289,12 @@ Mismo patrón que el bot viejo (`build-flow.mjs` genera el JSON importable), per
 
 ## Pasos del build (próxima sesión)
 
-1. Excel: columna `Material base` en la hoja Colecciones (dropdown contra Materiales)
-   + marcar la base de cada colección con TG/Martín.
+1. ~~Excel: columna `Material base` en la hoja Colecciones (dropdown contra Materiales)
+   + marcar la base de cada colección con TG/Martín.~~ **HECHO** (script
+   `visor/scripts/material-base-colecciones.mjs`): Stickers con forma → papel
+   autoadhesivo (definido por Martín) · Carteles y vidrieras → Vinilo y lona UV (el
+   adhesivo, propuesta aplicada) · las otras dos, único material. Verificado: solo
+   sheet2 + sharedStrings cambiaron, 96 tests del visor en verde.
 2. Visor: escala + mínimo a `meta` en `chunk.ts`, marca de base al chunk, aviso al
    ingestar si una colección con varios materiales no tiene base (+ tests), y
    **re-ingestar**.

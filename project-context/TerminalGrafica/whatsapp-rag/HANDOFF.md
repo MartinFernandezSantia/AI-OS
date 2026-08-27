@@ -93,6 +93,12 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
      Excel y tiene gate de tokens (>3k falla).
    - Prerequisito del build: agregar la ESCALA del material a `meta` del chunk
      (`chunk.ts`) y re-ingestar — el auditor la necesita.
+   - **HECHO el paso 1 del build**: columna `Material base` en Colecciones (dropdown
+     contra Materiales_lista, C2:C35) con las 4 bases marcadas, vía
+     `visor/scripts/material-base-colecciones.mjs`. Falta que el visor la use (marca en
+     el chunk + aviso si falta) — eso va con el paso 2. Ojo: apareció un lock huérfano
+     de LibreOffice de WINDOWS (`C:/Users/marti/...`) con el archivo cerrado; se
+     verificó sin proceso vivo y se borró antes de escribir.
 4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
