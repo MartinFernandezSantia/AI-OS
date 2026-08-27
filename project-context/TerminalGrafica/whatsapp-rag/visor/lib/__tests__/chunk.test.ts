@@ -7,7 +7,12 @@ import { escalaDe, type Datos } from "../parse";
  *  del material (área útil + separación en su primera fila). */
 const datos: Datos = {
   colecciones: [
-    { "Colección": "Stickers con forma", "Descripción": "Stickers cortados con forma, para interior." },
+    {
+      "Colección": "Stickers con forma",
+      "Descripción": "Stickers cortados con forma, para interior.",
+      "Material base": "Papel autoadhesivo",
+    },
+    // Un solo material: la base es opcional, y el chunk no la anuncia aunque esté.
     { "Colección": "Banners y lonas", "Descripción": "Lona impresa full color con ojalillos." },
   ],
   productos: [
@@ -203,6 +208,43 @@ describe("chunks — coleccion-material", () => {
   it("el chunk m2 no lleva geometría en la meta", () => {
     expect(cs.at(-1)!.meta).not.toHaveProperty("geometria");
   });
+
+  it("la meta lleva la escala completa: es lo que el auditor re-calcula", () => {
+    expect(cs[0].meta.escala).toEqual([
+      { desde: 1, hasta: 1, precio: 2500 },
+      { desde: 2, hasta: 10, precio: 2200 },
+      { desde: 11, hasta: null, precio: 2000 },
+    ]);
+  });
+
+  it("el mínimo facturable viaja en la escala del material m2", () => {
+    expect(cs.at(-1)!.meta.escala).toEqual([
+      { desde: 1, hasta: null, precio: 16000, minimo_facturable: 0.5 },
+    ]);
+  });
+
+  it("el material base se anuncia en su chunk y se marca en la meta", () => {
+    expect(cs[0].texto).toContain("Es la opción BASE de la colección");
+    expect(cs[0].meta.es_base).toBe(true);
+  });
+
+  it("el material NO base de la misma colección no se anuncia", () => {
+    expect(cs[1].texto).not.toContain("BASE");
+    expect(cs[1].meta.es_base).toBe(false);
+  });
+
+  it("con un solo material no se anuncia base: no hay nada que elegir", () => {
+    const conBase = {
+      ...datos,
+      colecciones: [
+        datos.colecciones[0],
+        { ...datos.colecciones[1], "Material base": "Lona" },
+      ],
+    };
+    const lona = chunks(conBase, "coleccion-material").at(-1)!;
+    expect(lona.texto).not.toContain("BASE");
+    expect(lona.meta.es_base).toBe(false);
+  });
 });
 
 describe("chunks — coleccion", () => {
@@ -319,6 +361,27 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("la columna dice 99");
     expect(a[0]).toContain("calcula 104");
+  });
+
+  it("colección con varios materiales y sin base marcada: hay que elegir una", () => {
+    const sinBase: Datos = {
+      ...datos,
+      colecciones: datos.colecciones.map(({ "Material base": _b, ...c }) => c),
+    };
+    const a = avisos(sinBase);
+    expect(a).toHaveLength(1); // solo la de 2 materiales; la de Lona no lo necesita
+    expect(a[0]).toContain("Stickers con forma");
+    expect(a[0]).toContain("Material base");
+  });
+
+  it("base que apunta a un material que la colección no usa", () => {
+    const mala: Datos = {
+      ...datos,
+      colecciones: [{ ...datos.colecciones[0], "Material base": "Vinilo UV" }, datos.colecciones[1]],
+    };
+    const a = avisos(mala);
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("ningún producto de la colección lo usa");
   });
 
   it("pieza que no entra en el área útil: rinde 0, derivar a consulta", () => {

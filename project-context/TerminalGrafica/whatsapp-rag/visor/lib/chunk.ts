@@ -39,6 +39,11 @@ export interface Chunk {
  *  taller (una bobina, una plancha) — y si viene cargada, gana sobre el cálculo. */
 export const COL_RINDE = "Piezas por unidad de cobro";
 
+/** El material que se cotiza cuando el cliente no pide una opción especial. Vive en la
+ *  hoja Colecciones (una por colección) porque la elección es del negocio, no del bot:
+ *  el prompt le dice "cotizá la base y sugerí alternativas". */
+export const COL_BASE = "Material base";
+
 const CONOCIDAS = new Set([
   "Colección",
   "Producto",
@@ -150,6 +155,24 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
 const descripcionDe = (datos: Datos, coleccion: string): string =>
   datos.colecciones.find((c) => c["Colección"] === coleccion)?.["Descripción"] ?? "";
 
+/** Material base de una colección (columna del Excel); "" si no está marcada. */
+const baseDe = (datos: Datos, coleccion: string): string =>
+  datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_BASE] ?? "";
+
+/**
+ * La escala como DATO estructurado para `metadata`. El texto del chunk la lleva en prosa
+ * (`lineaPrecio`) porque es lo que lee el LLM; esto es lo que lee el AUDITOR del workflow
+ * para re-calcular el total sin confiar en lo que el bot dice haber leído.
+ */
+function escalaMeta(tramos: Tramo[]): Record<string, unknown>[] {
+  return tramos.map((t) => ({
+    desde: t.desde,
+    hasta: t.hasta,
+    precio: t.precio,
+    ...(t.minimo !== null && { minimo_facturable: t.minimo }),
+  }));
+}
+
 /** Productos de una colección, en el orden del Excel. */
 const productosDe = (datos: Datos, coleccion: string): Fila[] =>
   datos.productos.filter((p) => p["Colección"] === coleccion);
@@ -178,6 +201,8 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
     const mats = materialesDe(items);
     const desc = descripcionDe(datos, col);
 
+    const base = baseDe(datos, col);
+
     for (const mat of mats) {
       const suyos = items.filter((p) => p["Material"] === mat);
       const tramos = escalaDe(datos.materiales, mat);
@@ -187,8 +212,12 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       const unidad = unidadDe(datos.materiales, mat);
       const modo = modoDe(unidad);
       const geo = geometriaDe(datos.materiales, mat);
+      // Solo se anuncia la base donde hay algo que elegir: con un material único la
+      // línea sería ruido (y "la opción base" no significa nada si no hay alternativa).
+      const esBase = mats.length > 1 && base === mat;
       const L: string[] = [titulo];
       if (desc) L.push(desc);
+      if (esBase) L.push("Es la opción BASE de la colección: se cotiza esta salvo que el cliente pida otra.");
       const motor = lineasMotor(modo, unidad, geo);
       if (motor.length) L.push("", ...motor);
       L.push("", "Medidas de referencia:");
@@ -206,6 +235,10 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           unidad,
           modo,
           productos: suyos.length,
+          es_base: esBase,
+          // El auditor del workflow re-calcula con esto; sin escala en la metadata
+          // tendría que parsear la prosa del chunk.
+          escala: escalaMeta(tramos),
           ...(geo && {
             geometria: {
               util_ancho: geo.utilAncho,
@@ -231,8 +264,13 @@ function chunksColeccion(datos: Datos): Chunk[] {
     if (!items.length) continue;
     const desc = descripcionDe(datos, col);
 
+    const base = baseDe(datos, col);
+
     const L: string[] = [col];
     if (desc) L.push(desc);
+    if (base && materialesDe(items).length > 1) {
+      L.push(`Opción BASE de la colección: ${base} (se cotiza esta salvo que el cliente pida otra).`);
+    }
     L.push("", "Productos disponibles:");
     // Acá conviven productos de materiales distintos: la unidad se resuelve por producto.
     for (const p of items) {
@@ -254,6 +292,7 @@ function chunksColeccion(datos: Datos): Chunk[] {
         coleccion: col,
         materiales: mats,
         productos: items.length,
+        ...(base && { material_base: base }),
       },
     });
   }
@@ -297,6 +336,7 @@ function chunksProducto(datos: Datos): Chunk[] {
         unidad,
         modo: modoDe(unidad),
         piezas_por_unidad: r,
+        escala: escalaMeta(tramos),
       },
     };
   });
@@ -320,6 +360,27 @@ export function chunks(datos: Datos, estrategia: Estrategia): Chunk[] {
  */
 export function avisos(datos: Datos): string[] {
   const out: string[] = [];
+
+  // Material base: solo importa donde hay más de un material para elegir. Sin base
+  // marcada el bot no sabe cuál cotizar por default y elige el que le quede a mano.
+  for (const col of nombresColeccion(datos)) {
+    const items = productosDe(datos, col);
+    const mats = materialesDe(items);
+    if (mats.length < 2) continue;
+    const base = baseDe(datos, col);
+    if (!base) {
+      out.push(
+        `${col}: usa ${mats.length} materiales y no tiene "${COL_BASE}" marcado. ` +
+          `Elegí cuál se cotiza cuando el cliente no pide una opción especial.`,
+      );
+    } else if (!mats.includes(base)) {
+      out.push(
+        `${col}: el "${COL_BASE}" es "${base}", pero ningún producto de la colección lo usa ` +
+          `(usa: ${mats.join(" · ")}). Revisá cuál está mal.`,
+      );
+    }
+  }
+
   for (const p of datos.productos) {
     const mat = p["Material"] ?? "";
     const unidad = unidadDe(datos.materiales, mat);
