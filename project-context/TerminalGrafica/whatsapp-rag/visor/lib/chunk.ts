@@ -476,6 +476,25 @@ export function chunks(datos: Datos, estrategia: Estrategia): Chunk[] {
 export function avisos(datos: Datos): string[] {
   const out: string[] = [];
 
+  // Material con precio cargado pero SIN ningún producto que lo use. El chunk es
+  // colección+material y sale de los productos, así que ese material no genera chunk: el
+  // bot no puede verlo ni cotizarlo, aunque esté en la lista de precios del cliente.
+  // Desaparece en silencio — el cliente lo ve en su Excel y asume que el bot lo cotiza.
+  //
+  // Lo encontró la Fase 4: el caso "300 etiquetas 4x4 solo impresión" era IMPOSIBLE de
+  // acertar (el material no tiene productos), y el bot cotizó el troquelado, que es lo
+  // razonable con lo que puede ver. Sin este aviso parecía un fallo del modelo.
+  const conProducto = new Set(datos.productos.map((p) => p["Material"]).filter(Boolean));
+  const conPrecio = [...new Set(datos.materiales.map((m) => m["Material"]).filter(Boolean))];
+  for (const mat of conPrecio) {
+    if (conProducto.has(mat)) continue;
+    out.push(
+      `"${mat}": tiene precio cargado pero ningún producto lo usa, así que no genera chunk ` +
+        `y el bot no puede cotizarlo. Agregale un producto en la hoja Productos, o sacalo ` +
+        `de Materiales si ya no se ofrece.`,
+    );
+  }
+
   // Material base: solo importa donde hay más de un material para elegir. Sin base
   // marcada el bot no sabe cuál cotizar por default y elige el que le quede a mano.
   for (const col of nombresColeccion(datos)) {

@@ -430,6 +430,37 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(avisos(datos)).toEqual([]);
   });
 
+  // Lo encontró la Fase 4: un caso de prueba pedía "Papel autoadhesivo solo impresión",
+  // un material con precio cargado pero SIN productos. No genera chunk, el bot no puede
+  // verlo, y cotizó el troquelado — lo razonable con lo que tenía a la vista. El caso era
+  // imposible de acertar y nada lo avisaba.
+  it("material con precio pero sin productos: no genera chunk y el bot no puede cotizarlo", () => {
+    const huerfano: Datos = {
+      ...datos,
+      materiales: [
+        ...datos.materiales,
+        { Material: "Papel autoadhesivo solo impresión", Unidad: "pliego A3", Desde: "1", "Precio por unidad": "1800" },
+      ],
+    };
+    const a = avisos(huerfano);
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("Papel autoadhesivo solo impresión");
+    expect(a[0]).toContain("ningún producto lo usa");
+  });
+
+  it("varios materiales huérfanos: uno por cada uno", () => {
+    // Nombres que NINGÚN producto del fixture usa (ojo: "OPP brillo" sí lo usa uno).
+    const dos: Datos = {
+      ...datos,
+      materiales: [
+        ...datos.materiales,
+        { Material: "OPP brillo sin troquelar", Unidad: "pliego A3", Desde: "1", "Precio por unidad": "2400" },
+        { Material: "Vinilo con barniz", Unidad: "m2", Desde: "1", "Precio por unidad": "20000" },
+      ],
+    };
+    expect(avisos(dos)).toHaveLength(2);
+  });
+
   it("producto pliego sin geometría ni rinde cargado: el bot no va a poder cotizar", () => {
     const sinGeo: Datos = {
       ...datos,
@@ -448,7 +479,9 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
       ...datos,
       productos: [{ ...datos.productos[0], "Piezas por unidad de cobro": "99" }],
     };
-    const a = avisos(conDrift);
+    // Dejar UN solo producto huerfaniza los materiales de los otros dos, y esos avisos son
+    // correctos pero no son los que este test mira. Se filtra por el aviso bajo prueba.
+    const a = avisos(conDrift).filter((x) => x.includes("la columna dice"));
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("la columna dice 99");
     expect(a[0]).toContain("calcula 104");
@@ -488,7 +521,7 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
         },
       ],
     };
-    const a = avisos(gigante);
+    const a = avisos(gigante).filter((x) => x.includes("no entra en el área útil"));
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("no entra en el área útil");
     // Y el chunk no dice "entran 0": el ítem sale sin rinde.
@@ -496,7 +529,11 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
   });
 
   it("los productos m2 no generan avisos aunque no tengan rinde", () => {
-    expect(avisos({ ...datos, productos: [datos.productos[2]] })).toEqual([]);
+    // Solo el producto m2: los avisos de material huérfano son de los otros materiales,
+    // que quedan sin producto por el recorte. Lo que este test fija es que el m2 en sí no
+    // aporta ninguno (no tiene rinde ni geometría, y así está bien).
+    const a = avisos({ ...datos, productos: [datos.productos[2]] });
+    expect(a.filter((x) => !x.includes("ningún producto lo usa"))).toEqual([]);
   });
 });
 
