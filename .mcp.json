@@ -1,3 +1,8 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "n8n-tg": {
+      "type": "http",
+      "url": "https://n8n.terminalgrafica.cloud/mcp-server/http"
+    }
+  }
 }
