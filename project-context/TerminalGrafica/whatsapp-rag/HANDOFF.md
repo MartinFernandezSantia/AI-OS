@@ -102,8 +102,17 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
      + `minimo_facturable` para el auditor. 2 avisos nuevos (colección multi-material sin
      base; base que apunta a un material que no usa). 110 tests en verde.
    - **PENDIENTE antes del flow: RE-INGESTAR** desde el visor. El chunk cambió
-     (7.986 chars vs 7.822) y `bot.rag_catalog` todavía tiene la versión vieja, sin
+     (8.767 chars vs 7.822) y `bot.rag_catalog` todavía tiene la versión vieja, sin
      `escala` ni `es_base` en la metadata.
+   - **Gotcha que encontró Martín, ya arreglado**: el chunk decía "es la opción base de
+     la colección", pero el título junta los dos ejes con un guion (`Stickers con forma
+     — Papel autoadhesivo…`) y "la colección" se quedaba sin referente: el bot puede
+     leerla como el título entero y la frase se vuelve una tautología. Ahora cada chunk
+     multi-material declara `Colección: X. Material: Y.`, nombra la colección entre
+     comillas y lleva a sus hermanos (el base los lista; los no base apuntan al base),
+     así el bot puede sugerir alternativas aunque el retrieval traiga un solo chunk.
+     Moraleja para chunks futuros: **el bot solo ve el `text` del embedding** — nada de
+     deícticos ("la colección", "este material") sin su referente escrito al lado.
 4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
