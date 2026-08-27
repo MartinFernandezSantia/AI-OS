@@ -73,11 +73,21 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 
 1. ~~Configurar `.env.local`~~ — **hecho**, Martín ya lo cargó (`BOT_DB` + `GEMINI_API_KEY`).
    Recordar: **Claude no puede crear ni leer archivos `.env*`** (deny rule).
-2. **Probar la ingesta contra la base real.** Nunca se ejercitó el camino completo
-   (preview → embeddings → escritura). Pendiente, pero **no bloquea la Fase 3**.
-3. **Fase 3 — el workflow de n8n.** ← siguiente Chat Trigger + memoria + tool RAG, sin Chatwoot ni
-   firewall. Acá va el **system prompt nuevo**: objetivo 2k tokens, techo 3k, partiendo de la
-   hoja Instrucciones. Hoy el prompt del bot viejo son ~6k, más prompt que datos.
+2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
+   (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
+   `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
+3. **Fase 3 — el workflow de n8n.** ← siguiente. La próxima sesión es de PLANIFICACIÓN
+   (plan primero, build después). Alcance acordado:
+   - Se basa en el workflow viejo (`whatsapp-rag-lite`) como referencia, pero la v1 arranca
+     **sin debounce y sin firewall**.
+   - **Memoria interna de n8n** (no Postgres) para poder ejecutar e interactuar con el bot
+     por el **nodo de Chat** de n8n directamente.
+   - **Revisión a fondo de los system prompts**: el del agente y el del Verificador. Decidir
+     con qué nos quedamos, qué se va, y cuánto se puede reducir (trim). Objetivo 2k tokens,
+     techo 3k, partiendo de la hoja Instrucciones del Excel. Hoy el prompt del bot viejo son
+     ~6k, más prompt que datos.
+   - Recordar: los casos de parámetros (mínimo, redondeo) se **inyectan al system prompt al
+     construirlo**, leyéndolos del Excel (ver "Preguntas abiertas").
 4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
