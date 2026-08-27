@@ -262,9 +262,10 @@ Detalle de B:
 
 Prerrequisitos de B (cambios chicos, previos al build del flow):
 
-- **Visor/ingesta**: agregar a `meta` del chunk la **escala** (tramos con
-  desde/hasta/precio), el **mínimo facturable** y la **unidad** ya están / faltan los
-  tramos — hoy `meta` lleva geometría pero no precios. Cambio en `chunk.ts` + re-ingestar.
+- ~~**Visor/ingesta**: agregar a `meta` del chunk la escala~~ **HECHO**: `meta.escala`
+  es un array de `{desde, hasta, precio, minimo_facturable?}` por material, y `meta`
+  ya traía `unidad`, `modo` y `geometria`. Con eso el auditor tiene todo para
+  re-calcular. **Pendiente re-ingestar** para que la tabla lo refleje.
 - **Cuarta copia de la fórmula de encaje** (geometria.ts, lib-xlsx.mjs, y ahora inline en
   el nodo Code): riesgo de desalineación conocido y ya asumido dos veces. Mitigación
   igual que con `price-display.ts` en el bot viejo: el builder la emite desde un único
@@ -295,9 +296,12 @@ Mismo patrón que el bot viejo (`build-flow.mjs` genera el JSON importable), per
    autoadhesivo (definido por Martín) · Carteles y vidrieras → Vinilo y lona UV (el
    adhesivo, propuesta aplicada) · las otras dos, único material. Verificado: solo
    sheet2 + sharedStrings cambiaron, 96 tests del visor en verde.
-2. Visor: escala + mínimo a `meta` en `chunk.ts`, marca de base al chunk, aviso al
-   ingestar si una colección con varios materiales no tiene base (+ tests), y
-   **re-ingestar**.
+2. ~~Visor: escala + mínimo a `meta` en `chunk.ts`, marca de base al chunk, aviso al
+   ingestar si una colección con varios materiales no tiene base (+ tests)~~ **HECHO**
+   (`meta.escala` con tramos + `minimo_facturable`, `meta.es_base` + línea en el texto,
+   2 avisos nuevos; 110 tests, cada uno verificado en rojo antes del fix). **Falta
+   re-ingestar** — el chunk cambió (7.986 chars vs 7.822), así que la tabla
+   `bot.rag_catalog` está desactualizada hasta que se corra la ingesta desde el visor.
 3. `n8n/build-flow.mjs`: prompt + flow + auditor + gate de tokens.
 4. Importar en n8n, cablear credenciales, smoke test de retrieval (¿el nodo PGVector
    lee `bot.rag_catalog` tal como la creó el visor?).
