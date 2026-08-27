@@ -12,6 +12,9 @@ Punto de arranque de la sesión de BUILD. El plan está en
 | `armar-prompt.mjs` | Arma el system prompt: plantilla + 3 inyecciones del Excel. Con gate de tokens. Lo importa el builder. |
 | `prompt-final.txt` | La salida del anterior: el prompt tal cual lo ve el modelo. Generado, no editar. |
 | `flows/cotizador-v1.json` | **Generado.** Lo que se importa en n8n. No editar a mano: se pisa en la próxima generación. |
+| `volcar-casos.mjs` | Vuelca la hoja `Casos de prueba` a `casos.json`, para correr la Fase 4 contra el bot en vivo. |
+| `listar-casos.mjs` | Los casos en una línea cada uno, para tenerlos a la vista. |
+| `materiales-huerfanos.mjs` | Materiales con precio y sin productos: los que NO generan chunk y el bot no puede cotizar. |
 | `../plans/system-prompt-v1.md` | **La plantilla** — esto SÍ se edita cuando se quiere cambiar el prompt. |
 
 ```bash
@@ -21,16 +24,17 @@ node n8n/test-auditor.mjs         # test de los nodos Code, contra el JSON ya em
 node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y mide
 ```
 
-Estado: prompt **~2.029 tokens** (objetivo 2.000, techo duro 3.000 — aborta si se pasa).
-Flow: **12 nodos**. Auditor: **46/46 casos del Excel** + los 11 rindes históricos.
+Estado: prompt **~1.889 tokens** (objetivo 2.000, techo duro 3.000 — aborta si se pasa).
+Flow: **12 nodos**. Cotizador: **46/46 casos del Excel** + los 11 rindes históricos.
 
-## Lo primero de la próxima sesión
+## El cambio grande: el LLM no escribe precios
 
-1. ~~RE-INGESTAR desde el visor~~ — **hecho**: `bot.rag_catalog` ya tiene los chunks con
-   `escala` + `es_base` en la metadata y las líneas de colección/material/hermanos.
-2. Importar `flows/cotizador-v1.json` en n8n, cablear credenciales (ver la Nota del propio
-   flow), smoke test de retrieval.
-3. Los 4 casos de humo (abajo).
+La Fase 4 con el modelo calculando midió **27/46**. Los fallos no compartían causa
+(aritmética suelta, tramo mal elegido, unidades m2 truncadas, rinde mal), y el mismo pedido
+llegó a dar $6.600 y $7.000 en dos ejecuciones con todos los pasos intermedios correctos.
+
+Ahora el modelo declara QUÉ cotizar y escribe `{P1}`, `{P2}`… en el mensaje; el nodo Code
+calcula el total desde el catálogo y el Responder lo inyecta. Ver "El cotizador" abajo.
 
 ## El flow construido (12 nodos)
 
@@ -65,39 +69,41 @@ emite 0 items no ejecuta a los que siguen, y el turno muere sin respuesta):
 - **Traer Escalas** lleva `alwaysOutputData` por lo mismo: sin filas (material inventado)
   el auditor tiene que ejecutar igual — justamente para reportar que no está en el catálogo.
 
-## Salida estructurada del agente (contrato con el auditor)
+## Salida estructurada del agente (el contrato)
 
-Un item por cotización del turno; `[]` si el turno no cotiza (saludo, repregunta).
+El modelo declara SOLO lo que puede saber sin calcular. Un item por cotización del turno,
+en el MISMO orden que los marcadores del mensaje; `[]` si el turno no cotiza.
 
 ```
-material_catalogo   string   EXACTO como vino de la tool
-modo                enum     pliego | m2
-ancho_cm, alto_cm   number   la medida de UNA pieza
-cantidad            number   piezas pedidas
-rinde               number   piezas por unidad de cobro (solo modo pliego)
-unidades_cobradas   number   pliegos, o m2 facturados
-precio_tramo        number   el precio unitario del tramo que aplicó
-aplico_minimo       bool     mínimo por trabajo o facturable
-aplico_redondeo     bool
-total                number   el número que le dijo al cliente
+respuesta           string   el mensaje, con {P1}, {P2}… donde van los precios
+cotizaciones[]:
+  material_catalogo string   EXACTO como vino de la tool
+  ancho_cm, alto_cm number   la medida de UNA pieza
+  cantidad          number   piezas pedidas
 ```
 
-## El auditor (nodo Code) — construido
+Todo lo demás —modo, rinde, unidades cobradas, tramo, mínimo, redondeo, total— lo deriva el
+nodo Code del catálogo. El modo en particular **lo manda el catálogo**: el modelo ya ni lo
+declara, porque la unidad del material es la que decide cómo se cobra.
 
-Re-calcula con la metadata del chunk (`escala`, `geometria`, `modo`) y compara contra lo
-declarado. **En v1 NO corrige: muestra** — el veredicto va pegado al mensaje del chat
-(`⚠ auditoría: rinde declarado 40, calculado 104`). Estamos midiendo, queremos ver los fallos.
+## El cotizador (nodo Code) — construido
 
-Qué chequea, en orden: material que existe en el catálogo · modo (lo manda el catálogo, no
-el modelo) · rinde · unidades cobradas · precio del tramo · total. Cada uno reporta por
-separado a propósito: en Fase 4, *qué* falló (rinde ≠ tramo ≠ aritmética) es lo que decide
-si se sube de tier de modelo o se ajusta el chunk.
+Calcula el total con la metadata del chunk (`escala`, `geometria`, `modo`) y lo devuelve
+para que el Responder lo inyecte en `{P1}`, `{P2}`… El modo **lo manda el catálogo**, no el
+modelo.
 
-Sanity floor, corre SIEMPRE aunque el desglose venga vacío o roto: total > 0 · total ≥
-mínimo por trabajo · múltiplo del redondeo · tope de magnitud ($600.000, derivado del caso
-más caro del catálogo ×8, así no envejece a mano). Más un chequeo suelto: **precio en el
-texto sin desglose estructurado** — el caso que más queremos ver, porque es un número que
-llegó al cliente sin poder auditarse.
+**Regla dura del Responder: un marcador sin precio NUNCA sale al chat.** Si una cotización
+no se pudo calcular (la pieza no entra en el pliego, material fuera del catálogo, total
+fuera de rango), el mensaje entero se reemplaza por una derivación a consulta. Derivar de
+más es preferible a mandar `{P1}` crudo o un precio inventado — en la Fase 4 con el LLM
+calculando, el bot llegó a cotizar $5.000 por algo que no entra en el pliego.
+
+Lo mismo si el modelo **tipea un precio a mano** ignorando el marcador: ese número no pasó
+por el cálculo, así que se deriva. Es la única forma de que el contrato no tenga fuga.
+
+Qué reporta como hallazgo (ya no "el bot calculó mal", sino "el modelo se salió del
+contrato"): material que no existe en el catálogo · no cotizable · precios escritos a mano ·
+marcadores que no cuadran con las cotizaciones declaradas.
 
 **La cuarta copia de la fórmula de encaje, resuelta.** El builder la tiene como un ÚNICO
 string (`FUENTE_RINDE`): lo evalúa para correr los tests y lo emite tal cual dentro del nodo
@@ -117,16 +123,45 @@ cotizable". 9 de los 46 casos en rojo. Fix fiel al Excel: el **primer** tramo cu
 que quede por debajo de su `desde` (no existe un tramo más barato que el primero, y las
 escalas por volumen solo viven en modo pliego, donde las unidades son enteras).
 
-## Casos de humo (antes de la Fase 4 con los 46)
+## Fase 4 — los 46 casos, medidos en vivo
 
-| Pedido | Total | Qué ejercita |
+Corridos por el MCP de n8n (`execute_workflow` + `get_workflow_execution`, un `sessionId`
+por caso). `node n8n/volcar-casos.mjs` vuelca la hoja a `casos.json` para tenerlos a mano.
+
+| | LLM calculando | Nodo calculando |
 |---|---|---|
-| 250 stickers 3x3 | $6.600 | camino pliego completo |
-| 100 stickers en vinilo UV 5x5 | $14.000 | m2 + mínimo facturable |
-| 10 stickers 3x3 | $4.000 | mínimo por trabajo (y que se presente como CANTIDAD) |
-| 1 lona de 90x60 | $8.600 | redondeo |
+| Aciertos | **27/46** (59%) | **44/46** (96%) |
 
-Los 46 casos completos están en la hoja `Casos de prueba` del Excel.
+Las cinco clases de fallo aritmético desaparecieron: aritmética suelta, tramo mal elegido,
+unidades m2 truncadas al mínimo facturable, rinde mal, y el caso grave (cotizar algo que no
+entra en el pliego). También se arreglaron los dos casos donde el modelo elegía mal el
+material — probablemente por el prompt más corto.
+
+Lo que quedó de los 2 restantes:
+
+- **Caso 43 — no era medible.** Pedía `Papel autoadhesivo solo impresión`, un material con
+  precio cargado pero SIN productos: no genera chunk, el bot no puede verlo. Cotizó el
+  troquelado, que es lo razonable con lo que tenía. Sobre los casos acertables el resultado
+  es 44/45. El visor ahora lo AVISA (ver abajo).
+- **Caso 44 — el comportamiento es correcto, el mensaje no.** Ya no cotiza: deriva a
+  consulta. Pero el texto arrastra la cola de debug (`⚠ auditoría:` + `(marcadores sin
+  precio: {P1})`), que es deliberada para medir y hay que sacar antes de producción.
+
+Detalle menor (caso 45): el mínimo se presenta sin decir "precio mínimo" ni que el pedido es
+chico — bien — pero tampoco dice la cantidad ("te llevás hasta 104"), que el prompt pide. El
+dato está en `piezas_por_unidad` de la auditoría, sin usar.
+
+### 4 materiales del catálogo no tienen chunk
+
+`node n8n/materiales-huerfanos.mjs` los lista. Tienen precio en la hoja Materiales pero
+ningún producto que los use, y como el chunk es colección+material, **no existen para el
+bot**: `Papel autoadhesivo solo impresión`, `OPP brillo`, `OPP plata/holográfico/cristal o
+mate`, `Vinilo y lona UV con blanco o barniz`. Los tres últimos son las variantes "sin
+troquelar" de materiales que sí están.
+
+Es una decisión del cliente: o se les carga un producto, o salen de la lista de precios.
+Mientras tanto el bot cotiza el material troquelado más parecido, que puede ser más caro.
+El visor lo avisa al ingestar (`avisos()` en `visor/lib/chunk.ts`).
 
 ## Trampas conocidas
 
