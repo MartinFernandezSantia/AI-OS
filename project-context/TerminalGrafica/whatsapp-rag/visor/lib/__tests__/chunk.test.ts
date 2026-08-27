@@ -73,28 +73,54 @@ const datos: Datos = {
 
 describe("escalaTexto", () => {
   it("un solo tramo (tarifa plana) muestra el monto sin rango", () => {
-    expect(escalaTexto(escalaDe(datos.materiales, "Lona"))).toBe("$16.000");
+    expect(escalaTexto(escalaDe(datos.materiales, "Lona"), "m2")).toBe("$16.000");
   });
 
-  it("tramo de un solo valor se escribe sin 'a'", () => {
-    expect(escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"))).toContain("1: $2.500");
+  it("tramo de un solo valor se escribe sin 'a', en singular", () => {
+    const t = escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"), "pliego A3");
+    expect(t).toContain("1 pliego A3: $2.500");
   });
 
   it("el tramo abierto se escribe 'N o más'", () => {
-    expect(escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"))).toContain("11 o más: $2.000");
+    const t = escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"), "pliego A3");
+    expect(t).toContain("11 pliegos A3 o más: $2.000");
+  });
+
+  // El fallo del humo de Fase 3: con los tramos sin rótulo el modelo leyó los rangos en
+  // PIEZAS (250 stickers → tramo "101 o más") en vez de en pliegos (3 → "2 a 10").
+  it("CADA tramo lleva su unidad, no solo el encabezado", () => {
+    const t = escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"), "pliego A3");
+    // Ningún rango queda como número pelado.
+    expect(t).not.toMatch(/\d+ a \d+:/);
+    expect(t).toContain("2 a 10 pliegos A3");
+  });
+
+  it("sin unidad se comporta como antes (números pelados)", () => {
+    expect(escalaTexto(escalaDe(datos.materiales, "Papel autoadhesivo"))).toContain("2 a 10:");
   });
 });
 
 describe("lineaPrecio — la unidad se imprime tal cual viene del Excel", () => {
-  it("pliego usa la unidad del material y no menciona m2", () => {
+  // Con varios tramos el encabezado dice qué INDEXA la escala; con uno solo (tarifa plana)
+  // no hay rangos que confundir y se queda con el "Precio por <unidad>" de siempre.
+  it("con varios tramos el encabezado dice que la escala va por unidad de cobro", () => {
     const l = lineaPrecio("Papel autoadhesivo", escalaDe(datos.materiales, "Papel autoadhesivo"));
-    expect(l).toContain("Precio por pliego A3");
+    expect(l).toContain("Precio según CANTIDAD DE PLIEGOS A3 (no de piezas)");
     expect(l).not.toContain("m2");
+  });
+
+  // Guard del cableado: no alcanza con que escalaTexto SEPA rotular — lineaPrecio tiene que
+  // pasarle la unidad. Sin este test, quitar el argumento deja 4 tests en verde y el chunk
+  // vuelve al formato que causó el fallo del humo.
+  it("la línea completa lleva los tramos rotulados, no solo el encabezado", () => {
+    const l = lineaPrecio("Papel autoadhesivo", escalaDe(datos.materiales, "Papel autoadhesivo"));
+    expect(l).toContain("2 a 10 pliegos A3: $2.200");
+    expect(l).not.toMatch(/\d+ a \d+: \$/); // ningún rango sin unidad
   });
 
   it("m2 lleva el mínimo facturable y no menciona pliego", () => {
     const l = lineaPrecio("Lona", escalaDe(datos.materiales, "Lona"));
-    expect(l).toContain("Precio por m2");
+    expect(l).toContain("Precio por m2"); // tarifa plana: un solo tramo
     expect(l).toContain("Mínimo facturable 0,5 m2");
     expect(l).not.toContain("pliego");
   });
@@ -131,12 +157,64 @@ describe("chunks — coleccion-material", () => {
 
   it("cada chunk lleva UNA sola línea de precio (la razón de ser de esta estrategia)", () => {
     for (const c of cs) {
-      expect(c.texto.match(/^Precio por /gm) ?? []).toHaveLength(1);
+      expect(c.texto.match(/^Precio (por|según) /gm) ?? []).toHaveLength(1);
     }
   });
 
   it("con varios materiales, el título lleva el sufijo del material", () => {
     expect(cs[0].titulo).toBe("Stickers con forma — Papel autoadhesivo");
+  });
+
+  // El ejemplo resuelve la cadena piezas → pliegos → tramo al lado del dato. Tiene que
+  // elegir una cantidad DISCRIMINANTE: una donde leer la escala en piezas dé un tramo
+  // distinto que leerla en pliegos. Si eligiera una donde ambas lecturas coinciden, el
+  // ejemplo se ve bien y no enseña nada — que es como se coló el fallo del humo.
+  it("el ejemplo de la cadena usa una cantidad donde piezas y pliegos dan tramos distintos", () => {
+    // Stickers 3x3: rinde 104. 200 piezas = 2 pliegos → tramo "2 a 10" ($2.200).
+    // Leídas como piezas, 200 caería en "11 o más" ($2.000): las lecturas difieren.
+    expect(cs[0].texto).toContain(
+      'Ej.: 200 piezas = 2 pliegos A3 (200 ÷ 104, redondeando para arriba) → tramo "2 a 10 pliegos A3", $2.200 cada pliego A3.',
+    );
+  });
+
+  it("el ejemplo no aparece donde no hay conversión que hacer (m2, tarifa plana)", () => {
+    expect(cs.at(-1)!.texto).not.toContain("Ej.:");
+  });
+
+  // Guard de la heurística: con rinde 4 y cortes en 2 y 51, la cantidad más chica (50) NO
+  // discrimina — 13 pliegos y 50 piezas caen las dos en "2 a 50", así que como ejemplo no
+  // enseña nada. La que sirve es 100 (25 pliegos → "2 a 50", pero 100 piezas → "51 o más").
+  // Sin la búsqueda de una cantidad discriminante esto se pone rojo y el ejemplo es decorativo.
+  it("saltea una cantidad donde ambas lecturas coinciden y elige la que discrimina", () => {
+    const raro: Datos = {
+      ...datos,
+      productos: [
+        {
+          "Colección": "Stickers con forma",
+          Producto: "Gigante",
+          Material: "Papel autoadhesivo",
+          "Ancho (cm)": "13",
+          "Alto (cm)": "21", // rinde 4 en 28x44 con sep 0,3 (2x2)
+        },
+      ],
+      materiales: [
+        {
+          Material: "Papel autoadhesivo",
+          Unidad: "pliego A3",
+          Desde: "1",
+          Hasta: "1",
+          "Precio por unidad": "2500",
+          "Área útil ancho (cm)": "28",
+          "Área útil alto (cm)": "44",
+          "Separación (cm)": "0,3",
+        },
+        { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "2", Hasta: "50", "Precio por unidad": "2200" },
+        { Material: "Papel autoadhesivo", Unidad: "pliego A3", Desde: "51", "Precio por unidad": "2000" },
+      ],
+    };
+    const t = chunks(raro, "coleccion-material")[0].texto;
+    expect(t).toContain('Ej.: 100 piezas = 25 pliegos A3 (100 ÷ 4, redondeando para arriba) → tramo "2 a 50 pliegos A3"');
+    expect(t).not.toContain("Ej.: 50 piezas");
   });
 
   it("con un solo material, el título es la colección sola", () => {
@@ -190,7 +268,8 @@ describe("chunks — coleccion-material", () => {
     };
     const t = chunks(a4, "coleccion-material")[0].texto;
     expect(t).toContain("entran 104 por pliego A4");
-    expect(t).toContain("Precio por pliego A4");
+    expect(t).toContain("CANTIDAD DE PLIEGOS A4");
+    expect(t).toContain("2 a 10 pliegos A4"); // los tramos rotulados también siguen al dato
     expect(t).not.toContain("A3");
   });
 
@@ -265,7 +344,7 @@ describe("chunks — coleccion", () => {
   it("un chunk por colección", () => expect(cs).toHaveLength(2));
 
   it("la colección con 2 materiales arrastra 2 líneas de precio (la ambigüedad a mostrar)", () => {
-    expect(cs[0].texto.match(/^Precio por /gm) ?? []).toHaveLength(2);
+    expect(cs[0].texto.match(/^Precio (por|según) /gm) ?? []).toHaveLength(2);
   });
 });
 
@@ -275,7 +354,7 @@ describe("chunks — producto", () => {
   it("un chunk por producto", () => expect(cs).toHaveLength(3));
 
   it("cada uno se lleva la escala completa de su material", () => {
-    expect(cs[0].texto).toContain("11 o más: $2.000");
+    expect(cs[0].texto).toContain("11 pliegos A3 o más: $2.000");
   });
 
   it("nombra la colección a la que pertenece", () => {

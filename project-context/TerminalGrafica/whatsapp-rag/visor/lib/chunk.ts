@@ -75,18 +75,39 @@ const money = (n: number): string => "$" + n.toLocaleString("es-AR");
 const numTexto = (n: number): string => n.toLocaleString("es-AR");
 
 /**
+ * Plural de una unidad de cobro para rotular tramos: "pliego A3" → "pliegos A3".
+ * Se pluraliza SOLO la primera palabra (el sustantivo; lo que sigue es el calificador de
+ * tamaño). "m2" queda igual porque no termina en letra — y así una unidad nueva del cliente
+ * no se rompe: en el peor caso queda sin pluralizar, que se lee raro pero no miente.
+ */
+const pluralUnidad = (unidad: string): string =>
+  unidad.replace(/^(\p{L}+)/u, (w) => (/[a-záéíóúñ]$/i.test(w) ? w + "s" : w));
+
+/**
  * La escala como texto legible.
  * Un solo tramo (tarifa plana) → solo el monto, sin rango: no tiene sentido decir
  * "1 o más: $16.000" cuando no hay otro tramo con el que comparar.
+ *
+ * `unidad` rotula CADA tramo ("2 a 10 pliegos A3"), no solo el encabezado. Es redundante
+ * para un humano y es justo lo que el LLM necesita: en el humo de Fase 3, con los tramos
+ * sin rótulo, el modelo tomó las 250 PIEZAS pedidas y buscó el tramo "101 o más" en vez de
+ * convertir a 3 pliegos primero (250 → $1.710 en vez de $2.200; total $5.100 vs $6.600).
+ * Los números pelados no dicen de qué son, y el chunk viene de hablar de piezas ("entran
+ * 104 por pliego"), así que la lectura equivocada es la natural. Cada fila se defiende sola.
  */
-export function escalaTexto(tramos: Tramo[]): string {
+export function escalaTexto(tramos: Tramo[], unidad = ""): string {
   if (!tramos.length) return "";
   if (tramos.length === 1) return money(tramos[0].precio);
+  const plural = pluralUnidad(unidad);
+  const suf = plural ? " " + plural : "";
   return tramos
     .map((t) => {
-      if (t.hasta === null) return `${t.desde} o más: ${money(t.precio)}`;
-      if (t.desde === t.hasta) return `${t.desde}: ${money(t.precio)}`;
-      return `${t.desde} a ${t.hasta}: ${money(t.precio)}`;
+      if (t.hasta === null) return `${t.desde}${suf} o más: ${money(t.precio)}`;
+      if (t.desde === t.hasta) {
+        // Un solo valor: va en singular ("1 pliego A3", no "1 pliegos A3").
+        return `${t.desde}${unidad ? " " + unidad : ""}: ${money(t.precio)}`;
+      }
+      return `${t.desde} a ${t.hasta}${suf}: ${money(t.precio)}`;
     })
     .join(" · ");
 }
@@ -105,12 +126,76 @@ export function lineaPrecio(material: string, tramos: Tramo[]): string {
   const min = tramos[0].minimo;
   // El mínimo facturable se expresa en la misma unidad de cobro (0,5 m2, 1 pliego…).
   const cola = min !== null ? `. Mínimo facturable ${numTexto(min)} ${unidad}` : "";
-  return `Precio por ${unidad} — ${material}: ${escalaTexto(tramos)}${cola}.`;
+  // Con varios tramos el encabezado tiene que decir QUÉ indexa la escala. "Precio por
+  // pliego A3" solo se lee como "cuánto cuesta un pliego" — cierto, pero deja abierto en
+  // qué unidad se buscan los rangos, y el modelo los leyó en piezas (ver escalaTexto).
+  const cabecera =
+    tramos.length > 1
+      ? `Precio según CANTIDAD DE ${pluralUnidad(unidad).toUpperCase()} (no de piezas) — ${material}`
+      : `Precio por ${unidad} — ${material}`;
+  return `${cabecera}: ${escalaTexto(tramos, unidad)}${cola}.`;
+}
+
+/** Cómo se nombra un tramo en prosa, para citarlo desde el ejemplo de la cadena. */
+function nombreTramo(t: Tramo, unidad: string): string {
+  const plural = pluralUnidad(unidad);
+  if (t.hasta === null) return `${t.desde} ${plural} o más`;
+  if (t.desde === t.hasta) return `${t.desde} ${unidad}`;
+  return `${t.desde} a ${t.hasta} ${plural}`;
+}
+
+/** El tramo que contiene `n` unidades. El primero cubre todo lo que quede por debajo de su
+ *  `desde`, igual que en el auditor del workflow (no existe tramo más barato que el primero). */
+function tramoDe(tramos: Tramo[], n: number): Tramo | null {
+  for (let i = 0; i < tramos.length; i++) {
+    const desde = i === 0 ? -Infinity : tramos[i].desde;
+    const hasta = tramos[i].hasta ?? Infinity;
+    if (n >= desde && n <= hasta) return tramos[i];
+  }
+  return null;
+}
+
+/** Cantidades que un cliente pide de verdad. El ejemplo tiene que sonar a pedido real, no
+ *  a un número construido para que la cuenta cierre. */
+const CANTIDADES_TIPICAS = [50, 100, 200, 250, 500, 1000] as const;
+
+/**
+ * La línea de ejemplo que muestra la cadena piezas → unidades de cobro → tramo, con los
+ * números de ESTA medida. El system prompt ya explica la regla en general; acá va resuelta
+ * al lado del dato, que es donde el modelo la necesita.
+ *
+ * Se elige, entre cantidades redondas, la más chica donde leer la escala en PIEZAS daría un
+ * tramo DISTINTO que leerla en unidades de cobro. Ese es exactamente el error del humo (250
+ * stickers 3x3: el modelo tomó el tramo "101 o más" por las 250 piezas, cuando eran 3
+ * pliegos y correspondía "2 a 10"). Un ejemplo donde ambas lecturas coinciden no enseña
+ * nada: se ve bien y deja pasar el bug.
+ */
+function ejemploCadena(r: number, tramos: Tramo[], unidad: string): string | null {
+  if (tramos.length < 2 || !(r > 0)) return null;
+
+  const candidatas = CANTIDADES_TIPICAS.filter((q) => q > r); // que haya conversión que hacer
+  if (!candidatas.length) return null;
+  // La más chica que distingue las dos lecturas; si ninguna lo hace, la más chica a secas.
+  const piezas =
+    candidatas.find((q) => tramoDe(tramos, Math.ceil(q / r)) !== tramoDe(tramos, q)) ??
+    candidatas[0];
+
+  const unidades = Math.ceil(piezas / r);
+  const objetivo = tramoDe(tramos, unidades);
+  if (!objetivo) return null;
+
+  // La cantidad de unidades manda el número gramatical: 1 pliego, 2 pliegos.
+  const unidadesTexto = `${numTexto(unidades)} ${unidades === 1 ? unidad : pluralUnidad(unidad)}`;
+  return (
+    `  Ej.: ${numTexto(piezas)} piezas = ${unidadesTexto}` +
+    ` (${numTexto(piezas)} ÷ ${numTexto(r)}, redondeando para arriba)` +
+    ` → tramo "${nombreTramo(objetivo, unidad)}", ${money(objetivo.precio)} cada ${unidad}.`
+  );
 }
 
 /** Las líneas de un producto dentro de la lista de medidas. `unidad` y `geo` vienen del
- *  material. */
-function itemProducto(p: Fila, unidad: string, geo: Geometria | null): string[] {
+ *  material; `tramos` solo para el ejemplo de la cadena. */
+function itemProducto(p: Fila, unidad: string, geo: Geometria | null, tramos: Tramo[] = []): string[] {
   const partes = [`- ${p["Producto"] ?? "(sin nombre)"}`];
 
   const a = p["Ancho (cm)"];
@@ -124,6 +209,10 @@ function itemProducto(p: Fila, unidad: string, geo: Geometria | null): string[] 
 
   const lineas = [partes.join(" · ") + "."];
   if (p["Descripción"]) lineas.push(`  ${p["Descripción"]}`);
+  if (r) {
+    const ej = ejemploCadena(r, tramos, unidad);
+    if (ej) lineas.push(ej);
+  }
 
   // Columnas que el cliente agregó y no conocemos: se emiten igual, sin tocar código.
   const extras = Object.keys(p).filter((k) => !CONOCIDAS.has(k));
@@ -236,7 +325,7 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       const motor = lineasMotor(modo, unidad, geo);
       if (motor.length) L.push("", ...motor);
       L.push("", "Medidas de referencia:");
-      for (const p of suyos) L.push(...itemProducto(p, unidad, geo));
+      for (const p of suyos) L.push(...itemProducto(p, unidad, geo, tramos));
       const precio = lineaPrecio(mat, tramos);
       if (precio) L.push("", precio);
 
@@ -290,7 +379,14 @@ function chunksColeccion(datos: Datos): Chunk[] {
     // Acá conviven productos de materiales distintos: la unidad se resuelve por producto.
     for (const p of items) {
       const mat = p["Material"] ?? "";
-      L.push(...itemProducto(p, unidadDe(datos.materiales, mat), geometriaDe(datos.materiales, mat)));
+      L.push(
+        ...itemProducto(
+          p,
+          unidadDe(datos.materiales, mat),
+          geometriaDe(datos.materiales, mat),
+          escalaDe(datos.materiales, mat),
+        ),
+      );
     }
 
     const mats = materialesDe(items);
@@ -334,7 +430,11 @@ function chunksProducto(datos: Datos): Chunk[] {
     const h = p["Alto (cm)"];
     if (a && h) L.push(`Medida: ${a}x${h} cm.`);
     const r = rindeEfectivo(p, geo);
-    if (r) L.push(`Entran ${numTexto(r)} por ${unidad || "unidad"}.`);
+    if (r) {
+      L.push(`Entran ${numTexto(r)} por ${unidad || "unidad"}.`);
+      const ej = ejemploCadena(r, tramos, unidad);
+      if (ej) L.push(ej.trimStart());
+    }
 
     for (const k of Object.keys(p).filter((k) => !CONOCIDAS.has(k))) L.push(`${k}: ${p[k]}.`);
 
