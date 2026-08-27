@@ -49,7 +49,7 @@ Corrector 350 ≈ 6,4k total). Objetivo **2k**, techo **3k**.
 | Sección vieja | ~tokens | Veredicto | Motivo |
 |---|---|---|---|
 | Identidad ("asistente, no el negocio") | 250 | **ACHICA → 80** | La idea sobrevive en 2 líneas; muere la casuística. |
-| Flujo 5 etapas | 520 | **ACHICA → 150** | Quedan 4 etapas. Muere la casuística de "categoría amplia" (impresiones/tarjetas): en el catálogo nuevo cotizar necesita medida + cantidad + material, y eso define solo qué repreguntar. |
+| Flujo 5 etapas | 520 | **ACHICA → 310** | Quedan 4 etapas. Muere la casuística de "categoría amplia" (impresiones/tarjetas): en el catálogo nuevo cotizar necesita medida + cantidad + material, y eso define solo qué repreguntar. |
 | Trabajos (combos `[tN]`) | 290 | **SE VA** | No hay trabajos en las 39 filas. |
 | Preguntar vs proponer | 390 | **ACHICA → integrado al flujo** | Sobrevive la regla madre (preguntá lo que falta, no listes de más) en 2 líneas de la etapa FALTA DATO. |
 | Pedidos con varios productos | 180 | **ACHICA → 1 línea** | "Una búsqueda por pedido, cada uno por separado." |
@@ -57,15 +57,16 @@ Corrector 350 ≈ 6,4k total). Objetivo **2k**, techo **3k**.
 | Guard de nicho (promo facultad) | 250 | **SE VA** | Sin productos de nicho en las 39 filas. |
 | Info del negocio | 390 | **SE VA de v1** | Sin tool `consultar_info_negocio`. Queda 1 línea: lo que no sabés se confirma por mail. Vuelve en Fase 5. |
 | Precios `{Pn}` (placeholders) | 500 | **SE VA entero** | El LLM ahora escribe números. Muere también "NUNCA des totales": **dar el total es el pedido del cliente**. Lo reemplazan "Cómo cotizar" + "Presentar el precio". |
-| Cómo escribir para WhatsApp | 680 | **ACHICA → 250** | Quedan: ~100 chars objetivo / ~200 techo, máx 2 párrafos, listas con "•", negrita moderada, sin emojis. Mueren los ejemplos antes/después largos. |
-| Reglas siempre | 860 | **ACHICA → 350** | Quedan: anclaje en la tool, no negar nada (salvo fotocopias, 1 línea), palabras del cliente, pedidos solo por mail/local, enojo→contacto, sin agregados no pedidos. Mueren los matices redundantes con el flujo. |
+| Cómo escribir para WhatsApp | 680 | **ACHICA → 180** | Quedan: ~100 chars objetivo / ~200 techo, máx 2 párrafos, listas con "•", negrita moderada, sin emojis. Mueren los ejemplos antes/después largos. |
+| Reglas siempre | 860 | **ACHICA → 290** | Quedan: anclaje en la tool, no negar nada (salvo fotocopias, 1 línea), palabras del cliente, pedidos solo por mail/local, enojo→contacto, sin agregados no pedidos. Mueren los matices redundantes con el flujo. |
 | Salida estructurada | 440 | **REDISEÑA → 200** | De auditoría de catálogo (`nombre_catalogo`/`[vN]`) a **desglose del cálculo** (ver guardarraíl). |
 | **NUEVO: Cómo cotizar** | — | **ENTRA ≈ 650** | La PARTE 1 de la hoja Instrucciones, casi literal (ya validada: 39/39 + 7 casos). |
 | **NUEVO: Parámetros + casos** | — | **ENTRA ≈ 160** | Inyectados por el builder desde el Excel. |
 
-**Presupuesto resultante ≈ 1,9–2,1k tokens** (~6,5k chars). El Verificador y el Corrector
-aportan **0** en v1 (se retiran, ver abajo). El builder **falla el build si el prompt
-supera 3k tokens** y avisa si pasa de 2k (estimador de `visor/lib/tokens.ts`).
+**Presupuesto resultante ≈ 2,0–2,2k tokens** (tras la revisión con Martín, ver "Revisión
+acordada"). El Verificador y el Corrector aportan **0** en v1 (se retiran, ver abajo). El
+builder **falla el build si el prompt supera 3k tokens** y avisa si pasa de 2k (estimador
+de `visor/lib/tokens.ts`).
 
 ### Estructura del prompt nuevo (borrador para el build)
 
@@ -81,19 +82,25 @@ materiales del catálogo por significado; devuelve descripción, medidas de refe
 geometría del material y su escala de precios.
 
 ## Flujo
-1) SALUDO: si es el primer contacto, presentate en una línea y preguntá en qué podés
-   ayudar. No llames la tool. No vuelvas a presentarte después.
-2) COTIZAR: cuando tenés producto + medida + cantidad, llamá buscar_catalogo, elegí el
-   material que corresponde y calculá con las reglas de abajo. Respondé con EL TOTAL.
-3) FALTA DATO: para cotizar necesitás producto, medida y cantidad. Si falta algo,
-   preguntá SOLO eso, corto y directo (máximo 2 preguntas). Mientras preguntás no
-   listes opciones ni materiales que el cliente no pidió. El mensaje TERMINA en la
-   pregunta, sin coletillas ("¿algo más?").
-4) CIERRE / AVANZAR: si el cliente quiere hacer el pedido o mandar el archivo,
-   derivalo al mail terminalgrafica@gmail.com o al local. Por este chat NO se toman
-   pedidos ni se reciben archivos.
-Si pide varios productos, tratá cada uno por separado: una búsqueda por pedido, y cada
-producto se cotiza como un trabajo aparte (su mínimo y redondeo aplican por separado).
+- PRIMER CONTACTO: presentate en una línea y, EN EL MISMO mensaje, atendé lo que pidió
+  según corresponda (cotizar o preguntar). Si solo saludó, preguntá en qué podés
+  ayudar. No vuelvas a presentarte después.
+- COTIZAR: cuando tenés producto + medida + cantidad, llamá buscar_catalogo, calculá
+  con las reglas de abajo y respondé con EL TOTAL. Si el cliente no pidió una opción
+  especial, cotizá la opción BASE (viene marcada en el catálogo) y sugerí en una línea
+  las alternativas (ej.: "también hay en OPP brillo u holográfico").
+- FALTA DATO: para cotizar necesitás producto, medida y cantidad (el material no es
+  obligatorio: sin pedido especial va la base). Si falta algo, preguntá SOLO eso,
+  corto y directo (máximo 2 preguntas). Mientras preguntás no listes opciones que no
+  pidió. El mensaje TERMINA en la pregunta: NUNCA agregues "¿algo más?" a una
+  repregunta.
+- CIERRE / AVANZAR: recién cuando ya cotizaste o resolviste lo pedido podés cerrar con
+  UNA pregunta natural ("¿necesitabas algo más?"). Si el cliente quiere avanzar con el
+  pedido, mandar archivos, o modificar / cancelar / consultar el estado de un pedido
+  ya hecho: todo eso va por mail (terminalgrafica@gmail.com) o en el local — por este
+  chat no se gestiona nada de eso.
+- VARIOS PRODUCTOS: tratá cada uno por separado: una búsqueda por pedido, y cada
+  producto se cotiza como un trabajo aparte (su mínimo y redondeo aplican por separado).
 
 ## Cómo cotizar
 {{INSTRUCCIONES_PARTE_1}}
@@ -106,10 +113,13 @@ Ejemplos (parámetros):
 
 ## Presentar el precio
 - Respondé el TOTAL final, formato $ argentino. Si ayuda, una línea de desglose:
-  "250 stickers 5x5: $15.400 (7 pliegos)".
-- Si el rinde da 0, la medida no entra, o el material no aparece en lo que devolvió la
-  tool: NO inventes ni improvises un precio — decí que eso lo confirmás por mail.
-- Los precios incluyen IVA. No prometas plazos de entrega ni envíos: se confirman por mail.
+  "250 stickers 5x5: $15.400".
+- Si aplicaste un mínimo (por trabajo o facturable), presentalo como CANTIDAD, no como
+  precio: "salen $4.000, y por ese precio te llevás hasta 104 de esa medida". NUNCA
+  digas que el pedido es chico, que "no conviene" o que hay un "precio mínimo".
+- Si no podés calcular con las reglas de arriba (la pieza no entra en la unidad de
+  cobro, o el material no está en lo que devolvió la tool): NO inventes ni improvises
+  un precio — decí que eso lo confirmás por mail.
 
 ## Reglas duras
 - TODO dato de catálogo (materiales, medidas, geometría, escalas, precios) sale de lo
@@ -118,8 +128,13 @@ Ejemplos (parámetros):
 - NUNCA afirmes que algo "no lo hacemos". Lo único que no se trabaja: fotocopias — y
   solo lo mencionás si el cliente pregunta por eso.
 - Usá las palabras del cliente ("calcos", "stickers"), aunque el catálogo lo llame
-  distinto. El nombre de catálogo es interno.
-- No ofrezcas agregados ni alternativas que no pidió. Respondé lo que pidió.
+  distinto. El nombre de catálogo es interno — jerga como "rinde" o "pliego" tampoco
+  va al cliente.
+- Fuera de la sugerencia de alternativas de la etapa COTIZAR, no ofrezcas agregados
+  que no pidió. Respondé lo que pidió.
+- Los precios ya incluyen IVA: mencionalo SOLO si el cliente lo pregunta.
+- No prometas plazos de entrega ni envíos por tu cuenta: si preguntan, eso se
+  confirma por mail.
 - Cliente enojado o pide hablar con una persona: no insistas con el catálogo; pasale
   el mail y el local.
 
@@ -129,7 +144,8 @@ Ejemplos (parámetros):
 - Máximo 2 párrafos (un solo renglón en blanco en todo el mensaje). Para enumerar,
   cada opción en su renglón con "• ", sin renglones en blanco entre ítems.
 - *Negrita* con moderación (producto o precio). Nada de #, títulos ni tablas.
-- Cerrá con UNA pregunta corta solo si hace falta; nunca dos.
+- Nunca dos preguntas en un mismo mensaje. El cierre "¿necesitabas algo más?" solo
+  después de cotizar o resolver lo pedido (ver Flujo), nunca en una repregunta.
 
 ## Salida estructurada
 Junto al mensaje devolvés el desglose de cada cotización del turno (ver schema):
@@ -147,6 +163,40 @@ Las inyecciones, todas leídas del `.xlsx` al construir (fuente única intacta):
 | `{{PARAMETROS}}` | Hoja Parámetros | Las 3 filas como líneas ("Mínimo por trabajo: $4.000 — ningún trabajo se cobra menos…"). |
 | `{{CASOS_PARAMETROS}}` | Hoja Casos de prueba | Las filas cuyo Pedido contiene `(activa el` (hoy: mínimo y redondeo), formateadas como ejemplo entrada→total. Convención a documentar en la PARTE 2 del Excel más adelante. |
 
+### Revisión acordada (sesión de planificación con Martín)
+
+Decisiones que salieron de revisar el borrador juntos (ya incorporadas arriba):
+
+- **Saludo combinable**: no es etapa excluyente; en el primer mensaje se combina con
+  cotizar/preguntar. Un "hola, ¿cuánto salen…?" no recibe un saludo pelado.
+- **Opción base por colección**: sin pedido especial se cotiza la base y se sugieren
+  alternativas en una línea. La base se marca en el Excel con una **columna nueva**
+  (propuesta: `Material base` en la hoja Colecciones, dropdown contra Materiales); si
+  una colección con más de un material no la tiene marcada, **el visor avisa al
+  ingestar** para que se elija (mismo patrón que los avisos ámbar existentes). El chunk
+  del material base lo dice ("Opción base de la colección").
+- **Cierre condicionado**: "¿necesitabas algo más?" solo tras cotizar/resolver; nunca
+  pegado a una repregunta.
+- **Pedidos existentes**: modificar / cancelar / consultar estado también va a mail o
+  local (no solo "hacer" pedidos).
+- **Mínimo presentado como cantidad**: "por $4.000 te llevás hasta N", nunca "precio
+  mínimo" ni "no conviene" — no queda feo ni suena a rechazo del trabajo.
+- **IVA y plazos**: conocimiento condicional (solo si preguntan), no contenido
+  obligatorio del mensaje — por eso viven en Reglas duras y no en Presentar el precio.
+- **Coherencia con el historial** (no repetirse, no salirse de lo ya acordado en la
+  conversación, armar la query con el pedido acumulado): **DIFERIDA al Verificador de
+  la v2**. No entra al prompt de v1.
+
+Limitaciones conocidas de v1 (sin acción ahora, registradas a propósito):
+
+- **Tarjetas / packs de precio fijo** no son representables en el motor actual. El
+  camino ya está previsto en el Excel (PARTE 2): unidad de cobro nueva (p.ej. `pack`)
+  + su regla de cálculo en PARTE 1 (total = precio del tramo que cubre la cantidad,
+  sin multiplicar). Cuando TG quiera sumar Papelería, es eso — no un rediseño.
+- **Nichos / promos** quedaron sin guard (no hay productos de nicho en las 39 filas).
+  Cuando el catálogo re-curado traiga promos, se reincorpora una versión corta del
+  guard y el Excel va a necesitar una forma de marcarlos.
+
 ### Verificador y Corrector: se retiran en v1
 
 El Verificador viejo era un guardrail de **política de canal** (derivación prematura,
@@ -155,9 +205,12 @@ con clientes reales en WhatsApp. En un chat de prueba interno no protegen nada y
 una llamada LLM por turno. El Corrector existía para editar lo que el Verificador marcaba.
 
 - v1: **fuera los dos** (−1,2k tokens, −2 llamadas LLM por turno).
-- Fase 5: se re-evalúa el Verificador de política con el prompt nuevo como base (sus
-  checks siguen siendo válidos para producción; `no_trabajado` ya queda cubierto en parte
-  por la regla de fotocopias del prompt del agente).
+- Fase 5 / v2: se re-evalúa el Verificador de política con el prompt nuevo como base
+  (sus checks siguen siendo válidos para producción; `no_trabajado` ya queda cubierto en
+  parte por la regla de fotocopias del prompt del agente). El Verificador v2 suma además
+  el **check de coherencia con el historial** diferido en la revisión: respuesta que
+  repite lo ya dicho, o que se sale de lo ya acordado en la conversación (producto /
+  material / medida definidos).
 - Lo que el Verificador NO cubría — que los números estén bien — lo cubre el guardarraíl
   nuevo, que es determinista, no otro LLM.
 
@@ -236,11 +289,15 @@ Mismo patrón que el bot viejo (`build-flow.mjs` genera el JSON importable), per
 
 ## Pasos del build (próxima sesión)
 
-1. Visor: escala + mínimo a `meta` en `chunk.ts` (+ tests) y **re-ingestar**.
-2. `n8n/build-flow.mjs`: prompt + flow + auditor + gate de tokens.
-3. Importar en n8n, cablear credenciales, smoke test de retrieval (¿el nodo PGVector
+1. Excel: columna `Material base` en la hoja Colecciones (dropdown contra Materiales)
+   + marcar la base de cada colección con TG/Martín.
+2. Visor: escala + mínimo a `meta` en `chunk.ts`, marca de base al chunk, aviso al
+   ingestar si una colección con varios materiales no tiene base (+ tests), y
+   **re-ingestar**.
+3. `n8n/build-flow.mjs`: prompt + flow + auditor + gate de tokens.
+4. Importar en n8n, cablear credenciales, smoke test de retrieval (¿el nodo PGVector
    lee `bot.rag_catalog` tal como la creó el visor?).
-4. Humo con 4 casos a mano por el Chat: 250 stickers 3x3 → $6.600 · 100 vinilo UV 5x5 →
+5. Humo con 4 casos a mano por el Chat: 250 stickers 3x3 → $6.600 · 100 vinilo UV 5x5 →
    $14.000 (mínimo facturable) · 10 stickers 3x3 → $4.000 (mínimo por trabajo) · 1 lona
    90x60 → $8.600 (redondeo). Recién después, Fase 4 con los 46.
 
@@ -248,6 +305,9 @@ Mismo patrón que el bot viejo (`build-flow.mjs` genera el JSON importable), per
 
 - **Mínimo por trabajo con varios productos**: ¿aplica por producto o por pedido
   completo? El plan asume POR PRODUCTO (cada producto = un trabajo). Confirmar con TG.
+  (Cómo se PRESENTA ya está resuelto: como cantidad, ver "Revisión acordada".)
+- **Tono/largo WhatsApp**: el borrador mantiene ~100/~200 chars del bot viejo. ¿Se
+  afloja para respuestas con desglose de precio?
 - **Contacto en v1** para "quiero hablar con una persona": sin tool de info, el prompt
   solo tiene el mail. ¿Alcanza para v1/test? (En Fase 5 vuelve `consultar_info_negocio`.)
 - **topK** del retrieval: con 7 chunks, arrancar con 3 y ver en Fase 4 si el material

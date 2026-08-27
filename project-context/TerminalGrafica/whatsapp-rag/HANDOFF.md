@@ -76,8 +76,12 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
    (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
    `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
-3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. El plan ya está escrito y
-   aprobar/ejecutar es la próxima sesión: **`plans/workflow-n8n-v1.md`**. Resumen:
+3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. El plan está escrito y
+   **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
+   sección "Revisión acordada" del plan): **`plans/workflow-n8n-v1.md`**. Decisiones
+   nuevas de la revisión: opción BASE por colección (columna nueva en el Excel + aviso
+   del visor al ingestar si falta), mínimo presentado como CANTIDAD, saludo combinable,
+   coherencia-con-historial diferida al Verificador v2. Resumen:
    - Flow mínimo (~10 nodos): Chat Trigger + Agente (OpenRouter flash-lite) + Simple
      Memory + tool PGVector sobre `bot.rag_catalog` + salida estructurada con DESGLOSE
      del cálculo + auditor determinista. Sin debounce, sin firewall, sin Chatwoot.
