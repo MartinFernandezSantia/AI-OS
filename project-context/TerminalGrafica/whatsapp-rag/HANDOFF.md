@@ -96,12 +96,26 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
       BOT_DB. **Ojo: son 2, no 3** — el chat quedó en Gemini nativo, no OpenRouter (ver
       el README; el bot lite ya había migrado después de escrito el plan).
    3. Smoke test de retrieval (¿el nodo PGVector lee `bot.rag_catalog` tal como la dejó
-      el visor?) y los 4 casos de humo.
+      el visor?) y los 4 casos de humo (abajo).
 
    Estado del build: **12 nodos**, prompt ~2.029 tokens, auditor verde contra **46/46
    casos del Excel** + 11 rindes históricos. `node n8n/build-flow.mjs` re-genera todo;
    `--test` corre solo los tests. `node n8n/test-auditor.mjs` prueba los nodos Code
    (13 escenarios de cableado) contra el JSON ya emitido.
+
+   **Los 4 casos de humo** (los 46 completos están en la hoja `Casos de prueba`):
+
+   | Escribir en el chat | Total | Qué ejercita | Si falla, mirar |
+   |---|---|---|---|
+   | `250 stickers 3x3` | $6.600 | camino pliego completo | $5.130 = buscó el tramo por PIEZAS (250 → 101+) en vez de por PLIEGOS (3 → tramo 2-10) |
+   | `100 stickers en vinilo UV 5x5` | $14.000 | m2 + mínimo facturable | 0,25 m2 < mínimo 0,5 → se cobran 0,5 × $28.000. Es el mínimo DEL MATERIAL, no el de trabajo |
+   | `10 stickers 3x3` | $4.000 | mínimo por trabajo | crudo da $2.500. Mirar también CÓMO lo presenta: como cantidad ("por ese precio te llevás hasta 104"), nunca "precio mínimo" ni "es chico" |
+   | `1 lona de 90x60` | $8.600 | redondeo | 0,54 m2 × $16.000 = $8.640 → múltiplo de $100 MÁS CERCANO. $8.700 = redondeó hacia arriba |
+
+   En los 4, además del número: que **no** aparezca `⚠ auditoría:` pegado al mensaje, que
+   `cotizaciones` NO venga vacío (un total en el texto sin desglose es un precio que llegó
+   al cliente sin poder auditarse — el auditor lo marca solo), y que el retrieval haya
+   traído el chunk del material correcto.
 
    El plan está escrito y
    **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
@@ -144,6 +158,25 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
 5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp.
+
+## El MCP de n8n — Claude YA VE las ejecuciones
+
+`https://n8n.terminalgrafica.cloud/mcp-server/http`, cableado en `.mcp.json` del repo.
+OAuth 2.1 con registro dinámico: **lo autentica Martín** desde `/mcp` (se abre el browser),
+Claude no puede hacerlo solo. Scopes que ofrece: `workflow:read/write/execute`,
+`execution:read`, `credential:read`, `dataTable:read/write`, `project:read`, `tag:read`.
+
+Esto **retira la restricción** que arrastraba el proyecto ("Claude no ve las ejecuciones,
+pedile el dato a Martín"): con `execution:read` se leen el retrieval, la salida estructurada
+y el veredicto del auditor directo de la ejecución. Donde más pesa es en la Fase 4 — 46 casos
+que si no habría que copiar a mano.
+
+La lección de fondo NO cambia: sin la ejecución a la vista, no afirmar qué pasó. En el bot
+viejo eso ya salió mal dos veces (Claude dedujo, el dato lo desmintió).
+
+Dos avisos: el dominio está tras el **geo-block solo-AR de Cloudflare** (desde fuera de AR
+da 403), y si al autorizar se pueden elegir scopes, con `workflow:read` + `execution:read`
+(+ `workflow:write` si se quiere importar sin UI) alcanza — no hace falta `credential:read`.
 
 ## Decisiones ya tomadas (no reabrir sin motivo)
 
