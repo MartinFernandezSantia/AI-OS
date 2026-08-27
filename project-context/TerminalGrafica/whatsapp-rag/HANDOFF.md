@@ -28,9 +28,12 @@ project-context/TerminalGrafica/whatsapp-rag/
   HANDOFF.md                 ← este archivo
   Catalogo-TG-v2.xlsx        ← LA FUENTE ÚNICA
   n8n/                       ← Fase 3: EMPEZAR ACÁ
-    README.md                            ← arranque del build (orden, flow, trampas)
+    README.md                            ← el flow, el auditor, las trampas, los casos de humo
+    build-flow.mjs                       ← EL BUILDER: Excel + prompt → flow JSON (con los tests)
+    test-auditor.mjs                     ← test de los nodos Code contra el JSON emitido
     armar-prompt.mjs                     ← plantilla + Excel → prompt (con gate de tokens)
     prompt-final.txt                     ← generado: el prompt que ve el modelo
+    flows/cotizador-v1.json              ← generado: lo que se importa en n8n
   plans/
     rediseno-excel-motor-cotizacion.md   ← el plan madre (por qué, decisiones, fases)
     workflow-n8n-v1.md                    ← el plan de la Fase 3 (trim, auditor, acuerdos)
@@ -82,11 +85,25 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
    (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
    `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
-3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. **Empezar por
-   [`n8n/README.md`](n8n/README.md)**: tiene el orden de trabajo, el flow a construir, el
-   contrato de la salida estructurada, los casos de humo y las trampas. El prompt ya está
-   armado y medido (`node n8n/armar-prompt.mjs` → ~2.029 tokens; la plantilla editable es
-   `plans/system-prompt-v1.md`). El plan está escrito y
+3. **Fase 3 — el workflow de n8n.** ← **EL FLOW YA ESTÁ CONSTRUIDO**; falta importarlo y
+   probarlo en vivo. **Empezar por [`n8n/README.md`](n8n/README.md)**: tiene el flow, el
+   contrato de la salida estructurada, el auditor, los casos de humo y las trampas.
+
+   Lo que queda, en orden:
+   1. **RE-INGESTAR desde el visor** (sigue pendiente, y todo lo demás depende de esto).
+   2. Importar `n8n/flows/cotizador-v1.json` y cablear 2 credenciales (el flow trae una
+      Nota con el detalle): Google Gemini(PaLM) API — la MISMA para chat y embeddings — y
+      BOT_DB. **Ojo: son 2, no 3** — el chat quedó en Gemini nativo, no OpenRouter (ver
+      el README; el bot lite ya había migrado después de escrito el plan).
+   3. Smoke test de retrieval (¿el nodo PGVector lee `bot.rag_catalog` tal como la dejó
+      el visor?) y los 4 casos de humo.
+
+   Estado del build: **12 nodos**, prompt ~2.029 tokens, auditor verde contra **46/46
+   casos del Excel** + 11 rindes históricos. `node n8n/build-flow.mjs` re-genera todo;
+   `--test` corre solo los tests. `node n8n/test-auditor.mjs` prueba los nodos Code
+   (13 escenarios de cableado) contra el JSON ya emitido.
+
+   El plan está escrito y
    **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
    sección "Revisión acordada" del plan): **`plans/workflow-n8n-v1.md`**. Decisiones
    nuevas de la revisión: opción BASE por colección (columna nueva en el Excel + aviso
@@ -185,6 +202,16 @@ rompen si se ignoran:
 **La fórmula de encaje está DUPLICADA a propósito** en `visor/lib/geometria.ts` (la usa el
 visor) y `visor/scripts/lib-xlsx.mjs` (la usan los scripts, que no importan TS). Si cambia
 una, cambiar la otra — los tests del visor fijan los 7 rindes históricos.
+La TERCERA (el nodo Code del bot) **no** es una copia a mano: `n8n/build-flow.mjs` la tiene
+como un único string que evalúa para testear y emite dentro del nodo. Si cambia la fórmula,
+son dos lugares a tocar, no tres — y los 46 casos del Excel avisan si se desalinean.
+
+**El auditor tiene que reproducir la planilla, y el build lo verifica.** `build-flow.mjs`
+corre los 11 rindes + los 46 casos de la hoja `Casos de prueba` antes de escribir el JSON;
+si falla uno, no emite nada. Ese gate ya pagó: agarró que los materiales m2 (un solo tramo
+`Desde 1`) dejaban afuera cualquier medida menor a 1 m2 — media lona no matcheaba ningún
+tramo. Los tests se verificaron en rojo a propósito (rompiendo el redondeo y el encaje)
+antes de darlos por buenos.
 
 **Si el .xlsx está abierto en LibreOffice, no escribirlo.** Existe `.~lock.<archivo>#`
 mientras está abierto; chequearlo antes de aplicar cualquier script, o el próximo guardado del
@@ -198,12 +225,11 @@ si no están, se rehacen rápido leyendo el .xlsx con Node.
 
 ## Preguntas abiertas
 
-**El guardarraíl de precios: propuesta en el plan, falta el OK de Martín.** Reemplazo del
-`{P1}`: el agente emite un DESGLOSE estructurado (material, modo, medida, rinde, tramo,
-total) y un nodo Code lo re-calcula determinísticamente contra la metadata del chunk
-(escala + geometría) + sanity floor (negativo, mínimo, redondeo, orden de magnitud). En v1
-el fallo se MUESTRA en el chat de prueba, no se corrige en silencio. Detalle y opciones
-descartadas en `plans/workflow-n8n-v1.md`.
+**El guardarraíl de precios: CONSTRUIDO** (opción B del plan, la recomendada). El agente
+emite un DESGLOSE estructurado y el nodo Code lo re-calcula contra la metadata del chunk
+(escala + geometría) + sanity floor. En v1 el fallo se MUESTRA en el chat de prueba, no se
+corrige en silencio. Falta el visto bueno de Martín **viéndolo andar**, no en el papel.
+Detalle y opciones descartadas en `plans/workflow-n8n-v1.md`.
 
 **Los parámetros ya tienen casos** (10 stickers 3x3 → $4.000 por mínimo; 1 lona 90x60 →
 $8.600 por redondeo). Ejecución definida en `plans/workflow-n8n-v1.md`: el builder los lee
@@ -223,9 +249,15 @@ Productos sigan funcionando.
 ## Comandos
 
 ```bash
+# el flow de n8n (desde project-context/TerminalGrafica/whatsapp-rag/)
+node n8n/build-flow.mjs           # tests + emite flows/cotizador-v1.json
+node n8n/build-flow.mjs --test    # solo los 46 casos + rindes, no escribe
+node n8n/test-auditor.mjs         # los nodos Code contra el JSON emitido
+node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y mide
+
 cd project-context/TerminalGrafica/whatsapp-rag/visor
 pnpm install
-pnpm test        # 96 tests (incluye e2e-tmp.test.ts contra el .xlsx real, no commiteado)
+pnpm test        # 110 tests (incluye e2e-tmp.test.ts contra el .xlsx real, no commiteado)
 pnpm dev         # http://localhost:3000
 pnpm build
 
