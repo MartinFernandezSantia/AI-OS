@@ -68,7 +68,12 @@ acordada"). El Verificador y el Corrector aportan **0** en v1 (se retiran, ver a
 builder **falla el build si el prompt supera 3k tokens** y avisa si pasa de 2k (estimador
 de `visor/lib/tokens.ts`).
 
-### Estructura del prompt nuevo (borrador para el build)
+### Estructura del prompt nuevo
+
+> **Ya no es borrador**: vive en [`system-prompt-v1.md`](system-prompt-v1.md) y se arma
+> con `node n8n/armar-prompt.mjs` (→ `n8n/prompt-final.txt`, **~2.029 tokens** medidos
+> con las inyecciones reales). Lo de abajo queda como referencia de la discusión; la
+> fuente de verdad es el archivo.
 
 Plantilla estática + 3 inyecciones desde el Excel (`{{...}}`):
 
@@ -159,7 +164,7 @@ Las inyecciones, todas leídas del `.xlsx` al construir (fuente única intacta):
 
 | Placeholder | Fuente | Cómo |
 |---|---|---|
-| `{{INSTRUCCIONES_PARTE_1}}` | Hoja Instrucciones | Filas entre `═══ PARTE 1` y `═══ PARTE 2`, literales (incluye los 2 ejemplos trabajados y la regla rinde-0). La PARTE 2 (cómo cargar) NO va al bot. |
+| `{{INSTRUCCIONES_PARTE_1}}` | Hoja Instrucciones | Filas entre `═══ PARTE 1` y `═══ PARTE 2` (incluye los 2 ejemplos trabajados y la regla rinde-0). La PARTE 2 (cómo cargar) NO va al bot. **No del todo literal**: esas filas le hablan a quien EDITA la planilla ("hoja Materiales", "buscar en Materiales el tramo") y el bot no ve hojas — el armador re-apunta esas referencias al catálogo, y **falla el build** si el cliente reescribe esas líneas. |
 | `{{PARAMETROS}}` | Hoja Parámetros | Las 3 filas como líneas ("Mínimo por trabajo: $4.000 — ningún trabajo se cobra menos…"). |
 | `{{CASOS_PARAMETROS}}` | Hoja Casos de prueba | Las filas cuyo Pedido contiene `(activa el` (hoy: mínimo y redondeo), formateadas como ejemplo entrada→total. Convención a documentar en la PARTE 2 del Excel más adelante. |
 
@@ -302,7 +307,9 @@ Mismo patrón que el bot viejo (`build-flow.mjs` genera el JSON importable), per
    2 avisos nuevos; 110 tests, cada uno verificado en rojo antes del fix). **Falta
    re-ingestar** — el chunk cambió (7.986 chars vs 7.822), así que la tabla
    `bot.rag_catalog` está desactualizada hasta que se corra la ingesta desde el visor.
-3. `n8n/build-flow.mjs`: prompt + flow + auditor + gate de tokens.
+3. ~~El system prompt + su gate de tokens~~ **HECHO**: `n8n/armar-prompt.mjs` +
+   `plans/system-prompt-v1.md`, ~2.029 tokens. Falta `n8n/build-flow.mjs`, que lo importa
+   y emite el flow JSON con el auditor.
 4. Importar en n8n, cablear credenciales, smoke test de retrieval (¿el nodo PGVector
    lee `bot.rag_catalog` tal como la creó el visor?).
 5. Humo con 4 casos a mano por el Chat: 250 stickers 3x3 → $6.600 · 100 vinilo UV 5x5 →

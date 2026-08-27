@@ -27,8 +27,14 @@ Se salva RAG + firewall. Todo lo demás estaba en discusión.
 project-context/TerminalGrafica/whatsapp-rag/
   HANDOFF.md                 ← este archivo
   Catalogo-TG-v2.xlsx        ← LA FUENTE ÚNICA
+  n8n/                       ← Fase 3: EMPEZAR ACÁ
+    README.md                            ← arranque del build (orden, flow, trampas)
+    armar-prompt.mjs                     ← plantilla + Excel → prompt (con gate de tokens)
+    prompt-final.txt                     ← generado: el prompt que ve el modelo
   plans/
     rediseno-excel-motor-cotizacion.md   ← el plan madre (por qué, decisiones, fases)
+    workflow-n8n-v1.md                    ← el plan de la Fase 3 (trim, auditor, acuerdos)
+    system-prompt-v1.md                   ← LA PLANTILLA del prompt (esto se edita)
     visor-chunks.md                       ← el plan del visor + la ampliación de ingesta
   visor/                     ← app Next 16, la herramienta de trabajo
     lib/{xlsx,parse,chunk,tokens}.ts      ← lógica pura (la reusa la ingesta)
@@ -76,7 +82,11 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
    (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
    `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
-3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. El plan está escrito y
+3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. **Empezar por
+   [`n8n/README.md`](n8n/README.md)**: tiene el orden de trabajo, el flow a construir, el
+   contrato de la salida estructurada, los casos de humo y las trampas. El prompt ya está
+   armado y medido (`node n8n/armar-prompt.mjs` → ~2.029 tokens; la plantilla editable es
+   `plans/system-prompt-v1.md`). El plan está escrito y
    **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
    sección "Revisión acordada" del plan): **`plans/workflow-n8n-v1.md`**. Decisiones
    nuevas de la revisión: opción BASE por colección (columna nueva en el Excel + aviso
