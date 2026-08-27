@@ -41,27 +41,46 @@ Referencia (NO tocar, es el bot anterior): `../whatsapp-rag-lite/`.
 ## Estado: qué está hecho
 
 **El Excel** (`Catalogo-TG-v2.xlsx`) — 6 hojas visibles + `_listas` oculta.
-31 productos, 11 materiales (24 tramos), 4 colecciones, 39 casos de prueba.
-Las reglas de la hoja Instrucciones reproducen **39/39** de los precios que calculó el cliente.
+31 productos, 11 materiales (24 tramos), 4 colecciones, 46 casos de prueba.
+Las reglas de la hoja Instrucciones reproducen **39/39** de los precios que calculó el cliente,
+más 7 casos nuevos del motor (verificados a mano contra la fórmula y las escalas).
+
+**MOTOR DE MEDIDA LIBRE** (pedido del cliente, revierte con motivo el "el bot no calcula
+geometría" del plan madre): el bot cotiza CUALQUIER medida, no solo las del catálogo.
+- La geometría es DATO en Materiales (3 columnas nuevas: `Área útil ancho/alto (cm)`,
+  `Separación (cm)`): troquelado/medio corte 28x44 sep 0,3 · solo impresión 31x46 sep 0.
+  Se carga UNA vez por material, en su primera fila. Los m2 las dejan vacías.
+- `Piezas por unidad de cobro` se VACIÓ en los 14 productos pliego: el rinde se CALCULA
+  (visor para las referencias, bot para medidas libres). La columna queda solo para
+  unidades no geométricas (bobina, plancha); si se carga, gana sobre el cálculo.
+- La fórmula de encaje vive en Instrucciones PARTE 1 (base del system prompt): dos
+  orientaciones, floor((útil+sep)÷(pieza+sep)) por eje, la mejor. Rinde 0 → consulta.
+- Los 31 productos quedan como "Medidas de referencia" (anclas RAG + sugerencias).
 
 **El visor** (`visor/`) — corre con `pnpm dev` en `visor/`. Sube el .xlsx, lo parsea en el
 browser y muestra los bloques de texto que va a leer el bot. Tres estrategias comparables por
 tab. Con `.env.local` configurado, **también ingesta** a `bot.rag_catalog`.
+- `lib/geometria.ts`: la función pura de encaje (misma fórmula, testeada contra los 7
+  rindes históricos). `rindeEfectivo`: columna cargada > calculado > null.
+- Los chunks pliego publican área útil + separación + "Se cotiza CUALQUIER medida"; los m2,
+  la conversión. Encabezado: "Medidas de referencia:". `meta.geometria` en los pliego.
+- **Avisos** en la UI (caja ámbar): material pliego sin geometría ni rinde, drift
+  columna-vs-cálculo, pieza que no entra (rinde 0).
 
-Salida actual: **7 chunks · 7.087 chars · ~1.772 tokens**, uno por colección+material.
+Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+material.
 
 ## Estado: qué falta
 
-1. **Configurar `.env.local`** (copiar de `visor/env.example.txt`): `BOT_DB` y `GEMINI_API_KEY`.
-   Sin eso el visor sirve para mirar pero el botón de ingesta no funciona.
-   → **Claude no puede crear ni leer archivos `.env*`** (deny rule). Lo hace Martín.
+1. ~~Configurar `.env.local`~~ — **hecho**, Martín ya lo cargó (`BOT_DB` + `GEMINI_API_KEY`).
+   Recordar: **Claude no puede crear ni leer archivos `.env*`** (deny rule).
 2. **Probar la ingesta contra la base real.** Nunca se ejercitó el camino completo
-   (preview → embeddings → escritura). Es lo primero a verificar.
-3. **Fase 3 — el workflow de n8n.** Chat Trigger + memoria + tool RAG, sin Chatwoot ni
+   (preview → embeddings → escritura). Pendiente, pero **no bloquea la Fase 3**.
+3. **Fase 3 — el workflow de n8n.** ← siguiente Chat Trigger + memoria + tool RAG, sin Chatwoot ni
    firewall. Acá va el **system prompt nuevo**: objetivo 2k tokens, techo 3k, partiendo de la
    hoja Instrucciones. Hoy el prompt del bot viejo son ~6k, más prompt que datos.
-4. **Fase 4 — medir.** Correr los 39 casos contra el bot y ver el % de aciertos. Si Flash Lite
-   no llega, subir de tier es decisión de datos.
+4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
+   no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
+   el LLM tiene que hacer floor + dos orientaciones él solo.
 5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp.
 
 ## Decisiones ya tomadas (no reabrir sin motivo)
@@ -77,6 +96,9 @@ Salida actual: **7 chunks · 7.087 chars · ~1.772 tokens**, uno por colección+
 | Canal v1 | Chat Trigger de n8n. Sin Chatwoot ni WhatsApp hasta la Fase 5. |
 | Alcance del catálogo | Solo las 39 filas de Lista de precios. Papelería NO entra. |
 | Sinónimos | No se agregan todavía. Probar con nombre + descripción. |
+| Medidas libres | **El bot SÍ calcula geometría** (pedido del cliente; revierte el plan madre). Las medidas del catálogo son referencias, no un menú. |
+| El rinde | Se CALCULA desde la geometría del material. La columna solo para unidades no geométricas; cargada gana sobre el cálculo (con aviso de drift). |
+| La fórmula de encaje | Vive en Instrucciones (→ system prompt), NO repetida por chunk. El chunk lleva los datos: área útil, separación, unidad, escala. |
 
 ## Cosas que cuestan sangre si no se saben
 
@@ -98,12 +120,21 @@ tabla, y TRUNCATE en Postgres exige propiedad — no se puede otorgar por grant.
 `delete` dentro de la transacción; mismo efecto.
 
 **El .xlsx se edita con scripts, no a mano.** `visor/scripts/*.mjs` hacen sustitución
-quirúrgica sobre el ZIP (todos con dry run por defecto y `--apply` para escribir). Verificado
-que dejan las demás hojas byte-idénticas. Detalles que rompen si se ignoran:
+quirúrgica sobre el ZIP (todos con dry run por defecto y `--apply` para escribir; el manejo
+del ZIP y sharedStrings está compartido en `scripts/lib-xlsx.mjs`, que también chequea el
+lock de LibreOffice). Verificado que dejan las demás hojas byte-idénticas. Detalles que
+rompen si se ignoran:
 - Las **filas vacías no existen** como `<row>`: el XML salta de `r="1"` a `r="3"`. Reindexar
   sin reconstruir los huecos aplasta todas las separaciones.
 - Los offsets `nameLen`/`extraLen` del **local header difieren** de los del directorio central.
 - Reusar los estilos que ya están en el archivo, no inventar nuevos.
+- Los **tags self-closing** (`<c r="G2" s="11"/>`, `<row r="5"/>`) desalinean todo si un regex
+  con `[\s\S]*?` no los contempla: se tragan el contenido hasta el próximo cierre. Ya mordió
+  una vez (celda vacía intermedia en Materiales); `lib/xlsx.ts` quedó arreglado.
+
+**La fórmula de encaje está DUPLICADA a propósito** en `visor/lib/geometria.ts` (la usa el
+visor) y `visor/scripts/lib-xlsx.mjs` (la usan los scripts, que no importan TS). Si cambia
+una, cambiar la otra — los tests del visor fijan los 7 rindes históricos.
 
 **Si el .xlsx está abierto en LibreOffice, no escribirlo.** Existe `.~lock.<archivo>#`
 mientras está abierto; chequearlo antes de aplicar cualquier script, o el próximo guardado del
@@ -122,26 +153,23 @@ escribía `{P1}` y un nodo determinista lo reemplazaba validando contra catálog
 calcula, esa red no existe. Falta decidir qué la reemplaza — al menos un chequeo de sanidad
 (negativo, orden de magnitud absurdo) antes de enviar.
 
-**Los parámetros no muerden.** `Mínimo por trabajo $4.000` y `Redondeo $100` están definidos
-pero no afectan a ninguno de los 39 casos (el más barato da $6.600). Van a empezar a importar
-cuando el bot cotice cantidades chicas. Conviene sumar 2-3 casos de prueba de cantidad chica.
-Decisión pendiente: dónde viven al ingestar — se acordó **inyectarlos en el system prompt al
-construirlo**, leyéndolos del Excel, para no romper la fuente única.
-
-**El alias del nombre viejo de la columna.** `chunk.ts` acepta `Piezas por pliego` y
-`Piezas por unidad de cobro`. Es deuda: dos nombres para lo mismo. Sacar el viejo cuando esté
-confirmado que el Excel migrado anda bien.
+**Los parámetros ya tienen casos** (10 stickers 3x3 → $4.000 por mínimo; 1 lona 90x60 →
+$8.600 por redondeo). Sigue pendiente la decisión de ejecución: al ingestar NO van al chunk —
+se acordó **inyectarlos en el system prompt al construirlo** (Fase 3), leyéndolos del Excel,
+para no romper la fuente única.
 
 **Nadie abrió el .xlsx para ver cómo quedó visualmente.** No hay LibreOffice en la máquina de
-Claude; toda la validación fue estructural (ZIP íntegro, XML bien formado, contenido correcto).
-El aspecto — anchos de columna con los textos largos de Instrucciones — está sin revisar.
+Claude; toda la validación fue estructural (ZIP íntegro, XML bien formado, contenido correcto,
+e2e del visor). El aspecto — anchos de columna, las 3 columnas nuevas de Materiales, los 7
+casos nuevos — está sin revisar. Al abrirlo, chequear también que los desplegables de
+Productos sigan funcionando.
 
 ## Comandos
 
 ```bash
 cd project-context/TerminalGrafica/whatsapp-rag/visor
 pnpm install
-pnpm test        # 67 tests
+pnpm test        # 96 tests (incluye e2e-tmp.test.ts contra el .xlsx real, no commiteado)
 pnpm dev         # http://localhost:3000
 pnpm build
 
