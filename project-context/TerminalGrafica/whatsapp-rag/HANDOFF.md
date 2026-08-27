@@ -76,18 +76,19 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
    (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
    `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
-3. **Fase 3 — el workflow de n8n.** ← siguiente. La próxima sesión es de PLANIFICACIÓN
-   (plan primero, build después). Alcance acordado:
-   - Se basa en el workflow viejo (`whatsapp-rag-lite`) como referencia, pero la v1 arranca
-     **sin debounce y sin firewall**.
-   - **Memoria interna de n8n** (no Postgres) para poder ejecutar e interactuar con el bot
-     por el **nodo de Chat** de n8n directamente.
-   - **Revisión a fondo de los system prompts**: el del agente y el del Verificador. Decidir
-     con qué nos quedamos, qué se va, y cuánto se puede reducir (trim). Objetivo 2k tokens,
-     techo 3k, partiendo de la hoja Instrucciones del Excel. Hoy el prompt del bot viejo son
-     ~6k, más prompt que datos.
-   - Recordar: los casos de parámetros (mínimo, redondeo) se **inyectan al system prompt al
-     construirlo**, leyéndolos del Excel (ver "Preguntas abiertas").
+3. **Fase 3 — el workflow de n8n.** ← siguiente: el BUILD. El plan ya está escrito y
+   aprobar/ejecutar es la próxima sesión: **`plans/workflow-n8n-v1.md`**. Resumen:
+   - Flow mínimo (~10 nodos): Chat Trigger + Agente (OpenRouter flash-lite) + Simple
+     Memory + tool PGVector sobre `bot.rag_catalog` + salida estructurada con DESGLOSE
+     del cálculo + auditor determinista. Sin debounce, sin firewall, sin Chatwoot.
+   - **Trim resuelto en el plan**: prompt nuevo ≈ 1,9–2,1k tokens (borrador completo en el
+     plan, sección por sección qué se va del viejo de ~5,2k). Verificador y Corrector SE
+     RETIRAN en v1 (eran guardrail de política de canal; re-evaluar en Fase 5).
+   - Los parámetros (mínimo, redondeo) y la PARTE 1 de Instrucciones se **inyectan al
+     system prompt al construirlo** con un builder nuevo (`n8n/build-flow.mjs`) que lee el
+     Excel y tiene gate de tokens (>3k falla).
+   - Prerequisito del build: agregar la ESCALA del material a `meta` del chunk
+     (`chunk.ts`) y re-ingestar — el auditor la necesita.
 4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
@@ -163,15 +164,21 @@ si no están, se rehacen rápido leyendo el .xlsx con Node.
 
 ## Preguntas abiertas
 
-**El guardarraíl de precios que se perdió.** En el bot viejo el LLM nunca tipeaba un número:
-escribía `{P1}` y un nodo determinista lo reemplazaba validando contra catálogo. Ahora que
-calcula, esa red no existe. Falta decidir qué la reemplaza — al menos un chequeo de sanidad
-(negativo, orden de magnitud absurdo) antes de enviar.
+**El guardarraíl de precios: propuesta en el plan, falta el OK de Martín.** Reemplazo del
+`{P1}`: el agente emite un DESGLOSE estructurado (material, modo, medida, rinde, tramo,
+total) y un nodo Code lo re-calcula determinísticamente contra la metadata del chunk
+(escala + geometría) + sanity floor (negativo, mínimo, redondeo, orden de magnitud). En v1
+el fallo se MUESTRA en el chat de prueba, no se corrige en silencio. Detalle y opciones
+descartadas en `plans/workflow-n8n-v1.md`.
 
 **Los parámetros ya tienen casos** (10 stickers 3x3 → $4.000 por mínimo; 1 lona 90x60 →
-$8.600 por redondeo). Sigue pendiente la decisión de ejecución: al ingestar NO van al chunk —
-se acordó **inyectarlos en el system prompt al construirlo** (Fase 3), leyéndolos del Excel,
-para no romper la fuente única.
+$8.600 por redondeo). Ejecución definida en `plans/workflow-n8n-v1.md`: el builder los lee
+del Excel (filas de Casos de prueba cuyo Pedido contiene `(activa el`) y los inyecta al
+system prompt como ejemplos. NO van al chunk; la fuente única queda intacta.
+
+**Preguntas nuevas del plan de Fase 3** (ver su última sección): ¿el mínimo por trabajo
+aplica por producto o por pedido completo? (el plan asume por producto — confirmar con TG);
+¿alcanza solo el mail como contacto en v1?; topK inicial 3.
 
 **Nadie abrió el .xlsx para ver cómo quedó visualmente.** No hay LibreOffice en la máquina de
 Claude; toda la validación fue estructural (ZIP íntegro, XML bien formado, contenido correcto,
