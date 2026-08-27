@@ -7,15 +7,22 @@ Punto de arranque de la sesión de BUILD. El plan está en
 
 | Archivo | Qué es |
 |---|---|
-| `armar-prompt.mjs` | Arma el system prompt: plantilla + 3 inyecciones del Excel. Con gate de tokens. **Ya anda.** |
-| `prompt-final.txt` | La salida del anterior: el prompt tal cual lo va a ver el modelo. Generado, no editar. |
+| `build-flow.mjs` | **El builder.** Emite `flows/cotizador-v1.json` con el prompt, el schema de salida y el auditor (parámetros del Excel horneados). Aborta si el auditor no reproduce el Excel. |
+| `test-auditor.mjs` | Test de los nodos Code contra el JSON emitido: formas de dato raras, turnos sin cotizaciones, material inventado, veredicto en el mensaje. |
+| `armar-prompt.mjs` | Arma el system prompt: plantilla + 3 inyecciones del Excel. Con gate de tokens. Lo importa el builder. |
+| `prompt-final.txt` | La salida del anterior: el prompt tal cual lo ve el modelo. Generado, no editar. |
+| `flows/cotizador-v1.json` | **Generado.** Lo que se importa en n8n. No editar a mano: se pisa en la próxima generación. |
 | `../plans/system-prompt-v1.md` | **La plantilla** — esto SÍ se edita cuando se quiere cambiar el prompt. |
 
 ```bash
-node n8n/armar-prompt.mjs     # regenera prompt-final.txt y mide
+node n8n/build-flow.mjs           # tests + emite flows/cotizador-v1.json
+node n8n/build-flow.mjs --test    # solo los tests (46 casos del Excel), no escribe
+node n8n/test-auditor.mjs         # test de los nodos Code, contra el JSON ya emitido
+node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y mide
 ```
 
-Estado: **~2.029 tokens** (objetivo 2.000, techo duro 3.000 — el script aborta si se pasa).
+Estado: prompt **~2.029 tokens** (objetivo 2.000, techo duro 3.000 — aborta si se pasa).
+Flow: **12 nodos**. Auditor: **46/46 casos del Excel** + los 11 rindes históricos.
 
 ## Lo primero de la próxima sesión
 
@@ -23,28 +30,42 @@ Estado: **~2.029 tokens** (objetivo 2.000, techo duro 3.000 — el script aborta
    `bot.rag_catalog` todavía tiene los chunks viejos: sin `escala` ni `es_base` en la
    metadata, y sin las líneas de colección/material/hermanos. **El auditor y la etapa
    COTIZAR del prompt dependen de esto.**
-2. **`build-flow.mjs`** — importa `armarPrompt` de acá y emite `flows/cotizador-v1.json`.
-3. Importar en n8n, cablear credenciales, smoke test de retrieval.
-4. Los 4 casos de humo (abajo).
+2. Importar `flows/cotizador-v1.json` en n8n, cablear credenciales (ver la Nota del propio
+   flow), smoke test de retrieval.
+3. Los 4 casos de humo (abajo).
 
-## El flow a construir (~10 nodos)
+## El flow construido (12 nodos)
 
 ```
 Chat Trigger
    └─ Agente (AI Agent, systemMessage = prompt-final.txt)
-        ├─ Modelo: OpenRouter → gemini-3.1-flash-lite
-        ├─ Memoria: Simple Memory (window ~10, sessionId del Chat Trigger)
+        ├─ Modelo: Google Gemini nativo → models/gemini-3.1-flash-lite
+        ├─ Memoria: Simple Memory (window 10, sessionId del Chat Trigger)
         ├─ Tool buscar_catalogo: PGVector → bot.rag_catalog (topK 3)
         │    └─ Embeddings Google Gemini: models/gemini-embedding-001
-        └─ Salida estructurada (desglose de cotización)
+        └─ Salida · Agente (schema del desglose de cotización)
+   └─ Materiales Declarados (Code: abre las cotizaciones en 1 item por material)
    └─ Traer Escalas (Postgres: metadata del material declarado)
    └─ Auditar Cotización (Code: re-cálculo determinista + sanity)
    └─ Responder (mensaje + veredicto visible en el chat de prueba)
 ```
 
-Credenciales que pide al importar: **OpenRouter** (chat), **Google AI Studio**
-(embeddings — el MISMO modelo que la ingesta o los vectores no comparan), **BOT_DB**
-(PGVector + Traer Escalas; pooler 5432, user `bot_runtime.<ref>`, SSL Ignore).
+Credenciales que pide al importar (2, no 3): **Google Gemini(PaLM) API** — la MISMA para
+el chat y los embeddings — y **BOT_DB** (PGVector + Traer Escalas; pooler 5432, user
+`bot_runtime.<ref>`, SSL Ignore). El propio flow lleva una Nota con esto.
+
+**Cambio contra el plan**: el chat va por **Gemini nativo**, no OpenRouter. El bot lite ya
+había migrado (`lmChatGoogleGemini`) después de escrito el plan; nativo comparte credencial
+con los embeddings — una menos que cablear, y es el camino ya probado en este n8n. Volver a
+OpenRouter es cambiar `GEMINI_MODEL` y el `type` del nodo Modelo en el builder.
+
+**Dos nodos Code que no estaban en el plan**, ambos por el mismo footgun de n8n (un nodo que
+emite 0 items no ejecuta a los que siguen, y el turno muere sin respuesta):
+- **Materiales Declarados**: el Agente emite 1 item con N cotizaciones, pero Traer Escalas
+  necesita una query por material. Deduplica, y ante un turno sin cotizaciones emite igual
+  un item marcado para que la rama no se corte.
+- **Traer Escalas** lleva `alwaysOutputData` por lo mismo: sin filas (material inventado)
+  el auditor tiene que ejecutar igual — justamente para reportar que no está en el catálogo.
 
 ## Salida estructurada del agente (contrato con el auditor)
 
@@ -63,20 +84,40 @@ aplico_redondeo     bool
 total                number   el número que le dijo al cliente
 ```
 
-## El auditor (nodo Code)
+## El auditor (nodo Code) — construido
 
-Re-calcula con la metadata del chunk (`escala`, `geometria`, `unidad`) y compara contra
-lo declarado. **En v1 NO corrige: muestra** (`⚠ auditoría: rinde declarado 40, calculado 24`).
-Estamos midiendo, queremos ver los fallos.
+Re-calcula con la metadata del chunk (`escala`, `geometria`, `modo`) y compara contra lo
+declarado. **En v1 NO corrige: muestra** — el veredicto va pegado al mensaje del chat
+(`⚠ auditoría: rinde declarado 40, calculado 104`). Estamos midiendo, queremos ver los fallos.
 
-Sanity floor, aunque el desglose venga vacío o roto: total > 0 · total ≥ mínimo por
-trabajo · múltiplo del redondeo · tope de magnitud (el caso más caro del catálogo hoy es
-$64.000; usar algo como $500.000).
+Qué chequea, en orden: material que existe en el catálogo · modo (lo manda el catálogo, no
+el modelo) · rinde · unidades cobradas · precio del tramo · total. Cada uno reporta por
+separado a propósito: en Fase 4, *qué* falló (rinde ≠ tramo ≠ aritmética) es lo que decide
+si se sube de tier de modelo o se ajusta el chunk.
 
-**Ojo — cuarta copia de la fórmula de encaje.** Ya vive en `visor/lib/geometria.ts` y
-`visor/scripts/lib-xlsx.mjs`. El nodo Code va a ser la tercera implementación (cuarta
-copia). Emitirla desde el builder a partir de un único string, y fijar los 7 rindes
-históricos como test.
+Sanity floor, corre SIEMPRE aunque el desglose venga vacío o roto: total > 0 · total ≥
+mínimo por trabajo · múltiplo del redondeo · tope de magnitud ($600.000, derivado del caso
+más caro del catálogo ×8, así no envejece a mano). Más un chequeo suelto: **precio en el
+texto sin desglose estructurado** — el caso que más queremos ver, porque es un número que
+llegó al cliente sin poder auditarse.
+
+**La cuarta copia de la fórmula de encaje, resuelta.** El builder la tiene como un ÚNICO
+string (`FUENTE_RINDE`): lo evalúa para correr los tests y lo emite tal cual dentro del nodo
+Code. No hay dos textos que sincronizar. Igual con el re-cálculo completo (`FUENTE_COTIZAR`).
+
+**El gate del build**: antes de emitir nada, el builder corre los 11 rindes históricos y los
+**46 casos de la hoja `Casos de prueba`** contra ese mismo código. Si el auditor no reproduce
+la planilla del cliente, **el build falla y no escribe el JSON**. Donde el Excel declara el
+rinde esperado, también se verifica: un total correcto con el rinde equivocado sería una
+coincidencia que enmascara un bug.
+
+### Un bug que encontró ese gate
+
+El primer auditor buscaba el tramo con `n >= desde`, y los materiales m2 tienen un solo
+tramo `Desde 1` (tarifa plana). Media lona = 0,54 m2 → no matcheaba ningún tramo → "no
+cotizable". 9 de los 46 casos en rojo. Fix fiel al Excel: el **primer** tramo cubre todo lo
+que quede por debajo de su `desde` (no existe un tramo más barato que el primero, y las
+escalas por volumen solo viven en modo pliego, donde las unidades son enteras).
 
 ## Casos de humo (antes de la Fase 4 con los 46)
 

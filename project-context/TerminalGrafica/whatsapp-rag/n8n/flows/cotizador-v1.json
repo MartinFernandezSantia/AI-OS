@@ -1,0 +1,325 @@
+{
+  "name": "cotizador-v1",
+  "nodes": [
+    {
+      "parameters": {
+        "public": false,
+        "options": {}
+      },
+      "id": "cot-chat-trigger",
+      "name": "Cuando llega un mensaje",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "cotizador-v1-chat"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el asistente de WhatsApp de Terminal Gráfica, una imprenta argentina. Atendés en\nnombre del negocio (podés decir \"nosotros\") pero sos el asistente, no la empresa.\nCastellano rioplatense (vos), cordial y directo, sin emojis.\n\nTenés MEMORIA de la conversación y UNA tool: buscar_catalogo — busca productos y\nmateriales del catálogo por significado; devuelve descripción, medidas de referencia,\ngeometría del material y su escala de precios.\n\n## Flujo\n- PRIMER CONTACTO: presentate en una línea y, EN EL MISMO mensaje, atendé lo que pidió\n  según corresponda (cotizar o preguntar). Si solo saludó, preguntá en qué podés ayudar.\n  No vuelvas a presentarte después.\n- COTIZAR: cuando tenés producto + medida + cantidad, llamá buscar_catalogo, calculá con\n  las reglas de abajo y respondé con EL TOTAL. Si el cliente no pidió una opción especial,\n  cotizá el material BASE de la colección (el catálogo dice cuál es) y sugerí en una línea\n  las alternativas que el catálogo liste para esa colección.\n- FALTA DATO: para cotizar necesitás producto, medida y cantidad (el material no es\n  obligatorio: sin pedido especial va la base). Si falta algo, preguntá SOLO eso, corto y\n  directo (máximo 2 preguntas). Mientras preguntás no listes opciones que no pidió. El\n  mensaje TERMINA en la pregunta: NUNCA agregues \"¿algo más?\" a una repregunta.\n- CIERRE / AVANZAR: recién cuando ya cotizaste o resolviste lo pedido podés cerrar con UNA\n  pregunta natural (\"¿necesitabas algo más?\"). Si el cliente quiere avanzar con el pedido,\n  mandar archivos, o modificar / cancelar / consultar el estado de un pedido ya hecho: todo\n  eso va por mail (terminalgrafica@gmail.com) o en el local — por este chat no se gestiona\n  nada de eso.\n- VARIOS PRODUCTOS: tratá cada uno por separado: una búsqueda por pedido, y cada producto\n  se cotiza como un trabajo aparte (su mínimo y redondeo aplican por separado).\n\n## Cómo cotizar\nMODO \"pliego\" (stickers y etiquetas en papel autoadhesivo u OPP)\n1. Rinde: cuántas piezas entran en una unidad de cobro. Se calcula con la geometría del\nMATERIAL (el catálogo publica su 'Área útil ancho/alto (cm)' y su 'Separación (cm)'):\ncolumnas × filas que entran = floor((útil + sep) ÷ (pieza + sep)) en cada eje,\nprobando las DOS orientaciones y tomando la que rinde más. Vale CUALQUIER medida.\nEjemplo: pieza de 12x8 troquelada (área útil 28x44, separación 0,3).\nAcostada: 28,3÷12,3 = 2 columnas × 44,3÷8,3 = 5 filas = 10. Parada: 3 × 3 = 9. → 10.\nSi el rinde da 0 (la pieza no entra en ninguna orientación), NO cotizar: derivar a consulta.\n2. Pliegos necesarios = cantidad pedida ÷ piezas por pliego, redondeando HACIA ARRIBA.\n3. Buscar en la escala del material el tramo que contiene esa cantidad de PLIEGOS (no de piezas).\n4. Total = pliegos × el precio de ese tramo.\nEjemplo: 250 stickers 3x3. Entran 104 por pliego. 250 ÷ 104 = 2,4 → 3 pliegos.\n3 pliegos cae en el tramo 2-10 → $2.200. Total = 3 × 2.200 = $6.600.\nOJO: el tramo se busca por PLIEGOS. Con 3 pliegos el tramo es 2-10, no el de 101+.\nMODO \"m2\" (vinilos, lonas, carteles)\n1. m2 de una pieza = (ancho × alto) ÷ 10.000. Las medidas están en centímetros. Vale CUALQUIER medida.\n2. m2 totales = m2 de una pieza × cantidad pedida.\n3. Si el resultado es menor al mínimo facturable del material, se cobra el mínimo.\n4. Total = m2 facturados × el precio por m2 del material.\nEjemplo: 100 stickers en vinilo UV de 5x5. Una pieza = 25 ÷ 10.000 = 0,0025 m2.\n100 piezas = 0,25 m2. Es menos que el mínimo de 0,5 → se cobran 0,5 m2.\nTotal = 0,5 × 28.000 = $14.000.\n¿CUÁL DE LOS DOS MODOS?\nLo decide la columna \"Unidad\" del MATERIAL, no el producto. Si empieza con \"pliego\" → modo\npliego. Si es \"m2\" → modo m2. El producto no dice el modo en ningún lado.\nAL FINAL, SIEMPRE\n- Aplicar el mínimo por trabajo (ver Parámetros vigentes).\n- Redondear al múltiplo indicado en Parámetros vigentes.\n\n## Parámetros vigentes\n- Mínimo por trabajo: 4000 (Ningún trabajo se cobra menos que esto.)\n- Redondeo: 100 (El total final se redondea al múltiplo de $100 más cercano.)\n- Moneda: ARS (Pesos argentinos, IVA incluido.)\n\nEjemplos de esos parámetros aplicados:\n- 10 stickers 3x3 cm → $4.000\n- 1 lona de 90x60 cm → $8.600\n\n## Presentar el precio\n- Respondé el TOTAL final, formato $ argentino. Si ayuda, una línea de desglose:\n  \"250 stickers 5x5: $15.400\".\n- Si aplicaste un mínimo (por trabajo o facturable), presentalo como CANTIDAD, no como\n  precio: \"salen $4.000, y por ese precio te llevás hasta 104 de esa medida\". NUNCA digas\n  que el pedido es chico, que \"no conviene\" o que hay un \"precio mínimo\".\n- Si no podés calcular con las reglas de arriba (la pieza no entra en la unidad de cobro, o\n  el material no está en lo que devolvió la tool): NO inventes ni improvises un precio —\n  decí que eso lo confirmás por mail.\n\n## Reglas duras\n- TODO dato de catálogo (materiales, medidas, geometría, escalas, precios) sale de lo que\n  buscar_catalogo devolvió EN ESTE turno. Sin resultado a la vista no afirmes ni niegues:\n  ofrecé confirmarlo por mail.\n- NUNCA afirmes que algo \"no lo hacemos\". Lo único que no se trabaja: fotocopias — y solo\n  lo mencionás si el cliente pregunta por eso.\n- Usá las palabras del cliente (\"calcos\", \"stickers\"), aunque el catálogo lo llame distinto.\n  El nombre de catálogo es interno — jerga como \"rinde\" o \"pliego\" tampoco va al cliente.\n- Fuera de la sugerencia de alternativas de la etapa COTIZAR, no ofrezcas agregados que no\n  pidió. Respondé lo que pidió.\n- Los precios ya incluyen IVA: mencionalo SOLO si el cliente lo pregunta.\n- No prometas plazos de entrega ni envíos por tu cuenta: si preguntan, eso se confirma por\n  mail.\n- Cliente enojado o pide hablar con una persona: no insistas con el catálogo; pasale el\n  mail y el local.\n\n## Cómo escribir (WhatsApp, en un celular)\n- Apuntá a ~100 caracteres; techo ~200, salvo listas. Sin preámbulos, sin repetir lo que el\n  cliente dijo.\n- Máximo 2 párrafos (un solo renglón en blanco en todo el mensaje). Para enumerar, cada\n  opción en su renglón con \"• \", sin renglones en blanco entre ítems.\n- *Negrita* con moderación (producto o precio). Nada de #, títulos ni tablas.\n- Nunca dos preguntas en un mismo mensaje. El cierre \"¿necesitabas algo más?\" solo después\n  de cotizar o resolver lo pedido (ver Flujo), nunca en una repregunta.\n\n## Salida estructurada\nJunto al mensaje devolvés el desglose de cada cotización del turno (ver schema):\nmaterial_catalogo EXACTO como vino de la tool, modo, medida, cantidad, rinde, unidades\ncobradas, precio del tramo, si aplicaste mínimo o redondeo, y el total. Si el turno no\ncotiza (saludo, repregunta), cotizaciones: []. Todo lo declarado tiene que salir de la\ntool: este bloque existe para auditar tu cálculo.\n"
+        }
+      },
+      "id": "cot-agente",
+      "name": "Agente",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        240,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// El Agente emite UN item con la respuesta + N cotizaciones. Traer Escalas necesita una\n// query POR MATERIAL, así que acá se abre en N items (deduplicados por material).\nconst j = $input.first().json;\n// La salida del output parser puede venir en .output (n8n la anida) o plana.\nconst salida = j.output && typeof j.output === 'object' ? j.output : j;\nconst cotizaciones = Array.isArray(salida.cotizaciones) ? salida.cotizaciones : [];\nconst materiales = [...new Set(cotizaciones.map((c) => String(c && c.material_catalogo || '')).filter(Boolean))];\n// Sin materiales igual emitimos UN item: si este nodo devuelve [], los nodos siguientes\n// no ejecutan y el turno muere sin respuesta (el mismo footgun de Leer Decisiones en el v9).\nif (!materiales.length) return [{ json: { material: null, sin_cotizaciones: true } }];\nreturn materiales.map((material) => ({ json: { material } }));"
+      },
+      "id": "cot-materiales",
+      "name": "Materiales Declarados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select metadata\n  from bot.rag_catalog\n where metadata->>'material' = $1\n limit 1",
+        "options": {
+          "queryReplacement": "={{ [ String($json.material || '') ] }}"
+        }
+      },
+      "id": "cot-traer-escalas",
+      "name": "Traer Escalas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        780,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// AUDITOR DETERMINISTA. Re-calcula cada cotización desde la metadata del CATÁLOGO y la\n// compara contra lo que declaró el modelo. En v1 NO corrige: adjunta el veredicto para\n// que el chat de prueba lo muestre (estamos midiendo la Fase 4, queremos ver los fallos).\n//\n// Parámetros HORNEADOS por el builder desde la hoja Parámetros del Excel. Si cambian allá,\n// hay que re-generar el flow (node n8n/build-flow.mjs) y re-importarlo.\nconst MINIMO_TRABAJO = 4000;\nconst REDONDEO = 100;\nconst TOPE_MAGNITUD = 600000;\n\n/** Piezas de ancho×alto cm que entran en el área útil, probando las DOS orientaciones.\n *  El epsilon absorbe el error binario (28,3/2,83 debe dar 10, no floor(9,999…)). */\nfunction rinde(ancho, alto, geo) {\n  const { util_ancho: ua, util_alto: uh, separacion: sep } = geo || {};\n  if (!(ancho > 0) || !(alto > 0) || !(ua > 0) || !(uh > 0)) return 0;\n  const eje = (util, pieza) => Math.floor((util + sep) / (pieza + sep) + 1e-9);\n  return Math.max(eje(ua, ancho) * eje(uh, alto), eje(ua, alto) * eje(uh, ancho), 0);\n}\n\n/**\n * El tramo de la escala que contiene `n` unidades de cobro. `hasta` vacío = \"de acá en\n * adelante\" (así lo define la PARTE 2 del Excel).\n *\n * El PRIMER tramo cubre además todo lo que quede por debajo de su `desde`: en modo m2 las\n * unidades son fraccionarias (0,5 m2) y el \"Desde 1\" de una tarifa plana no es una cota que\n * el catálogo pretenda aplicar — no existe un tramo más barato que el primero. Sin esto,\n * media lona no matchea ningún tramo y el auditor la declara no cotizable.\n */\nfunction tramoDe(escala, n) {\n  const orden = (escala || []).slice().sort((a, b) => Number(a.desde) - Number(b.desde));\n  for (let i = 0; i < orden.length; i++) {\n    const t = orden[i];\n    const desde = i === 0 ? -Infinity : Number(t.desde);\n    const hasta = t.hasta === null || t.hasta === undefined ? Infinity : Number(t.hasta);\n    if (n >= desde && n <= hasta) return t;\n  }\n  return null;\n}\n\n/** Redondeo al múltiplo MÁS CERCANO (no hacia arriba): 8.640 → 8.600 con paso 100.\n *  Es lo que dice la hoja Parámetros y lo que reproduce el caso de la lona 90x60. */\nconst redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);\n\n/**\n * Re-calcula una cotización desde los datos del CATÁLOGO (no desde lo que declaró el LLM).\n * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar.\n */\nfunction cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado }) {\n  const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);\n  if (!(a > 0) || !(h > 0) || !(q > 0)) return { ok: false, motivo: 'medida o cantidad inválida' };\n  if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };\n\n  let unidades, r = null;\n  if (modo === 'pliego') {\n    // El rinde cargado a mano gana sobre el cálculo (unidades no geométricas: bobina, plancha).\n    r = rinde_cargado != null ? Number(rinde_cargado) : rinde(a, h, geometria);\n    if (!(r > 0)) return { ok: false, motivo: 'la pieza no entra en la unidad de cobro (rinde 0) — derivar a consulta' };\n    unidades = Math.ceil(q / r - 1e-9);\n  } else if (modo === 'm2') {\n    const m2Pieza = (a * h) / 10000;\n    unidades = m2Pieza * q;\n    // El mínimo facturable vive en el tramo (columna \"Mínimo facturable\" del material).\n    const min = Number((escala.find((t) => t.minimo_facturable != null) || {}).minimo_facturable || 0);\n    if (min > 0 && unidades < min) unidades = min;\n  } else {\n    return { ok: false, motivo: 'modo desconocido: ' + modo };\n  }\n\n  // El tramo se busca por UNIDADES DE COBRO (pliegos / m2), nunca por piezas pedidas.\n  const tramo = tramoDe(escala, unidades);\n  if (!tramo) return { ok: false, motivo: 'ningún tramo de la escala cubre ' + unidades + ' unidades' };\n\n  const bruto = unidades * Number(tramo.precio);\n  const conMinimo = Math.max(bruto, MINIMO_TRABAJO);\n  const total = redondear(conMinimo, REDONDEO);\n  return {\n    ok: true,\n    rinde: r,\n    unidades_cobradas: unidades,\n    precio_tramo: Number(tramo.precio),\n    aplico_minimo: conMinimo > bruto + 1e-9,\n    aplico_redondeo: Math.abs(total - conMinimo) > 1e-9,\n    total,\n  };\n}\n\n// ── Entrada ───────────────────────────────────────────────────────────────────────\nconst jAgente = $('Agente').first().json;\nconst salida = jAgente.output && typeof jAgente.output === 'object' ? jAgente.output : jAgente;\nconst respuesta = String(salida.respuesta ?? '').trim();\nconst cotizaciones = Array.isArray(salida.cotizaciones) ? salida.cotizaciones : [];\n\n// La metadata de cada material, indexada por nombre. Traer Escalas devuelve una fila por\n// chunk; el chunk colección+material tiene UNA escala, así que la primera alcanza.\nconst porMaterial = {};\nfor (const it of $input.all()) {\n  const r = it.json || {};\n  if (!r.metadata) continue;\n  const md = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata;\n  const nombre = String(md.material || '');\n  if (nombre && !porMaterial[nombre]) porMaterial[nombre] = md;\n}\n\n// ── Auditoría ─────────────────────────────────────────────────────────────────────\nconst hallazgos = [];\nconst detalle = [];\n\nfor (const c of cotizaciones) {\n  const etiqueta = String(c.material_catalogo || '(sin material)');\n  const md = porMaterial[etiqueta];\n  if (!md) {\n    // El modelo declaró un material que no existe en el catálogo: el número no tiene respaldo.\n    hallazgos.push('material \"' + etiqueta + '\" no está en el catálogo (o lo escribió distinto)');\n    detalle.push({ material: etiqueta, estado: 'sin_catalogo', total_declarado: c.total });\n    continue;\n  }\n  const esperado = cotizar({\n    modo: md.modo,\n    ancho_cm: c.ancho_cm,\n    alto_cm: c.alto_cm,\n    cantidad: c.cantidad,\n    escala: md.escala,\n    geometria: md.geometria,\n    rinde_cargado: null,\n  });\n\n  if (!esperado.ok) {\n    hallazgos.push(etiqueta + ': no es cotizable (' + esperado.motivo + ') pero el bot cotizó $' + c.total);\n    detalle.push({ material: etiqueta, estado: 'no_cotizable', motivo: esperado.motivo, total_declarado: c.total });\n    continue;\n  }\n\n  // El MODO lo manda el catálogo, no el modelo: si declaró otro, el resto del desglose\n  // se calculó con la fórmula equivocada aunque el total dé bien de casualidad.\n  if (c.modo && c.modo !== md.modo) hallazgos.push(etiqueta + ': modo declarado ' + c.modo + ', catálogo dice ' + md.modo);\n  if (md.modo === 'pliego' && c.rinde != null && Number(c.rinde) !== esperado.rinde) {\n    hallazgos.push(etiqueta + ': rinde declarado ' + c.rinde + ', calculado ' + esperado.rinde);\n  }\n  if (c.unidades_cobradas != null && Math.abs(Number(c.unidades_cobradas) - esperado.unidades_cobradas) > 1e-6) {\n    hallazgos.push(etiqueta + ': unidades declaradas ' + c.unidades_cobradas + ', calculadas ' + esperado.unidades_cobradas);\n  }\n  if (c.precio_tramo != null && Number(c.precio_tramo) !== esperado.precio_tramo) {\n    hallazgos.push(etiqueta + ': precio de tramo declarado $' + c.precio_tramo + ', el que aplica es $' + esperado.precio_tramo);\n  }\n  if (Number(c.total) !== esperado.total) {\n    hallazgos.push(etiqueta + ': TOTAL declarado $' + c.total + ', calculado $' + esperado.total);\n  }\n\n  detalle.push({\n    material: etiqueta,\n    estado: Number(c.total) === esperado.total ? 'ok' : 'difiere',\n    total_declarado: c.total,\n    total_calculado: esperado.total,\n    rinde_declarado: c.rinde ?? null,\n    rinde_calculado: esperado.rinde,\n    unidades_calculadas: esperado.unidades_cobradas,\n    precio_tramo_calculado: esperado.precio_tramo,\n    aplico_minimo: esperado.aplico_minimo,\n    aplico_redondeo: esperado.aplico_redondeo,\n  });\n}\n\n// ── Sanity floor ──────────────────────────────────────────────────────────────────\n// Corre SIEMPRE, incluso si el desglose vino vacío o roto: son las cotas que ningún total\n// puede violar, independientemente de si el re-cálculo de arriba pudo hacerse.\nfor (const c of cotizaciones) {\n  const t = Number(c.total);\n  const etiqueta = String(c.material_catalogo || '(sin material)');\n  if (!Number.isFinite(t) || t <= 0) { hallazgos.push(etiqueta + ': total inválido (' + c.total + ')'); continue; }\n  if (t < MINIMO_TRABAJO) hallazgos.push(etiqueta + ': total $' + t + ' por debajo del mínimo por trabajo ($' + MINIMO_TRABAJO + ')');\n  if (REDONDEO > 0 && Math.abs(t % REDONDEO) > 1e-6) hallazgos.push(etiqueta + ': total $' + t + ' no es múltiplo de ' + REDONDEO);\n  if (t > TOPE_MAGNITUD) hallazgos.push(etiqueta + ': total $' + t + ' fuera de rango (tope $' + TOPE_MAGNITUD + ')');\n}\n\n// Un número en el texto sin cotización estructurada: el desglose no se puede auditar y el\n// cliente igual recibe un precio. Es el caso que más queremos ver en la Fase 4.\nif (!cotizaciones.length && /\\$\\s?\\d/.test(respuesta)) {\n  hallazgos.push('la respuesta menciona un precio pero el desglose vino vacío: no se pudo auditar');\n}\n\nreturn [{ json: {\n  respuesta,\n  auditoria: {\n    ok: hallazgos.length === 0,\n    hallazgos,\n    cotizaciones: detalle,\n  },\n} }];"
+      },
+      "id": "cot-auditor",
+      "name": "Auditar Cotización",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lo que ve el chat de prueba. En v1 el veredicto de la auditoría va PEGADO al mensaje:\n// estamos midiendo y queremos ver los fallos sin abrir la ejecución en n8n. En producción\n// (Fase 5) esta cola se saca y la política de fallo se decide con los datos de la Fase 4.\nconst j = $input.first().json;\nconst a = j.auditoria || { ok: true, hallazgos: [] };\nlet output = String(j.respuesta ?? '').trim();\n// GUARD contra mensaje vacío: si el agente devolvió respuesta vacía, el cliente recibiría\n// un mensaje en blanco. Caemos a un texto seguro antes de pegar el veredicto.\nif (!output) output = 'Disculpá, no pude terminar de armar esa respuesta. ¿Me lo repetís o lo vemos por mail (terminalgrafica@gmail.com)?';\nif (!a.ok) output += '\\n\\n⚠ auditoría: ' + (a.hallazgos || []).join(' · ');\nreturn [{ json: { output, auditoria: a } }];"
+      },
+      "id": "cot-responder",
+      "name": "Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2,
+          "maxOutputTokens": 1200
+        }
+      },
+      "id": "cot-modelo",
+      "name": "Modelo",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        140,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Cuando llega un mensaje').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "id": "cot-memoria",
+      "name": "Memoria",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "buscar_catalogo",
+        "toolDescription": "Busca en el catálogo real de Terminal Gráfica por significado. Devuelve, por colección y material: la descripción, las medidas de referencia con su rinde, la geometría de la unidad de cobro (área útil y separación) y la escala de precios por tramo. Pasale lo que pide el cliente en sus palabras (ej.: 'stickers redondos para autos', 'cartel para vidriera').",
+        "tableName": "bot.rag_catalog",
+        "topK": 3,
+        "options": {
+          "columnNames": {
+            "idColumnName": "id",
+            "vectorColumnName": "embedding",
+            "contentColumnName": "text",
+            "metadataColumnName": "metadata"
+          }
+        }
+      },
+      "id": "cot-pgvector",
+      "name": "buscar_catalogo",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        460,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "vxRQvyIwYEqGpJqc",
+          "name": "Bot Readonly DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "id": "cot-embeddings",
+      "name": "Embeddings (Google Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        460,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"respuesta\",\n    \"cotizaciones\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"El mensaje tal cual se le manda al cliente por WhatsApp.\"\n    },\n    \"cotizaciones\": {\n      \"type\": \"array\",\n      \"description\": \"Una entrada por producto cotizado en ESTE turno. Vacío si no cotizaste.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"material_catalogo\",\n          \"modo\",\n          \"ancho_cm\",\n          \"alto_cm\",\n          \"cantidad\",\n          \"unidades_cobradas\",\n          \"precio_tramo\",\n          \"total\"\n        ],\n        \"properties\": {\n          \"material_catalogo\": {\n            \"type\": \"string\",\n            \"description\": \"El nombre del material EXACTO como vino de buscar_catalogo.\"\n          },\n          \"modo\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"pliego\",\n              \"m2\"\n            ],\n            \"description\": \"Según la unidad del material.\"\n          },\n          \"ancho_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Ancho de UNA pieza, en cm.\"\n          },\n          \"alto_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Alto de UNA pieza, en cm.\"\n          },\n          \"cantidad\": {\n            \"type\": \"number\",\n            \"description\": \"Piezas que pidió el cliente.\"\n          },\n          \"rinde\": {\n            \"type\": \"number\",\n            \"description\": \"Piezas por unidad de cobro. Solo en modo pliego; 0 si no aplica.\"\n          },\n          \"unidades_cobradas\": {\n            \"type\": \"number\",\n            \"description\": \"Pliegos, o m2 facturados.\"\n          },\n          \"precio_tramo\": {\n            \"type\": \"number\",\n            \"description\": \"Precio unitario del tramo que aplicó.\"\n          },\n          \"aplico_minimo\": {\n            \"type\": \"boolean\",\n            \"description\": \"Si aplicaste mínimo por trabajo o facturable.\"\n          },\n          \"aplico_redondeo\": {\n            \"type\": \"boolean\"\n          },\n          \"total\": {\n            \"type\": \"number\",\n            \"description\": \"El número que le dijiste al cliente.\"\n          }\n        }\n      }\n    }\n  }\n}"
+      },
+      "id": "cot-salida",
+      "name": "Salida · Agente",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde `Catalogo-TG-v2.xlsx`. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo** y **Traer Escalas**: credencial Postgres `BOT_DB` (pooler 5432,\nuser `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`, **schema-cualificada**\n(sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala` y `es_base` en la metadata. El auditor los necesita.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $600000. Si cambian en el Excel, re-generar y re-importar.",
+        "height": 520,
+        "width": 460
+      },
+      "id": "cot-nota",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -560
+      ]
+    }
+  ],
+  "connections": {
+    "Cuando llega un mensaje": {
+      "main": [
+        [
+          {
+            "node": "Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente": {
+      "main": [
+        [
+          {
+            "node": "Materiales Declarados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Materiales Declarados": {
+      "main": [
+        [
+          {
+            "node": "Traer Escalas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traer Escalas": {
+      "main": [
+        [
+          {
+            "node": "Auditar Cotización",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditar Cotización": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_catalogo": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (Google Gemini)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "buscar_catalogo",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida · Agente": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
