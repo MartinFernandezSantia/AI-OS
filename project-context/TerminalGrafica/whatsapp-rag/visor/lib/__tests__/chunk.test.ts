@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisos, chunks, escalaTexto, lineaPrecio, rindeEfectivo } from "../chunk";
+import { avisos, chunks, COL_SIN_MINIMO, escalaTexto, lineaPrecio, rindeEfectivo } from "../chunk";
 import { escalaDe, type Datos } from "../parse";
 
 /** Fixture chico armado a mano: dos colecciones, tres materiales, los dos modos.
@@ -302,6 +302,32 @@ describe("chunks — coleccion-material", () => {
     ]);
   });
 
+  it("sin la columna 'Sin mínimo por trabajo', la meta dice false: el mínimo se aplica", () => {
+    // El default tiene que ser el comportamiento de siempre. Si esto se invirtiera, todo
+    // trabajo chico dejaría de tener piso sin que ningún caso del Excel se ponga rojo.
+    expect(cs[0].meta.sin_minimo).toBe(false);
+  });
+
+  it("la colección marcada 'Sin mínimo por trabajo' viaja exenta en la meta", () => {
+    const exenta: Datos = {
+      ...datos,
+      colecciones: datos.colecciones.map((c) => ({ ...c, "Sin mínimo por trabajo": "sí" })),
+    };
+    expect(chunks(exenta, "coleccion-material")[0].meta.sin_minimo).toBe(true);
+  });
+
+  it("la marca la escribe el cliente a mano: se acepta sí/si/x/1, no cualquier cosa", () => {
+    const con = (v: string) =>
+      chunks(
+        { ...datos, colecciones: datos.colecciones.map((c) => ({ ...c, "Sin mínimo por trabajo": v })) },
+        "coleccion-material",
+      )[0].meta.sin_minimo;
+    for (const v of ["sí", "si", "SÍ", " Si ", "x", "X", "1"]) expect(con(v)).toBe(true);
+    // "no" tiene que leerse como NO exenta: un falso positivo acá le saca el piso a un
+    // trabajo real y TG cobra de menos.
+    for (const v of ["no", "No", "", "0", "-"]) expect(con(v)).toBe(false);
+  });
+
   it("el material base se anuncia con la colección NOMBRADA y se marca en la meta", () => {
     // El título junta los dos ejes con un guion: sin nombrar la colección, "la colección"
     // se queda sin referente y el bot puede leerla como el título entero.
@@ -446,6 +472,57 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("Papel autoadhesivo solo impresión");
     expect(a[0]).toContain("ningún producto lo usa");
+  });
+
+  // El otro error caro y silencioso del catálogo: una colección de terminaciones (laminado
+  // $330, ojalillos $1.000) sin marcar como exenta. El total "se ve" bien — $4.000 — solo
+  // que es 12 veces el precio real, y nada lo delata.
+  describe("colección barata sin exención del mínimo", () => {
+    // Un material cuyo tramo más caro queda MUY por debajo del mínimo por trabajo.
+    const conLaminado = (extra: Partial<Datos> = {}): Datos => ({
+      ...datos,
+      parametros: [{ "Parámetro": "Mínimo por trabajo", Valor: "4000" }],
+      colecciones: [...datos.colecciones, { "Colección": "Terminaciones", "Descripción": "Agregados." }],
+      productos: [
+        ...datos.productos,
+        { "Colección": "Terminaciones", Producto: "Laminado mate", Material: "Film de laminado" },
+      ],
+      materiales: [
+        ...datos.materiales,
+        { Material: "Film de laminado", Unidad: "unidad", Desde: "1", "Precio por unidad": "330" },
+      ],
+      ...extra,
+    });
+
+    it("avisa que TODO pedido se va a cotizar el mínimo", () => {
+      const a = avisos(conLaminado()).filter((x) => x.includes("Terminaciones"));
+      expect(a).toHaveLength(1);
+      expect(a[0]).toContain("$4.000");
+      expect(a[0]).toContain(COL_SIN_MINIMO);
+    });
+
+    it("marcada como exenta, no avisa nada", () => {
+      const d = conLaminado();
+      const exenta: Datos = {
+        ...d,
+        colecciones: d.colecciones.map((c) =>
+          c["Colección"] === "Terminaciones" ? { ...c, [COL_SIN_MINIMO]: "sí" } : c,
+        ),
+      };
+      expect(avisos(exenta).filter((x) => x.includes("Terminaciones"))).toEqual([]);
+    });
+
+    it("una colección que SÍ supera el mínimo no se avisa aunque no esté marcada", () => {
+      // Las colecciones normales del fixture (stickers a $2.500 el pliego, lona a $16.000)
+      // no tienen que aparecer: el aviso sería ruido en cada carga.
+      const a = avisos(conLaminado());
+      expect(a.filter((x) => x.includes("Stickers con forma"))).toEqual([]);
+      expect(a.filter((x) => x.includes("Banners"))).toEqual([]);
+    });
+
+    it("sin el parámetro cargado no se avisa: no hay con qué comparar", () => {
+      expect(avisos(conLaminado({ parametros: [] }))).toEqual([]);
+    });
   });
 
   it("varios materiales huérfanos: uno por cada uno", () => {

@@ -177,7 +177,7 @@ const redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);
  * Re-calcula una cotización desde los datos del CATÁLOGO (no desde lo que declaró el LLM).
  * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar.
  */
-function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado }) {
+function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado, sin_minimo }) {
   const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);
   if (!(a > 0) || !(h > 0) || !(q > 0)) return { ok: false, motivo: 'medida o cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
@@ -203,7 +203,10 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_c
   if (!tramo) return { ok: false, motivo: 'ningún tramo de la escala cubre ' + unidades + ' unidades' };
 
   const bruto = unidades * Number(tramo.precio);
-  const conMinimo = Math.max(bruto, MINIMO_TRABAJO);
+  // El mínimo por trabajo cubre el armado y el montaje de una PRODUCCIÓN. Las colecciones
+  // marcadas "Sin mínimo por trabajo" son agregados sobre un trabajo ya cobrado (laminado,
+  // ojalillos): ahí el mínimo multiplicaría por 12 el precio de laminar una hoja.
+  const conMinimo = sin_minimo ? bruto : Math.max(bruto, MINIMO_TRABAJO);
   const total = redondear(conMinimo, REDONDEO);
   return {
     ok: true,
@@ -343,6 +346,42 @@ function correrTests() {
     okCasos++;
   }
 
+  // La exención del mínimo por trabajo (colecciones marcadas "Sin mínimo por trabajo").
+  // No sale de la hoja de casos: esos van por material y la marca es de la colección.
+  // Se prueba contra una escala mínima armada acá, en las DOS direcciones — que exima
+  // cuando corresponde, y que NO exima cuando no.
+  {
+    const escalaBarata = [{ desde: 1, hasta: null, precio: 330 }];
+    const comun = { modo: "pliego", ancho_cm: 21, alto_cm: 29.7, cantidad: 1, escala: escalaBarata };
+    // Rinde 1: la "pieza" ocupa la unidad entera, así que se cobra 1 x $330.
+    const geo = { util_ancho: 21, util_alto: 29.7, separacion: 0 };
+
+    const exento = motor.cotizar({ ...comun, geometria: geo, sin_minimo: true });
+    if (!exento.ok) {
+      fallos.push(`sin_minimo: el caso exento no cotizó (${exento.motivo})`);
+    } else {
+      if (exento.total !== 300) {
+        // 330 redondeado al múltiplo de 100 más cercano.
+        fallos.push(`sin_minimo: exento esperaba $300 (330 redondeado), dio $${exento.total}`);
+      }
+      if (exento.aplico_minimo) fallos.push("sin_minimo: el exento marcó aplico_minimo");
+    }
+
+    const normal = motor.cotizar({ ...comun, geometria: geo, sin_minimo: false });
+    if (!normal.ok) {
+      fallos.push(`sin_minimo: el caso NO exento no cotizó (${normal.motivo})`);
+    } else if (normal.total !== MINIMO_TRABAJO) {
+      fallos.push(`sin_minimo: sin exención esperaba $${MINIMO_TRABAJO}, dio $${normal.total}`);
+    }
+
+    // Sin el campo, el default es el de siempre: se aplica el mínimo. Un chunk viejo
+    // (ingestado antes de esta columna) no tiene que cambiar de comportamiento.
+    const ausente = motor.cotizar({ ...comun, geometria: geo });
+    if (ausente.ok && ausente.total !== MINIMO_TRABAJO) {
+      fallos.push(`sin_minimo: sin el campo esperaba $${MINIMO_TRABAJO}, dio $${ausente.total}`);
+    }
+  }
+
   return { fallos, okCasos, totalCasos: CASOS.length };
 }
 
@@ -480,6 +519,8 @@ function codeAuditor() {
     "    escala: md.escala,",
     "    geometria: md.geometria,",
     "    rinde_cargado: null,",
+    "    // Exención del mínimo por trabajo: la marca es de la COLECCIÓN, viene en el chunk.",
+    "    sin_minimo: md.sin_minimo === true,",
     "  });",
     "",
     "  if (!r.ok) {",
@@ -790,7 +831,8 @@ const flow = {
           "(sin el `bot.` consulta public y devuelve [] en verde, sin error).",
           "",
           "**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con",
-          "`escala` y `es_base` en la metadata. El auditor los necesita.",
+          "`escala`, `es_base` y `sin_minimo` en la metadata. El auditor los necesita —",
+          "un chunk viejo sin `sin_minimo` cotiza el mínimo aunque la colección esté exenta.",
           "",
           `**Parámetros horneados**: mínimo por trabajo $${MINIMO_TRABAJO} · redondeo $${REDONDEO} ·`,
           `tope de sanity $${TOPE_MAGNITUD}. Si cambian en el Excel, re-generar y re-importar.`,
@@ -833,6 +875,27 @@ if (fallos.length) {
   process.exit(1);
 }
 console.log("✓ el auditor reproduce el Excel entero.");
+
+// El gate de arriba evalúa las funciones del auditor, pero NO el pegamento del nodo: los
+// campos que el Code emitido le pasa a `cotizar`. Ese cableado se puede borrar sin que
+// ningún caso se ponga rojo (comprobado: el gate quedó en 46/46 con `sin_minimo` sin
+// pasar, y la exención no habría funcionado nunca en producción). Acá se verifica que el
+// código emitido realmente los pase.
+{
+  const jsAuditor = flow.nodes.find((n) => n.name === "Auditar Cotización")?.parameters?.jsCode ?? "";
+  const CABLEADOS = [
+    ["modo", "modo: md.modo"],
+    ["escala", "escala: md.escala"],
+    ["geometria", "geometria: md.geometria"],
+    ["sin_minimo", "sin_minimo: md.sin_minimo"],
+  ];
+  const sinCablear = CABLEADOS.filter(([, frag]) => !jsAuditor.includes(frag));
+  if (sinCablear.length) {
+    console.error("\n✗ ABORTADO: el nodo Auditar Cotización no le pasa a cotizar():");
+    for (const [campo, frag] of sinCablear) console.error(`  - ${campo} (falta "${frag}")`);
+    process.exit(1);
+  }
+}
 
 if (SOLO_TEST) process.exit(0);
 

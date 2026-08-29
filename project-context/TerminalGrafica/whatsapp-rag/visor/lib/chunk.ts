@@ -44,6 +44,15 @@ export const COL_RINDE = "Piezas por unidad de cobro";
  *  el prompt le dice "cotizá la base y sugerí alternativas". */
 export const COL_BASE = "Material base";
 
+/** Colecciones cuyos productos son un AGREGADO sobre otro trabajo (laminado, ojalillos,
+ *  anillado), no un trabajo en sí. El mínimo por trabajo no les aplica: cubre el armado
+ *  y el montaje de una producción, y laminar una hoja no tiene nada de eso. Sin esto el
+ *  bot cotizaría el mínimo entero por un laminado de $330. Vacío = se aplica, como siempre. */
+export const COL_SIN_MINIMO = "Sin mínimo por trabajo";
+
+/** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
+const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
+
 const CONOCIDAS = new Set([
   "Colección",
   "Producto",
@@ -248,6 +257,10 @@ const descripcionDe = (datos: Datos, coleccion: string): string =>
 const baseDe = (datos: Datos, coleccion: string): string =>
   datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_BASE] ?? "";
 
+/** ¿La colección está exenta del mínimo por trabajo? (ver COL_SIN_MINIMO) */
+const sinMinimoDe = (datos: Datos, coleccion: string): boolean =>
+  esSi(datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_SIN_MINIMO]);
+
 /**
  * La escala como DATO estructurado para `metadata`. El texto del chunk la lleva en prosa
  * (`lineaPrecio`) porque es lo que lee el LLM; esto es lo que lee el AUDITOR del workflow
@@ -340,6 +353,8 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           modo,
           productos: suyos.length,
           es_base: esBase,
+          // El auditor lo lee para NO aplicar el mínimo por trabajo (ver COL_SIN_MINIMO).
+          sin_minimo: sinMinimoDe(datos, col),
           // El auditor del workflow re-calcula con esto; sin escala en la metadata
           // tendría que parsear la prosa del chunk.
           escala: escalaMeta(tramos),
@@ -546,5 +561,43 @@ export function avisos(datos: Datos): string[] {
       );
     }
   }
+
+  // Colecciones donde el mínimo por trabajo se come TODOS los precios y no están exentas.
+  // El caso son las terminaciones (laminado $330, ojalillos $1.000): agregados sobre un
+  // trabajo ya cobrado, donde el mínimo multiplica el precio por 12. Es un error caro y
+  // silencioso — el total "se ve" bien, solo está mal.
+  //
+  // El mínimo aplica al TOTAL, no al precio unitario, así que no alcanza con mirar el
+  // tramo: en una colección por pliegos el unitario puede ser $2.800 y un pedido de 2
+  // pliegos ya pasa el mínimo. Solo avisa cuando la colección no puede superarlo NUNCA, y
+  // eso solo pasa donde no hay cantidad que escale el total: unidades no geométricas
+  // (una unidad = un ítem). Las colecciones pliego/m2 quedan fuera por construcción.
+  const minimoTrabajo = num(
+    datos.parametros.find((p) => p["Parámetro"] === "Mínimo por trabajo")?.["Valor"],
+  );
+  if (minimoTrabajo !== null && minimoTrabajo > 0) {
+    for (const col of nombresColeccion(datos)) {
+      if (sinMinimoDe(datos, col)) continue;
+      const mats = materialesDe(productosDe(datos, col));
+      // Con una unidad de cobro geométrica (pliego) o continua (m2), la cantidad hace
+      // crecer el total y el mínimo solo afecta al pedido más chico: eso es lo que se
+      // quiere. El problema es solo donde una unidad = un ítem.
+      if (mats.some((m) => modoDe(unidadDe(datos.materiales, m)) !== "otro")) continue;
+      const topes = mats
+        .map((m) => escalaDe(datos.materiales, m))
+        .filter((t) => t.length)
+        .map((t) => Math.max(...t.map((x) => x.precio)));
+      if (!topes.length) continue;
+      const tope = Math.max(...topes);
+      if (tope >= minimoTrabajo) continue;
+      out.push(
+        `${col}: el precio más alto de la colección (${money(tope)}) no llega al mínimo por ` +
+          `trabajo (${money(minimoTrabajo)}), así que un pedido de 1 se va a cotizar ${money(minimoTrabajo)}. ` +
+          `Si son agregados sobre otro trabajo (laminado, ojalillos, anillado), marcá ` +
+          `"${COL_SIN_MINIMO}" = sí en la hoja Colecciones.`,
+      );
+    }
+  }
+
   return out;
 }
