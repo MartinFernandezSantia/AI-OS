@@ -26,7 +26,9 @@ Se salva RAG + firewall. Todo lo demás estaba en discusión.
 ```
 project-context/TerminalGrafica/whatsapp-rag/
   HANDOFF.md                 ← este archivo
-  Catalogo-TG-v2.xlsx        ← LA FUENTE ÚNICA
+  Catalogo-TG-v2.xlsx        ← LA FUENTE ÚNICA (lo VIGENTE: es lo que está ingestado)
+  Catalogo-TG-v3.xlsx        ← copia EN CURSO (normalización del catálogo del cliente)
+  Catalogo_WhatsApp_Terminal_Grafica (1).xlsx  ← entrega del cliente, por única vez
   n8n/                       ← Fase 3: EMPEZAR ACÁ
     README.md                            ← el flow, el auditor, las trampas, los casos de humo
     build-flow.mjs                       ← EL BUILDER: Excel + prompt → flow JSON (con los tests)
@@ -46,6 +48,20 @@ project-context/TerminalGrafica/whatsapp-rag/
 ```
 
 Referencia (NO tocar, es el bot anterior): `../whatsapp-rag-lite/`.
+
+## EN CURSO — normalizar el catálogo del cliente
+
+El cliente trajo un Excel propio (armado con Claude, sin nuestro esquema). Se lo está
+normalizando HACIA el nuestro: de ahí salen datos y aprendizajes, no al revés. Plan y
+decisiones en `plans/normalizar-catalogo-cliente.md`.
+
+**Se trabaja sobre `Catalogo-TG-v3.xlsx`**, una copia. El `v2` es lo VIGENTE (lo que está
+ingestado en `bot.rag_catalog`) y no se toca hasta que el v3 esté probado. Los scripts leen
+la copia con `CATALOGO=../Catalogo-TG-v3.xlsx node <script>`.
+
+Hecho hasta ahora: la tarifa de `Vinilo y lona UV` ($21.000 → $22.000 el m², confirmada por
+TG el 18/08/2026) y sus 4 casos de prueba. Gate 46/46 contra el v3. **Falta re-ingestar**
+desde el visor: cambia una sola línea, la del chunk `Carteles y vidrieras — Vinilo y lona UV`.
 
 ## Estado: qué está hecho
 

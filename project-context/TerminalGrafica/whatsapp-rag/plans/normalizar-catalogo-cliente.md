@@ -1,8 +1,20 @@
 # Plan — normalizar el catálogo del cliente hacia el nuestro
 
-> Estado: APROBADO en lo grande (alcance y decisiones), sin construir.
-> Fuente de verdad: `Catalogo-TG-v2.xlsx` (el NUESTRO). El archivo del cliente
+> Estado: APROBADO en lo grande (alcance y decisiones). EN CURSO.
+> Fuente de verdad: el catálogo NUESTRO. El archivo del cliente
 > (`Catalogo_WhatsApp_Terminal_Grafica (1).xlsx`) es una entrega de datos por única vez.
+>
+> **Se trabaja sobre `Catalogo-TG-v3.xlsx`, una copia.** El `v2` queda intacto como el
+> catálogo vigente hasta que el v3 esté probado y re-ingestado. Los scripts aceptan
+> `CATALOGO=../Catalogo-TG-v3.xlsx` para leer la copia sin cambiar el default.
+
+## Avance
+
+- [x] **Tarifa `Vinilo y lona UV` $21.000 → $22.000** — aplicada en `Materiales!E22` y en
+      los 4 casos de prueba. Gate del auditor 46/46 contra el v3. En los chunks cambia una
+      sola línea (`Carteles y vidrieras — Vinilo y lona UV`).
+      **Falta re-ingestar desde el visor** para que el bot la vea.
+- [ ] El resto de esta lista.
 
 ## La dirección
 
@@ -53,7 +65,7 @@ el bot recomendaba algo que no era). Puede servir; hoy no tiene destino.
 Mismos precios, misma geometría (28x44, sep 0,3), mismos tramos. La hoja `Pliegos A3` del
 cliente es nuestra hoja `Materiales` con otro nombre. Cero cambios ahí.
 
-### Un cambio de tarifa real
+### Un cambio de tarifa real — YA APLICADO en el v3
 
 `Vinilo y lona UV`: **$21.000 → $22.000** el m² (confirmado 18/08/2026 en el archivo).
 Mueve 4 de nuestros casos de prueba:
