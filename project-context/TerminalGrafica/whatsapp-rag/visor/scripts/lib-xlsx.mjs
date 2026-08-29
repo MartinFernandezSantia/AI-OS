@@ -9,7 +9,11 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
-export const XLSX = path.resolve(import.meta.dirname, "../../Catalogo-TG-v2.xlsx");
+/** El catálogo. `CATALOGO=<ruta>` lo apunta a otro archivo (una copia en la que se está
+ *  trabajando) sin tocar el default ni el original. */
+export const XLSX = process.env.CATALOGO
+  ? path.resolve(process.env.CATALOGO)
+  : path.resolve(import.meta.dirname, "../../Catalogo-TG-v2.xlsx");
 
 /** LibreOffice deja este archivo mientras el .xlsx está abierto. Escribir con el archivo
  *  abierto = el próximo guardado del usuario pisa el cambio. */
