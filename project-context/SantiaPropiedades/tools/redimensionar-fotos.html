@@ -370,7 +370,7 @@
 
     <div class="acciones">
       <button class="primario" id="btn-procesar" disabled>Redimensionar</button>
-      <button class="secundario" id="btn-zip" disabled>Descargar todas</button>
+      <button class="secundario" id="btn-zip" disabled>Descargar todas (.zip)</button>
       <button class="secundario" id="btn-limpiar" disabled>Limpiar</button>
     </div>
 
@@ -669,23 +669,158 @@
     if (foto.blob) bajar(foto.blob, foto.nombreSalida || foto.nombre);
   }
 
-  // Descarga una por una, espaciadas: el navegador bloquea las ráfagas.
+  // ---- ZIP ----
+  // Lo armamos a mano en modo "store" (sin comprimir): los JPEG ya vienen
+  // comprimidos, así que deflate no ganaría nada y la página sigue sin
+  // depender de ninguna librería externa.
+
+  var tablaCrc = null;
+
+  function crc32(bytes) {
+    if (!tablaCrc) {
+      tablaCrc = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) {
+          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        tablaCrc[n] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) {
+      crc = tablaCrc[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // Fecha/hora en formato MS-DOS, que es lo que guarda el ZIP.
+  function fechaDos(d) {
+    return {
+      hora: ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() / 2)) & 0xFFFF,
+      fecha: (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF
+    };
+  }
+
+  // Nombres únicos: si se repiten, el ZIP queda con entradas duplicadas.
+  function nombresUnicos(entradas) {
+    var vistos = Object.create(null);
+    return entradas.map(function (nombre) {
+      if (!vistos[nombre]) { vistos[nombre] = 1; return nombre; }
+      var base = nombre.replace(/\.[^.]+$/, "");
+      var ext = nombre.slice(base.length);
+      var n = vistos[nombre]++;
+      var propuesta;
+      do { propuesta = base + "-" + (++n) + ext; } while (vistos[propuesta]);
+      vistos[propuesta] = 1;
+      return propuesta;
+    });
+  }
+
+  function armarZip(archivos) {
+    var codificador = new TextEncoder();
+    var momento = fechaDos(new Date());
+    var partes = [];
+    var central = [];
+    var desplazamiento = 0;
+
+    archivos.forEach(function (item) {
+      var nombreBytes = codificador.encode(item.nombre);
+      var datos = item.datos;
+      var crc = crc32(datos);
+
+      var local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034B50, true);   // firma
+      local.setUint16(4, 20, true);           // versión necesaria
+      local.setUint16(6, 0x0800, true);       // bit 11: nombre en UTF-8
+      local.setUint16(8, 0, true);            // método: store
+      local.setUint16(10, momento.hora, true);
+      local.setUint16(12, momento.fecha, true);
+      local.setUint32(14, crc, true);
+      local.setUint32(18, datos.length, true); // comprimido
+      local.setUint32(22, datos.length, true); // sin comprimir
+      local.setUint16(26, nombreBytes.length, true);
+      local.setUint16(28, 0, true);            // extra
+
+      partes.push(new Uint8Array(local.buffer), nombreBytes, datos);
+
+      var dir = new DataView(new ArrayBuffer(46));
+      dir.setUint32(0, 0x02014B50, true);
+      dir.setUint16(4, 20, true);              // versión que lo creó
+      dir.setUint16(6, 20, true);              // versión necesaria
+      dir.setUint16(8, 0x0800, true);
+      dir.setUint16(10, 0, true);
+      dir.setUint16(12, momento.hora, true);
+      dir.setUint16(14, momento.fecha, true);
+      dir.setUint32(16, crc, true);
+      dir.setUint32(20, datos.length, true);
+      dir.setUint32(24, datos.length, true);
+      dir.setUint16(28, nombreBytes.length, true);
+      dir.setUint16(30, 0, true);              // extra
+      dir.setUint16(32, 0, true);              // comentario
+      dir.setUint16(34, 0, true);              // disco
+      dir.setUint16(36, 0, true);              // atributos internos
+      dir.setUint32(38, 0, true);              // atributos externos
+      dir.setUint32(42, desplazamiento, true); // dónde arranca el local header
+
+      central.push(new Uint8Array(dir.buffer), nombreBytes);
+      desplazamiento += 30 + nombreBytes.length + datos.length;
+    });
+
+    var largoCentral = central.reduce(function (t, p) { return t + p.length; }, 0);
+
+    var fin = new DataView(new ArrayBuffer(22));
+    fin.setUint32(0, 0x06054B50, true);
+    fin.setUint16(4, 0, true);                    // disco
+    fin.setUint16(6, 0, true);                    // disco del directorio
+    fin.setUint16(8, archivos.length, true);
+    fin.setUint16(10, archivos.length, true);
+    fin.setUint32(12, largoCentral, true);
+    fin.setUint32(16, desplazamiento, true);
+    fin.setUint16(20, 0, true);                   // comentario
+
+    return new Blob(partes.concat(central, [new Uint8Array(fin.buffer)]),
+                    { type: "application/zip" });
+  }
+
+  function nombreDelZip() {
+    var d = new Date();
+    var dos = function (n) { return (n < 10 ? "0" : "") + n; };
+    return "fotos-" + d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) +
+           "-" + dos(d.getHours()) + dos(d.getMinutes()) + ".zip";
+  }
+
   function bajarTodas() {
     var listas = fotos.filter(function (f) { return f.blob; });
     if (listas.length === 0) return;
 
     btnZip.disabled = true;
-    var i = 0;
-    function siguiente() {
-      if (i >= listas.length) {
-        btnZip.disabled = false;
-        return;
-      }
-      bajar(listas[i].blob, listas[i].nombreSalida || listas[i].nombre);
-      i++;
-      setTimeout(siguiente, 350);
-    }
-    siguiente();
+    var textoPrevio = btnZip.textContent;
+    btnZip.textContent = "Armando ZIP...";
+    barra.hidden = false;
+    barraRelleno.style.width = "0";
+
+    var nombres = nombresUnicos(listas.map(function (f) {
+      return f.nombreSalida || f.nombre;
+    }));
+
+    var leidas = 0;
+    Promise.all(listas.map(function (foto, i) {
+      return foto.blob.arrayBuffer().then(function (buf) {
+        leidas++;
+        barraRelleno.style.width = (leidas / listas.length * 100) + "%";
+        return { nombre: nombres[i], datos: new Uint8Array(buf) };
+      });
+    })).then(function (archivos) {
+      bajar(armarZip(archivos), nombreDelZip());
+    }).catch(function (e) {
+      console.error(e);
+      alert("No se pudo armar el ZIP. Probá descargando las fotos de a una.");
+    }).then(function () {
+      barra.hidden = true;
+      btnZip.textContent = textoPrevio;
+      btnZip.disabled = false;
+    });
   }
 
   // ---- eventos ----
