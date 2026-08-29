@@ -266,18 +266,30 @@ el motor de escala elige bien el tramo:
 El par 20/21 de carpetas es el más valioso: 21 carpetas cuestan MÁS que 20 aunque el
 precio unitario baje. Si el motor se equivoca de tramo, salta acá.
 
-⚠ Todos los esperados de arriba asumen que **el redondeo a $100 y el mínimo por trabajo de
-$4.000 aplican igual que hoy**. Hay que confirmarlo: el mínimo tiene sentido para un
-trabajo de imprenta, pero "1 laminado a $330" caería a $4.000 y eso está mal.
-**Esto hay que resolverlo antes de cargar.**
+**Y los casos del mínimo**, ahora que `Encuadernación y terminaciones` va exenta. Son los
+que prueban que la exención llega hasta el cliente:
+
+| Caso | Esperado | Por qué |
+|---|---|---|
+| 1 laminado mate | 300 | $330 redondeado. Sin la exención daría $4.000 |
+| 1 colocación de ojalillos | 1.000 | idem, sin la exención $4.000 |
+| 12 anillados plásticos | 28.800 | exenta pero muy por encima del mínimo: no cambia nada |
+| 10 stickers 3x3 cm | 4.000 | NO exenta: el mínimo sigue aplicando donde corresponde |
+
+El último es el que ya está en la hoja. Vale la pena dejarlo al lado de los otros: es la
+prueba de que la exención no se derramó a las colecciones que sí llevan mínimo.
+
+⚠ Todos los esperados asumen el redondeo a $100 vigente.
 
 ---
 
 ## Qué falta decidir antes de cargar
 
-1. **El mínimo de $4.000 no puede aplicar a las terminaciones.** Un laminado de $330 o un
-   ojalillo de $1.000 no son un trabajo completo: son un extra sobre otro trabajo. Hay que
-   decidir si el mínimo se marca por producto, por colección, o si estos van exentos.
+1. ~~**El mínimo de $4.000 no puede aplicar a las terminaciones.**~~ **RESUELTO**: columna
+   `Sin mínimo por trabajo` en `Colecciones` (vacío = se aplica, `sí` = no). Ya está en el
+   v3, cableada hasta el auditor y con tests. Falta marcarla en `Encuadernación y
+   terminaciones` cuando esa colección se cargue — `visor/scripts/columna-sin-minimo.mjs`
+   lo hace solo al volver a correrlo.
 2. **Precio plano**: ¿escala de un tramo (mi voto) o `fijo` con cantidad 1?
 3. **`Pack 4 libros`**: ¿entra?
 4. **Porta banner tipo X**: el nombre dice 60x160, la medida dice 90x190. Preguntar a TG.
