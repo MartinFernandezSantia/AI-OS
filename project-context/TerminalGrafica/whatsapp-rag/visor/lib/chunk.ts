@@ -50,6 +50,19 @@ export const COL_BASE = "Material base";
  *  bot cotizaría el mínimo entero por un laminado de $330. Vacío = se aplica, como siempre. */
 export const COL_SIN_MINIMO = "Sin mínimo por trabajo";
 
+/**
+ * El tamaño como lo nombra el cliente: "A4", "A5 o A6", "oficio", "9x13 cm".
+ *
+ * Es distinto de Ancho/Alto, que son la medida con la que se CALCULA. En lo que se cobra
+ * de a ítem (un anillado, un recetario) no hay nada que calcular: el tamaño es una
+ * característica del producto, y el cliente pregunta y responde en A4, no en 21x29,7. Poner
+ * los cm ahí no solo no ayuda — hace que el bot los lea como una medida cotizable.
+ *
+ * Donde SÍ se calcula por superficie (pliego, m2) esta columna no va: ahí la medida es el
+ * dato de entrada y el cliente pide cualquiera.
+ */
+export const COL_FORMATO = "Formato";
+
 /** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
 const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
 
@@ -61,6 +74,7 @@ const CONOCIDAS = new Set([
   "Ancho (cm)",
   "Alto (cm)",
   COL_RINDE,
+  COL_FORMATO,
 ]);
 
 /**
@@ -207,9 +221,14 @@ function ejemploCadena(r: number, tramos: Tramo[], unidad: string): string | nul
 function itemProducto(p: Fila, unidad: string, geo: Geometria | null, tramos: Tramo[] = []): string[] {
   const partes = [`- ${p["Producto"] ?? "(sin nombre)"}`];
 
+  // El formato manda sobre los cm: es el tamaño en las palabras del cliente ("A5"), y donde
+  // existe es porque el producto NO se cotiza por superficie. Decir "14,8x21 cm" ahí sería
+  // contestar en una unidad que el cliente no usó y sugerir un cálculo que no existe.
+  const formato = p[COL_FORMATO];
   const a = p["Ancho (cm)"];
   const h = p["Alto (cm)"];
-  if (a && h) partes.push(`${a}x${h} cm`);
+  if (formato) partes.push(formato);
+  else if (a && h) partes.push(`${numTexto(Number(a))}x${numTexto(Number(h))} cm`);
 
   // El rinde solo aparece donde hace falta convertir piezas → unidades de cobro (modo pliego
   // y similares). En m2 no hay ni columna ni geometría y no entra. La unidad sale del material.
@@ -349,7 +368,10 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       }
       const motor = lineasMotor(modo, unidad, geo);
       if (motor.length) L.push("", ...motor);
-      L.push("", "Medidas de referencia:");
+      // "Medidas de referencia" significa "estas son ejemplos, pedí la que quieras", y eso
+      // solo es cierto donde el precio sale de la superficie. Un recetario A5 se vende A5:
+      // ahí la lista son los productos, no medidas entre las que elegir.
+      L.push("", modo === "item" ? "Productos:" : "Medidas de referencia:");
       for (const p of suyos) L.push(...itemProducto(p, unidad, geo, tramos));
       const precio = lineaPrecio(mat, tramos);
       if (precio) L.push("", precio);

@@ -157,9 +157,14 @@ function preparar(hoja, existentes, items, clave, aFila) {
     if (v) existentes.add(String(/t="s"/.test(c[1]) ? CADENAS[Number(v[1])] : v[1]).trim());
   }
   const iSin = encabezado.indexOf("Sinónimos");
+  const iFmt = encabezado.indexOf("Formato");
+  if (iFmt < 0) throw new Error('falta la columna "Formato" en Productos — corré agregar-columna.mjs primero');
   preparar("Productos", existentes, PRODUCTOS, (p) => p.producto, (p) => {
     const fila = [p.coleccion, p.producto, p.descripcion ?? "", p.material, p.medida?.[0] ?? "", p.medida?.[1] ?? "", ""];
     if (iSin >= 0 && p.sinonimos) fila[iSin] = p.sinonimos;
+    // Formato y medida son excluyentes: donde hay formato el precio no sale de la
+    // superficie, así que cargar cm además sería un dato que nadie usa y confunde al bot.
+    if (p.formato) fila[iFmt] = p.formato;
     return fila;
   });
   void primeraCol;

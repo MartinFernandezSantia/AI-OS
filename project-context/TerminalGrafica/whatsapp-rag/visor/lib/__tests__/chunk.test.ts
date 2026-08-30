@@ -245,6 +245,18 @@ describe("chunks — coleccion-material", () => {
     expect(cs[0].texto).not.toContain("Medidas disponibles");
   });
 
+  it("en modo item el encabezado dice 'Productos', no 'Medidas de referencia'", () => {
+    // "Medidas de referencia" promete que se puede pedir cualquier medida. Cierto donde el
+    // precio sale de la superficie; falso en un anillado, que se vende A4 y punto.
+    const porUnidad: Datos = {
+      ...datos,
+      materiales: datos.materiales.map((m) => ({ ...m, Unidad: "unidad" })),
+    };
+    const t = chunks(porUnidad, "coleccion-material")[0].texto;
+    expect(t).toContain("Productos:");
+    expect(t).not.toContain("Medidas de referencia:");
+  });
+
   it("el chunk m2 habilita cualquier medida con su conversión", () => {
     expect(cs.at(-1)!.texto).toContain("Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).");
   });
@@ -300,6 +312,47 @@ describe("chunks — coleccion-material", () => {
     expect(cs.at(-1)!.meta.escala).toEqual([
       { desde: 1, hasta: null, precio: 16000, minimo_facturable: 0.5 },
     ]);
+  });
+
+  describe("Formato — el tamaño en las palabras del cliente", () => {
+    // Un recetario se vende "A5", no "14,8x21 cm". Contestar en cm no solo no ayuda: los
+    // números se leen como una medida cotizable en un producto que no se cotiza por medida.
+    const conFormato = (extra: Record<string, string> = {}): Datos => ({
+      ...datos,
+      productos: datos.productos.map((p, i) => (i === 0 ? { ...p, Formato: "A5", ...extra } : p)),
+    });
+
+    it("el formato reemplaza a los cm en la línea del producto", () => {
+      const t = chunks(conFormato(), "coleccion-material")[0].texto;
+      // El nombre del producto del fixture ya dice "3x3 cm", así que se compara la LÍNEA
+      // del ítem, no el chunk entero.
+      const linea = t.split("\n").find((l) => l.startsWith("- Stickers 3x3"))!;
+      expect(linea).toContain("· A5 ·");
+      expect(linea).not.toContain("· 3x3 cm");
+    });
+
+    it("sin formato, los cm siguen saliendo (lo que se cotiza por medida no cambia)", () => {
+      const linea = cs[0].texto.split("\n").find((l) => l.startsWith("- Stickers 3x3"))!;
+      expect(linea).toContain("· 3x3 cm ·");
+    });
+
+    it("los cm decimales se escriben en es-AR, no con punto", () => {
+      // "14.8x21" es formato inglés y en un chunto en castellano se lee como otra cosa.
+      const decimal: Datos = {
+        ...datos,
+        productos: datos.productos.map((p, i) =>
+          i === 0 ? { ...p, "Ancho (cm)": "14.8", "Alto (cm)": "21" } : p,
+        ),
+      };
+      const t = chunks(decimal, "coleccion-material")[0].texto;
+      expect(t).toContain("14,8x21 cm");
+      expect(t).not.toContain("14.8x21");
+    });
+
+    it("el formato no se duplica como columna extra", () => {
+      const t = chunks(conFormato(), "coleccion-material")[0].texto;
+      expect(t).not.toContain("Formato: A5");
+    });
   });
 
   it("sin la columna 'Sin mínimo por trabajo', la meta dice false: el mínimo se aplica", () => {

@@ -38,6 +38,13 @@ const COLUMNAS = [
     hoja: "Productos",
     nombre: "Sinónimos",
   },
+  {
+    // El tamaño en las palabras del cliente: "A4", "A5 o A6", "oficio". Va donde el
+    // producto NO se cotiza por superficie: ahí el tamaño es una característica, no un
+    // dato de entrada, y el cliente pregunta y responde en A5, no en 14,8x21 cm.
+    hoja: "Productos",
+    nombre: "Formato",
+  },
 ];
 
 chequearLock();
