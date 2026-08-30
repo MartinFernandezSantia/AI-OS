@@ -75,10 +75,11 @@ const MD_TARJETAS = {
   es_base: false,
   sin_minimo: false,
   escala: [{ desde: 1, hasta: null, precio: 13200 }],
+  paquete: 100,
   variantes: [
-    { material: "Tarjetas 9x5 simple faz x100", unidad: "paquete de 100 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 13200 }] },
-    { material: "Tarjetas 9x5 simple faz x500", unidad: "paquete de 500 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 28000 }] },
-    { material: "Tarjetas 9x5 simple faz x1000", unidad: "paquete de 1000 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 42000 }] },
+    { material: "Tarjetas 9x5 simple faz x100", unidad: "paquete de 100 tarjetas", modo: "item", sin_minimo: false, paquete: 100, escala: [{ desde: 1, hasta: null, precio: 13200 }] },
+    { material: "Tarjetas 9x5 simple faz x500", unidad: "paquete de 500 tarjetas", modo: "item", sin_minimo: false, paquete: 500, escala: [{ desde: 1, hasta: null, precio: 28000 }] },
+    { material: "Tarjetas 9x5 simple faz x1000", unidad: "paquete de 1000 tarjetas", modo: "item", sin_minimo: false, paquete: 1000, escala: [{ desde: 1, hasta: null, precio: 42000 }] },
   ],
 };
 
@@ -92,17 +93,22 @@ const cot = (material, ancho_cm, alto_cm, cantidad) => ({
 
 const casos = [
   // ── Chunk agrupado: las 3 presentaciones viven en UN chunk ──────────────────────────
+  // El modelo declara la cantidad en PIEZAS ("100 tarjetas"), porque es como pide el
+  // cliente y como se lo pide el esquema de salida. El catálogo cobra por PAQUETE. Los
+  // números de acá abajo salen de ejecuciones leídas en vivo, no de lo que suponemos que
+  // el modelo hace.
   {
-    nombre: "agrupado · 100 tarjetas → la primera variante, $13.200",
+    nombre: "agrupado · 100 tarjetas → 1 paquete, $13.200",
     agente: {
       output: {
         respuesta: "100 tarjetas simple faz te salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 1)],
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 100)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],
     esperaOk: true,
     esperaEnMensaje: ["$13.200"],
+    noEsperaEnMensaje: ["$1.320.000"], // 100 × el precio del paquete
   },
   {
     nombre: "agrupado · 500 tarjetas → variante que NO es la primera del chunk",
@@ -111,7 +117,7 @@ const casos = [
     agente: {
       output: {
         respuesta: "500 tarjetas simple faz te salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x500", 9, 5, 1)],
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x500", 9, 5, 500)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],
@@ -120,56 +126,73 @@ const casos = [
     noEsperaEnMensaje: ["$13.200", "$66.000"], // ni la 1ª variante ni 5 x el precio de 100
   },
   {
-    nombre: "agrupado · 1000 tarjetas → la última variante, $42.000",
+    nombre: "agrupado · 1000 tarjetas del x1000 → $42.000, no $42.000.000",
+    // Reproduce la ejecución 305 leída en vivo: el modelo declaró el material "…x1000" con
+    // cantidad 1000 y el auditor hacía 1000 × el precio del paquete. El nombre ya decía
+    // x1000 y la cantidad lo volvía a decir: se contaba dos veces.
     agente: {
       output: {
         respuesta: "1000 tarjetas te salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x1000", 9, 5, 1)],
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x1000", 9, 5, 1000)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],
     esperaOk: true,
     esperaEnMensaje: ["$42.000"],
+    noEsperaEnMensaje: ["$42.000.000"],
   },
   {
-    nombre: "agrupado · el modelo pide 5 paquetes de 100 en vez del pack de 500",
-    // Cotiza $66.000 en vez de $28.000: caro, pero NO es un error del auditor — hizo la
-    // cuenta que le pidieron. Queda registrado para saber qué pasa si el modelo elige mal
-    // la presentación; el chunk lo desalienta con "no se calcula proporcionalmente".
+    nombre: "agrupado · 1000 piezas pero declarando el paquete de 100 → 10 paquetes",
+    // Elige una presentación más cara de lo necesario ($132.000 contra $42.000), pero la
+    // cuenta es la que le pidieron y el total es plausible. Queda registrado: es el costo
+    // de que el modelo elija mal la presentación, no un error de aritmética.
     agente: {
       output: {
         respuesta: "Salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 5)],
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 1000)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],
     esperaOk: true,
-    esperaEnMensaje: ["$66.000"],
+    esperaEnMensaje: ["$132.000"],
   },
   {
-    nombre: "agrupado · el modelo confunde tarjetas con paquetes (500 x $13.200)",
-    // El riesgo grande: el esquema le pide "piezas que pidió el cliente" y la unidad de
-    // cobro es un paquete de 100. Si declara 500, el total se va a $6.600.000 y el tope de
-    // sanity ($600.000) lo ataja: deriva a consulta en vez de mandar un disparate.
+    nombre: "agrupado · 150 tarjetas → no es múltiplo de 100, deriva",
+    // TG vende paquetes cerrados. 150 no son 1,5 paquetes ni se redondea a 2 (eso sería
+    // cobrarle 200 y entregarle 150). El modelo ya respondía esto solo — leído en la
+    // ejecución 304, con "Y 50?" — y ahora el auditor no lo puede contradecir.
     agente: {
       output: {
-        respuesta: "500 tarjetas salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 500)],
+        respuesta: "150 tarjetas salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 150)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],
     esperaOk: false,
     esperaEnMensaje: ["terminalgrafica@gmail.com"],
-    noEsperaEnMensaje: ["$6.600.000"],
   },
   {
-    nombre: "agrupado · cantidad intermedia (300) → no hay presentación, deriva",
+    nombre: "agrupado · el modelo declara 1 (paquetes) en vez de las piezas",
+    // La lectura inversa: si el modelo pasa la cantidad de PAQUETES, 1 no divide exacto
+    // por 100 y deriva. Prefiere derivar antes que adivinar cuál de las dos lecturas era.
+    agente: {
+      output: {
+        respuesta: "Un paquete sale {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 1)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+  },
+  {
+    nombre: "agrupado · presentación inventada (x300) → no está en el chunk, deriva",
     // TG no vende 300: no hay material que lo cubra. El modelo no debería declararlo, pero
     // si lo hace con un nombre inventado el auditor no lo encuentra y deriva.
     agente: {
       output: {
         respuesta: "300 tarjetas salen {P1}.",
-        cotizaciones: [cot("Tarjetas 9x5 simple faz x300", 9, 5, 1)],
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x300", 9, 5, 300)],
       },
     },
     filas: [{ metadata: MD_TARJETAS }],

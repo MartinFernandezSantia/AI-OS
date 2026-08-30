@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisos, chunks, COL_SIN_MINIMO, escalaTexto, lineaPrecio, rindeEfectivo } from "../chunk";
+import { avisos, chunks, COL_SIN_MINIMO, escalaTexto, lineaPrecio, paqueteDe, rindeEfectivo } from "../chunk";
 import { escalaDe, type Datos } from "../parse";
 
 /** Fixture chico armado a mano: dos colecciones, tres materiales, los dos modos.
@@ -366,6 +366,56 @@ describe("chunks — coleccion-material", () => {
       // El default no cambia: lo que ya andaba (stickers, lonas) se arma igual que antes.
       expect(chunks(datos, "coleccion-material").length).toBe(cs.length);
       expect(cs[0].meta).not.toHaveProperty("variantes");
+    });
+
+    it("cada variante lleva cuántas piezas trae su paquete", () => {
+      // Sin esto el auditor multiplicaba las dos cosas: el modelo declara el material
+      // "…x1000" con cantidad 1000 (piezas) y salían 1000 paquetes.
+      const m = chunks(conFamilia(), "coleccion-material")[0].meta as Record<string, unknown>;
+      const vs = m.variantes as { material: string; paquete?: number }[];
+      expect(vs.map((v) => v.paquete)).toEqual([100, 500]);
+    });
+  });
+
+  describe("Piezas por paquete", () => {
+    const mat = (Material: string, Unidad: string, extra = {}) => ({
+      Material, Unidad, Desde: "1", "Precio por unidad": "1000", ...extra,
+    });
+
+    it("lo deriva del número que ya trae la unidad", () => {
+      const ms = [mat("A", "paquete de 100 tarjetas"), mat("B", "paquete de 1000 tarjetas")];
+      expect(paqueteDe(ms, "A")).toBe(100);
+      expect(paqueteDe(ms, "B")).toBe(1000);
+    });
+
+    it("la columna cargada le gana a la unidad", () => {
+      // El caso real: "Pack 4 libros de medicina" tiene unidad "pack" a secas.
+      const ms = [mat("Pack libros", "pack", { "Piezas por paquete": "4" })];
+      expect(paqueteDe(ms, "Pack libros")).toBe(4);
+    });
+
+    it("lo que se cobra de a uno NO tiene paquete", () => {
+      // Y esto es lo que importa: si "unidad" u "hoja" devolvieran un número, el auditor
+      // dividiría un precio unitario por la nada y cobraría de menos.
+      const ms = [mat("Anillado", "unidad"), mat("Copia", "hoja"), mat("Lona", "m2")];
+      expect(paqueteDe(ms, "Anillado")).toBeNull();
+      expect(paqueteDe(ms, "Copia")).toBeNull();
+      expect(paqueteDe(ms, "Lona")).toBeNull();
+    });
+
+    it("un número en una unidad que no es de conjunto no lo convierte en paquete", () => {
+      // "pliego A3" y "hoja A4" tienen dígitos, pero no son paquetes de 3 ni de 4.
+      const ms = [mat("Pliego", "pliego A3"), mat("Hoja", "hoja A4")];
+      expect(paqueteDe(ms, "Pliego")).toBeNull();
+      expect(paqueteDe(ms, "Hoja")).toBeNull();
+    });
+
+    it("una unidad de conjunto sin número da null, para que el gate lo cante", () => {
+      expect(paqueteDe([mat("X", "pack")], "X")).toBeNull();
+    });
+
+    it("un material que no existe da null en vez de romper", () => {
+      expect(paqueteDe([mat("A", "paquete de 100 tarjetas")], "No existe")).toBeNull();
     });
   });
 

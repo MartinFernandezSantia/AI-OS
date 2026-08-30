@@ -8,7 +8,8 @@
 // Las columnas a agregar se declaran en COLUMNAS. Cada una:
 //   hoja    – dónde va
 //   nombre  – el encabezado
-//   marcar  – (opcional) { valor, filas: [claves de la 1ª columna] }
+//   marcar  – (opcional) el mismo valor en varias filas: { valor, filas: [claves] }
+//   valores – (opcional) un valor DISTINTO por fila: { [clave]: valor }
 import { XLSX, chequearLock, abrir, cadenasDe, dec, indiceCadenas, guardar } from "./lib-xlsx.mjs";
 
 const APLICAR = process.argv.includes("--apply");
@@ -53,6 +54,18 @@ const COLUMNAS = [
     hoja: "Materiales",
     nombre: "Familia",
   },
+  {
+    // Cuántas piezas trae el paquete. El cliente pide en piezas ("mil tarjetas") y esto se
+    // cobra por paquete: sin el dato, el auditor multiplicaba las dos cosas y 1000 tarjetas
+    // del paquete de 1000 daban $54.000.000.
+    //
+    // Casi siempre se deriva sola de la Unidad ("paquete de 500 volantes" → 500), así que
+    // la columna solo se carga donde no se puede leer así. Hoy es un caso: el pack de
+    // libros, cuya unidad es "pack" a secas y el 4 está en el nombre.
+    hoja: "Materiales",
+    nombre: "Piezas por paquete",
+    valores: { "Pack 4 libros de medicina": "4" },
+  },
 ];
 
 chequearLock();
@@ -75,7 +88,7 @@ const CADENAS = cadenasDe(leer("xl/sharedStrings.xml"));
 let insertadas = 0;
 const escrituras = new Map();
 
-for (const { hoja, nombre, marcar } of COLUMNAS) {
+for (const { hoja, nombre, marcar, valores } of COLUMNAS) {
   const h = HOJAS.find((x) => x.nombre === hoja);
   if (!h) throw new Error(`el Excel no tiene la hoja "${hoja}"`);
   const ruta = "xl/" + RID[h.rid].replace(/^\//, "");
@@ -101,10 +114,17 @@ for (const { hoja, nombre, marcar } of COLUMNAS) {
   const destino = yaExiste ?? String.fromCharCode(ultimaCol.charCodeAt(0) + 1);
   console.log(`${hoja} · "${nombre}" → columna ${destino}${yaExiste ? " (ya existía)" : ""}`);
 
-  const presentes = marcar ? marcar.filas.filter((k) => filaDe[k]) : [];
-  const faltan = marcar ? marcar.filas.filter((k) => !filaDe[k]) : [];
-  if (marcar) {
-    console.log(`  marca "${marcar.valor}" en: ${presentes.length ? presentes.join(" · ") : "(ninguna todavía)"}`);
+  // `marcar` (un valor en varias filas) y `valores` (uno distinto por fila) se resuelven
+  // al mismo mapa clave→valor, así la escritura de abajo tiene un solo camino.
+  const aCargar = {
+    ...(marcar ? Object.fromEntries(marcar.filas.map((k) => [k, marcar.valor])) : {}),
+    ...(valores ?? {}),
+  };
+  const claves = Object.keys(aCargar);
+  const presentes = claves.filter((k) => filaDe[k]);
+  const faltan = claves.filter((k) => !filaDe[k]);
+  if (claves.length) {
+    console.log(`  carga en: ${presentes.length ? presentes.map((k) => `${k}="${aCargar[k]}"`).join(" · ") : "(ninguna todavía)"}`);
     if (faltan.length) console.log(`  todavía no están en la hoja: ${faltan.join(" · ")}`);
   }
 
@@ -119,7 +139,7 @@ for (const { hoja, nombre, marcar } of COLUMNAS) {
   xml = xml.replace(/<row r="(\d+)"([^>]*)>([\s\S]*?)<\/row>/g, (todo, nStr, attrs, cuerpo) => {
     const n = Number(nStr);
     const clave = Object.keys(filaDe).find((k) => filaDe[k] === n);
-    const texto = n === 1 ? nombre : presentes.includes(clave) ? marcar.valor : null;
+    const texto = n === 1 ? nombre : presentes.includes(clave) ? aCargar[clave] : null;
     if (texto === null) return todo;
     if (cuerpo.includes(`<c r="${destino}${n}"`)) return todo; // ya cargada
     insertadas++;

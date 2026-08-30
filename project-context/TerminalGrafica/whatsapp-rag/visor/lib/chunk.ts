@@ -78,6 +78,23 @@ export const COL_FORMATO = "Formato";
  */
 export const COL_FAMILIA = "Familia";
 
+/**
+ * Cuántas PIEZAS trae una unidad de cobro que se vende en paquete cerrado: 100 tarjetas,
+ * 500 volantes, 10 talonarios, 4 libros.
+ *
+ * Existe porque el cliente pide en piezas ("mil tarjetas") y el catálogo cobra en paquetes.
+ * Sin este dato el auditor multiplicaba las dos cosas: el modelo declaraba el material
+ * "Tarjetas 9x5 doble faz x1000" con cantidad 1000, y 1000 × $54.000 daba $54.000.000.
+ * El nombre ya decía x1000 y la cantidad lo volvía a decir.
+ *
+ * Es un dato del CATÁLOGO, no algo que el modelo deba despejar en el prompt: esa es la
+ * misma apuesta que ya falló con los pliegos. El auditor divide y exige división exacta.
+ *
+ * Casi siempre se deriva sola de la Unidad ("paquete de 500 volantes" → 500). La columna
+ * es para lo que no se puede leer así, y si está cargada manda sobre lo derivado.
+ */
+export const COL_PAQUETE = "Piezas por paquete";
+
 /** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
 const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
 
@@ -308,6 +325,33 @@ const sinMinimoDe = (datos: Datos, coleccion: string, material?: string): boolea
 };
 
 /**
+ * Cuántas piezas trae el paquete de este material, o null si no se vende en paquete
+ * (ver COL_PAQUETE).
+ *
+ * La columna manda; si está vacía se deriva de la Unidad, que ya lleva el número en todos
+ * los casos del catálogo ("paquete de 500 volantes", "paquete de 10 talonarios"). Derivarla
+ * evita el error silencioso de cargar 500 en la unidad y 100 en la columna.
+ *
+ * Solo cuenta el número si la unidad nombra un CONJUNTO. "hoja", "unidad" y "m2" no son
+ * paquetes por más que aparezca un número al lado, y tratarlos como tales dividiría un
+ * precio unitario por la nada.
+ */
+export function paqueteDe(materiales: Fila[], material: string): number | null {
+  const fila = materiales.find((m) => m["Material"] === material);
+  if (!fila) return null;
+
+  const cargado = num(fila[COL_PAQUETE]);
+  if (cargado && cargado > 1) return cargado;
+
+  const u = String(fila["Unidad"] ?? "").trim().toLowerCase();
+  if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(u)) return null;
+  // "paquete de 1000 tarjetas": el primer número que aparezca después del sustantivo.
+  const m = u.match(/(\d[\d.,]*)/);
+  const n = m ? num(m[1]) : null;
+  return n && n > 1 ? n : null;
+}
+
+/**
  * La escala como DATO estructurado para `metadata`. El texto del chunk la lleva en prosa
  * (`lineaPrecio`) porque es lo que lee el LLM; esto es lo que lee el AUDITOR del workflow
  * para re-calcular el total sin confiar en lo que el bot dice haber leído.
@@ -442,6 +486,11 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           es_base: esBase,
           // El auditor lo lee para NO aplicar el mínimo por trabajo (ver COL_SIN_MINIMO).
           sin_minimo: sinMinimoDe(datos, col, mat),
+          // Piezas por paquete: el cliente pide en piezas y esto se cobra por paquete.
+          // Sin esto el auditor multiplica las dos cosas (ver COL_PAQUETE).
+          ...(paqueteDe(datos.materiales, mat) && {
+            paquete: paqueteDe(datos.materiales, mat),
+          }),
           // El auditor del workflow re-calcula con esto; sin escala en la metadata
           // tendría que parsear la prosa del chunk.
           escala: escalaMeta(tramos),
@@ -456,6 +505,9 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
               modo: modoDe(unidadDe(datos.materiales, m)),
               sin_minimo: sinMinimoDe(datos, col, m),
               escala: escalaMeta(escalaDe(datos.materiales, m)),
+              ...(paqueteDe(datos.materiales, m) && {
+                paquete: paqueteDe(datos.materiales, m),
+              }),
             })),
           }),
           ...(geo && {

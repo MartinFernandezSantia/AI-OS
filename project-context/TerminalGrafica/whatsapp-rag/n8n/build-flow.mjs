@@ -121,6 +121,20 @@ function sinMinimoDeMaterial(material) {
   return COLECCIONES.some((c) => cols.has(c["Colección"]) && esSi(c["Sin mínimo por trabajo"]));
 }
 
+/** Piezas por paquete de un material, o null si se vende de a uno. Calca `paqueteDe` de
+ *  visor/lib/chunk.ts: la columna manda, si está vacía se deriva de la Unidad. */
+function paqueteDeMaterial(material) {
+  const fila = MATERIALES.find((m) => m["Material"] === material);
+  if (!fila) return null;
+  const cargado = num(fila["Piezas por paquete"]);
+  if (cargado && cargado > 1) return cargado;
+  const u = String(fila["Unidad"] ?? "").trim().toLowerCase();
+  if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(u)) return null;
+  const m = u.match(/(\d[\d.,]*)/);
+  const n = m ? num(m[1]) : null;
+  return n && n > 1 ? n : null;
+}
+
 // ── Parámetros: se HORNEAN como constantes del auditor ────────────────────────────────
 const PARAMS_FILAS = objetos(matriz("Parámetros"));
 const paramNum = (nombre) => {
@@ -192,7 +206,7 @@ const redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);
  * Re-calcula una cotización desde los datos del CATÁLOGO (no desde lo que declaró el LLM).
  * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar.
  */
-function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado, sin_minimo }) {
+function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado, sin_minimo, paquete }) {
   const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);
   if (!(q > 0)) return { ok: false, motivo: 'cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
@@ -202,10 +216,25 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_c
 
   let unidades, r = null;
   if (modo === 'item') {
-    // Unidad de cobro = ítem. Sin geometría ni conversión: la cantidad pedida ES la
-    // cantidad de unidades. Cubre lo que se cobra por unidad (anillado, laminado, sobre)
-    // y lo que se vende por paquete cerrado (100 tarjetas = 1 paquete).
-    unidades = q;
+    // Unidad de cobro = ítem. Sin geometría ni conversión.
+    const p = Number(paquete);
+    if (p > 1) {
+      // Se vende por paquete cerrado y el cliente pide en PIEZAS ("mil tarjetas"), así que
+      // hay que convertir. Sin esto se multiplicaba dos veces: el modelo declara el
+      // material "…x1000" con cantidad 1000 y salían $54.000.000 por un trabajo de $54.000.
+      //
+      // Se exige división EXACTA: TG vende paquetes cerrados, no cantidades intermedias.
+      // 150 tarjetas no son 1,5 paquetes ni se redondean a 2 (eso sería cobrarle 200 y
+      // entregarle 150, una decisión comercial que no es del bot). Va a consulta.
+      if (Math.abs(q / p - Math.round(q / p)) > 1e-9) {
+        return { ok: false, motivo: 'se vende en paquetes de ' + p + ' y ' + q + ' no es múltiplo — derivar a consulta' };
+      }
+      unidades = Math.round(q / p);
+    } else {
+      // Se cobra de a uno (anillado, laminado, sobre): la cantidad pedida ES la cantidad
+      // de unidades.
+      unidades = q;
+    }
   } else if (modo === 'pliego') {
     // El rinde cargado a mano gana sobre el cálculo (unidades no geométricas: bobina, plancha).
     r = rinde_cargado != null ? Number(rinde_cargado) : rinde(a, h, geometria);
@@ -412,6 +441,71 @@ function correrTests() {
     if (desconocido.ok) fallos.push("item: el modo 'otro' cotizó en vez de rechazar");
   }
 
+  // Paquete cerrado: el cliente pide PIEZAS, el catálogo cobra PAQUETES.
+  //
+  // Los números salen de la ejecución 305 leída en vivo: el modelo declaró el material
+  // "Tarjetas 9x5 doble faz x1000" con cantidad 1000, y el auditor hizo 1000 × $54.000 =
+  // $54.000.000. Lo atajó el tope de sanity, pero por accidente: el mismo error con un
+  // paquete más barato pasa el tope y le llega al cliente.
+  {
+    const mil = [{ desde: 1, hasta: null, precio: 54000 }];
+    const cien = [{ desde: 1, hasta: null, precio: 16500 }];
+    const pack = (cantidad, paquete, escala) =>
+      motor.cotizar({ modo: "item", cantidad, paquete, escala, ancho_cm: null, alto_cm: null });
+
+    // El caso que motivó todo: pedir 1000 piezas del material que YA es de 1000.
+    const r = pack(1000, 1000, mil);
+    if (!r.ok || r.total !== 54000) {
+      fallos.push(`paquete: 1000 piezas del x1000 esperaba $54000, dio ${r.ok ? "$" + r.total : r.motivo}`);
+    } else if (r.unidades_cobradas !== 1) {
+      fallos.push(`paquete: 1000 piezas del x1000 cobró ${r.unidades_cobradas} paquetes, no 1`);
+    }
+
+    // Múltiplo exacto: 1000 piezas del paquete de 100 son 10 paquetes.
+    const diez = pack(1000, 100, cien);
+    if (!diez.ok || diez.total !== 165000) {
+      fallos.push(`paquete: 1000 piezas del x100 esperaba $165000, dio ${diez.ok ? "$" + diez.total : diez.motivo}`);
+    }
+
+    // Un solo paquete pedido en piezas.
+    const uno = pack(100, 100, cien);
+    if (!uno.ok || uno.total !== 16500) {
+      fallos.push(`paquete: 100 piezas del x100 esperaba $16500, dio ${uno.ok ? "$" + uno.total : uno.motivo}`);
+    }
+
+    // Cantidad intermedia: TG vende paquetes cerrados. 150 no es 1,5 paquetes ni se
+    // redondea a 2 — va a consulta. (El modelo ya respondía esto solo; ahora el auditor
+    // no lo puede contradecir con un número.)
+    const intermedia = pack(150, 100, cien);
+    if (intermedia.ok) {
+      fallos.push(`paquete: 150 piezas de a 100 cotizó $${intermedia.total} en vez de derivar`);
+    }
+
+    // Sin `paquete` NO se divide: la mayoría de los ítems se cobran de a uno y dividir ahí
+    // sería inventar un descuento. Es el default seguro para un chunk viejo sin el campo.
+    const suelto = motor.cotizar({
+      modo: "item", cantidad: 3, escala: [{ desde: 1, hasta: null, precio: 2400 }],
+      ancho_cm: null, alto_cm: null, sin_minimo: true,
+    });
+    if (!suelto.ok || suelto.total !== 7200) {
+      fallos.push(`paquete: sin el campo esperaba 3 × $2400 = $7200, dio ${suelto.ok ? "$" + suelto.total : suelto.motivo}`);
+    }
+
+    // `paquete: 1` es "se vende de a uno", no una división por uno con otro camino.
+    const unitario = pack(3, 1, [{ desde: 1, hasta: null, precio: 2400 }]);
+    if (!unitario.ok || unitario.unidades_cobradas !== 3) {
+      fallos.push(`paquete: con paquete=1 esperaba 3 unidades, dio ${unitario.ok ? unitario.unidades_cobradas : unitario.motivo}`);
+    }
+
+    // El tramo se busca por PAQUETES, no por piezas. Con escala por tramos, pedir 1000
+    // piezas de a 100 tiene que caer en el tramo de 10, no en el de 1000.
+    const escalonada = [{ desde: 1, hasta: 5, precio: 20000 }, { desde: 6, hasta: null, precio: 15000 }];
+    const t = pack(1000, 100, escalonada);
+    if (!t.ok || t.precio_tramo !== 15000) {
+      fallos.push(`paquete: 10 paquetes esperaba el tramo de $15000, dio ${t.ok ? "$" + t.precio_tramo : t.motivo}`);
+    }
+  }
+
   // Los modos que el Excel produce, comparados contra la unidad escrita. Si alguien carga
   // una unidad nueva y cae en `otro`, el producto entra al catálogo pero no se puede
   // cotizar: el chunk sale con precio y el bot deriva todo a consulta.
@@ -431,6 +525,38 @@ function correrTests() {
       const unidad = m["Unidad"] ?? "";
       if (modoDe(unidad) === "otro") {
         fallos.push(`el material "${m["Material"]}" tiene unidad "${unidad}", que no es un modo conocido — no se va a poder cotizar`);
+      }
+    }
+  }
+
+  // Que todo material que se vende EN PAQUETE tenga cuántas piezas trae. Sin el dato, el
+  // auditor cobra la cantidad pedida como si fueran paquetes: pedir 500 volantes salía
+  // 500 × el precio del paquete de 500. La unidad ya lleva el número en todo el catálogo,
+  // así que esto se rompe recién cuando alguien escribe una unidad de conjunto sin cifra.
+  {
+    for (const m of MATERIALES) {
+      const unidad = String(m["Unidad"] ?? "").trim().toLowerCase();
+      if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(unidad)) continue;
+      if (!paqueteDeMaterial(m["Material"])) {
+        fallos.push(
+          `el material "${m["Material"]}" se vende por "${unidad}" pero no se sabe cuántas piezas trae — ` +
+            `cargá "Piezas por paquete" o poné la cantidad en la unidad ("paquete de 100 tarjetas")`,
+        );
+      }
+    }
+
+    // Y el cruce inverso: un paquete cuyo NOMBRE dice una cantidad distinta de la que se
+    // va a cobrar. "Tarjetas …x500" con unidad "paquete de 100" cotizaría 5 veces de menos
+    // y nadie lo notaría — el precio sale plausible.
+    for (const m of MATERIALES) {
+      const p = paqueteDeMaterial(m["Material"]);
+      if (!p) continue;
+      const enNombre = String(m["Material"] ?? "").match(/\bx\s?(\d[\d.]*)\b/i);
+      const n = enNombre ? num(enNombre[1]) : null;
+      if (n && n !== p) {
+        fallos.push(
+          `el material "${m["Material"]}" dice x${n} en el nombre pero su paquete es de ${p} piezas`,
+        );
       }
     }
   }
@@ -514,7 +640,11 @@ const ESQUEMA_SALIDA = {
           },
           ancho_cm: { type: "number", description: "Ancho de UNA pieza, en cm." },
           alto_cm: { type: "number", description: "Alto de UNA pieza, en cm." },
-          cantidad: { type: "number", description: "Piezas que pidió el cliente." },
+          // SIEMPRE en piezas, incluso cuando el material se vende por paquete: "mil
+          // tarjetas" es 1000, no 1. La conversión a unidades de cobro la hace el auditor
+          // con `paquete` del catálogo. Cambiar esto a paquetes le devuelve al modelo una
+          // cuenta que ya no tiene que hacer, y las dos lecturas dejan de distinguirse.
+          cantidad: { type: "number", description: "Piezas que pidió el cliente (1000 tarjetas = 1000, aunque se vendan por paquete)." },
         },
       },
     },
@@ -618,6 +748,9 @@ function codeAuditor() {
     "    rinde_cargado: null,",
     "    // Exención del mínimo por trabajo: la marca es de la COLECCIÓN, viene en el chunk.",
     "    sin_minimo: md.sin_minimo === true,",
+    "    // Piezas por paquete. El modelo declara `cantidad` en PIEZAS ('mil tarjetas') y esto",
+    "    // se cobra por paquete: sin el dato del catálogo, las dos cosas se multiplicaban.",
+    "    paquete: md.paquete,",
     "  });",
     "",
     "  if (!r.ok) {",
@@ -936,9 +1069,11 @@ const flow = {
           "(sin el `bot.` consulta public y devuelve [] en verde, sin error).",
           "",
           "**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con",
-          "`escala`, `es_base`, `sin_minimo` y `variantes` en la metadata. El auditor los",
-          "necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté exento, y",
-          "sin `variantes` las presentaciones agrupadas (500 tarjetas) no se encuentran.",
+          "`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El",
+          "auditor los necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté",
+          "exento, sin `variantes` las presentaciones agrupadas (500 tarjetas) no se",
+          "encuentran, y sin `paquete` la cantidad en piezas se cobra como si fueran paquetes",
+          "(1000 tarjetas × el precio del paquete de 1000).",
           "",
           "**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow",
           "hornea el prompt, los parámetros y el código del auditor: quedarse con la versión",
@@ -998,6 +1133,7 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["escala", "escala: md.escala"],
     ["geometria", "geometria: md.geometria"],
     ["sin_minimo", "sin_minimo: md.sin_minimo"],
+    ["paquete", "paquete: md.paquete"],
   ];
   const sinCablear = CABLEADOS.filter(([, frag]) => !jsAuditor.includes(frag));
   if (sinCablear.length) {
