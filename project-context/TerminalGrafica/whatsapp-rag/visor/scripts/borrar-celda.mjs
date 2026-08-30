@@ -3,7 +3,7 @@
 // parte del NOMBRE del producto, no un empaque de 4 piezas, y hacía que el bot derivara
 // cuando el cliente pedía un pack (1 no es múltiplo de 4).
 //
-//   node visor/scripts/zz-borrar-celda.mjs                 → dry run
+//   node visor/scripts/borrar-celda.mjs                 → dry run
 //   CATALOGO=../Catalogo-TG-v3.xlsx node … --apply
 import { XLSX, chequearLock, abrir, cadenasDe, dec, guardar } from "./lib-xlsx.mjs";
 
