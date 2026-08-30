@@ -104,7 +104,9 @@ function preparar(hoja, existentes, items, clave, aFila) {
   const iSinMin = encabezado.indexOf("Sin mínimo por trabajo");
   if (iSinMin < 0) throw new Error('falta la columna "Sin mínimo por trabajo" — corré columna-sin-minimo.mjs primero');
   preparar("Colecciones", primeraCol, COLECCIONES, (c) => c.nombre, (c) => {
-    const fila = [c.nombre, c.descripcion, ""]; // sin material base: se decide si hace falta
+    // Material base solo donde el cliente puede pedir la misma medida en varios materiales
+    // y hay que decidir cuál cotizar; en el resto queda vacío a propósito.
+    const fila = [c.nombre, c.descripcion, c.materialBase ?? ""];
     fila[iSinMin] = c.sinMinimo ? "sí" : "";
     return fila;
   });

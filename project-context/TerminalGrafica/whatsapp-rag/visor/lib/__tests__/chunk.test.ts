@@ -672,10 +672,17 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(a[0]).toContain("calcula 104");
   });
 
-  it("colección con varios materiales y sin base marcada: hay que elegir una", () => {
+  it("la MISMA medida en dos materiales y sin base marcada: hay que elegir una", () => {
+    // La señal de que el material base es una decisión: el cliente puede pedir "5x5" y hay
+    // dos materiales que se la dan. El fixture trae 3x3 solo en papel y 5x5 solo en OPP,
+    // así que hay que agregar la 5x5 en papel para que exista la elección.
     const sinBase: Datos = {
       ...datos,
       colecciones: datos.colecciones.map(({ "Material base": _b, ...c }) => c),
+      productos: [
+        ...datos.productos,
+        { "Colección": "Stickers con forma", Producto: "Stickers 5x5 cm", Material: "Papel autoadhesivo", "Ancho (cm)": "5", "Alto (cm)": "5" },
+      ],
     };
     const a = avisos(sinBase);
     expect(a).toHaveLength(1); // solo la de 2 materiales; la de Lona no lo necesita
@@ -683,10 +690,27 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(a[0]).toContain("Material base");
   });
 
+  it("materiales que NO compiten por la misma medida: no se avisa nada", () => {
+    // "Encuadernación y terminaciones" tiene 10 productos distintos (anillado, laminado,
+    // ojalillos): son productos propios, no alternativas. No hay base que elegir y avisar
+    // sería ruido en cada carga.
+    const sinBase: Datos = {
+      ...datos,
+      colecciones: datos.colecciones.map(({ "Material base": _b, ...c }) => c),
+    };
+    // El fixture ya es así: 3x3 solo en papel, 5x5 solo en OPP.
+    expect(avisos(sinBase)).toEqual([]);
+  });
+
   it("base que apunta a un material que la colección no usa", () => {
     const mala: Datos = {
       ...datos,
       colecciones: [{ ...datos.colecciones[0], "Material base": "Vinilo UV" }, datos.colecciones[1]],
+      // Con la misma medida en dos materiales, para que la base sea una decisión real.
+      productos: [
+        ...datos.productos,
+        { "Colección": "Stickers con forma", Producto: "Stickers 5x5 cm", Material: "Papel autoadhesivo", "Ancho (cm)": "5", "Alto (cm)": "5" },
+      ],
     };
     const a = avisos(mala);
     expect(a).toHaveLength(1);

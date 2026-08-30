@@ -21,6 +21,10 @@ export const COLECCIONES = [
       "Tarjetas de presentación 9x5 cm, full color. Simple o doble faz, en papel ilustración " +
       "o kraft 280 g, con opción encapsulada (plastificada de ambos lados). Se cotizan por " +
       "cantidad cerrada: 100, 500 o 1000.",
+    // Las 14 son 9x5: el cliente pide "100 tarjetas" y hay 6 variantes que se la dan. Sin
+    // base, el bot cotiza la que le quede a mano — puede ser kraft doble faz, casi el doble
+    // que la común. La base es la más simple y barata; el resto se cotiza si lo pide.
+    materialBase: "Tarjetas 9x5 simple faz x100",
   },
   {
     nombre: "Papelería comercial",
@@ -170,6 +174,17 @@ export const MATERIALES = [
  * (un anillado no tiene tamaño: es el trabajo).
  */
 export const PRODUCTOS = [
+  // ── Materiales viejos que tenían precio pero NINGÚN producto ─────────────────────────
+  // Son las versiones SIN TROQUELAR de los stickers (área útil 31x46 sin separación, más
+  // grande que la troquelada porque no hay que dejar margen de corte) y el vinilo con
+  // blanco. Estaban en Materiales desde el principio con su escala completa, pero sin un
+  // producto que los use no generan chunk: el bot no podía cotizarlos ni nombrarlos, y
+  // cuando alguien pedía "impresión sin corte" cotizaba el troquelado, que es más caro.
+  { coleccion: "Stickers con forma", producto: "Stickers en plancha sin cortar", material: "Papel autoadhesivo solo impresión", medida: [5, 5], descripcion: "La plancha impresa sin corte: el cliente recorta a mano. Papel autoadhesivo brillo. Sale más barato que el troquelado.", sinonimos: "sin cortar, sin troquelar, plancha entera, solo impresión, recorto yo" },
+  { coleccion: "Stickers con forma", producto: "Stickers en OPP brillo sin cortar", material: "OPP brillo", medida: [5, 5], descripcion: "Plancha de OPP brillo impresa sin corte. Más resistente al roce y a la humedad que el papel." },
+  { coleccion: "Stickers con forma", producto: "Stickers holográficos sin cortar", material: "OPP plata, holográfico, cristal o mate", medida: [5, 5], descripcion: "Plancha de OPP tornasolado impresa sin corte. También en plata, cristal y mate." },
+  { coleccion: "Carteles y vidrieras", producto: "Cartel adhesivo con blanco o barniz", material: "Vinilo y lona UV con blanco o barniz", medida: [50, 70], descripcion: "Vinilo UV con una capa de blanco o barniz: da más cuerpo al color sobre superficies oscuras o transparentes.", sinonimos: "con blanco, con barniz, para vidrio, para superficie oscura" },
+
   // ── Tarjetas personales ──────────────────────────────────────────────────────────────
   { coleccion: "Tarjetas personales", producto: "100 tarjetas 9x5 cm simple faz", material: "Tarjetas 9x5 simple faz x100", medida: [9, 5], descripcion: "Tarjetas de presentación full color, impresas de un lado. El precio es por las 100.", sinonimos: "tarjetas personales, tarjetas de presentación, tarjetas comerciales" },
   { coleccion: "Tarjetas personales", producto: "100 tarjetas 9x5 cm simple faz encapsuladas", material: "Tarjetas 9x5 simple faz encapsuladas x100", medida: [9, 5], descripcion: "Impresas de un lado y plastificadas de los dos: más resistentes y con mejor tacto." },

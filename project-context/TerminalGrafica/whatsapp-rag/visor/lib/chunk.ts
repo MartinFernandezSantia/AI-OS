@@ -610,17 +610,36 @@ export function avisos(datos: Datos): string[] {
     );
   }
 
-  // Material base: solo importa donde hay más de un material para elegir. Sin base
-  // marcada el bot no sabe cuál cotizar por default y elige el que le quede a mano.
+  // Material base: solo importa donde el cliente puede pedir EL MISMO producto en
+  // materiales distintos ("stickers 5x5" en papel o en OPP). Ahí, sin base marcada, el bot
+  // no sabe cuál cotizar por default y elige el que le quede a mano.
+  //
+  // NO importa donde cada material es un producto propio: en "Encuadernación y
+  // terminaciones" hay 10 grupos, pero un anillado no es una alternativa de un laminado y
+  // no hay nada que elegir. Avisar ahí sería ruido en cada carga.
+  //
+  // La señal de que hay elección: dos productos de la colección con MEDIDA igual y
+  // material distinto. Es lo que hace del material base una decisión y no un dato.
   for (const col of nombresColeccion(datos)) {
     const items = productosDe(datos, col);
     const mats = materialesDe(items);
     if (mats.length < 2) continue;
+    const porMedida = new Map<string, Set<string>>();
+    for (const p of items) {
+      const a = p["Ancho (cm)"];
+      const h = p["Alto (cm)"];
+      if (!a || !h) continue;
+      const k = `${a}x${h}`;
+      if (!porMedida.has(k)) porMedida.set(k, new Set());
+      porMedida.get(k)!.add(p["Material"] ?? "");
+    }
+    const hayEleccion = [...porMedida.values()].some((s) => s.size > 1);
+    if (!hayEleccion) continue;
     const base = baseDe(datos, col);
     if (!base) {
       out.push(
-        `${col}: usa ${mats.length} materiales y no tiene "${COL_BASE}" marcado. ` +
-          `Elegí cuál se cotiza cuando el cliente no pide una opción especial.`,
+        `${col}: el cliente puede pedir la misma medida en ${mats.length} materiales y no ` +
+          `hay "${COL_BASE}" marcado. Elegí cuál se cotiza cuando no pide una opción especial.`,
       );
     } else if (!mats.includes(base)) {
       out.push(
