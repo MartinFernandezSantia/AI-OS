@@ -581,8 +581,8 @@ export function avisos(datos: Datos): string[] {
       const mats = materialesDe(productosDe(datos, col));
       // Con una unidad de cobro geométrica (pliego) o continua (m2), la cantidad hace
       // crecer el total y el mínimo solo afecta al pedido más chico: eso es lo que se
-      // quiere. El problema es solo donde una unidad = un ítem.
-      if (mats.some((m) => modoDe(unidadDe(datos.materiales, m)) !== "otro")) continue;
+      // quiere. El problema es solo donde una unidad de cobro es UN ÍTEM.
+      if (!mats.every((m) => modoDe(unidadDe(datos.materiales, m)) === "item")) continue;
       const topes = mats
         .map((m) => escalaDe(datos.materiales, m))
         .filter((t) => t.length)

@@ -156,10 +156,21 @@ describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
     expect(modoDe("  Pliego A3  ")).toBe("pliego");
   });
 
-  it("una unidad desconocida no se hace pasar por ninguna de las dos", () => {
+  it("reconoce las unidades que se cobran de a ítem", () => {
+    // Lo que no se cotiza por superficie: un anillado, un sobre, una hoja suelta, o un
+    // paquete cerrado ("paquete de 100" → pedir 1 son 100 tarjetas).
+    expect(modoDe("unidad")).toBe("item");
+    expect(modoDe("hoja")).toBe("item");
+    expect(modoDe("paquete de 100")).toBe("item");
+    expect(modoDe("pack")).toBe("item");
+  });
+
+  it("una unidad desconocida no se hace pasar por ninguno de los modos", () => {
+    // `otro` sigue siendo el cajón de errores, NO el default de item: si lo fuera, una
+    // unidad mal escrita cotizaría de a ítem en silencio en vez de fallar.
     expect(modoDe("plancha 30x40")).toBe("otro");
-    expect(modoDe("unidad")).toBe("otro");
     expect(modoDe("metro lineal")).toBe("otro");
+    expect(modoDe("bobina")).toBe("otro");
     expect(modoDe("")).toBe("otro");
   });
 

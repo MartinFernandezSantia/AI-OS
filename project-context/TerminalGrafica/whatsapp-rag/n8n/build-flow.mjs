@@ -179,11 +179,19 @@ const redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);
  */
 function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado, sin_minimo }) {
   const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);
-  if (!(a > 0) || !(h > 0) || !(q > 0)) return { ok: false, motivo: 'medida o cantidad inválida' };
+  if (!(q > 0)) return { ok: false, motivo: 'cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
+  // La medida solo hace falta donde el precio depende de ella. Un anillado o un ojalillo
+  // no tienen tamaño: son el trabajo. Exigirla ahí dejaría fuera media colección.
+  if (modo !== 'item' && (!(a > 0) || !(h > 0))) return { ok: false, motivo: 'medida inválida' };
 
   let unidades, r = null;
-  if (modo === 'pliego') {
+  if (modo === 'item') {
+    // Unidad de cobro = ítem. Sin geometría ni conversión: la cantidad pedida ES la
+    // cantidad de unidades. Cubre lo que se cobra por unidad (anillado, laminado, sobre)
+    // y lo que se vende por paquete cerrado (100 tarjetas = 1 paquete).
+    unidades = q;
+  } else if (modo === 'pliego') {
     // El rinde cargado a mano gana sobre el cálculo (unidades no geométricas: bobina, plancha).
     r = rinde_cargado != null ? Number(rinde_cargado) : rinde(a, h, geometria);
     if (!(r > 0)) return { ok: false, motivo: 'la pieza no entra en la unidad de cobro (rinde 0) — derivar a consulta' };
@@ -263,11 +271,13 @@ function catalogoDe(material) {
 }
 
 /** Modo por PREFIJO de la unidad (calca visor/lib/parse.ts): "pliego A4" es modo pliego.
- *  Con igualdad, una unidad nueva caería al modo equivocado sin ningún aviso. */
+ *  Con igualdad, una unidad nueva caería al modo equivocado sin ningún aviso.
+ *  `item` es lista explícita, no default: ver el comentario en parse.ts. */
 function modoDe(unidad) {
   const u = String(unidad).trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
+  if (/^(unidad|hoja|paquete|pack|item|ítem)\b/.test(u)) return "item";
   return "otro";
 }
 
@@ -344,6 +354,67 @@ function correrTests() {
       continue;
     }
     okCasos++;
+  }
+
+  // El modo `item`: unidad de cobro = ítem. Es lo que usan los productos que no se cotizan
+  // por superficie (anillado, sobres, tarjetas por paquete cerrado).
+  {
+    const porUnidad = [{ desde: 1, hasta: 200, precio: 250 }, { desde: 201, hasta: null, precio: 220 }];
+    const item = (cantidad, extra = {}) =>
+      motor.cotizar({ modo: "item", cantidad, escala: porUnidad, ancho_cm: 23.5, alto_cm: 12, ...extra });
+
+    // La cantidad pedida ES la cantidad de unidades: sin rinde ni conversión.
+    const r250 = item(250);
+    if (!r250.ok || r250.total !== 55000) {
+      fallos.push(`item: 250 sobres esperaba $55000, dio ${r250.ok ? "$" + r250.total : r250.motivo}`);
+    } else if (r250.unidades_cobradas !== 250) {
+      fallos.push(`item: 250 sobres cobró ${r250.unidades_cobradas} unidades, no 250`);
+    }
+
+    // El borde de tramo: 201 salta al tramo más barato y el total redondea a $100.
+    const r201 = item(201);
+    if (!r201.ok || r201.total !== 44200) {
+      fallos.push(`item: 201 sobres esperaba $44200, dio ${r201.ok ? "$" + r201.total : r201.motivo}`);
+    }
+
+    // Sin medida tiene que cotizar igual: un anillado no tiene tamaño. Va exento del
+    // mínimo (es una terminación), que es como se va a cargar de verdad.
+    const sinMedida = motor.cotizar({
+      modo: "item", cantidad: 1, escala: [{ desde: 1, hasta: null, precio: 2400 }],
+      ancho_cm: null, alto_cm: null, sin_minimo: true,
+    });
+    if (!sinMedida.ok || sinMedida.total !== 2400) {
+      fallos.push(`item: sin medida esperaba $2400, dio ${sinMedida.ok ? "$" + sinMedida.total : sinMedida.motivo}`);
+    }
+
+    // Una unidad que NO está en la lista sigue siendo un error, no un ítem por default.
+    const desconocido = motor.cotizar({
+      modo: "otro", cantidad: 1, escala: porUnidad, ancho_cm: 10, alto_cm: 10,
+    });
+    if (desconocido.ok) fallos.push("item: el modo 'otro' cotizó en vez de rechazar");
+  }
+
+  // Los modos que el Excel produce, comparados contra la unidad escrita. Si alguien carga
+  // una unidad nueva y cae en `otro`, el producto entra al catálogo pero no se puede
+  // cotizar: el chunk sale con precio y el bot deriva todo a consulta.
+  {
+    const CASOS_MODO = [
+      ["pliego A3", "pliego"], ["pliego A4", "pliego"],
+      ["m2", "m2"], ["m²", "m2"],
+      ["unidad", "item"], ["hoja", "item"], ["paquete de 100", "item"], ["pack", "item"],
+      ["bobina", "otro"], ["", "otro"],
+    ];
+    for (const [unidad, esperado] of CASOS_MODO) {
+      const got = modoDe(unidad);
+      if (got !== esperado) fallos.push(`modoDe("${unidad}"): esperaba "${esperado}", dio "${got}"`);
+    }
+    // Y lo que de verdad importa: que NINGÚN material del Excel caiga en `otro`.
+    for (const m of MATERIALES) {
+      const unidad = m["Unidad"] ?? "";
+      if (modoDe(unidad) === "otro") {
+        fallos.push(`el material "${m["Material"]}" tiene unidad "${unidad}", que no es un modo conocido — no se va a poder cotizar`);
+      }
+    }
   }
 
   // La exención del mínimo por trabajo (colecciones marcadas "Sin mínimo por trabajo").
