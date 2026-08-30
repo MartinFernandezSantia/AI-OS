@@ -90,8 +90,14 @@ export const COL_FAMILIA = "Familia";
  * Es un dato del CATÁLOGO, no algo que el modelo deba despejar en el prompt: esa es la
  * misma apuesta que ya falló con los pliegos. El auditor divide y exige división exacta.
  *
- * Casi siempre se deriva sola de la Unidad ("paquete de 500 volantes" → 500). La columna
- * es para lo que no se puede leer así, y si está cargada manda sobre lo derivado.
+ * Se deriva sola de la Unidad ("paquete de 500 volantes" → 500). La columna es para lo que
+ * no se puede leer así, y si está cargada manda sobre lo derivado.
+ *
+ * OJO con la diferencia entre un empaque y un producto que se LLAMA pack: el "Pack 4 libros
+ * de medicina" tiene unidad "pack" y el cliente lo pide de a uno ("quiero el pack"), no de
+ * a cuatro. Cargarle 4 hacía que el bot derivara un producto que sí está en el catálogo,
+ * porque 1 no es múltiplo de 4. Por eso una unidad de conjunto SIN número no cuenta como
+ * paquete: el número tiene que estar, y tiene que ser de piezas.
  */
 export const COL_PAQUETE = "Piezas por paquete";
 
@@ -344,7 +350,9 @@ export function paqueteDe(materiales: Fila[], material: string): number | null {
   if (cargado && cargado > 1) return cargado;
 
   const u = String(fila["Unidad"] ?? "").trim().toLowerCase();
-  if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(u)) return null;
+  // "pack" a secas queda AFUERA a propósito: sin un número de piezas al lado no se sabe si
+  // es un empaque o un producto que se llama pack y se pide de a uno (ver COL_PAQUETE).
+  if (!/^(paquete|caja|resma|juego|blister|set)\b/.test(u)) return null;
   // "paquete de 1000 tarjetas": el primer número que aparezca después del sustantivo.
   const m = u.match(/(\d[\d.,]*)/);
   const n = m ? num(m[1]) : null;

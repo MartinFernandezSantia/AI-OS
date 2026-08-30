@@ -389,9 +389,17 @@ describe("chunks — coleccion-material", () => {
     });
 
     it("la columna cargada le gana a la unidad", () => {
-      // El caso real: "Pack 4 libros de medicina" tiene unidad "pack" a secas.
-      const ms = [mat("Pack libros", "pack", { "Piezas por paquete": "4" })];
-      expect(paqueteDe(ms, "Pack libros")).toBe(4);
+      const ms = [mat("Resma especial", "resma", { "Piezas por paquete": "250" })];
+      expect(paqueteDe(ms, "Resma especial")).toBe(250);
+    });
+
+    it('"pack" a secas NO es un paquete: puede ser el nombre del producto', () => {
+      // El caso real, y un error que cometí: al "Pack 4 libros de medicina" le cargué
+      // paquete=4 y el bot empezó a DERIVAR un producto que sí está en el catálogo — el
+      // cliente pide "el pack" (cantidad 1) y 1 no es múltiplo de 4. El 4 está en el
+      // nombre del producto, no en la unidad: no es un empaque de 4 piezas sueltas.
+      const ms = [mat("Pack 4 libros de medicina", "pack")];
+      expect(paqueteDe(ms, "Pack 4 libros de medicina")).toBeNull();
     });
 
     it("lo que se cobra de a uno NO tiene paquete", () => {
@@ -411,7 +419,7 @@ describe("chunks — coleccion-material", () => {
     });
 
     it("una unidad de conjunto sin número da null, para que el gate lo cante", () => {
-      expect(paqueteDe([mat("X", "pack")], "X")).toBeNull();
+      expect(paqueteDe([mat("X", "paquete")], "X")).toBeNull();
     });
 
     it("un material que no existe da null en vez de romper", () => {

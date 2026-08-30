@@ -129,7 +129,9 @@ function paqueteDeMaterial(material) {
   const cargado = num(fila["Piezas por paquete"]);
   if (cargado && cargado > 1) return cargado;
   const u = String(fila["Unidad"] ?? "").trim().toLowerCase();
-  if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(u)) return null;
+  // "pack" a secas queda AFUERA: sin número no se sabe si es un empaque o un producto que
+  // se llama pack (el de los 4 libros se pide de a uno).
+  if (!/^(paquete|caja|resma|juego|blister|set)\b/.test(u)) return null;
   const m = u.match(/(\d[\d.,]*)/);
   const n = m ? num(m[1]) : null;
   return n && n > 1 ? n : null;
@@ -529,25 +531,29 @@ function correrTests() {
     }
   }
 
-  // Que todo material que se vende EN PAQUETE tenga cuántas piezas trae. Sin el dato, el
-  // auditor cobra la cantidad pedida como si fueran paquetes: pedir 500 volantes salía
-  // 500 × el precio del paquete de 500. La unidad ya lleva el número en todo el catálogo,
-  // así que esto se rompe recién cuando alguien escribe una unidad de conjunto sin cifra.
+  // El paquete: cuántas piezas trae una unidad de cobro que se vende cerrada. Sin el dato,
+  // el auditor cobra la cantidad pedida como si fueran paquetes (500 volantes × el precio
+  // del paquete de 500). Con el dato de más, deriva un producto que sí está en el catálogo.
   {
+    // La unidad tiene que decir la cantidad. Una unidad de conjunto sin número es
+    // ambigua y hay que resolverla en el Excel, no adivinarla acá: "pack" puede ser un
+    // empaque de 4 piezas o un producto que se llama pack y se pide de a uno.
     for (const m of MATERIALES) {
       const unidad = String(m["Unidad"] ?? "").trim().toLowerCase();
-      if (!/^(paquete|pack|caja|resma|juego|blister|set)\b/.test(unidad)) continue;
+      if (!/^(paquete|caja|resma|juego|blister|set)\b/.test(unidad)) continue;
       if (!paqueteDeMaterial(m["Material"])) {
         fallos.push(
           `el material "${m["Material"]}" se vende por "${unidad}" pero no se sabe cuántas piezas trae — ` +
-            `cargá "Piezas por paquete" o poné la cantidad en la unidad ("paquete de 100 tarjetas")`,
+            `poné la cantidad en la unidad ("paquete de 100 tarjetas")`,
         );
       }
     }
 
-    // Y el cruce inverso: un paquete cuyo NOMBRE dice una cantidad distinta de la que se
-    // va a cobrar. "Tarjetas …x500" con unidad "paquete de 100" cotizaría 5 veces de menos
-    // y nadie lo notaría — el precio sale plausible.
+    // El cruce con el NOMBRE, en las dos direcciones. Un "…x500" con unidad "paquete de
+    // 100" cobra 5 veces de menos y nadie lo nota: el precio sale plausible. Y un nombre
+    // sin cifra con paquete cargado suele ser el error inverso — el que cometí con el
+    // "Pack 4 libros de medicina", donde el 4 es parte del NOMBRE del producto y el
+    // cliente igual pide uno solo.
     for (const m of MATERIALES) {
       const p = paqueteDeMaterial(m["Material"]);
       if (!p) continue;
@@ -556,6 +562,15 @@ function correrTests() {
       if (n && n !== p) {
         fallos.push(
           `el material "${m["Material"]}" dice x${n} en el nombre pero su paquete es de ${p} piezas`,
+        );
+      }
+      // El paquete solo tiene sentido si el cliente pide EN PIEZAS. Esa intención se lee
+      // en la unidad: "paquete de 100 tarjetas" nombra la pieza, "pack" no nombra nada.
+      const unidad = String(m["Unidad"] ?? "").trim().toLowerCase();
+      if (!/\d/.test(unidad)) {
+        fallos.push(
+          `el material "${m["Material"]}" tiene paquete de ${p} pero su unidad ("${unidad}") no dice ` +
+            `de cuántas piezas — si el cliente lo pide de a uno, no lleva paquete`,
         );
       }
     }

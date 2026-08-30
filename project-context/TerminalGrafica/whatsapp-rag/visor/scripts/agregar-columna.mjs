@@ -59,12 +59,14 @@ const COLUMNAS = [
     // cobra por paquete: sin el dato, el auditor multiplicaba las dos cosas y 1000 tarjetas
     // del paquete de 1000 daban $54.000.000.
     //
-    // Casi siempre se deriva sola de la Unidad ("paquete de 500 volantes" → 500), así que
-    // la columna solo se carga donde no se puede leer así. Hoy es un caso: el pack de
-    // libros, cuya unidad es "pack" a secas y el 4 está en el nombre.
+    // Se deriva sola de la Unidad ("paquete de 500 volantes" → 500), así que hoy no hay
+    // nada que cargar a mano. La columna existe para el material donde el número no esté
+    // en la unidad — y para poner "1" donde la unidad DIGA un conjunto pero el cliente lo
+    // pida de a uno: el "Pack 4 libros de medicina" es un producto que se llama pack, no
+    // un paquete de 4 piezas sueltas (ver COL_PAQUETE en visor/lib/chunk.ts).
     hoja: "Materiales",
     nombre: "Piezas por paquete",
-    valores: { "Pack 4 libros de medicina": "4" },
+    valores: { "Pack 4 libros de medicina": "1" },
   },
 ];
 
