@@ -105,6 +105,21 @@ function num(v) {
 
 const MATERIALES = objetos(matriz("Materiales"));
 const CASOS = objetos(matriz("Casos de prueba"));
+// Productos y Colecciones no se hornean en el flow (el bot los lee del chunk), pero el
+// gate los necesita: la exención del mínimo es de la COLECCIÓN y los casos van por
+// material, así que hay que cruzarlas igual que lo hace el chunk.
+const PRODUCTOS = objetos(matriz("Productos"));
+const COLECCIONES = objetos(matriz("Colecciones"));
+
+/** ¿Esta línea de precio está exenta del mínimo por trabajo? La marca puede estar en el
+ *  MATERIAL o en la COLECCIÓN, y alcanza con una. Calca `sinMinimoDe` de
+ *  visor/lib/chunk.ts, incluida la tolerancia del "sí". */
+function sinMinimoDeMaterial(material) {
+  const esSi = (v) => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
+  if (MATERIALES.some((m) => m["Material"] === material && esSi(m["Sin mínimo por trabajo"]))) return true;
+  const cols = new Set(PRODUCTOS.filter((p) => p["Material"] === material).map((p) => p["Colección"]));
+  return COLECCIONES.some((c) => cols.has(c["Colección"]) && esSi(c["Sin mínimo por trabajo"]));
+}
 
 // ── Parámetros: se HORNEAN como constantes del auditor ────────────────────────────────
 const PARAMS_FILAS = objetos(matriz("Parámetros"));
@@ -327,6 +342,9 @@ function correrTests() {
       cantidad: num(c["Cantidad"]),
       escala: cat.escala,
       geometria: cat.geometria,
+      // La exención es de la COLECCIÓN; el caso solo nombra el material, así que se cruza
+      // por los productos igual que lo hace el chunk.
+      sin_minimo: sinMinimoDeMaterial(material),
       // La columna del caso es el rinde ESPERADO, no un dato de entrada: si se lo pasáramos,
       // el test no probaría la fórmula de encaje, solo la aritmética que viene después.
       rinde_cargado: null,

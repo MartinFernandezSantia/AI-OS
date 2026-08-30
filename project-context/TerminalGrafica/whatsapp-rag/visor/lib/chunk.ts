@@ -257,9 +257,21 @@ const descripcionDe = (datos: Datos, coleccion: string): string =>
 const baseDe = (datos: Datos, coleccion: string): string =>
   datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_BASE] ?? "";
 
-/** ¿La colección está exenta del mínimo por trabajo? (ver COL_SIN_MINIMO) */
-const sinMinimoDe = (datos: Datos, coleccion: string): boolean =>
-  esSi(datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_SIN_MINIMO]);
+/**
+ * ¿Esta línea de precio está exenta del mínimo por trabajo? (ver COL_SIN_MINIMO)
+ *
+ * Se puede marcar en el MATERIAL o en la COLECCIÓN, y alcanza con una. Hace falta el nivel
+ * de material porque casi todas las colecciones mezclan: "Papelería comercial" tiene sobres
+ * a $250 la unidad (que sin exención cotizarían $4.000) junto a talonarios de $54.000 (que
+ * sí tienen que llevar piso). Marcar la colección entera le sacaría el mínimo a los dos.
+ * La marca de colección queda como atajo para cuando TODA la colección es del mismo tipo.
+ */
+const sinMinimoDe = (datos: Datos, coleccion: string, material?: string): boolean => {
+  if (material && esSi(datos.materiales.find((m) => m["Material"] === material)?.[COL_SIN_MINIMO])) {
+    return true;
+  }
+  return esSi(datos.colecciones.find((c) => c["Colección"] === coleccion)?.[COL_SIN_MINIMO]);
+};
 
 /**
  * La escala como DATO estructurado para `metadata`. El texto del chunk la lleva en prosa
@@ -354,7 +366,7 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           productos: suyos.length,
           es_base: esBase,
           // El auditor lo lee para NO aplicar el mínimo por trabajo (ver COL_SIN_MINIMO).
-          sin_minimo: sinMinimoDe(datos, col),
+          sin_minimo: sinMinimoDe(datos, col, mat),
           // El auditor del workflow re-calcula con esto; sin escala en la metadata
           // tendría que parsear la prosa del chunk.
           escala: escalaMeta(tramos),
@@ -562,40 +574,38 @@ export function avisos(datos: Datos): string[] {
     }
   }
 
-  // Colecciones donde el mínimo por trabajo se come TODOS los precios y no están exentas.
-  // El caso son las terminaciones (laminado $330, ojalillos $1.000): agregados sobre un
-  // trabajo ya cobrado, donde el mínimo multiplica el precio por 12. Es un error caro y
-  // silencioso — el total "se ve" bien, solo está mal.
+  // Líneas de precio que el mínimo por trabajo se come enteras y no están exentas. El caso
+  // son las terminaciones (laminado $330, ojalillos $1.000) y la impresión por hoja ($100):
+  // el mínimo multiplica el precio por 12 o por 40. Es un error caro y silencioso — el total
+  // "se ve" bien, solo está mal.
   //
-  // El mínimo aplica al TOTAL, no al precio unitario, así que no alcanza con mirar el
-  // tramo: en una colección por pliegos el unitario puede ser $2.800 y un pedido de 2
-  // pliegos ya pasa el mínimo. Solo avisa cuando la colección no puede superarlo NUNCA, y
-  // eso solo pasa donde no hay cantidad que escale el total: unidades no geométricas
-  // (una unidad = un ítem). Las colecciones pliego/m2 quedan fuera por construcción.
+  // Se mira MATERIAL por material, no colección: casi todas mezclan. "Papelería comercial"
+  // tiene sobres a $250 junto a talonarios de $54.000, y avisar (o eximir) por colección
+  // entera trataría igual a los dos.
+  //
+  // El mínimo aplica al TOTAL, así que no alcanza con mirar el tramo: con unidad geométrica
+  // (pliego) o continua (m2) la cantidad hace crecer el total y el mínimo solo afecta al
+  // pedido más chico, que es lo que se quiere. Solo avisa donde una unidad de cobro es UN
+  // ÍTEM y ni el tramo más caro llega al mínimo.
   const minimoTrabajo = num(
     datos.parametros.find((p) => p["Parámetro"] === "Mínimo por trabajo")?.["Valor"],
   );
   if (minimoTrabajo !== null && minimoTrabajo > 0) {
     for (const col of nombresColeccion(datos)) {
-      if (sinMinimoDe(datos, col)) continue;
-      const mats = materialesDe(productosDe(datos, col));
-      // Con una unidad de cobro geométrica (pliego) o continua (m2), la cantidad hace
-      // crecer el total y el mínimo solo afecta al pedido más chico: eso es lo que se
-      // quiere. El problema es solo donde una unidad de cobro es UN ÍTEM.
-      if (!mats.every((m) => modoDe(unidadDe(datos.materiales, m)) === "item")) continue;
-      const topes = mats
-        .map((m) => escalaDe(datos.materiales, m))
-        .filter((t) => t.length)
-        .map((t) => Math.max(...t.map((x) => x.precio)));
-      if (!topes.length) continue;
-      const tope = Math.max(...topes);
-      if (tope >= minimoTrabajo) continue;
-      out.push(
-        `${col}: el precio más alto de la colección (${money(tope)}) no llega al mínimo por ` +
-          `trabajo (${money(minimoTrabajo)}), así que un pedido de 1 se va a cotizar ${money(minimoTrabajo)}. ` +
-          `Si son agregados sobre otro trabajo (laminado, ojalillos, anillado), marcá ` +
-          `"${COL_SIN_MINIMO}" = sí en la hoja Colecciones.`,
-      );
+      for (const mat of materialesDe(productosDe(datos, col))) {
+        if (sinMinimoDe(datos, col, mat)) continue;
+        if (modoDe(unidadDe(datos.materiales, mat)) !== "item") continue;
+        const tramos = escalaDe(datos.materiales, mat);
+        if (!tramos.length) continue;
+        const tope = Math.max(...tramos.map((t) => t.precio));
+        if (tope >= minimoTrabajo) continue;
+        out.push(
+          `${col} — ${mat}: el precio más alto (${money(tope)}) no llega al mínimo por trabajo ` +
+            `(${money(minimoTrabajo)}), así que un pedido de 1 se va a cotizar ${money(minimoTrabajo)}. ` +
+            `Si se cobra de a uno como agregado (laminado, ojalillos, una hoja suelta), marcá ` +
+            `"${COL_SIN_MINIMO}" = sí en su fila de Materiales.`,
+        );
+      }
     }
   }
 
