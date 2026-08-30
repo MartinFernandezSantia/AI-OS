@@ -26,8 +26,8 @@ Se salva RAG + firewall. Todo lo demás estaba en discusión.
 ```
 project-context/TerminalGrafica/whatsapp-rag/
   HANDOFF.md                 ← este archivo
-  Catalogo-TG-v2.xlsx        ← LA FUENTE ÚNICA (lo VIGENTE: es lo que está ingestado)
-  Catalogo-TG-v3.xlsx        ← copia EN CURSO (normalización del catálogo del cliente)
+  Catalogo-TG-v3.xlsx        ← LA FUENTE ÚNICA (lo VIGENTE: es lo que está ingestado)
+  Catalogo-TG-v2.xlsx        ← el anterior, con los 31 productos. Referencia, no se toca
   Catalogo_WhatsApp_Terminal_Grafica (1).xlsx  ← entrega del cliente, por única vez
   n8n/                       ← Fase 3: EMPEZAR ACÁ
     README.md                            ← el flow, el auditor, las trampas, los casos de humo
@@ -49,26 +49,36 @@ project-context/TerminalGrafica/whatsapp-rag/
 
 Referencia (NO tocar, es el bot anterior): `../whatsapp-rag-lite/`.
 
-## EN CURSO — normalizar el catálogo del cliente
+## El catálogo del cliente ya está cargado
 
-El cliente trajo un Excel propio (armado con Claude, sin nuestro esquema). Se lo está
-normalizando HACIA el nuestro: de ahí salen datos y aprendizajes, no al revés. Plan y
+El cliente trajo un Excel propio (armado con Claude, sin nuestro esquema). Se lo normalizó
+HACIA el nuestro: de ahí salieron los datos y los aprendizajes, no al revés. Plan y
 decisiones en `plans/normalizar-catalogo-cliente.md`.
 
-**Se trabaja sobre `Catalogo-TG-v3.xlsx`**, una copia. El `v2` es lo VIGENTE (lo que está
-ingestado en `bot.rag_catalog`) y no se toca hasta que el v3 esté probado. Los scripts leen
-la copia con `CATALOGO=../Catalogo-TG-v3.xlsx node <script>`.
+**`Catalogo-TG-v3.xlsx` es ahora la fuente única y está ingestado.** Tiene los 31 productos
+del v2 más los 61 del cliente: 55 materiales, 8 colecciones, 79 casos de prueba. Incluye la
+tarifa de `Vinilo y lona UV` ($21.000 → $22.000 el m², confirmada por TG el 18/08/2026).
 
-Hecho hasta ahora: la tarifa de `Vinilo y lona UV` ($21.000 → $22.000 el m², confirmada por
-TG el 18/08/2026) y sus 4 casos de prueba. Gate 46/46 contra el v3. **Falta re-ingestar**
-desde el visor: cambia una sola línea, la del chunk `Carteles y vidrieras — Vinilo y lona UV`.
+Los scripts leen el archivo con `CATALOGO=Catalogo-TG-v3.xlsx node <script>` (sin la
+variable apuntan al v2, que quedó de referencia).
+
+**Qué destapó la carga**: tres bugs del auditor, todos de la misma forma — el modelo
+declaraba bien y el auditor interpretaba mal. Detalle en "Estado: qué falta" § *El catálogo
+del cliente, cargado*. La lección que vale para lo que venga: **la relación entre lo que
+pide el cliente y la unidad de cobro es un dato del catálogo**, no algo que el prompt deba
+despejar — esa apuesta ya había fallado con los pliegos en la Fase 4.
 
 ## Estado: qué está hecho
 
-**El Excel** (`Catalogo-TG-v2.xlsx`) — 6 hojas visibles + `_listas` oculta.
-31 productos, 11 materiales (24 tramos), 4 colecciones, 46 casos de prueba.
+**El Excel** (`Catalogo-TG-v3.xlsx`) — 6 hojas visibles + `_listas` oculta.
+92 productos, 55 materiales, 8 colecciones, 79 casos de prueba. Los 31 productos originales
+(11 materiales, 24 tramos, 4 colecciones) más los 61 que trajo el cliente.
 Las reglas de la hoja Instrucciones reproducen **39/39** de los precios que calculó el cliente,
 más 7 casos nuevos del motor (verificados a mano contra la fórmula y las escalas).
+
+**Tres modos de cobro**, derivados del PREFIJO de la columna `Unidad` del material:
+`pliego` (rinde geométrico), `m2` (superficie) e `item` (la unidad de cobro es un ítem).
+`otro` es el bucket de error: un gate rompe el build si algún material cae ahí.
 
 **MOTOR DE MEDIDA LIBRE** (pedido del cliente, revierte con motivo el "el bot no calcula
 geometría" del plan madre): el bot cotiza CUALQUIER medida, no solo las del catálogo.
@@ -92,7 +102,10 @@ tab. Con `.env.local` configurado, **también ingesta** a `bot.rag_catalog`.
 - **Avisos** en la UI (caja ámbar): material pliego sin geometría ni rinde, drift
   columna-vs-cálculo, pieza que no entra (rinde 0).
 
-Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+material.
+Salida actual: **55 chunks · 42.132 chars**, uno por colección+FAMILIA de material (las
+presentaciones del mismo producto —100/500/1000 tarjetas, los 5 plastificados— van juntas
+en un chunk con su tabla de precios; sin agrupar, tarjetas daba 14 chunks casi idénticos
+compitiendo entre sí en el retrieval). El bot lee 5 por turno (`topK`), no los 55.
 
 ## Estado: qué falta
 
@@ -101,27 +114,31 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
 2. ~~Probar la ingesta contra la base real~~ — **hecho**: el camino completo
    (preview → embeddings → escritura) se ejercitó contra `bot.rag_catalog`. El gotcha del
    `search_path` de pgvector quedó arreglado en `db.ts` (ver "Cosas que cuestan sangre").
-3. **Fase 3 — el workflow de n8n.** ← **EL FLOW YA ESTÁ CONSTRUIDO**; falta importarlo y
-   probarlo en vivo. **Empezar por [`n8n/README.md`](n8n/README.md)**: tiene el flow, el
-   contrato de la salida estructurada, el auditor, los casos de humo y las trampas.
+3. ~~**Fase 3 — el workflow de n8n.**~~ — **CORRIENDO EN DEV.** Workflow `EXZDlxFBcTPqMYez`
+   en `n8n.terminalgrafica.cloud`, credenciales cableadas, probado en vivo contra la base
+   real. **Empezar por [`n8n/README.md`](n8n/README.md)**: tiene el flow, el contrato de la
+   salida estructurada, el auditor, los casos de humo y las trampas.
 
-   Lo que queda, en orden:
-   1. ~~RE-INGESTAR desde el visor~~ — **hecho** (Martín, 2026-08-27). `bot.rag_catalog`
-      ya tiene los chunks con `escala` + `es_base` en la metadata. Igual conviene
-      verificarlo en el primer retrieval antes de culpar al cálculo.
-   2. Importar `n8n/flows/cotizador-v1.json` y cablear 2 credenciales (el flow trae una
-      Nota con el detalle): Google Gemini(PaLM) API — la MISMA para chat y embeddings — y
-      BOT_DB. **Ojo: son 2, no 3** — el chat quedó en Gemini nativo, no OpenRouter (ver
-      el README; el bot lite ya había migrado después de escrito el plan).
-   3. Smoke test de retrieval (¿el nodo PGVector lee `bot.rag_catalog` tal como la dejó
-      el visor?) y los 4 casos de humo (abajo).
+   1. ~~RE-INGESTAR desde el visor~~ — **hecho**. `bot.rag_catalog` tiene los 55 chunks con
+      `escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata.
+   2. ~~Importar el flow y cablear 2 credenciales~~ — **hecho**: Google Gemini(PaLM) API
+      (la MISMA para chat y embeddings) y BOT_DB. **Ojo: son 2, no 3** — el chat quedó en
+      Gemini nativo, no OpenRouter (ver el README).
+   3. ~~Smoke test de retrieval y los 4 casos de humo~~ — **hecho**, más 13 casos del
+      catálogo nuevo.
 
-   Estado del build: **12 nodos**, prompt ~2.029 tokens, auditor verde contra **46/46
+   **Sincronizar el flow después de tocar el Excel o el builder.** Se regenera con
+   `node n8n/build-flow.mjs` y se sube — por la UI o por el MCP (`update_workflow` con
+   `updateNodeParameters`; `setNodeParameter` NO existe). Quedarse con el flow viejo da
+   errores que **parecen del catálogo y son del flow**: eso costó una sesión entera
+   persiguiendo un `modo desconocido` que ya estaba arreglado en el repo.
+
+   Estado del build: **12 nodos**, prompt ~2.029 tokens, auditor verde contra **79/79
    casos del Excel** + 11 rindes históricos. `node n8n/build-flow.mjs` re-genera todo;
    `--test` corre solo los tests. `node n8n/test-auditor.mjs` prueba los nodos Code
-   (13 escenarios de cableado) contra el JSON ya emitido.
+   (23 escenarios de cableado) contra el JSON ya emitido.
 
-   **Los 4 casos de humo** (los 46 completos están en la hoja `Casos de prueba`):
+   **Los 4 casos de humo** (los 79 completos están en la hoja `Casos de prueba`):
 
    | Escribir en el chat | Total | Qué ejercita | Si falla, mirar |
    |---|---|---|---|
@@ -134,6 +151,17 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
    `cotizaciones` NO venga vacío (un total en el texto sin desglose es un precio que llegó
    al cliente sin poder auditarse — el auditor lo marca solo), y que el retrieval haya
    traído el chunk del material correcto.
+
+   **Los 5 casos de humo del catálogo nuevo** (verificados en vivo el 30/08; el número mal
+   de la derecha es lo que daba ANTES del arreglo):
+
+   | Escribir en el chat | Total | Qué ejercita | Si falla |
+   |---|---|---|---|
+   | `1000 tarjetas doble faz` | $54.000 | paquete: piezas → unidades de cobro | $54.000.000 = multiplicó en vez de dividir; mirar si el chunk trae `paquete` |
+   | `500 volantes A6` | $12.000 | el mismo bug fuera de tarjetas | $6.000.000. Alcanza a 20 líneas de precio: perforados, sobres, talonarios, membretadas |
+   | `250 tarjetas simple faz` | (deriva) | paquete cerrado, sin cantidades intermedias | si cotiza, se rompió la división exacta: TG no vende 250 |
+   | `el pack de 4 libros de medicina` | $99.000 | un producto que se LLAMA pack | si deriva, alguien le cargó `Piezas por paquete`: el cliente pide UNO |
+   | `5 plastificados A4` | $11.000 | ítem suelto — NO se divide | $2.200 = dividió algo que se cobra de a uno |
 
    El plan está escrito y
    **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
@@ -172,10 +200,56 @@ Salida actual: **7 chunks · 7.822 chars · ~1.956 tokens**, uno por colección+
      así el bot puede sugerir alternativas aunque el retrieval traiga un solo chunk.
      Moraleja para chunks futuros: **el bot solo ve el `text` del embedding** — nada de
      deícticos ("la colección", "este material") sin su referente escrito al lado.
-4. **Fase 4 — medir.** Correr los 46 casos contra el bot y ver el % de aciertos. Si Flash Lite
+4. **Fase 4 — medir.** Correr los 79 casos contra el bot y ver el % de aciertos. Si Flash Lite
    no llega, subir de tier es decisión de datos. Los 7 del motor son los más exigentes:
    el LLM tiene que hacer floor + dos orientaciones él solo.
 5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp.
+
+### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
+
+El Excel pasó a `Catalogo-TG-v3.xlsx` (el v2 no se toca) con los 61 productos que mandó
+TG: 55 materiales, 8 colecciones, 79 casos de prueba. Tres cosas rompieron en el camino, y
+las tres eran de la MISMA forma — el modelo declaraba bien y el auditor interpretaba mal.
+
+1. **`modo desconocido`.** El auditor solo sabía `pliego` y `m2`; los 61 productos nuevos
+   son de a ítem. Se agregó el modo `item` (unidad de cobro = un ítem), derivado del
+   PREFIJO de la columna Unidad, con `otro` como bucket de error explícito.
+2. **El paquete contado dos veces.** El cliente pide en piezas ("mil tarjetas"), el
+   catálogo cobra por paquete. El modelo declaraba el material `…x1000` **con cantidad
+   1000** y el auditor hacía 1000 × $54.000 = **$54.000.000** (leído en la ejecución 305).
+   Lo atajaba el tope de sanity, pero por accidente: con un paquete más barato pasa el tope
+   y llega al cliente. Ahora el catálogo aporta `paquete` y el auditor DIVIDE, exigiendo
+   división exacta — TG vende paquetes cerrados, así que 150 tarjetas van a consulta, no se
+   redondean a 2 paquetes. **Alcanzaba a 20 líneas de precio, no solo a las tarjetas**:
+   perforados, volantes, hojas membretadas, sobres y talonarios tenían el mismo bug sin que
+   nadie los hubiera probado.
+3. **Un "pack" que no era un paquete.** Al cargar el dato le puse `paquete = 4` al
+   `Pack 4 libros de medicina` leyendo su unidad `pack` como un empaque — y el bot empezó a
+   DERIVAR un producto que sí está en el catálogo (el cliente pide "el pack", 1, y 1 no es
+   múltiplo de 4). Regla que salió de ahí: **una unidad de conjunto sin número de piezas no
+   es un paquete.** "paquete de 500 volantes" dice de qué y cuántas; "pack" no dice nada.
+
+El dato del paquete se **deriva de la Unidad**, que ya trae el número en todo el catálogo;
+la columna `Piezas por paquete` queda para lo que no se pueda leer así. Derivarlo evita el
+error silencioso de cargar 500 en la unidad y 100 en la columna.
+
+**Gates nuevos, porque estos datos se rompen en silencio** (un precio mal dividido sale
+plausible y nadie lo nota): que toda unidad de conjunto diga cuántas piezas trae; que el
+nombre no contradiga al paquete (`…x500` con unidad de 100 cobra 5 veces de menos); que un
+paquete cargado tenga una unidad que lo respalde. Y `paquete` se sumó al **gate de
+cableado**, que mira el código EMITIDO: borrar el pase deja el build en 79/79 verde y rompe
+producción — ya había pasado con `sin_minimo`.
+
+Verificado en vivo tras la ingesta (13 ejecuciones leídas, no deducidas): 1000 tarjetas
+$54.000 · 500 volantes $12.000 · 100 sobres $25.000 · 10 talonarios $54.000 · el pack
+$99.000 y un libro suelto $30.000 · 5 plastificados A4 $11.000 sin dividir · 250 tarjetas
+deriva · y los caminos viejos intactos (250 stickers $6.600 rinde 104, lona 90x60 $8.600).
+Un turno con volantes + stickers cotizó los dos modos a la vez, cada uno con su cuenta.
+
+**Pendiente que salió de las pruebas**: `500 tarjetas kraft` cotiza $88.000 = 5 × el x100,
+porque en kraft solo existe el paquete de 100. La cuenta está bien, el precio no: en las
+otras líneas 500 sale bastante menos que 5×100. **Falta pedirle a TG el precio de 500 y
+1000 en kraft.**
 
 ## El MCP de n8n — Claude YA VE las ejecuciones
 
@@ -186,7 +260,7 @@ Claude no puede hacerlo solo. Scopes que ofrece: `workflow:read/write/execute`,
 
 Esto **retira la restricción** que arrastraba el proyecto ("Claude no ve las ejecuciones,
 pedile el dato a Martín"): con `execution:read` se leen el retrieval, la salida estructurada
-y el veredicto del auditor directo de la ejecución. Donde más pesa es en la Fase 4 — 46 casos
+y el veredicto del auditor directo de la ejecución. Donde más pesa es en la Fase 4 — 79 casos
 que si no habría que copiar a mano.
 
 La lección de fondo NO cambia: sin la ejecución a la vista, no afirmar qué pasó. En el bot
@@ -204,7 +278,7 @@ da 403), y si al autorizar se pueden elegir scopes, con `workflow:read` + `execu
 | Dashboard (`catalog-curator`) | Se retira como vía de carga. |
 | Quién calcula | **El LLM**, con instrucciones precisas y datos correctos. No motor determinista. |
 | Un material por producto | "Vinilo UV montado en corrugado" es UN material, no una composición. |
-| Unidad del chunk | **Colección + material** (7 chunks). Las otras dos se generan para comparar. |
+| Unidad del chunk | **Colección + FAMILIA de material** (55 chunks). Las otras dos se generan para comparar. |
 | Ingesta | Desde la app, no CLI. Reemplazo total en una transacción. |
 | Canal v1 | Chat Trigger de n8n. Sin Chatwoot ni WhatsApp hasta la Fase 5. |
 | Alcance del catálogo | Solo las 39 filas de Lista de precios. Papelería NO entra. |
@@ -255,10 +329,10 @@ visor) y `visor/scripts/lib-xlsx.mjs` (la usan los scripts, que no importan TS).
 una, cambiar la otra — los tests del visor fijan los 7 rindes históricos.
 La TERCERA (el nodo Code del bot) **no** es una copia a mano: `n8n/build-flow.mjs` la tiene
 como un único string que evalúa para testear y emite dentro del nodo. Si cambia la fórmula,
-son dos lugares a tocar, no tres — y los 46 casos del Excel avisan si se desalinean.
+son dos lugares a tocar, no tres — y los 79 casos del Excel avisan si se desalinean.
 
 **El auditor tiene que reproducir la planilla, y el build lo verifica.** `build-flow.mjs`
-corre los 11 rindes + los 46 casos de la hoja `Casos de prueba` antes de escribir el JSON;
+corre los 11 rindes + los 79 casos de la hoja `Casos de prueba` antes de escribir el JSON;
 si falla uno, no emite nada. Ese gate ya pagó: agarró que los materiales m2 (un solo tramo
 `Desde 1`) dejaban afuera cualquier medida menor a 1 m2 — media lona no matcheaba ningún
 tramo. Los tests se verificaron en rojo a propósito (rompiendo el redondeo y el encaje)
@@ -302,7 +376,7 @@ Productos sigan funcionando.
 ```bash
 # el flow de n8n (desde project-context/TerminalGrafica/whatsapp-rag/)
 node n8n/build-flow.mjs           # tests + emite flows/cotizador-v1.json
-node n8n/build-flow.mjs --test    # solo los 46 casos + rindes, no escribe
+node n8n/build-flow.mjs --test    # solo los 79 casos + rindes, no escribe
 node n8n/test-auditor.mjs         # los nodos Code contra el JSON emitido
 node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y mide
 
