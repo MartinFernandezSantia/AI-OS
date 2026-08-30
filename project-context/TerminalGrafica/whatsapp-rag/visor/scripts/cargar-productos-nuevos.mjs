@@ -117,6 +117,8 @@ function preparar(hoja, existentes, items, clave, aFila) {
   const { primeraCol, encabezado } = inspeccionar("Materiales");
   const iSinMin = encabezado.indexOf("Sin mínimo por trabajo");
   if (iSinMin < 0) throw new Error('falta la columna "Sin mínimo por trabajo" en Materiales — corré agregar-columna.mjs primero');
+  const iFam = encabezado.indexOf("Familia");
+  if (iFam < 0) throw new Error('falta la columna "Familia" en Materiales — corré agregar-columna.mjs primero');
   const filas = [];
   const nuevos = [];
   for (const m of MATERIALES) {
@@ -127,6 +129,7 @@ function preparar(hoja, existentes, items, clave, aFila) {
       // La marca va SOLO en la primera fila del material, igual que la geometría: es un
       // dato del material, no del tramo.
       if (m.sinMinimo && filas.every((f) => f[0] !== m.material)) fila[iSinMin] = "sí";
+      if (m.familia && filas.every((f) => f[0] !== m.material)) fila[iFam] = m.familia;
       filas.push(fila);
     }
   }

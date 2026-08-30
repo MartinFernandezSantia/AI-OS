@@ -82,25 +82,25 @@ export const COLECCIONES = [
  */
 export const MATERIALES = [
   // ── Tarjetas: cada combinación de cantidad + terminación tiene su precio cerrado ──────
-  { material: "Tarjetas 9x5 simple faz x100", unidad: "paquete de 100", tramos: [[1, null, 13200]] },
-  { material: "Tarjetas 9x5 simple faz encapsuladas x100", unidad: "paquete de 100", tramos: [[1, null, 16500]] },
-  { material: "Tarjetas 9x5 doble faz x100", unidad: "paquete de 100", tramos: [[1, null, 16500]] },
-  { material: "Tarjetas 9x5 doble faz encapsuladas x100", unidad: "paquete de 100", tramos: [[1, null, 18700]] },
-  { material: "Tarjetas 9x5 kraft simple faz x100", unidad: "paquete de 100", tramos: [[1, null, 17600]] },
-  { material: "Tarjetas 9x5 kraft doble faz x100", unidad: "paquete de 100", tramos: [[1, null, 24200]] },
-  { material: "Tarjetas 9x5 simple faz x500", unidad: "paquete de 500", tramos: [[1, null, 28000]] },
-  { material: "Tarjetas 9x5 simple faz encapsuladas x500", unidad: "paquete de 500", tramos: [[1, null, 38000]] },
-  { material: "Tarjetas 9x5 doble faz x500", unidad: "paquete de 500", tramos: [[1, null, 38000]] },
-  { material: "Tarjetas 9x5 doble faz encapsuladas x500", unidad: "paquete de 500", tramos: [[1, null, 45000]] },
-  { material: "Tarjetas 9x5 simple faz x1000", unidad: "paquete de 1000", tramos: [[1, null, 42000]] },
-  { material: "Tarjetas 9x5 simple faz encapsuladas x1000", unidad: "paquete de 1000", tramos: [[1, null, 54000]] },
-  { material: "Tarjetas 9x5 doble faz x1000", unidad: "paquete de 1000", tramos: [[1, null, 54000]] },
-  { material: "Tarjetas 9x5 doble faz encapsuladas x1000", unidad: "paquete de 1000", tramos: [[1, null, 59000]] },
+  { material: "Tarjetas 9x5 simple faz x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 simple faz", tramos: [[1, null, 13200]] },
+  { material: "Tarjetas 9x5 simple faz encapsuladas x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 simple faz encapsuladas", tramos: [[1, null, 16500]] },
+  { material: "Tarjetas 9x5 doble faz x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 doble faz", tramos: [[1, null, 16500]] },
+  { material: "Tarjetas 9x5 doble faz encapsuladas x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 doble faz encapsuladas", tramos: [[1, null, 18700]] },
+  { material: "Tarjetas 9x5 kraft simple faz x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 kraft simple faz", tramos: [[1, null, 17600]] },
+  { material: "Tarjetas 9x5 kraft doble faz x100", unidad: "paquete de 100 tarjetas", familia: "Tarjetas 9x5 kraft doble faz", tramos: [[1, null, 24200]] },
+  { material: "Tarjetas 9x5 simple faz x500", unidad: "paquete de 500 tarjetas", familia: "Tarjetas 9x5 simple faz", tramos: [[1, null, 28000]] },
+  { material: "Tarjetas 9x5 simple faz encapsuladas x500", unidad: "paquete de 500 tarjetas", familia: "Tarjetas 9x5 simple faz encapsuladas", tramos: [[1, null, 38000]] },
+  { material: "Tarjetas 9x5 doble faz x500", unidad: "paquete de 500 tarjetas", familia: "Tarjetas 9x5 doble faz", tramos: [[1, null, 38000]] },
+  { material: "Tarjetas 9x5 doble faz encapsuladas x500", unidad: "paquete de 500 tarjetas", familia: "Tarjetas 9x5 doble faz encapsuladas", tramos: [[1, null, 45000]] },
+  { material: "Tarjetas 9x5 simple faz x1000", unidad: "paquete de 1000 tarjetas", familia: "Tarjetas 9x5 simple faz", tramos: [[1, null, 42000]] },
+  { material: "Tarjetas 9x5 simple faz encapsuladas x1000", unidad: "paquete de 1000 tarjetas", familia: "Tarjetas 9x5 simple faz encapsuladas", tramos: [[1, null, 54000]] },
+  { material: "Tarjetas 9x5 doble faz x1000", unidad: "paquete de 1000 tarjetas", familia: "Tarjetas 9x5 doble faz", tramos: [[1, null, 54000]] },
+  { material: "Tarjetas 9x5 doble faz encapsuladas x1000", unidad: "paquete de 1000 tarjetas", familia: "Tarjetas 9x5 doble faz encapsuladas", tramos: [[1, null, 59000]] },
 
   // ── Papelería comercial ──────────────────────────────────────────────────────────────
-  { material: "Hojas membretadas A4 x500", unidad: "paquete de 500", tramos: [[1, null, 35000]] },
-  { material: "Sobres impresos x100", unidad: "paquete de 100", tramos: [[1, null, 25000]] },
-  { material: "Talonarios x10", unidad: "paquete de 10", tramos: [[1, null, 54000]] },
+  { material: "Hojas membretadas A4 x500", unidad: "paquete de 500 hojas", tramos: [[1, null, 35000]] },
+  { material: "Sobres impresos x100", unidad: "paquete de 100 sobres", tramos: [[1, null, 25000]] },
+  { material: "Talonarios x10", unidad: "paquete de 10 talonarios", tramos: [[1, null, 54000]] },
   // Escala confirmada por el cliente el 19/08/2026 contra la pantalla de su sistema.
   { material: "Sobres oficio inglés", unidad: "unidad", tramos: [[1, 200, 250], [201, 500, 220], [501, 1000, 190], [1001, null, 180]], sinMinimo: true },
   { material: "Carpetas institucionales sin laminar", unidad: "unidad", tramos: [[1, 20, 2600], [21, 50, 2500], [51, 100, 2300], [101, 300, 2100], [301, null, 1900]], sinMinimo: true },
@@ -133,18 +133,18 @@ export const MATERIALES = [
   // El cliente tenía los 5 formatos metidos en la descripción de una sola fila
   // ("A4 $2.200, oficio $2.400, A3 $3.000, carnet 9x13 $1.500, cocodrilo $800").
   // Desdoblados: si no, plastificar un carnet cotizaría $2.200 en vez de $1.500.
-  { material: "Plastificado A4", unidad: "unidad", tramos: [[1, null, 2200]], sinMinimo: true },
-  { material: "Plastificado oficio", unidad: "unidad", tramos: [[1, null, 2400]], sinMinimo: true },
-  { material: "Plastificado A3", unidad: "unidad", tramos: [[1, null, 3000]], sinMinimo: true },
-  { material: "Plastificado carnet", unidad: "unidad", tramos: [[1, null, 1500]], sinMinimo: true },
-  { material: "Plastificado cocodrilo", unidad: "unidad", tramos: [[1, null, 800]], sinMinimo: true },
+  { material: "Plastificado A4", unidad: "unidad", familia: "Plastificado de documentos", tramos: [[1, null, 2200]], sinMinimo: true },
+  { material: "Plastificado oficio", unidad: "unidad", familia: "Plastificado de documentos", tramos: [[1, null, 2400]], sinMinimo: true },
+  { material: "Plastificado A3", unidad: "unidad", familia: "Plastificado de documentos", tramos: [[1, null, 3000]], sinMinimo: true },
+  { material: "Plastificado carnet", unidad: "unidad", familia: "Plastificado de documentos", tramos: [[1, null, 1500]], sinMinimo: true },
+  { material: "Plastificado cocodrilo", unidad: "unidad", familia: "Plastificado de documentos", tramos: [[1, null, 800]], sinMinimo: true },
   { material: "Troquelado y corte a medida", unidad: "unidad", tramos: [[1, null, 50]], sinMinimo: true },
   { material: "Colocación de ojalillos", unidad: "unidad", tramos: [[1, null, 1000]], sinMinimo: true },
   { material: "Numerado correlativo", unidad: "unidad", tramos: [[1, null, 5000]] },
-  { material: "Perforado x500", unidad: "paquete de 500", tramos: [[1, null, 4000]] },
+  { material: "Perforado x500", unidad: "paquete de 500 perforados", tramos: [[1, null, 4000]] },
 
   // ── Folletería y editorial ───────────────────────────────────────────────────────────
-  { material: "Volantes A6 x500", unidad: "paquete de 500", tramos: [[1, null, 12000]] },
+  { material: "Volantes A6 x500", unidad: "paquete de 500 volantes", tramos: [[1, null, 12000]] },
   { material: "Libros de medicina", unidad: "unidad", tramos: [[1, null, 30000]] },
   { material: "Pack 4 libros de medicina", unidad: "pack", tramos: [[1, null, 99000]] },
   { material: "Anotadores personalizados en negro", unidad: "unidad", tramos: [[1, 10, 4000], [11, 20, 3400], [21, 50, 3000], [51, null, 2600]], sinMinimo: true },

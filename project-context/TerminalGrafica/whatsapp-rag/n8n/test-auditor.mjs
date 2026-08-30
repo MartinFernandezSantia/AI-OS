@@ -60,6 +60,28 @@ const MD_LONA = {
   escala: [{ desde: 1, hasta: null, precio: 16000, minimo_facturable: 0.5 }],
 };
 
+/**
+ * Un chunk AGRUPADO: las tres presentaciones de un mismo producto (100/500/1000 tarjetas)
+ * en un solo chunk. `material` es la primera; las otras viven en `variantes`. Modela lo que
+ * emite chunk.ts cuando los materiales comparten Familia.
+ */
+const MD_TARJETAS = {
+  estrategia: "coleccion-material",
+  coleccion: "Tarjetas personales",
+  material: "Tarjetas 9x5 simple faz x100",
+  familia: "Tarjetas 9x5 simple faz",
+  unidad: "paquete de 100 tarjetas",
+  modo: "item",
+  es_base: false,
+  sin_minimo: false,
+  escala: [{ desde: 1, hasta: null, precio: 13200 }],
+  variantes: [
+    { material: "Tarjetas 9x5 simple faz x100", unidad: "paquete de 100 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 13200 }] },
+    { material: "Tarjetas 9x5 simple faz x500", unidad: "paquete de 500 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 28000 }] },
+    { material: "Tarjetas 9x5 simple faz x1000", unidad: "paquete de 1000 tarjetas", modo: "item", sin_minimo: false, escala: [{ desde: 1, hasta: null, precio: 42000 }] },
+  ],
+};
+
 /** El modelo ahora declara SOLO qué cotizar: material, medida de una pieza y cantidad. */
 const cot = (material, ancho_cm, alto_cm, cantidad) => ({
   material_catalogo: material,
@@ -69,6 +91,91 @@ const cot = (material, ancho_cm, alto_cm, cantidad) => ({
 });
 
 const casos = [
+  // ── Chunk agrupado: las 3 presentaciones viven en UN chunk ──────────────────────────
+  {
+    nombre: "agrupado · 100 tarjetas → la primera variante, $13.200",
+    agente: {
+      output: {
+        respuesta: "100 tarjetas simple faz te salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 1)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: true,
+    esperaEnMensaje: ["$13.200"],
+  },
+  {
+    nombre: "agrupado · 500 tarjetas → variante que NO es la primera del chunk",
+    // El caso que motivó agrupar: el material declarado no es `md.material`, vive en
+    // `variantes`. Sin leerlas, el auditor no lo encontraría y derivaría a consulta.
+    agente: {
+      output: {
+        respuesta: "500 tarjetas simple faz te salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x500", 9, 5, 1)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: true,
+    esperaEnMensaje: ["$28.000"],
+    noEsperaEnMensaje: ["$13.200", "$66.000"], // ni la 1ª variante ni 5 x el precio de 100
+  },
+  {
+    nombre: "agrupado · 1000 tarjetas → la última variante, $42.000",
+    agente: {
+      output: {
+        respuesta: "1000 tarjetas te salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x1000", 9, 5, 1)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: true,
+    esperaEnMensaje: ["$42.000"],
+  },
+  {
+    nombre: "agrupado · el modelo pide 5 paquetes de 100 en vez del pack de 500",
+    // Cotiza $66.000 en vez de $28.000: caro, pero NO es un error del auditor — hizo la
+    // cuenta que le pidieron. Queda registrado para saber qué pasa si el modelo elige mal
+    // la presentación; el chunk lo desalienta con "no se calcula proporcionalmente".
+    agente: {
+      output: {
+        respuesta: "Salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 5)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: true,
+    esperaEnMensaje: ["$66.000"],
+  },
+  {
+    nombre: "agrupado · el modelo confunde tarjetas con paquetes (500 x $13.200)",
+    // El riesgo grande: el esquema le pide "piezas que pidió el cliente" y la unidad de
+    // cobro es un paquete de 100. Si declara 500, el total se va a $6.600.000 y el tope de
+    // sanity ($600.000) lo ataja: deriva a consulta en vez de mandar un disparate.
+    agente: {
+      output: {
+        respuesta: "500 tarjetas salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 500)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    noEsperaEnMensaje: ["$6.600.000"],
+  },
+  {
+    nombre: "agrupado · cantidad intermedia (300) → no hay presentación, deriva",
+    // TG no vende 300: no hay material que lo cubra. El modelo no debería declararlo, pero
+    // si lo hace con un nombre inventado el auditor no lo encuentra y deriva.
+    agente: {
+      output: {
+        respuesta: "300 tarjetas salen {P1}.",
+        cotizaciones: [cot("Tarjetas 9x5 simple faz x300", 9, 5, 1)],
+      },
+    },
+    filas: [{ metadata: MD_TARJETAS }],
+    esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+  },
   {
     nombre: "250 stickers 3x3 → el nodo calcula $6.600",
     agente: {

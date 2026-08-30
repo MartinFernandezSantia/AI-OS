@@ -45,6 +45,14 @@ const COLUMNAS = [
     hoja: "Productos",
     nombre: "Formato",
   },
+  {
+    // Agrupa líneas de precio que son el mismo producto en distinta presentación: las
+    // tarjetas de 100/500/1000, los 5 formatos de plastificado. Sin esto, cada precio
+    // genera su chunk y en tarjetas eso daba 14 casi idénticos compitiendo entre sí.
+    // Vacío = un chunk por material, como siempre.
+    hoja: "Materiales",
+    nombre: "Familia",
+  },
 ];
 
 chequearLock();

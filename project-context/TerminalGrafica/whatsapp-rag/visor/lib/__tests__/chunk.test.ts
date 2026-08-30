@@ -314,6 +314,61 @@ describe("chunks — coleccion-material", () => {
     ]);
   });
 
+  describe("Familia — presentaciones del mismo producto en un chunk", () => {
+    // Sin agrupar, las 14 tarjetas daban 14 chunks casi idénticos: 35% del texto literal
+    // compartido, y la descripción de la colección nombrando "100, 500 o 1000" DENTRO de
+    // todos, así que buscar "1000 tarjetas" matcheaba con los 14 por igual.
+    const conFamilia = (): Datos => ({
+      ...datos,
+      materiales: [
+        { Material: "Pack x100", Unidad: "paquete de 100 tarjetas", Familia: "Tarjetas", Desde: "1", "Precio por unidad": "13200" },
+        { Material: "Pack x500", Unidad: "paquete de 500 tarjetas", Familia: "Tarjetas", Desde: "1", "Precio por unidad": "28000" },
+      ],
+      colecciones: [{ "Colección": "Tarjetas", "Descripción": "Tarjetas." }],
+      productos: [
+        { "Colección": "Tarjetas", Producto: "100 tarjetas", Material: "Pack x100" },
+        { "Colección": "Tarjetas", Producto: "500 tarjetas", Material: "Pack x500" },
+      ],
+    });
+
+    it("los materiales de una familia dan UN chunk, no uno por precio", () => {
+      const cs = chunks(conFamilia(), "coleccion-material");
+      expect(cs).toHaveLength(1);
+      expect(cs[0].titulo).toBe("Tarjetas");
+    });
+
+    it("el chunk lleva las dos presentaciones y los DOS precios", () => {
+      const t = chunks(conFamilia(), "coleccion-material")[0].texto;
+      expect(t).toContain("- 100 tarjetas");
+      expect(t).toContain("- 500 tarjetas");
+      expect(t).toContain("$13.200");
+      expect(t).toContain("$28.000");
+    });
+
+    it("avisa que los precios NO se interpolan", () => {
+      // 500 tarjetas no son cinco veces 100 ($28.000, no $66.000). Sin esta línea el
+      // modelo tiene un precio por paquete y una cantidad, y la multiplicación es la
+      // lectura natural.
+      const t = chunks(conFamilia(), "coleccion-material")[0].texto;
+      expect(t).toContain("no se calcula proporcionalmente");
+    });
+
+    it("la meta lleva CADA presentación con su escala: el auditor indexa por material", () => {
+      // El chunk se llama "Tarjetas" pero hay dos materiales cotizables adentro. Si la
+      // meta trajera solo el primero, pedir 500 no tendría con qué calcularse.
+      const m = chunks(conFamilia(), "coleccion-material")[0].meta as Record<string, unknown>;
+      const vs = m.variantes as { material: string; escala: { precio: number }[] }[];
+      expect(vs.map((v) => v.material)).toEqual(["Pack x100", "Pack x500"]);
+      expect(vs[1].escala[0].precio).toBe(28000);
+    });
+
+    it("sin familia declarada, cada material sigue teniendo su chunk", () => {
+      // El default no cambia: lo que ya andaba (stickers, lonas) se arma igual que antes.
+      expect(chunks(datos, "coleccion-material").length).toBe(cs.length);
+      expect(cs[0].meta).not.toHaveProperty("variantes");
+    });
+  });
+
   describe("Formato — el tamaño en las palabras del cliente", () => {
     // Un recetario se vende "A5", no "14,8x21 cm". Contestar en cm no solo no ayuda: los
     // números se leen como una medida cotizable en un producto que no se cotiza por medida.

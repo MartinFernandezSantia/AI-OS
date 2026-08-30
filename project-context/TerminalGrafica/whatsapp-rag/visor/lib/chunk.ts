@@ -63,6 +63,21 @@ export const COL_SIN_MINIMO = "Sin mínimo por trabajo";
  */
 export const COL_FORMATO = "Formato";
 
+/**
+ * Agrupa líneas de precio que son EL MISMO producto en distinta presentación: las tarjetas
+ * simple faz de 100, 500 y 1000, o los cinco formatos de plastificado.
+ *
+ * Sin esto cada precio genera su propio chunk, y en tarjetas eso daba 14 casi idénticos —
+ * 35% de su texto literalmente igual, y la descripción de la colección nombrando "100, 500
+ * o 1000" dentro de TODOS, así que buscar "1000 tarjetas" matcheaba con los 14 por igual.
+ * Agrupados, el bot ve la tabla entera en un resultado y elige leyendo, no confiando en que
+ * el vector correcto entre en el top K.
+ *
+ * Es una agrupación de PRESENTACIÓN, no una escala: cada fila mantiene su precio cerrado
+ * (500 tarjetas no son cinco veces 100) y no se interpola entre ellas.
+ */
+export const COL_FAMILIA = "Familia";
+
 /** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
 const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
 
@@ -322,6 +337,24 @@ const materialesDe = (items: Fila[]): string[] => [
   ...new Set(items.map((p) => p["Material"]).filter(Boolean)),
 ];
 
+/** La familia de un material, o su propio nombre si no tiene (ver COL_FAMILIA). */
+const familiaDe = (datos: Datos, material: string): string =>
+  datos.materiales.find((m) => m["Material"] === material)?.[COL_FAMILIA] || material;
+
+/**
+ * Los materiales de una colección agrupados por familia: `[nombre del grupo, materiales]`.
+ * Sin familias declaradas es uno por material — el comportamiento de siempre.
+ */
+function gruposDe(datos: Datos, mats: string[]): [string, string[]][] {
+  const grupos = new Map<string, string[]>();
+  for (const m of mats) {
+    const fam = familiaDe(datos, m);
+    if (!grupos.has(fam)) grupos.set(fam, []);
+    grupos.get(fam)!.push(m);
+  }
+  return [...grupos];
+}
+
 // ── Estrategia 1: colección + material (la unidad cotizable cerrada) ────────────────────
 // Una sola escala por chunk: cero ambigüedad de qué precio aplicar. El bot igual ve las
 // medidas hermanas, así puede sugerir 5x5 si le piden 4x4.
@@ -336,27 +369,33 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
 
     const base = baseDe(datos, col);
 
-    for (const mat of mats) {
-      const suyos = items.filter((p) => p["Material"] === mat);
+    const grupos = gruposDe(datos, mats);
+
+    for (const [familia, delGrupo] of grupos) {
+      // El primer material del grupo define unidad, modo y geometría: los de una familia
+      // comparten todo salvo el precio y la presentación (100 / 500 / 1000 tarjetas).
+      const mat = delGrupo[0];
+      const agrupado = delGrupo.length > 1;
+      const suyos = items.filter((p) => delGrupo.includes(p["Material"] ?? ""));
       const tramos = escalaDe(datos.materiales, mat);
-      // Con un solo material, el nombre del material no agrega nada al título.
-      const titulo = mats.length > 1 ? `${col} — ${mat}` : col;
+      // Con un solo grupo, su nombre no agrega nada al título de la colección.
+      const titulo = grupos.length > 1 ? `${col} — ${familia}` : col;
 
       const unidad = unidadDe(datos.materiales, mat);
       const modo = modoDe(unidad);
       const geo = geometriaDe(datos.materiales, mat);
-      // Solo hay base donde hay algo que elegir: con un material único la línea sería
+      // Solo hay base donde hay algo que elegir: con un grupo único la línea sería
       // ruido (y "el material base" no significa nada si no hay alternativa).
-      const varios = mats.length > 1;
-      const esBase = varios && base === mat;
-      const otros = mats.filter((m) => m !== mat);
+      const varios = grupos.length > 1;
+      const esBase = varios && delGrupo.includes(base);
+      const otros = grupos.map(([f]) => f).filter((f) => f !== familia);
 
       const L: string[] = [titulo];
       if (desc) L.push(desc);
       // Los dos ejes por SEPARADO. El título los junta con un guion y el bot no tiene
       // cómo saber dónde termina uno y empieza el otro: sin esta línea, "la colección"
       // de las de abajo se queda sin referente claro.
-      if (varios) L.push(`Colección: ${col}. Material: ${mat}.`);
+      if (varios) L.push(`Colección: ${col}. Material: ${familia}.`);
       // La colección se nombra explícita (no "la colección") por lo mismo. Y cada chunk
       // lleva a sus hermanos: si el retrieval trae uno solo, el bot igual puede sugerir
       // alternativas sin inventarlas ni depender de la prosa de la descripción.
@@ -372,9 +411,23 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       // solo es cierto donde el precio sale de la superficie. Un recetario A5 se vende A5:
       // ahí la lista son los productos, no medidas entre las que elegir.
       L.push("", modo === "item" ? "Productos:" : "Medidas de referencia:");
-      for (const p of suyos) L.push(...itemProducto(p, unidad, geo, tramos));
-      const precio = lineaPrecio(mat, tramos);
-      if (precio) L.push("", precio);
+      for (const p of suyos) {
+        const suMat = p["Material"] ?? mat;
+        L.push(...itemProducto(p, unidadDe(datos.materiales, suMat), geo, escalaDe(datos.materiales, suMat)));
+      }
+      // Un renglón de precio por material del grupo: las presentaciones tienen precio
+      // CERRADO (500 tarjetas no son cinco veces 100), así que se listan, no se interpolan.
+      const precios = delGrupo
+        .map((m) => lineaPrecio(m, escalaDe(datos.materiales, m)))
+        .filter(Boolean);
+      if (precios.length) L.push("", ...precios);
+      if (agrupado) {
+        L.push(
+          `Son presentaciones distintas del mismo producto: cada una tiene su precio cerrado ` +
+            `y no se calcula proporcionalmente. Si el cliente pide una cantidad que no está ` +
+            `en la lista, confirmala por mail.`,
+        );
+      }
 
       out.push({
         titulo,
@@ -392,6 +445,19 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
           // El auditor del workflow re-calcula con esto; sin escala en la metadata
           // tendría que parsear la prosa del chunk.
           escala: escalaMeta(tramos),
+          // Un chunk agrupado tiene VARIOS materiales cotizables. El auditor indexa por
+          // nombre de material, así que se los lleva todos con su escala y su unidad: si
+          // no, el bot vería "500 tarjetas" en el texto y el auditor no sabría calcularlo.
+          ...(agrupado && {
+            familia,
+            variantes: delGrupo.map((m) => ({
+              material: m,
+              unidad: unidadDe(datos.materiales, m),
+              modo: modoDe(unidadDe(datos.materiales, m)),
+              sin_minimo: sinMinimoDe(datos, col, m),
+              escala: escalaMeta(escalaDe(datos.materiales, m)),
+            })),
+          }),
           ...(geo && {
             geometria: {
               util_ancho: geo.utilAncho,
