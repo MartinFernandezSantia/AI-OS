@@ -53,7 +53,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select metadata\n  from bot.rag_catalog\n where metadata->>'material' = $1\n limit 1",
+        "query": "select metadata\n  from bot.rag_catalog\n where metadata->>'material' = $1\n    or metadata->'variantes' @> jsonb_build_array(jsonb_build_object('material', $1::text))\n limit 1",
         "options": {
           "queryReplacement": "={{ [ String($json.material || '') ] }}"
         }
@@ -195,7 +195,7 @@
     },
     {
       "parameters": {
-        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde `Catalogo-TG-v2.xlsx`. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo** y **Traer Escalas**: credencial Postgres `BOT_DB` (pooler 5432,\nuser `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`, **schema-cualificada**\n(sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base` y `sin_minimo` en la metadata. El auditor los necesita —\nun chunk viejo sin `sin_minimo` cotiza el mínimo aunque la colección esté exenta.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.",
+        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo** y **Traer Escalas**: credencial Postgres `BOT_DB` (pooler 5432,\nuser `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`, **schema-cualificada**\n(sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base`, `sin_minimo` y `variantes` en la metadata. El auditor los\nnecesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté exento, y\nsin `variantes` las presentaciones agrupadas (500 tarjetas) no se encuentran.\n\n**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow\nhornea el prompt, los parámetros y el código del auditor: quedarse con la versión\nvieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.",
         "height": 520,
         "width": 460
       },

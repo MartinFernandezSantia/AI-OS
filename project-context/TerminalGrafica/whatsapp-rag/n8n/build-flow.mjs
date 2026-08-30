@@ -810,7 +810,15 @@ const flow = {
       // leído (mismo patrón que "Buscar Precios" del bot lite). Una query por item.
       parameters: {
         operation: "executeQuery",
-        query: "select metadata\n  from bot.rag_catalog\n where metadata->>'material' = $1\n limit 1",
+        // El material puede ser el del chunk O una de sus `variantes` (un chunk agrupado
+        // lleva las 3 presentaciones de tarjetas o los 5 formatos de plastificado). Sin la
+        // segunda condición, pedir "500 tarjetas" no traería fila y el bot derivaría todo.
+        query:
+          "select metadata\n" +
+          "  from bot.rag_catalog\n" +
+          " where metadata->>'material' = $1\n" +
+          "    or metadata->'variantes' @> jsonb_build_array(jsonb_build_object('material', $1::text))\n" +
+          " limit 1",
         options: { queryReplacement: "={{ [ String($json.material || '') ] }}" },
       },
       id: "cot-traer-escalas",
@@ -916,7 +924,7 @@ const flow = {
         content: [
           "## Cotizador v1 — qué cablear al importar",
           "",
-          "Generado por `n8n/build-flow.mjs` desde `Catalogo-TG-v2.xlsx`. **No editar acá**:",
+          "Generado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:",
           "los cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.",
           "",
           "**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*",
@@ -928,8 +936,13 @@ const flow = {
           "(sin el `bot.` consulta public y devuelve [] en verde, sin error).",
           "",
           "**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con",
-          "`escala`, `es_base` y `sin_minimo` en la metadata. El auditor los necesita —",
-          "un chunk viejo sin `sin_minimo` cotiza el mínimo aunque la colección esté exenta.",
+          "`escala`, `es_base`, `sin_minimo` y `variantes` en la metadata. El auditor los",
+          "necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté exento, y",
+          "sin `variantes` las presentaciones agrupadas (500 tarjetas) no se encuentran.",
+          "",
+          "**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow",
+          "hornea el prompt, los parámetros y el código del auditor: quedarse con la versión",
+          "vieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.",
           "",
           `**Parámetros horneados**: mínimo por trabajo $${MINIMO_TRABAJO} · redondeo $${REDONDEO} ·`,
           `tope de sanity $${TOPE_MAGNITUD}. Si cambian en el Excel, re-generar y re-importar.`,
