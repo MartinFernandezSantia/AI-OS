@@ -672,5 +672,74 @@ const chequeoCw = (nombre, cond, detalle) => {
   chequeoCw("primer contacto: historialTexto vacío", a.historialTexto === "", JSON.stringify(a.historialTexto));
 }
 
+// ── El egreso (parte 6): Preparar Envio → Chequear Envio → Actualizar Entrega ─────────
+// El punto de estos tests es el del caso real del lite (2026-07-29): la entrega se decide
+// por el ID que devuelve Chatwoot, nunca por el status HTTP — y el cierre del log tiene
+// que mergear signals sin pisar la via del INSERT.
+console.log("\n— Variante Chatwoot: egreso —");
+const codigoPrepEnvio = flowCw.nodes.find((n) => n.name === "Preparar Envio").parameters.jsCode;
+const codigoChequear = flowCw.nodes.find((n) => n.name === "Chequear Envio").parameters.jsCode;
+const exprActualizar = flowCw.nodes
+  .find((n) => n.name === "Actualizar Entrega")
+  .parameters.options.queryReplacement.replace(/^=\{\{\s*/, "")
+  .replace(/\s*\}\}$/, "");
+
+/** Evalúa el queryReplacement (una expresión n8n) con $()/$execution simulados. */
+const paramsActualizar = (chequeado, t0) =>
+  new Function("$", "$execution", "return " + exprActualizar)(
+    (nombre) => ({ first: () => ({ json: { "Chequear Envio": chequeado, "Cuando llega un mensaje": { _t0: t0 } }[nombre] }) }),
+    { id: "test-exec" },
+  );
+
+{
+  const sobre = correrCode(codigoPrepEnvio, {
+    nodos: {
+      Responder: [{ json: { output: "Salen $6.600.", via: "normal" } }],
+      "Cuando llega un mensaje": [{ json: { _chatwoot: { accountId: 1, conversationId: 7 } } }],
+    },
+  })[0].json;
+  chequeoCw(
+    "Preparar Envio arma el sobre flat",
+    sobre.accountId === 1 && sobre.conversationId === 7 && sobre.final === "Salen $6.600." && sobre.via === "normal",
+    JSON.stringify(sobre),
+  );
+
+  const chequear = (respuestaChatwoot) =>
+    correrCode(codigoChequear, {
+      items: [{ json: respuestaChatwoot }],
+      nodos: { "Preparar Envio": [{ json: sobre }] },
+    })[0].json;
+
+  // Entrega confirmada: Chatwoot devolvió el mensaje creado, con id en la raíz o anidado.
+  const okRaiz = chequear({ id: 4321, content: "Salen $6.600." });
+  chequeoCw("entrega OK por id en la raíz", okRaiz.entregado === true && okRaiz.idMensajeChatwoot === 4321, JSON.stringify(okRaiz));
+  const okAnidado = chequear({ data: { id: 4322 } });
+  chequeoCw("entrega OK por id anidado (data.id)", okAnidado.entregado === true && okAnidado.idMensajeChatwoot === 4322, JSON.stringify(okAnidado));
+
+  // NO-entrega: el 503 del caso real, un item de error de n8n, y una respuesta sin id.
+  const caido = chequear({ message: "Service temporarily unavailable" });
+  chequeoCw("503 de Chatwoot → NO entregado", caido.entregado === false && caido.detalle.includes("unavailable"), JSON.stringify(caido));
+  const errorN8n = chequear({ error: { message: "connect ECONNREFUSED" } });
+  chequeoCw("item de error de n8n → NO entregado", errorN8n.entregado === false && errorN8n.detalle.includes("ECONNREFUSED"), JSON.stringify(errorN8n));
+  const sinId = chequear({ content: "ok pero sin id" });
+  chequeoCw("respuesta sin id → NO entregado", sinId.entregado === false && sinId.detalle.includes("id de mensaje"), JSON.stringify(sinId));
+
+  // El cierre del log: [entregado, signals extra, execution_id].
+  const [flagOk, jsonOk, execOk] = paramsActualizar({ ...okRaiz }, Date.now() - 1500);
+  const sigOk = JSON.parse(jsonOk);
+  chequeoCw(
+    "Actualizar Entrega (OK): flag/execution y latencia medida",
+    flagOk === "true" && execOk === "test-exec" && sigOk.entregado === true && sigOk.chatwoot_message_id === 4321 && sigOk.latencia_ms >= 1500 && sigOk.envio_detalle === undefined,
+    JSON.stringify([flagOk, sigOk, execOk]),
+  );
+  const [flagMal, jsonMal] = paramsActualizar({ ...caido }, 0);
+  const sigMal = JSON.parse(jsonMal);
+  chequeoCw(
+    "Actualizar Entrega (fallo): detalle presente, sin latencia si no hay _t0",
+    flagMal === "false" && sigMal.entregado === false && sigMal.envio_detalle.includes("unavailable") && sigMal.latencia_ms === null,
+    JSON.stringify([flagMal, sigMal]),
+  );
+}
+
 console.log(fallos ? `\n✗ ${fallos} FALLOS` : "\n✓ todo el camino del cotizador anda");
 process.exitCode = fallos ? 1 : 0;

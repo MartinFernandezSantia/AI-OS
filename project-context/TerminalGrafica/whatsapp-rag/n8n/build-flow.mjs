@@ -49,6 +49,18 @@ const GEMINI_CRED = { googlePalmApi: { id: "ql7KStbm6WaYEaSJ", name: "Google Gem
 // Instrucciones/Parámetros/Casos (columnas contiguas) da igual; para Materiales rompe.
 // Este lector mapea por REFERENCIA de celda (A1) → índice de columna real.
 
+// GUARD: el default de lib-xlsx es el v2 (46 casos, TOPE 600k) y el catálogo VIGENTE es el
+// v3 (132 casos, TOPE 1.8M). Un build sin CATALOGO= emite desde el Excel viejo EN VERDE
+// (los gates corren contra el mismo Excel equivocado y pasan) — ya mordió: 2026-08-31,
+// el emitido local divergió del flow vivo y lo cazó el diff, no el gate.
+import { XLSX } from "../visor/scripts/lib-xlsx.mjs";
+if (!process.env.CATALOGO) {
+  console.error("✗ ABORTADO: falta CATALOGO=. El default de lib-xlsx es el Excel VIEJO (v2).");
+  console.error("  Correr: CATALOGO=Catalogo-TG-v3.xlsx node n8n/build-flow.mjs");
+  process.exit(1);
+}
+console.log(`catálogo: ${XLSX}`);
+
 const { entradas } = abrir();
 const leer = (n) => entradas.find((e) => e.nombre === n).contenido.toString("utf8");
 const wbXml = leer("xl/workbook.xml");
@@ -1793,8 +1805,167 @@ const adaptadorChatwoot = {
   position: [0, 0],
 };
 
+// ---------- Egreso F3+F4 (parte 6): la respuesta vuelve a Chatwoot y la entrega se VERIFICA ----------
+// Cadena: Entregar → Preparar Envio → Enviar Mensaje → Chequear Envio → ¿Se Entregó?
+//   → [sí] Actualizar Entrega ; [no] Label Envío Fallido → Actualizar Entrega.
+//
+// Diferencia con el lite: allá el INSERT del turno y el cierre eran nodos distintos de dos
+// fases (Log Decisión / Log Turno). Acá Log Turno YA insertó la fila ANTES del envío (con
+// state y signals.via del Responder), así que el cierre es un UPDATE que suma SOLO lo que
+// se sabe al final: si se entregó, el id del mensaje en Chatwoot y la latencia. signals se
+// MERGEA (||), no se pisa: via y fallo_parser del INSERT sobreviven.
+// NOMBRES sin acento ("Preparar Envio"/"Chequear Envio") = los del lite/v10, así las refs
+// $('Preparar Envio')/$('Chequear Envio') quedan idénticas a las ya probadas en prod.
+const prepararEnvio = {
+  // El "sobre" FLAT que Enviar Mensaje / Chequear Envio esperan. Sin `accion` ni enum: ese
+  // vocabulario era del lite; el estado de ESTE turno ya quedó en bot.log al insertarse.
+  parameters: {
+    jsCode: [
+      "const r = $('Responder').first().json;",
+      "const trig = $('Cuando llega un mensaje').first().json;",
+      "const cw = trig._chatwoot || {};",
+      "return [{ json: {",
+      "  accountId: cw.accountId,",
+      "  conversationId: cw.conversationId,",
+      "  final: String(r.output || ''),",
+      "  via: String(r.via || 'normal'),",
+      "} }];",
+    ].join("\n"),
+  },
+  id: "cw-preparar-envio",
+  name: "Preparar Envio",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [2100, 0],
+};
+
+const enviarMensaje = {
+  // Envía a la conversación por la red interna Docker (rails:3000). alwaysOutputData +
+  // onError=continue: aunque falle, emite un item para que Chequear Envio detecte la
+  // NO-entrega — sin esto, el fallo mata la ejecución y no queda ni fila ni label.
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ content: $json.final, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    options: {},
+  },
+  id: "cw-enviar-mensaje",
+  name: "Enviar Mensaje",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [2320, 0],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+  retryOnFail: true,
+  maxTries: 3,
+  waitBetweenTries: 3000,
+  alwaysOutputData: true,
+};
+
+const chequearEnvio = {
+  // EL LOG NO PUEDE DECIR QUE SE CONTESTÓ SI NO SE CONTESTÓ. Caso real del lite
+  // (2026-07-29): Chatwoot devolvió "Service temporarily unavailable", el cliente no
+  // recibió nada y la base afirmaba la entrega — Martin lo descubrió mirando WhatsApp.
+  // La entrega se confirma por el `id` numérico que devuelve Chatwoot, NO por el status
+  // HTTP: con onError, el nodo puede emitir un item de error sin status alguno.
+  parameters: {
+    jsCode: [
+      "const env = $('Preparar Envio').first().json;",
+      "const r = $input.first().json || {};",
+      "// el id puede venir en la raíz o anidado según cómo responda Chatwoot",
+      "const idMensaje = r.id || (r.data && r.data.id) || null;",
+      "const huboError = !!(r.error || r.errorMessage || r.message === 'Service temporarily unavailable');",
+      "const entregado = !!idMensaje && !huboError;",
+      "const detalle = entregado ? null : String(",
+      "  r.errorMessage || (r.error && (r.error.message || r.error)) || r.message",
+      "  || 'Chatwoot no devolvió id de mensaje'",
+      ").slice(0, 300);",
+      "return [{ json: { ...env, entregado, idMensajeChatwoot: idMensaje || null, detalle } }];",
+    ].join("\n"),
+  },
+  id: "cw-chequear-envio",
+  name: "Chequear Envio",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [2540, 0],
+};
+
+const seEntrego = {
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, version: 2 },
+      combinator: "and",
+      conditions: [{ leftValue: "={{ $json.entregado }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } }],
+    },
+    options: {},
+  },
+  id: "cw-se-entrego",
+  name: "¿Se Entregó?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2.2,
+  position: [2760, 0],
+};
+
+const labelEnvioFallido = {
+  // Marca la conversación 'envio-fallido' para revisión manual. Ref a Decidir (siempre ejecutó).
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ labels: ['envio-fallido'] }) }}",
+    options: {},
+  },
+  id: "cw-label-envio-fallido",
+  name: "Label Envío Fallido",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [2980, 160],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+};
+
+const actualizarEntrega = {
+  // Cierra la fila que Log Turno insertó ESTE turno (match execution_id). $1 viaja como
+  // string 'true'/'false' y castea en SQL: el queryReplacement de n8n serializa mejor
+  // strings que booleans. Es TERMINAL y el cliente ya fue atendido (o ya falló el envío y
+  // quedó el label) → si el UPDATE falla, CRASHEA (stopWorkflow): un cierre que falla en
+  // silencio deja el log mintiendo — la clase exacta del bug de julio. El Error Workflow
+  // (tg-bot-error) lo asienta en bot.errors.
+  parameters: {
+    operation: "executeQuery",
+    query:
+      "update bot.log\n" +
+      "   set state = case when $1::boolean then state else 'envio_fallido' end,\n" +
+      "       signals = coalesce(signals, '{}'::jsonb) || $2::jsonb\n" +
+      " where execution_id = $3",
+    options: {
+      queryReplacement:
+        "={{ (() => { const c = $('Chequear Envio').first().json; const t0 = Number($('Cuando llega un mensaje').first().json._t0 || 0); const lat = t0 > 0 ? Date.now() - t0 : null; const extra = { entregado: c.entregado === true, latencia_ms: lat, chatwoot_message_id: c.idMensajeChatwoot || null }; if (c.entregado !== true) extra.envio_detalle = String(c.detalle || ''); return [ String(c.entregado === true), JSON.stringify(extra), String($execution.id || '') ]; })() }}",
+    },
+  },
+  id: "cw-actualizar-entrega",
+  name: "Actualizar Entrega",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [2980, 0],
+  credentials: { postgres: BOT_DB },
+  onError: "stopWorkflow",
+};
+
 const flowCw = JSON.parse(JSON.stringify(flow));
 flowCw.name = "cotizador-v1-chatwoot";
+// F0 del lite: los crashes de la variante (Actualizar Entrega incluido) van al Error
+// Workflow tg-bot-error, que los asienta en bot.errors con la traza.
+flowCw.settings = { ...(flowCw.settings || {}), errorWorkflow: "bZFVbSBHJKFtO1Hh" };
 // Fuera el Chat Trigger (lo reemplaza el adaptador, que hereda su nombre)…
 flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "cot-chat-trigger");
 // …y fuera la Simple Memory: la memoria ES el historial de Chatwoot (decisión de Martín).
@@ -1829,6 +2000,21 @@ flowCw.nodes.unshift(
   labelCap,
   adaptadorChatwoot,
 );
+flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, actualizarEntrega);
+Object.assign(flowCw.connections, {
+  // Egreso (parte 6): cuelga de Entregar, que en el chat era terminal.
+  Entregar: { main: [[{ node: "Preparar Envio", type: "main", index: 0 }]] },
+  "Preparar Envio": { main: [[{ node: "Enviar Mensaje", type: "main", index: 0 }]] },
+  "Enviar Mensaje": { main: [[{ node: "Chequear Envio", type: "main", index: 0 }]] },
+  "Chequear Envio": { main: [[{ node: "¿Se Entregó?", type: "main", index: 0 }]] },
+  "¿Se Entregó?": {
+    main: [
+      [{ node: "Actualizar Entrega", type: "main", index: 0 }], // 0 true = entregado
+      [{ node: "Label Envío Fallido", type: "main", index: 0 }], // 1 false = no entregado
+    ],
+  },
+  "Label Envío Fallido": { main: [[{ node: "Actualizar Entrega", type: "main", index: 0 }]] },
+});
 Object.assign(flowCw.connections, {
   "Chatwoot Webhook": { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] },
   "Verificar HMAC": { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] },
@@ -1887,8 +2073,13 @@ Object.assign(flowCw.connections, {
       "Firewall Tier-1 (bot.firewall_check, fail-open con log a bot.errors) → ¿Tiene Texto? → " +
       "Wait 15s → Get Historial → Decidir (debounce/idempotencia/ráfaga NFC/CAP) → adaptador. " +
       "SIN Simple Memory: la memoria es el historial del canal (historialTexto → input del " +
-      "Agente). Falta el EGRESO (parte 6): la respuesta del LLM aún no vuelve a Chatwoot. " +
-      "Credenciales: 'Chatwoot API Token' (HTTP Header) + BOT DB + Gemini.";
+      "Agente). EGRESO (parte 6): Entregar → Preparar Envio → Enviar Mensaje (rails:3000) → " +
+      "Chequear Envio (entrega = id de Chatwoot, no status HTTP) → ¿Se Entregó? (no → Label " +
+      "Envío Fallido) → Actualizar Entrega (UPDATE de la fila de bot.log del turno: mergea " +
+      "signals con entregado/latencia_ms/chatwoot_message_id; state='envio_fallido' si no " +
+      "llegó; si el UPDATE falla, crashea → Error Workflow tg-bot-error). " +
+      "Credenciales: 'Chatwoot API Token' (HTTP Header) + BOT DB + Gemini. " +
+      "Para activar (parte 8): desactivar el bot lite primero — comparten el path 'chatwoot'.";
   }
 }
 
@@ -1999,6 +2190,16 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["el firewall llama a bot.firewall_check", (cwNodo("Firewall Tier-1")?.parameters?.query || "").includes("bot.firewall_check")],
     ["Decidir normaliza NFC", (cwNodo("Decidir")?.parameters?.jsCode || "").includes("normalize('NFC')")],
     ["la cadena del log sobrevive en la variante", flowCw.connections["Responder"]?.main?.[0]?.[0]?.node === "Armar Log"],
+    // Egreso (parte 6). Lo que falla acá falla EN SILENCIO en prod: un envío que no se
+    // verifica vuelve al log mentiroso de julio, un UPDATE que pisa signals borra la via.
+    ["el egreso cuelga de Entregar", flowCw.connections["Entregar"]?.main?.[0]?.[0]?.node === "Preparar Envio"],
+    ["Enviar Mensaje va por la red interna", String(cwNodo("Enviar Mensaje")?.parameters?.url || "").includes("http://rails:3000") && cwNodo("Enviar Mensaje")?.alwaysOutputData === true],
+    ["la entrega se decide por id, no por status HTTP", ["idMensaje", "entregado = !!idMensaje"].every((f) => (cwNodo("Chequear Envio")?.parameters?.jsCode || "").includes(f))],
+    ["¿Se Entregó? bifurca a Actualizar/Label", flowCw.connections["¿Se Entregó?"]?.main?.[0]?.[0]?.node === "Actualizar Entrega" && flowCw.connections["¿Se Entregó?"]?.main?.[1]?.[0]?.node === "Label Envío Fallido"],
+    ["el fallo de envío también cierra el log", flowCw.connections["Label Envío Fallido"]?.main?.[0]?.[0]?.node === "Actualizar Entrega"],
+    ["Actualizar Entrega mergea signals por execution_id", ["|| $2::jsonb", "execution_id = $3", "'envio_fallido'"].every((f) => (cwNodo("Actualizar Entrega")?.parameters?.query || "").includes(f))],
+    ["Actualizar Entrega crashea si falla (no silencio)", cwNodo("Actualizar Entrega")?.onError === "stopWorkflow"],
+    ["los crashes van al Error Workflow tg-bot-error", flowCw.settings?.errorWorkflow === "bZFVbSBHJKFtO1Hh"],
   ].filter(([, ok]) => !ok);
   if (CW_CABLEADO.length) {
     console.error("\n✗ ABORTADO: el cableado de la variante Chatwoot está incompleto:");
@@ -2015,4 +2216,4 @@ mkdirSync(path.dirname(SALIDA), { recursive: true });
 writeFileSync(SALIDA, JSON.stringify(flow, null, 2) + "\n");
 console.log(`\n✓ ${flow.nodes.length} nodos → ${path.relative(process.cwd(), SALIDA)}`);
 writeFileSync(OUT_CW, JSON.stringify(flowCw, null, 2) + "\n");
-console.log(`✓ ${flowCw.nodes.length} nodos → ${path.relative(process.cwd(), OUT_CW)} (variante Chatwoot, NO activar sin el egreso)`);
+console.log(`✓ ${flowCw.nodes.length} nodos → ${path.relative(process.cwd(), OUT_CW)} (variante Chatwoot con egreso; activar SOLO tras desactivar el lite — comparten el path 'chatwoot')`);
