@@ -340,6 +340,15 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      quiere que sepa la fecha, hay que inyectarla por expresión de n8n, no por texto
      horneado (el build fija la fecha del build, no la del turno).
 
+   **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
+   El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
+   los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`
+   (`verification.hallazgos` + `signals.via`) — por eso esta parte vino DESPUÉS del log:
+   sacarla antes habría vuelto los fallos invisibles. `test-auditor.mjs` invirtió el
+   invariante: ahora falla si un veredicto interno llega al mensaje, o si un turno con
+   `!ok` pierde sus hallazgos. Verificado en vivo: `20 stickers 30x45` deriva con el
+   mensaje LIMPIO y el hallazgo entero en el log; `1 lona 90x60` → $8.600 intacto.
+
 ### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
 
 El Excel pasó a `Catalogo-TG-v3.xlsx` (el v2 no se toca) con los 61 productos que mandó
@@ -774,8 +783,8 @@ aplica por producto o por pedido completo? (el plan asume por producto — confi
   laminar o laminado?" en vez de ir a la base. La colección Papelería comercial no tiene
   `Material base` marcado, así que el bot no tiene cuál elegir. O se le marca una base en el
   Excel, o se acepta que ahí pregunte.
-- **La cola de debug del Responder** (`⚠ auditoría:`, `(marcadores sin precio: …)`) sale al
-  mensaje del cliente. Sacarla antes de prod.
+- ~~**La cola de debug del Responder** sale al mensaje del cliente.~~ **HECHO (Parte 4)**:
+  se retiró; el rastro está en `bot.log`.
 - ~~**Los 132 casos del Excel nunca se corrieron completos contra el catálogo v3** en vivo.~~
   **HECHO con el log de la Fase 5: 130/132** (ver Fase 4). Quedan las 2 preguntas de
   elección de material (#53 banner roll-up duplicado → preguntar a TG; #72 "1 talonario
