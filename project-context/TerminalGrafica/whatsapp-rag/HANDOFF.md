@@ -342,9 +342,9 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
 
    **Parte 5 — CONSTRUIDA y subida (31/08): la variante Chatwoot, ingreso F1+F2.**
    `build-flow.mjs` ahora emite DOS flows: el de chat (18 nodos) y
-   `flows/cotizador-v1-chatwoot.json` (**37 nodos**, workflow `3vNAAe0sr7sMgPUa` en n8n,
-   **INACTIVO — no activar hasta la parte 6**: los enlatados sí postean a Chatwoot, pero la
-   respuesta del LLM muere en `Entregar` porque falta el egreso).
+   `flows/cotizador-v1-chatwoot.json` (**37 nodos** entonces; hoy 43 con el egreso de la
+   parte 6, workflow `3vNAAe0sr7sMgPUa` en n8n, **INACTIVO — no activar hasta la parte 8**:
+   comparte el path `chatwoot` con el bot lite activo, un solo flow por vez).
    - **Decisión de Martín: la memoria es el HISTORIAL DE CHATWOOT.** La variante saca la
      Simple Memory; el adaptador (que hereda el nombre "Cuando llega un mensaje" para no
      tocar el medio) emite `historialTexto` y el `text` del Agente lo antepone al mensaje
@@ -372,6 +372,42 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      Peña 3865, Mar del Plata" y `bot.business_info` dice "Dorrego 3365" — direcciones
      DISTINTAS, una es vieja. El enlatado nuevo no afirma ninguna ("pasá por el local")
      hasta que TG confirme cuál es.
+
+   **Parte 6 — CONSTRUIDA y subida (31/08): el egreso F3+F4, la respuesta vuelve a Chatwoot.**
+   La variante pasó a **43 nodos** (workflow `3vNAAe0sr7sMgPUa`, sigue INACTIVO hasta la
+   parte 8): `Entregar → Preparar Envio → Enviar Mensaje → Chequear Envio → ¿Se Entregó?
+   → [no] Label Envío Fallido → Actualizar Entrega`.
+   - **Diferencia clave con el lite**: allá el INSERT y el cierre del log eran dos nodos de
+     fases distintas; acá `Log Turno` YA insertó la fila ANTES del envío, así que el cierre
+     es **Actualizar Entrega**: un UPDATE por `execution_id` que **mergea** `signals` con
+     `||` (via y fallo_parser del INSERT sobreviven) sumando
+     `entregado`/`latencia_ms` (desde el `_t0` del adaptador)/`chatwoot_message_id`
+     (+`envio_detalle` si falló), y pisa `state='envio_fallido'` SOLO si no se entregó.
+   - **La entrega se decide por el `id` que devuelve Chatwoot, NUNCA por el status HTTP**
+     (el caso real del lite 2026-07-29: un 503 logueado como éxito). `Enviar Mensaje` va con
+     retry 3 + `onError: continue` + `alwaysOutputData` para que el fallo LLEGUE al chequeo.
+   - `Actualizar Entrega` es terminal y el cliente ya fue atendido → si el UPDATE falla,
+     **crashea** (`onError: stopWorkflow`): un cierre que falla en silencio es el bug de
+     julio otra vez. Y el crash lo asienta el **Error Workflow `tg-bot-error`**
+     (`bZFVbSBHJKFtO1Hh`), que ahora está seteado en los settings de la variante (el MCP lo
+     soporta: op `setWorkflowSettings.errorWorkflow`).
+   - 8 gates nuevos del egreso (verificados EN ROJO) + 8 tests nuevos en `test-auditor.mjs`
+     (Chequear Envio con id en raíz/anidado/503/error/sin-id; los parámetros del UPDATE
+     evaluando el queryReplacement REAL del emitido con mocks).
+   - **GOTCHA CARO cazado por el diff, no por los gates**: el builder defaultea al Excel
+     VIEJO (`Catalogo-TG-v2.xlsx`, 46 casos, tope $600k) — el vigente es
+     **`CATALOGO=Catalogo-TG-v3.xlsx`** (132 casos, tope $1.8M). Un build sin `CATALOGO=`
+     emite desde el v2 EN VERDE (los gates corren contra el mismo Excel equivocado).
+     Ahora el builder **ABORTA sin `CATALOGO=`**. Correr siempre:
+     `CATALOGO=Catalogo-TG-v3.xlsx node n8n/build-flow.mjs`.
+   - El diff se actualizó (scratchpad `diff-cw-v2.mjs`, pásale el dump del vivo como arg):
+     además de comentarios de jsCode normaliza el orden de claves y los DEFAULTS que
+     `update_workflow` quita al re-guardar (toolName = nombre del nodo, columnNames
+     estándar, modelName de embeddings) — equivalencia probada en vivo por el flow de chat.
+     Veredicto final: **el vivo calca al emitido, 43 nodos, 44 conexiones, credenciales,
+     settings y errorWorkflow idénticos**.
+   - **Lo que NO se pudo probar** sigue igual que la parte 5: el e2e real necesita el
+     switch (desactivar el lite, activar este) + un WhatsApp real → parte 8.
 
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
