@@ -383,6 +383,12 @@ function correrTests() {
       // La columna del caso es el rinde ESPERADO, no un dato de entrada: si se lo pasáramos,
       // el test no probaría la fórmula de encaje, solo la aritmética que viene después.
       rinde_cargado: null,
+      // El paquete, igual que en producción (el auditor lo lee de `md.paquete` del chunk).
+      // Faltaba, y el hueco era grave: la hoja cargaba la Cantidad ya convertida a unidades
+      // de cobro ("100 tarjetas" con Cantidad 1), así que la división piezas→paquetes —el
+      // bug del $54.000.000— no la ejercía NINGÚN caso. Ahora la Cantidad va en PIEZAS,
+      // como la escribe el cliente, y esta línea es la que hace que el gate la cubra.
+      paquete: paqueteDeMaterial(material),
     });
 
     if (esperado === null) {
@@ -1162,6 +1168,20 @@ console.log("✓ el auditor reproduce el Excel entero.");
   if (sinCablear.length) {
     console.error("\n✗ ABORTADO: el nodo Auditar Cotización no le pasa a cotizar():");
     for (const [campo, frag] of sinCablear) console.error(`  - ${campo} (falta "${frag}")`);
+    process.exit(1);
+  }
+
+  // El ESPEJO del cableado anterior, del lado del gate. Que el nodo emitido pase `paquete`
+  // no sirve de nada si el loop que corre los casos NO lo pasa: ahí el bug de la división
+  // piezas→paquetes vuelve a quedar sin test, que es exactamente como estuvo hasta hoy.
+  const gateSrc = String(correrTests);
+  const FALTANTES = [
+    ["paquete", "paquete: paqueteDeMaterial(material)"],
+    ["sin_minimo", "sin_minimo: sinMinimoDeMaterial(material)"],
+  ].filter(([, frag]) => !gateSrc.includes(frag));
+  if (FALTANTES.length) {
+    console.error("\n✗ ABORTADO: el gate de casos no le pasa a cotizar() lo que sí pasa producción:");
+    for (const [campo, frag] of FALTANTES) console.error(`  - ${campo} (falta "${frag}")`);
     process.exit(1);
   }
 }

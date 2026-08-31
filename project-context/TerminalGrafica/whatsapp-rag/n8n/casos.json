@@ -392,5 +392,649 @@
     "Ancho (cm)": "90",
     "Alto (cm)": "60",
     "Precio correcto": "8600"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 simple faz",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 simple faz x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "13200"
+  },
+  {
+    "Pedido": "500 tarjetas 9x5 doble faz",
+    "Cantidad": "500",
+    "Material": "Tarjetas 9x5 doble faz x500",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "38000"
+  },
+  {
+    "Pedido": "1000 tarjetas 9x5 simple faz encapsuladas",
+    "Cantidad": "1000",
+    "Material": "Tarjetas 9x5 simple faz encapsuladas x1000",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "54000"
+  },
+  {
+    "Pedido": "500 hojas membretadas A4",
+    "Cantidad": "500",
+    "Material": "Hojas membretadas A4 x500",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "35000"
+  },
+  {
+    "Pedido": "10 talonarios de factura",
+    "Cantidad": "10",
+    "Material": "Talonarios x10",
+    "Ancho (cm)": "15",
+    "Alto (cm)": "21",
+    "Precio correcto": "54000"
+  },
+  {
+    "Pedido": "500 volantes A6",
+    "Cantidad": "500",
+    "Material": "Volantes A6 x500",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "15",
+    "Precio correcto": "12000"
+  },
+  {
+    "Pedido": "1 banner roll-up 85x200",
+    "Cantidad": "1",
+    "Material": "Banner roll-up",
+    "Ancho (cm)": "85",
+    "Alto (cm)": "200",
+    "Precio correcto": "38000"
+  },
+  {
+    "Pedido": "250 sobres oficio inglés",
+    "Cantidad": "250",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "55000"
+  },
+  {
+    "Pedido": "150 sobres oficio inglés (tramo 1-200)",
+    "Cantidad": "150",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "37500"
+  },
+  {
+    "Pedido": "600 sobres oficio inglés (tramo 501-1000)",
+    "Cantidad": "600",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "114000"
+  },
+  {
+    "Pedido": "1200 sobres oficio inglés (tramo 1001+)",
+    "Cantidad": "1200",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "216000"
+  },
+  {
+    "Pedido": "30 carpetas institucionales",
+    "Cantidad": "30",
+    "Material": "Carpetas institucionales sin laminar",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "75000"
+  },
+  {
+    "Pedido": "30 carpetas institucionales laminadas",
+    "Cantidad": "30",
+    "Material": "Carpetas institucionales laminadas",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "84000"
+  },
+  {
+    "Pedido": "200 impresiones color A4",
+    "Cantidad": "200",
+    "Material": "Impresión color A4 simple faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "16000"
+  },
+  {
+    "Pedido": "15 anotadores en color",
+    "Cantidad": "15",
+    "Material": "Anotadores personalizados en color",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "15",
+    "Precio correcto": "57000"
+  },
+  {
+    "Pedido": "40 anillados plásticos",
+    "Cantidad": "40",
+    "Material": "Anillado plástico",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "96000"
+  },
+  {
+    "Pedido": "200 sobres oficio inglés (último del tramo)",
+    "Cantidad": "200",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "50000"
+  },
+  {
+    "Pedido": "201 sobres oficio inglés (primero del siguiente)",
+    "Cantidad": "201",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "44200"
+  },
+  {
+    "Pedido": "20 carpetas institucionales (último del tramo)",
+    "Cantidad": "20",
+    "Material": "Carpetas institucionales sin laminar",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "52000"
+  },
+  {
+    "Pedido": "21 carpetas institucionales (sale MÁS que 20)",
+    "Cantidad": "21",
+    "Material": "Carpetas institucionales sin laminar",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "52500"
+  },
+  {
+    "Pedido": "1 laminado (exento del mínimo)",
+    "Cantidad": "1",
+    "Material": "Laminado",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "300"
+  },
+  {
+    "Pedido": "1 colocación de ojalillos (exento)",
+    "Cantidad": "1",
+    "Material": "Colocación de ojalillos",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "1000"
+  },
+  {
+    "Pedido": "1 impresión b/n A4 (exenta: $100, no $4.000)",
+    "Cantidad": "1",
+    "Material": "Impresión blanco y negro A4 simple faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "100"
+  },
+  {
+    "Pedido": "1 sobre oficio inglés (exento: $250, no $4.000)",
+    "Cantidad": "1",
+    "Material": "Sobres oficio inglés",
+    "Ancho (cm)": "23.5",
+    "Alto (cm)": "12",
+    "Precio correcto": "300"
+  },
+  {
+    "Pedido": "12 anillados plásticos (exento, supera el mínimo)",
+    "Cantidad": "12",
+    "Material": "Anillado plástico",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "28800"
+  },
+  {
+    "Pedido": "1 talonario x10 (NO exento, ya supera el mínimo)",
+    "Cantidad": "10",
+    "Material": "Talonarios x10",
+    "Ancho (cm)": "15",
+    "Alto (cm)": "21",
+    "Precio correcto": "54000"
+  },
+  {
+    "Pedido": "50 impresiones b/n A4 doble faz (tramo 11-100)",
+    "Cantidad": "50",
+    "Material": "Impresión blanco y negro A4 doble faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "4800"
+  },
+  {
+    "Pedido": "200 impresiones b/n A4 doble faz (tramo 101-500)",
+    "Cantidad": "200",
+    "Material": "Impresión blanco y negro A4 doble faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "17600"
+  },
+  {
+    "Pedido": "1500 impresiones b/n A4 doble faz (tramo 1001+)",
+    "Cantidad": "1500",
+    "Material": "Impresión blanco y negro A4 doble faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "126000"
+  },
+  {
+    "Pedido": "1 plastificado A4",
+    "Cantidad": "1",
+    "Material": "Plastificado A4",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "2200"
+  },
+  {
+    "Pedido": "1 plastificado de carnet 9x13",
+    "Cantidad": "1",
+    "Material": "Plastificado carnet",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "13",
+    "Precio correcto": "1500"
+  },
+  {
+    "Pedido": "1 plastificado cocodrilo (el más barato)",
+    "Cantidad": "1",
+    "Material": "Plastificado cocodrilo",
+    "Ancho (cm)": "5",
+    "Alto (cm)": "8",
+    "Precio correcto": "800"
+  },
+  {
+    "Pedido": "10 plastificados A3",
+    "Cantidad": "10",
+    "Material": "Plastificado A3",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "30000"
+  },
+  {
+    "Pedido": "1 vinilo microperforado de 1x1 m",
+    "Cantidad": "1",
+    "Material": "Vinilo microperforado",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "100",
+    "Precio correcto": "18000"
+  },
+  {
+    "Pedido": "1 vinilo microperforado de 50x50 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo microperforado",
+    "Ancho (cm)": "50",
+    "Alto (cm)": "50",
+    "Precio correcto": "9000"
+  },
+  {
+    "Pedido": "1 cartel de PVC espumado 50x70 cm",
+    "Cantidad": "1",
+    "Material": "PVC espumado 3 mm con vinilo",
+    "Ancho (cm)": "50",
+    "Alto (cm)": "70",
+    "Precio correcto": "23000"
+  },
+  {
+    "Pedido": "1 cartel de PVC espumado de 100x150 cm",
+    "Cantidad": "1",
+    "Material": "PVC espumado 3 mm con vinilo",
+    "Ancho (cm)": "100",
+    "Alto (cm)": "150",
+    "Precio correcto": "69000"
+  },
+  {
+    "Pedido": "1 plano A1",
+    "Cantidad": "1",
+    "Material": "Impresión de planos lineal",
+    "Ancho (cm)": "59.4",
+    "Alto (cm)": "84.1",
+    "Precio correcto": "4000"
+  },
+  {
+    "Pedido": "4 planos A1",
+    "Cantidad": "4",
+    "Material": "Impresión de planos lineal",
+    "Ancho (cm)": "59.4",
+    "Alto (cm)": "84.1",
+    "Precio correcto": "14000"
+  },
+  {
+    "Pedido": "escaneo de 3 metros de planos",
+    "Cantidad": "3",
+    "Material": "Escaneo de planos",
+    "Precio correcto": "24000"
+  },
+  {
+    "Pedido": "escaneo de 1 metro de planos",
+    "Cantidad": "1",
+    "Material": "Escaneo de planos",
+    "Precio correcto": "8000"
+  },
+  {
+    "Pedido": "1 plancha A4 de stickers",
+    "Cantidad": "1",
+    "Material": "Plancha A4 de stickers",
+    "Precio correcto": "4000"
+  },
+  {
+    "Pedido": "10 planchas A4 de stickers",
+    "Cantidad": "10",
+    "Material": "Plancha A4 de stickers",
+    "Precio correcto": "14000"
+  },
+  {
+    "Pedido": "150 planchas A4 de stickers",
+    "Cantidad": "150",
+    "Material": "Plancha A4 de stickers",
+    "Precio correcto": "150000"
+  },
+  {
+    "Pedido": "1 lona 1,9x0,9 con porta banner 2 velas",
+    "Cantidad": "1",
+    "Material": "Lona 1,9x0,9 m con porta banner 2 velas",
+    "Precio correcto": "61400"
+  },
+  {
+    "Pedido": "1 lona 2x0,85 con roll up",
+    "Cantidad": "1",
+    "Material": "Lona 2x0,85 m con porta banner roll up",
+    "Precio correcto": "65200"
+  },
+  {
+    "Pedido": "2 lonas 2x0,85 con roll up",
+    "Cantidad": "2",
+    "Material": "Lona 2x0,85 m con porta banner roll up",
+    "Precio correcto": "130400"
+  },
+  {
+    "Pedido": "100 stickers en OPP brillo sin cortar de 8x8 cm",
+    "Cantidad": "100",
+    "Material": "OPP brillo",
+    "Ancho (cm)": "8",
+    "Alto (cm)": "8",
+    "Piezas por unidad de cobro": "15",
+    "Precio correcto": "16800"
+  },
+  {
+    "Pedido": "100 stickers holográficos sin cortar de 8x8 cm",
+    "Cantidad": "100",
+    "Material": "OPP plata, holográfico, cristal o mate",
+    "Ancho (cm)": "8",
+    "Alto (cm)": "8",
+    "Piezas por unidad de cobro": "15",
+    "Precio correcto": "18200"
+  },
+  {
+    "Pedido": "1 cartel adhesivo con blanco de 60x80 cm",
+    "Cantidad": "1",
+    "Material": "Vinilo y lona UV con blanco o barniz",
+    "Ancho (cm)": "60",
+    "Alto (cm)": "80",
+    "Precio correcto": "13000"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 simple faz encapsuladas",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 simple faz encapsuladas x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "16500"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 doble faz",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 doble faz x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "16500"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 doble faz encapsuladas",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 doble faz encapsuladas x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "18700"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 en papel kraft simple faz",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 kraft simple faz x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "17600"
+  },
+  {
+    "Pedido": "100 tarjetas 9x5 en papel kraft doble faz",
+    "Cantidad": "100",
+    "Material": "Tarjetas 9x5 kraft doble faz x100",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "24200"
+  },
+  {
+    "Pedido": "500 tarjetas 9x5 simple faz",
+    "Cantidad": "500",
+    "Material": "Tarjetas 9x5 simple faz x500",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "28000"
+  },
+  {
+    "Pedido": "500 tarjetas 9x5 simple faz encapsuladas",
+    "Cantidad": "500",
+    "Material": "Tarjetas 9x5 simple faz encapsuladas x500",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "38000"
+  },
+  {
+    "Pedido": "500 tarjetas 9x5 doble faz encapsuladas",
+    "Cantidad": "500",
+    "Material": "Tarjetas 9x5 doble faz encapsuladas x500",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "45000"
+  },
+  {
+    "Pedido": "1000 tarjetas 9x5 simple faz",
+    "Cantidad": "1000",
+    "Material": "Tarjetas 9x5 simple faz x1000",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "42000"
+  },
+  {
+    "Pedido": "1000 tarjetas 9x5 doble faz",
+    "Cantidad": "1000",
+    "Material": "Tarjetas 9x5 doble faz x1000",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "54000"
+  },
+  {
+    "Pedido": "1000 tarjetas 9x5 doble faz encapsuladas",
+    "Cantidad": "1000",
+    "Material": "Tarjetas 9x5 doble faz encapsuladas x1000",
+    "Ancho (cm)": "9",
+    "Alto (cm)": "5",
+    "Precio correcto": "59000"
+  },
+  {
+    "Pedido": "100 sobres impresos con el logo",
+    "Cantidad": "100",
+    "Material": "Sobres impresos x100",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "11",
+    "Precio correcto": "25000"
+  },
+  {
+    "Pedido": "500 perforados",
+    "Cantidad": "500",
+    "Material": "Perforado x500",
+    "Precio correcto": "4000"
+  },
+  {
+    "Pedido": "5 recetarios en negro",
+    "Cantidad": "5",
+    "Material": "Recetarios en negro",
+    "Precio correcto": "20000"
+  },
+  {
+    "Pedido": "5 recetarios en color",
+    "Cantidad": "5",
+    "Material": "Recetarios en color",
+    "Precio correcto": "22500"
+  },
+  {
+    "Pedido": "50 impresiones color A4 doble faz",
+    "Cantidad": "50",
+    "Material": "Impresión color A4 doble faz",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "30000"
+  },
+  {
+    "Pedido": "10 impresiones color A3",
+    "Cantidad": "10",
+    "Material": "Impresión color A3",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "12000"
+  },
+  {
+    "Pedido": "5 impresiones blanco y negro A3",
+    "Cantidad": "5",
+    "Material": "Impresión blanco y negro A3",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "3000"
+  },
+  {
+    "Pedido": "20 impresiones en papel ilustración",
+    "Cantidad": "20",
+    "Material": "Impresión en papel ilustración",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "16000"
+  },
+  {
+    "Pedido": "15 impresiones en opalina",
+    "Cantidad": "15",
+    "Material": "Impresión en opalina",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "13500"
+  },
+  {
+    "Pedido": "5 anillados metálicos wire-o",
+    "Cantidad": "5",
+    "Material": "Anillado metálico wire-o",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "16000"
+  },
+  {
+    "Pedido": "10 encuadernaciones abrochadas",
+    "Cantidad": "10",
+    "Material": "Encuadernación abrochada",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "20000"
+  },
+  {
+    "Pedido": "3 encuadernaciones fresadas",
+    "Cantidad": "3",
+    "Material": "Encuadernación fresada",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "15000"
+  },
+  {
+    "Pedido": "1 plastificado oficio",
+    "Cantidad": "1",
+    "Material": "Plastificado oficio",
+    "Ancho (cm)": "22",
+    "Alto (cm)": "33",
+    "Precio correcto": "2400"
+  },
+  {
+    "Pedido": "20 troquelados y corte a medida sobre unas cajitas ya impresas",
+    "Cantidad": "20",
+    "Material": "Troquelado y corte a medida",
+    "Precio correcto": "1000"
+  },
+  {
+    "Pedido": "20 numerados correlativos en unas entradas",
+    "Cantidad": "20",
+    "Material": "Numerado correlativo",
+    "Precio correcto": "100000"
+  },
+  {
+    "Pedido": "1 libro de medicina, el de Guyton",
+    "Cantidad": "1",
+    "Material": "Libros de medicina",
+    "Precio correcto": "30000"
+  },
+  {
+    "Pedido": "el pack de los 4 libros de medicina",
+    "Cantidad": "1",
+    "Material": "Pack 4 libros de medicina",
+    "Precio correcto": "99000"
+  },
+  {
+    "Pedido": "5 anotadores personalizados en negro",
+    "Cantidad": "5",
+    "Material": "Anotadores personalizados en negro",
+    "Ancho (cm)": "10",
+    "Alto (cm)": "15",
+    "Precio correcto": "20000"
+  },
+  {
+    "Pedido": "2 posters A3",
+    "Cantidad": "2",
+    "Material": "Posters A3 y A2",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "3200"
+  },
+  {
+    "Pedido": "1 porta banner tipo X",
+    "Cantidad": "1",
+    "Material": "Porta banner tipo X",
+    "Ancho (cm)": "90",
+    "Alto (cm)": "190",
+    "Precio correcto": "32000"
+  },
+  {
+    "Pedido": "1 cartel de seguridad e higiene A3",
+    "Cantidad": "1",
+    "Material": "Cartelería en plástico corrugado A3",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "10500"
+  },
+  {
+    "Pedido": "4 cartas plastificadas A4 para el menú",
+    "Cantidad": "4",
+    "Material": "Cartas y menús plastificados",
+    "Ancho (cm)": "21",
+    "Alto (cm)": "29.7",
+    "Precio correcto": "10400"
+  },
+  {
+    "Pedido": "1 cartel de precios A3 con plastificado",
+    "Cantidad": "1",
+    "Material": "Impresión color más plastificado",
+    "Ancho (cm)": "29.7",
+    "Alto (cm)": "42",
+    "Precio correcto": "4800"
   }
 ]
