@@ -36,25 +36,36 @@ llegó a dar $6.600 y $7.000 en dos ejecuciones con todos los pasos intermedios 
 Ahora el modelo declara QUÉ cotizar y escribe `{P1}`, `{P2}`… en el mensaje; el nodo Code
 calcula el total desde el catálogo y el Responder lo inyecta. Ver "El cotizador" abajo.
 
-## El flow construido (12 nodos)
+## El flow construido (13 nodos)
 
 ```
 Chat Trigger
    └─ Agente (AI Agent, systemMessage = prompt-final.txt)
+        │   onError: continueRegularOutput ← el turno NO puede morir sin respuesta
         ├─ Modelo: Google Gemini nativo → models/gemini-3.1-flash-lite
         ├─ Memoria: Simple Memory (window 10, sessionId del Chat Trigger)
         ├─ Tool buscar_catalogo: PGVector → bot.rag_catalog (topK 3)
         │    └─ Embeddings Google Gemini: models/gemini-embedding-001
-        └─ Salida · Agente (schema del desglose de cotización)
+        └─ Salida · Agente (schema del desglose, autoFix ON)
+             └─ Modelo · Corrector: el reintento que exige autoFix
    └─ Materiales Declarados (Code: abre las cotizaciones en 1 item por material)
    └─ Traer Escalas (Postgres: metadata del material declarado)
    └─ Auditar Cotización (Code: re-cálculo determinista + sanity)
-   └─ Responder (mensaje + veredicto visible en el chat de prueba)
+   └─ Responder (mensaje + veredicto + fallback si el parser falló)
 ```
 
-Credenciales que pide al importar (2, no 3): **Google Gemini(PaLM) API** — la MISMA para
-el chat y los embeddings — y **BOT_DB** (PGVector + Traer Escalas; pooler 5432, user
-`bot_runtime.<ref>`, SSL Ignore). El propio flow lleva una Nota con esto.
+Credenciales que pide al importar (2, no 4): **Google Gemini(PaLM) API** — la MISMA para
+el chat, los embeddings y el corrector — y **BOT_DB** (PGVector + Traer Escalas; pooler
+5432, user `bot_runtime.<ref>`, SSL Ignore). El propio flow lleva una Nota con esto.
+
+**El turno nunca muere en silencio.** Medido: 4 de 21 turnos (~19%) terminaban en error con
+"Invalid JSON in model output" —el modelo contesta en prosa, sobre todo cuando NO cotiza— y
+el cliente no recibía NADA. Dos defensas, que atacan mitades distintas:
+- `autoFix` en el parser: reintenta con el LLM y **recupera el turno**.
+- `onError` + fallback en el Responder: si aun así falla, **sale un mensaje** de falla
+  técnica (distinto del de "no puedo cotizar esto", que manda a TG trabajo real).
+El fallo queda registrado igual, como hallazgo y en `via` de la salida — sin ese rastro el
+arreglo vuelve el problema invisible: la ejecución sale verde y nadie sabe cuántas veces pasa.
 
 **Cambio contra el plan**: el chat va por **Gemini nativo**, no OpenRouter. El bot lite ya
 había migrado (`lmChatGoogleGemini`) después de escrito el plan; nativo comparte credencial

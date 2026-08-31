@@ -1189,12 +1189,35 @@ const flow = {
       position: [460, 440],
     },
     {
-      parameters: { schemaType: "manual", inputSchema: JSON.stringify(ESQUEMA_SALIDA, null, 2) },
+      parameters: {
+        schemaType: "manual",
+        inputSchema: JSON.stringify(ESQUEMA_SALIDA, null, 2),
+        // Reintenta con el LLM cuando la salida no valida contra el schema, en vez de
+        // tirar el error. Medido antes de prenderlo: 4 de 21 turnos (~19%) morían con
+        // "Invalid JSON in model output" — el modelo contestaba en prosa, sobre todo en
+        // los turnos que NO cotizan (una repregunta no tiene nada que declarar).
+        //
+        // El fallback del Responder ya garantizaba que el cliente reciba algo; esto ataca
+        // la otra mitad: que el turno no se PIERDA y el cliente no tenga que reescribir.
+        // Cuesta una llamada extra al LLM, pero solo cuando el formato salió mal.
+        autoFix: true,
+      },
       id: "cot-salida",
       name: "Salida · Agente",
       type: "@n8n/n8n-nodes-langchain.outputParserStructured",
       typeVersion: 1.2,
       position: [640, 240],
+    },
+    {
+      // El corrector que exige autoFix: sin un modelo cableado acá, el parser no puede
+      // reintentar. Es el MISMO Gemini y la misma credencial que el chat — no hace falta
+      // uno más caro para envolver un texto que ya está escrito en un JSON.
+      parameters: { modelName: GEMINI_MODEL, options: { temperature: 0, maxOutputTokens: 1200 } },
+      id: "cot-modelo-fix",
+      name: "Modelo · Corrector",
+      type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      typeVersion: 1,
+      position: [640, 440],
     },
     {
       parameters: {
@@ -1247,6 +1270,11 @@ const flow = {
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
     "Embeddings (Google Gemini)": { ai_embedding: [[{ node: "buscar_catalogo", type: "ai_embedding", index: 0 }]] },
     "Salida · Agente": { ai_outputParser: [[{ node: "Agente", type: "ai_outputParser", index: 0 }]] },
+    // El corrector cuelga del PARSER, no del Agente: es el que reintenta cuando la salida
+    // no valida. Sin esta conexión, `autoFix: true` no tiene con qué corregir.
+    "Modelo · Corrector": {
+      ai_languageModel: [[{ node: "Salida · Agente", type: "ai_languageModel", index: 0 }]],
+    },
   },
   settings: { executionOrder: "v1" },
 };

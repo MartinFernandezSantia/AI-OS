@@ -183,7 +183,8 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"respuesta\",\n    \"cotizaciones\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"El mensaje para el cliente por WhatsApp. Donde vaya un precio escribí el marcador {P1} para la primera cotización, {P2} para la segunda, y así. NUNCA escribas un número de precio vos: el marcador se reemplaza por el total ya calculado.\"\n    },\n    \"cotizaciones\": {\n      \"type\": \"array\",\n      \"description\": \"Una entrada por producto cotizado en ESTE turno, en el MISMO orden que los marcadores {P1}, {P2}… del mensaje. Vacío si no cotizaste.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"material_catalogo\",\n          \"ancho_cm\",\n          \"alto_cm\",\n          \"cantidad\"\n        ],\n        \"properties\": {\n          \"material_catalogo\": {\n            \"type\": \"string\",\n            \"description\": \"El nombre del material EXACTO como vino de buscar_catalogo.\"\n          },\n          \"ancho_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Ancho de UNA pieza, en cm.\"\n          },\n          \"alto_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Alto de UNA pieza, en cm.\"\n          },\n          \"cantidad\": {\n            \"type\": \"number\",\n            \"description\": \"Cuánto pidió el cliente, EN LA UNIDAD DE COBRO que declara el catálogo. Casi siempre son piezas (1000 tarjetas = 1000, aunque se vendan por paquete). Pero si el chunk dice que se cobra por metro lineal, van los METROS y admite decimales (2,45 metros de planos = 2.45, NO 1).\"\n          }\n        }\n      }\n    }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"respuesta\",\n    \"cotizaciones\"\n  ],\n  \"properties\": {\n    \"respuesta\": {\n      \"type\": \"string\",\n      \"description\": \"El mensaje para el cliente por WhatsApp. Donde vaya un precio escribí el marcador {P1} para la primera cotización, {P2} para la segunda, y así. NUNCA escribas un número de precio vos: el marcador se reemplaza por el total ya calculado.\"\n    },\n    \"cotizaciones\": {\n      \"type\": \"array\",\n      \"description\": \"Una entrada por producto cotizado en ESTE turno, en el MISMO orden que los marcadores {P1}, {P2}… del mensaje. Vacío si no cotizaste.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"material_catalogo\",\n          \"ancho_cm\",\n          \"alto_cm\",\n          \"cantidad\"\n        ],\n        \"properties\": {\n          \"material_catalogo\": {\n            \"type\": \"string\",\n            \"description\": \"El nombre del material EXACTO como vino de buscar_catalogo.\"\n          },\n          \"ancho_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Ancho de UNA pieza, en cm.\"\n          },\n          \"alto_cm\": {\n            \"type\": \"number\",\n            \"description\": \"Alto de UNA pieza, en cm.\"\n          },\n          \"cantidad\": {\n            \"type\": \"number\",\n            \"description\": \"Cuánto pidió el cliente, EN LA UNIDAD DE COBRO que declara el catálogo. Casi siempre son piezas (1000 tarjetas = 1000, aunque se vendan por paquete). Pero si el chunk dice que se cobra por metro lineal, van los METROS y admite decimales (2,45 metros de planos = 2.45, NO 1).\"\n          }\n        }\n      }\n    }\n  }\n}",
+        "autoFix": true
       },
       "id": "cot-salida",
       "name": "Salida · Agente",
@@ -192,6 +193,23 @@
       "position": [
         640,
         240
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0,
+          "maxOutputTokens": 1200
+        }
+      },
+      "id": "cot-modelo-fix",
+      "name": "Modelo · Corrector",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        640,
+        440
       ]
     },
     {
@@ -316,6 +334,17 @@
           {
             "node": "Agente",
             "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo · Corrector": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Salida · Agente",
+            "type": "ai_languageModel",
             "index": 0
           }
         ]
