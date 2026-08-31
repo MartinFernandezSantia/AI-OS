@@ -983,7 +983,7 @@ const CODE_RESPONDER = [
   "  // El hallazgo ya NO se pega al mensaje (Fase 5 · parte 4): el rastro vive en bot.log",
   "  // (verification.hallazgos + signals.via, los escribe Armar Log). El cliente recibe el",
   "  // mensaje limpio; la medición sigue intacta en la base.",
-  "  return [{ json: { output, via, auditoria: a } }];",
+  "  return [{ json: { output, aviso: null, via, auditoria: a, telefono_removido: false } }];",
   "}",
   "",
   "// GUARD contra mensaje vacío: si el agente devolvió respuesta vacía, el cliente recibiría",
@@ -1027,31 +1027,63 @@ const CODE_RESPONDER = [
   "// Cinturón y tirantes: si por lo que sea quedó un marcador sin sustituir, no sale al chat.",
   "if (/\\{P\\d+\\}/.test(output)) { output = CONSULTA; via = 'consulta'; }",
   "",
+  "// ── El teléfono fuera del mensaje (pedido de TG, 31/08) ───────────────────────────",
+  "// El teléfono SOLO corresponde ante una queja o un pedido de hablar con una persona. La",
+  "// regla vive en el prompt, pero SOLA no alcanza: medido en la ejecución 729, el historial",
+  "// del canal ya traía un turno viejo con 'llamanos al 0223…' y el modelo SE IMITÓ A SÍ",
+  "// MISMO por encima de la regla — y cada repetición renueva el patrón en el historial.",
+  "// Última línea de defensa determinista: si el mensaje trae un número con pinta de",
+  "// teléfono y el mensaje del cliente NO es una queja, la cláusula se remueve. El regex",
+  "// exige separadores entre TRES grupos de dígitos: no matchea cantidades ('1000'),",
+  "// medidas ni precios ('$16.500').",
+  "const RE_TEL = /(\\+?54[\\s.-]?9?[\\s.-]?)?\\(?0?\\d{2,4}\\)?[\\s.-]\\d{3,4}[\\s.-]\\d{4}\\b/;",
+  "let telefonoRemovido = false;",
+  "let chatInput = '';",
+  "try { chatInput = String($('Cuando llega un mensaje').first().json.chatInput || ''); } catch (e) {}",
+  "const esQueja = /queja|reclam|enoj|molest|indigna|est(a|á) mal|hablar con (una persona|alguien|un humano|el encargado|el due[ñn]o)|una persona real|atenci[oó]n humana/i.test(chatInput);",
+  "if (via === 'normal' && !esQueja && RE_TEL.test(output)) {",
+  "  const antes = output;",
+  "  output = output",
+  "    // Primero la cláusula entera: ', llamanos al 0223 476-0019' / 'o podés llamarnos al X'.",
+  "    .replace(new RegExp('[,;]?\\\\s*(o\\\\s+)?(pod[eé]s\\\\s+)?(llaman?os|llamar(nos)?)\\\\s*(al|por\\\\s+tel[eé]fono(\\\\s+al)?)?\\\\s*' + RE_TEL.source, 'gi'), '')",
+  "    // Después cualquier número suelto que haya quedado (p. ej. 'nuestro teléfono es X').",
+  "    .replace(new RegExp('\\\\s*' + RE_TEL.source, 'g'), '')",
+  "    .replace(/\\s{2,}/g, ' ')",
+  "    .replace(/\\s+([,.])/g, '$1')",
+  "    .trim();",
+  "  telefonoRemovido = antes !== output;",
+  "  // Si el mensaje ERA el teléfono ('Podés llamarnos al X.'), la limpieza lo deja roto",
+  "  // ('.'). Ahí va la derivación estándar entera, no un esqueleto de frase.",
+  "  if (telefonoRemovido && output.replace(/[\\s.,;:!?¡¿]/g, '').length < 12) {",
+  "    output = 'Escribinos a terminalgrafica@gmail.com o acercate al local y te ayudamos con eso.';",
+  "  }",
+  "}",
+  "",
   "// ── Aviso de precio provisorio (pedido de TG) ─────────────────────────────────────",
   "// Cuando el turno deriva a mail para AVANZAR con el trabajo, el precio que dio el bot no",
-  "// es final: TG lo confirma al recibir el archivo. Va como segundo párrafo del mismo mensaje.",
+  "// es final: TG lo confirma al recibir el archivo. Sale como MENSAJE SEPARADO en Chatwoot",
+  "// (campo `aviso`: el egreso lo manda en un segundo POST; el chat y el log lo concatenan).",
   "//",
   "// DOS caminos lo disparan, y los dos se aprendieron midiendo:",
   "// 1) El turno cotizó Y deriva a mail (cotización y '¿avanzamos?' en el mismo turno).",
-  "// 2) El cliente CONFIRMA en un turno posterior (smoke 31/08, turno 722: 'dale, lo quiero'",
-  "//    → el bot manda los archivos a mail SIN aviso, porque este turno no cotizó nada; el",
-  "//    precio quedó en un turno ANTERIOR). Señal: el mensaje pide ARCHIVOS por mail y hay",
-  "//    un monto en el historial del canal. En el flow de chat no hay historialTexto y este",
-  "//    camino queda apagado solo.",
+  "// 2) El cliente CONFIRMA en un turno posterior (turnos 722 y 729 del 31/08): este turno",
+  "//    no cotiza nada, pero deriva a mail para avanzar y el precio vive en el historial",
+  "//    del canal. Señal: palabra de avance en el mensaje + monto en el historial. OJO: la",
+  "//    señal fue '/archivo/' primero y el 729 la esquivó diciendo 'envianos tu pedido' —",
+  "//    por eso ahora es la familia avanzar/pedido/compra/encarg/archivo. En el flow de",
+  "//    chat no hay historialTexto y este camino queda apagado solo.",
   "//",
-  "// Con solo el mail alcanzaba de más: el prompt manda a mail muchas cosas que no son",
-  "// avanzar un pedido (plazos de entrega, envíos, cliente enojado). Medido en la ejecución",
-  "// 374 — preguntó CUÁNDO estaría listo, el bot derivó bien a mail, y le pegó el aviso en",
-  "// un turno donde no se cotizó nada. Por eso el camino 2 exige 'archivo' + monto previo.",
-  "//",
-  "// Tampoco aplica tras CONSULTA o falla técnica: esos mensajes ya dicen que no hay precio.",
+  "// Con solo el mail alcanzaba de más (ejecución 374: preguntó plazos, derivó a mail, y el",
+  "// aviso se pegó sin que hubiera precio alguno). Por eso el camino 2 exige ambas señales.",
   "const MAIL = 'terminalgrafica@gmail.com';",
   "const cotizoAlgo = cots.some((c) => c.precio != null);",
   "let historialCanal = '';",
   "try { historialCanal = String($('Cuando llega un mensaje').first().json.historialTexto || ''); } catch (e) {}",
-  "const confirmaPedido = /archivo/i.test(output) && RE_MONTO.test(historialCanal);",
+  "const RE_AVANZA = /avanzar|pedido|compra|encarg|archivo/i;",
+  "const confirmaPedido = RE_AVANZA.test(output) && RE_MONTO.test(historialCanal);",
+  "let aviso = null;",
   "if (via === 'normal' && (cotizoAlgo || confirmaPedido) && output.includes(MAIL) && !output.includes(AVISO_PRECIO)) {",
-  "  output += '\\n\\n' + AVISO_PRECIO;",
+  "  aviso = AVISO_PRECIO;",
   "  via = 'derivacion_avanzar';",
   "}",
   "",
@@ -1060,7 +1092,7 @@ const CODE_RESPONDER = [
   "// escribe su fila en bot.log el rastro vive ahí (verification.hallazgos + signals.via).",
   "// Al cliente no le llega NUNCA un veredicto interno. Para auditar: leer-bot-log.",
   "",
-  "return [{ json: { output, via, auditoria: a } }];",
+  "return [{ json: { output, aviso, via, auditoria: a, telefono_removido: telefonoRemovido } }];",
 ].join("\n");
 
 /** Armar Log: la fila de bot.log de ESTE turno (Fase 5, parte 1). El log es la herramienta
@@ -1083,16 +1115,18 @@ const CODE_ARMAR_LOG = [
   "return [{ json: {",
   "  session_id: String(trig.sessionId || ''),",
   "  customer_message: String(trig.chatInput || ''),",
-  "  // El mensaje que REALMENTE salió (con la cola de debug mientras exista; al sacarla en",
-  "  // la parte 4, esta columna queda limpia sola).",
-  "  bot_message: String(r.output || ''),",
+  "  // El mensaje COMPLETO que salió: el principal + el aviso de precio (que en Chatwoot",
+  "  // viaja como un segundo mensaje, pero en el log es la misma respuesta del turno).",
+  "  bot_message: String(r.output || '') + (r.aviso ? '\\n\\n' + r.aviso : ''),",
   "  // 'ok' = camino feliz. Cualquier otra cosa es la `via` cruda (consulta, vacio,",
   "  // fallback_texto, fallback_falla_tecnica): contar fallbacks es un GROUP BY de acá.",
   "  state: via === 'normal' || via === 'derivacion_avanzar' ? 'ok' : via,",
   "  products: JSON.stringify(crudas),",
   "  prices: JSON.stringify(a.cotizaciones || []),",
   "  verification: JSON.stringify({ ok: a.ok !== false, hallazgos: a.hallazgos || [] }),",
-  "  signals: JSON.stringify({ via, fallo_parser: jAg.error != null && jAg.output == null }),",
+  "  // telefono_removido solo cuando pasó: es la señal de que el modelo volvió a ofrecer el",
+  "  // teléfono y lo frenó el Responder — si crece, el prompt no está alcanzando.",
+  "  signals: JSON.stringify({ via, fallo_parser: jAg.error != null && jAg.output == null, ...(r.telefono_removido ? { telefono_removido: true } : {}) }),",
   "  execution_id: String($execution.id || ''),",
   "} }];",
 ].join("\n");
@@ -1102,9 +1136,12 @@ const CODE_ARMAR_LOG = [
 const CODE_ENTREGAR = [
   "// Punto final del flow. Re-emite lo que armó el Responder, así el chat muestra el",
   "// mensaje aunque el INSERT del log haya fallado (Log Turno va con onError=continue:",
-  "// un fallo de log no puede dejar al cliente sin respuesta).",
+  "// un fallo de log no puede dejar al cliente sin respuesta). El aviso de precio se",
+  "// CONCATENA para el chat de prueba (que muestra un solo texto); en Chatwoot el egreso",
+  "// lo manda aparte, como segundo mensaje.",
   "const r = $('Responder').first().json;",
-  "return [{ json: { output: r.output, via: r.via, auditoria: r.auditoria } }];",
+  "const completo = String(r.output || '') + (r.aviso ? '\\n\\n' + r.aviso : '');",
+  "return [{ json: { output: completo, via: r.via, auditoria: r.auditoria } }];",
 ].join("\n");
 
 // ══════════════════════════════════════════════════════════════════════════════════════
@@ -2024,6 +2061,9 @@ const prepararEnvio = {
       "  accountId: cw.accountId,",
       "  conversationId: cw.conversationId,",
       "  final: String(r.output || ''),",
+      "  // El aviso de precio provisorio viaja APARTE: si el principal se entregó, Enviar",
+      "  // Aviso lo manda como SEGUNDO mensaje (pedido de Martín: dos globos en WhatsApp).",
+      "  aviso: String(r.aviso || ''),",
       "  via: String(r.via || 'normal'),",
       "} }];",
     ].join("\n"),
@@ -2131,6 +2171,53 @@ const labelEnvioFallido = {
   onError: "continueRegularOutput",
 };
 
+const hayAviso = {
+  // Solo cuando el turno trae aviso de precio provisorio Y el mensaje principal se
+  // entregó (viene de la rama [sí] de ¿Se Entregó?). El aviso jamás sale solo: si el
+  // principal falló, mandar 'el precio final lo confirmamos…' sin contexto es ruido.
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 2 },
+      combinator: "and",
+      conditions: [{ leftValue: "={{ $json.aviso }}", operator: { type: "string", operation: "notEmpty" } }],
+    },
+    options: {},
+  },
+  id: "cw-hay-aviso",
+  name: "¿Hay Aviso?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2.2,
+  position: [2980, -160],
+};
+
+const enviarAviso = {
+  // El SEGUNDO mensaje (pedido de Martín): el aviso de precio provisorio como globo
+  // aparte en WhatsApp. Best-effort: si falla, el cliente ya recibió la cotización y la
+  // derivación — onError continue y el turno cierra igual (el log guarda el texto completo).
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ content: $json.aviso, message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    options: {},
+  },
+  id: "cw-enviar-aviso",
+  name: "Enviar Aviso",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [3200, -160],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+  retryOnFail: true,
+  maxTries: 2,
+  waitBetweenTries: 2000,
+  alwaysOutputData: true,
+};
+
 const actualizarEntrega = {
   // Cierra la fila que Log Turno insertó ESTE turno (match execution_id). $1 viaja como
   // string 'true'/'false' y castea en SQL: el queryReplacement de n8n serializa mejor
@@ -2198,7 +2285,7 @@ flowCw.nodes.unshift(
   labelCap,
   adaptadorChatwoot,
 );
-flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, labelEnvioFallido, actualizarEntrega);
+flowCw.nodes.push(prepararEnvio, enviarMensaje, chequearEnvio, seEntrego, hayAviso, enviarAviso, labelEnvioFallido, actualizarEntrega);
 flowCw.nodes.push(guardrailsTier2, modeloGuardrails, routerFailTier2, violacionRealTier2, strikeTier2, switchStrikeTier2, mensajeRefusalTier2, silencioTier2, logGuardFail);
 Object.assign(flowCw.connections, {
   // Egreso (parte 6): cuelga de Entregar, que en el chat era terminal.
@@ -2208,10 +2295,17 @@ Object.assign(flowCw.connections, {
   "Chequear Envio": { main: [[{ node: "¿Se Entregó?", type: "main", index: 0 }]] },
   "¿Se Entregó?": {
     main: [
-      [{ node: "Actualizar Entrega", type: "main", index: 0 }], // 0 true = entregado
+      [{ node: "¿Hay Aviso?", type: "main", index: 0 }], // 0 true = entregado → ¿va el 2º mensaje?
       [{ node: "Label Envío Fallido", type: "main", index: 0 }], // 1 false = no entregado
     ],
   },
+  "¿Hay Aviso?": {
+    main: [
+      [{ node: "Enviar Aviso", type: "main", index: 0 }], // 0 hay aviso → 2º mensaje
+      [{ node: "Actualizar Entrega", type: "main", index: 0 }], // 1 sin aviso → cerrar el log
+    ],
+  },
+  "Enviar Aviso": { main: [[{ node: "Actualizar Entrega", type: "main", index: 0 }]] },
   "Label Envío Fallido": { main: [[{ node: "Actualizar Entrega", type: "main", index: 0 }]] },
 });
 Object.assign(flowCw.connections, {
@@ -2434,7 +2528,12 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["el egreso cuelga de Entregar", flowCw.connections["Entregar"]?.main?.[0]?.[0]?.node === "Preparar Envio"],
     ["Enviar Mensaje va por la red interna", String(cwNodo("Enviar Mensaje")?.parameters?.url || "").includes("http://rails:3000") && cwNodo("Enviar Mensaje")?.alwaysOutputData === true],
     ["la entrega se decide por id, no por status HTTP", ["idMensaje", "entregado = !!idMensaje"].every((f) => (cwNodo("Chequear Envio")?.parameters?.jsCode || "").includes(f))],
-    ["¿Se Entregó? bifurca a Actualizar/Label", flowCw.connections["¿Se Entregó?"]?.main?.[0]?.[0]?.node === "Actualizar Entrega" && flowCw.connections["¿Se Entregó?"]?.main?.[1]?.[0]?.node === "Label Envío Fallido"],
+    ["¿Se Entregó? bifurca a ¿Hay Aviso?/Label", flowCw.connections["¿Se Entregó?"]?.main?.[0]?.[0]?.node === "¿Hay Aviso?" && flowCw.connections["¿Se Entregó?"]?.main?.[1]?.[0]?.node === "Label Envío Fallido"],
+    ["el aviso sale como 2º mensaje y el turno cierra igual", flowCw.connections["¿Hay Aviso?"]?.main?.[0]?.[0]?.node === "Enviar Aviso" && flowCw.connections["¿Hay Aviso?"]?.main?.[1]?.[0]?.node === "Actualizar Entrega" && flowCw.connections["Enviar Aviso"]?.main?.[0]?.[0]?.node === "Actualizar Entrega"],
+    ["Enviar Aviso postea el aviso por la red interna", String(cwNodo("Enviar Aviso")?.parameters?.url || "").includes("http://rails:3000") && String(cwNodo("Enviar Aviso")?.parameters?.jsonBody || "").includes("$json.aviso")],
+    ["el sobre del egreso lleva el aviso", (cwNodo("Preparar Envio")?.parameters?.jsCode || "").includes("aviso: String(r.aviso || '')")],
+    ["el Responder emite el aviso APARTE (no concatenado)", (cwNodo("Responder")?.parameters?.jsCode || "").includes("aviso = AVISO_PRECIO") && !(cwNodo("Responder")?.parameters?.jsCode || "").includes("output += '\\n\\n' + AVISO_PRECIO")],
+    ["el Responder remueve el teléfono salvo queja", ["RE_TEL", "esQueja", "telefonoRemovido"].every((f) => (cwNodo("Responder")?.parameters?.jsCode || "").includes(f))],
     ["el fallo de envío también cierra el log", flowCw.connections["Label Envío Fallido"]?.main?.[0]?.[0]?.node === "Actualizar Entrega"],
     ["Actualizar Entrega mergea signals por execution_id", ["|| $2::jsonb", "execution_id = $3", "'envio_fallido'"].every((f) => (cwNodo("Actualizar Entrega")?.parameters?.query || "").includes(f))],
     ["Actualizar Entrega crashea si falla (no silencio)", cwNodo("Actualizar Entrega")?.onError === "stopWorkflow"],

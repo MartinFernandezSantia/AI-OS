@@ -509,6 +509,30 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      ENOJO** se portó completa del lite (reconocer breve, contactos desde
      consultar_info_negocio, no inventar ninguno). 2 gates nuevos del prompt (en rojo).
 
+   **Post-smoke, 2ª iteración (31/08, tras la ejecución 729): la regla de prompt sola NO
+   alcanzó — defensas deterministas.** Martín volvió a probar y las dos fallas seguían:
+   - **El teléfono volvió a salir AUNQUE el prompt nuevo estaba activo.** Causa medida en
+     la 729: el historial del canal traía el turno viejo con "llamanos al 0223…" y el
+     modelo SE IMITÓ A SÍ MISMO por encima de la regla — y cada repetición renueva el
+     patrón (se autoalimenta). Lección: **una regla de prompt no gana contra un ejemplo
+     concreto en el contexto**. Fix determinista en el Responder: regex de teléfono (exige
+     separadores entre 3 grupos: no toca cantidades ni precios) → se remueve la cláusula
+     salvo que el chatInput sea una QUEJA (regex permisivo); si el mensaje queda roto
+     ("Podés llamarnos al X." → "."), va la derivación estándar entera. Flag
+     `signals.telefono_removido` en bot.log: si crece, el prompt no está alcanzando.
+   - **El aviso siguió sin salir**: la señal `/archivo/` era estrecha y el 729 dijo
+     "envianos tu pedido". Ampliada a avanzar/pedido/compra/encarg/archivo (+ monto en el
+     historial, como antes). Y el pedido REAL de Martín era un **segundo MENSAJE de
+     WhatsApp**, no un párrafo pegado: el Responder ahora emite `aviso` APARTE y el egreso
+     lo manda en un segundo POST — cadena nueva `¿Se Entregó? → ¿Hay Aviso? → Enviar
+     Aviso → Actualizar Entrega` (**54 nodos**; el aviso jamás sale si el principal no se
+     entregó; best-effort con retry 2). El chat y bot.log lo concatenan.
+   - Verificación: gates nuevos en rojo, tests del caso 729 tal cual (aviso SÍ + teléfono
+     NO + frase cerrando limpia) y de la queja (el teléfono queda), la limpieza corrida
+     sobre los 3 textos reales, diff vivo-vs-emitido limpio y **publicada = draft**
+     (chequeado con check-active: la 1ª publicación de Martín había quedado una versión
+     atrás y nadie lo vio hasta comparar activeVersion contra el draft).
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`

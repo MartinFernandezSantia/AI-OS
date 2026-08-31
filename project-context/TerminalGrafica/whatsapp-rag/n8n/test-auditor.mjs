@@ -517,6 +517,41 @@ const casos = [
     esperaOk: true,
     noEsperaEnMensaje: ["precio final lo confirmamos"],
   },
+  {
+    // LA EJECUCIÓN 729 TAL CUAL: el modelo dijo "envianos tu pedido" (no "archivos" — la
+    // señal /archivo/ sola la esquivó) Y volvió a ofrecer el teléfono copiándose del
+    // historial. Espera: aviso presente Y teléfono ausente, con la frase cerrando limpia.
+    nombre: "confirma con 'tu pedido' + teléfono copiado del historial → aviso SÍ, teléfono NO",
+    agente: {
+      output: {
+        respuesta:
+          "Para avanzar con la compra del libro de Ross, por favor envianos tu pedido a terminalgrafica@gmail.com, llamanos al 0223 476-0019 o acercate al local.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    chatInput: "Quiero comprar el de Ross",
+    historial: "HISTORIAL DE ESTA CONVERSACIÓN:\nCliente: A cuanto los libros de medicina?\nVos: Cada uno te sale $30.000. ¿Necesitabas algo más?\n\n",
+    esperaOk: true,
+    esperaEnMensaje: ["precio final lo confirmamos", "o acercate al local"],
+    noEsperaEnMensaje: ["0223", "llamanos"],
+  },
+  {
+    // La ÚNICA excepción del teléfono: una queja. El guard determinista lo deja pasar.
+    nombre: "QUEJA del cliente → el teléfono SÍ queda en el mensaje",
+    agente: {
+      output: {
+        respuesta:
+          "Lamento mucho lo que pasó. Podés escribirnos a terminalgrafica@gmail.com, llamarnos al 0223 476-0019 o acercarte al local para hablar con el equipo.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    chatInput: "Quiero hacer una queja, me atendieron pésimo y quiero hablar con una persona",
+    esperaOk: true,
+    esperaEnMensaje: ["0223 476-0019"],
+    noEsperaEnMensaje: ["precio final lo confirmamos"],
+  },
 ];
 
 let fallos = 0;
@@ -544,12 +579,16 @@ for (const c of casos) {
       nodos: {
         Agente: [{ json: c.agente }],
         // El camino "confirmación en turno posterior" del aviso lee el historial del canal
-        // (variante Chatwoot). Sin `historial` el nodo no existe y el try/catch del
-        // Responder lo apaga — igual que en el flow de chat.
-        ...(c.historial ? { "Cuando llega un mensaje": [{ json: { historialTexto: c.historial } }] } : {}),
+        // y el guard del teléfono lee el chatInput (variante Chatwoot). Sin ninguno de los
+        // dos el nodo no existe y el try/catch del Responder los apaga — como en el chat.
+        ...(c.historial || c.chatInput
+          ? { "Cuando llega un mensaje": [{ json: { historialTexto: c.historial || "", chatInput: c.chatInput || "" } }] }
+          : {}),
       },
     });
-    out = respItems[0].json.output;
+    // Lo que el cliente recibe EN TOTAL: el mensaje + el aviso (que en Chatwoot viaja como
+    // segundo mensaje; acá se concatena para validar presencia/ausencia del texto).
+    out = respItems[0].json.output + (respItems[0].json.aviso ? "\n\n" + respItems[0].json.aviso : "");
   } catch (e) {
     console.log(`✗ ${c.nombre}\n    Responder EXPLOTÓ: ${e.message}`);
     fallos++;
