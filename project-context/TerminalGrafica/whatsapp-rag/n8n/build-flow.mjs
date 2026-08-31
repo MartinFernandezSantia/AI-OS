@@ -28,7 +28,9 @@ const EMBEDDING_MODEL = "models/gemini-embedding-001"; // el MISMO que la ingest
 const TABLA_RAG = "bot.rag_catalog"; // schema-cualificada: sin schema consulta public y devuelve [] EN VERDE
 const TOP_K = 5; // de 7 chunks en total; subido a mano en n8n antes del humo. Revisar en Fase 4.
 /** Credencial Postgres. Se re-cablea en la UI al importar; el id acá es el del n8n de dev. */
-const BOT_DB = { id: "vxRQvyIwYEqGpJqc", name: "Bot Readonly DB" };
+// El id es el de la credencial VIVA en n8n.terminalgrafica.cloud (verificado por MCP el
+// 31/08: el viejo "Bot Readonly DB"/vxRQvyIwYEqGpJqc ya no existe y el update lo rechaza).
+const BOT_DB = { id: "bxPpuXnXEZpEvGIL", name: "BOT DB" };
 
 // ══════════════════════════════════════════════════════════════════════════════════════
 // Lectura del Excel
@@ -1036,6 +1038,50 @@ const CODE_RESPONDER = [
   "return [{ json: { output, via, auditoria: a } }];",
 ].join("\n");
 
+/** Armar Log: la fila de bot.log de ESTE turno (Fase 5, parte 1). El log es la herramienta
+ *  de medición: auditar una tanda pasa de 2 llamadas MCP por caso a UN SELECT. */
+const CODE_ARMAR_LOG = [
+  "// Una fila por turno en bot.log. Lo IRREEMPLAZABLE acá es `products`: las cotizaciones",
+  "// CRUDAS del Agente, con la cantidad TAL COMO LA DECLARÓ el modelo. La clase de bug que",
+  "// ni el auditor ni el gate de 132 casos pueden ver (conversión doble, medida inventada)",
+  "// solo se caza comparando esta columna contra lo que escribió el cliente — hasta hoy eso",
+  "// era ir a leer la ejecución por MCP, de a una.",
+  "const trig = $('Cuando llega un mensaje').first().json;",
+  "const jAg = $('Agente').first().json;",
+  "const r = $('Responder').first().json;",
+  "",
+  "const salida = jAg.output && typeof jAg.output === 'object' ? jAg.output : {};",
+  "const crudas = Array.isArray(salida.cotizaciones) ? salida.cotizaciones : [];",
+  "const a = r.auditoria || { ok: true, hallazgos: [], cotizaciones: [] };",
+  "const via = String(r.via || 'normal');",
+  "",
+  "return [{ json: {",
+  "  session_id: String(trig.sessionId || ''),",
+  "  customer_message: String(trig.chatInput || ''),",
+  "  // El mensaje que REALMENTE salió (con la cola de debug mientras exista; al sacarla en",
+  "  // la parte 4, esta columna queda limpia sola).",
+  "  bot_message: String(r.output || ''),",
+  "  // 'ok' = camino feliz. Cualquier otra cosa es la `via` cruda (consulta, vacio,",
+  "  // fallback_texto, fallback_falla_tecnica): contar fallbacks es un GROUP BY de acá.",
+  "  state: via === 'normal' || via === 'derivacion_avanzar' ? 'ok' : via,",
+  "  products: JSON.stringify(crudas),",
+  "  prices: JSON.stringify(a.cotizaciones || []),",
+  "  verification: JSON.stringify({ ok: a.ok !== false, hallazgos: a.hallazgos || [] }),",
+  "  signals: JSON.stringify({ via, fallo_parser: jAg.error != null && jAg.output == null }),",
+  "  execution_id: String($execution.id || ''),",
+  "} }];",
+].join("\n");
+
+/** Entregar: el Chat Trigger le responde al chat con la salida del ÚLTIMO nodo, y desde que
+ *  existe el log ese ya no es el Responder. Re-emite el mensaje tal cual. */
+const CODE_ENTREGAR = [
+  "// Punto final del flow. Re-emite lo que armó el Responder, así el chat muestra el",
+  "// mensaje aunque el INSERT del log haya fallado (Log Turno va con onError=continue:",
+  "// un fallo de log no puede dejar al cliente sin respuesta).",
+  "const r = $('Responder').first().json;",
+  "return [{ json: { output: r.output, via: r.via, auditoria: r.auditoria } }];",
+].join("\n");
+
 // ══════════════════════════════════════════════════════════════════════════════════════
 // El flow
 // ══════════════════════════════════════════════════════════════════════════════════════
@@ -1142,6 +1188,47 @@ const flow = {
       position: [1220, 0],
     },
     {
+      parameters: { jsCode: CODE_ARMAR_LOG },
+      id: "cot-armar-log",
+      name: "Armar Log",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [1440, 0],
+    },
+    {
+      parameters: {
+        operation: "executeQuery",
+        query:
+          "insert into bot.log\n" +
+          "  (session_id, customer_message, bot_message, state,\n" +
+          "   products, prices, verification, signals, execution_id)\n" +
+          "values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9)",
+        options: {
+          queryReplacement:
+            "={{ [ $json.session_id, $json.customer_message, $json.bot_message, $json.state, " +
+            "$json.products, $json.prices, $json.verification, $json.signals, $json.execution_id ] }}",
+        },
+      },
+      id: "cot-log-turno",
+      name: "Log Turno",
+      type: "n8n-nodes-base.postgres",
+      typeVersion: 2.6,
+      position: [1660, 0],
+      credentials: { postgres: BOT_DB },
+      // Un fallo del INSERT (base caída, permiso, columna renombrada) NO puede dejar al
+      // cliente sin respuesta: el mensaje ya está armado y Entregar lo re-emite igual.
+      onError: "continueRegularOutput",
+      alwaysOutputData: true,
+    },
+    {
+      parameters: { jsCode: CODE_ENTREGAR },
+      id: "cot-entregar",
+      name: "Entregar",
+      type: "n8n-nodes-base.code",
+      typeVersion: 2,
+      position: [1880, 0],
+    },
+    {
       parameters: { modelName: GEMINI_MODEL, options: { temperature: 0.2, maxOutputTokens: 1200 } },
       id: "cot-modelo",
       name: "Modelo",
@@ -1244,9 +1331,13 @@ const flow = {
           `(API key de Google AI Studio). Chat: \`${GEMINI_MODEL}\`. Embeddings: \`${EMBEDDING_MODEL}\` —`,
           "el MISMO modelo que usó la ingesta del visor, o los vectores no comparan.",
           "",
-          `**2) buscar_catalogo** y **Traer Escalas**: credencial Postgres \`BOT_DB\` (pooler 5432,`,
-          "user `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`, **schema-cualificada**",
-          "(sin el `bot.` consulta public y devuelve [] en verde, sin error).",
+          `**2) buscar_catalogo**, **Traer Escalas** y **Log Turno**: credencial Postgres \`BOT_DB\``,
+          "(pooler 5432, user `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`,",
+          "**schema-cualificada** (sin el `bot.` consulta public y devuelve [] en verde, sin error).",
+          "",
+          "**Log**: cada turno escribe UNA fila en `bot.log` (products = cotizaciones CRUDAS del",
+          "Agente, prices = detalle del auditor, signals.via). Auditar una tanda = un SELECT.",
+          "Un fallo del INSERT no corta la respuesta (onError continue + Entregar re-emite).",
           "",
           "**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con",
           "`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El",
@@ -1278,6 +1369,9 @@ const flow = {
     "Materiales Declarados": { main: [[{ node: "Traer Escalas", type: "main", index: 0 }]] },
     "Traer Escalas": { main: [[{ node: "Auditar Cotización", type: "main", index: 0 }]] },
     "Auditar Cotización": { main: [[{ node: "Responder", type: "main", index: 0 }]] },
+    Responder: { main: [[{ node: "Armar Log", type: "main", index: 0 }]] },
+    "Armar Log": { main: [[{ node: "Log Turno", type: "main", index: 0 }]] },
+    "Log Turno": { main: [[{ node: "Entregar", type: "main", index: 0 }]] },
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
@@ -1338,6 +1432,27 @@ console.log("✓ el auditor reproduce el Excel entero.");
   if (FALTANTES.length) {
     console.error("\n✗ ABORTADO: el gate de casos no le pasa a cotizar() lo que sí pasa producción:");
     for (const [campo, frag] of FALTANTES) console.error(`  - ${campo} (falta "${frag}")`);
+    process.exit(1);
+  }
+
+  // El log es la herramienta de medición de la Fase 5: si Armar Log deja de guardar las
+  // cotizaciones CRUDAS del Agente (la cantidad declarada), la única ventana a la clase de
+  // bug que ni el auditor ni el gate ven se cierra EN SILENCIO — el flow sigue andando y
+  // las filas salen igual, solo que ya no dicen nada. Mismo patrón que sin_minimo/paquete.
+  const jsLog = flow.nodes.find((n) => n.name === "Armar Log")?.parameters?.jsCode ?? "";
+  const sqlLog = flow.nodes.find((n) => n.name === "Log Turno")?.parameters?.query ?? "";
+  const jsEntregar = flow.nodes.find((n) => n.name === "Entregar")?.parameters?.jsCode ?? "";
+  const LOG_CABLEADO = [
+    ["products crudos del Agente", jsLog, "products: JSON.stringify(crudas)"],
+    ["hallazgos del auditor", jsLog, "hallazgos: a.hallazgos"],
+    ["via en signals", jsLog, "signals: JSON.stringify({ via"],
+    ["execution_id", jsLog, "execution_id: String($execution.id"],
+    ["INSERT con las 9 columnas", sqlLog, "products, prices, verification, signals, execution_id"],
+    ["Entregar re-emite del Responder", jsEntregar, "$('Responder')"],
+  ].filter(([, src, frag]) => !src.includes(frag));
+  if (LOG_CABLEADO.length) {
+    console.error("\n✗ ABORTADO: el cableado del log (bot.log) está incompleto:");
+    for (const [campo, , frag] of LOG_CABLEADO) console.error(`  - ${campo} (falta "${frag}")`);
     process.exit(1);
   }
 }

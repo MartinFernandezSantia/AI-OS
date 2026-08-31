@@ -18,8 +18,10 @@ const flow = JSON.parse(readFileSync(path.join(AQUI, "flows/cotizador-v1.json"),
 const codigo = flow.nodes.find((n) => n.name === "Auditar Cotización").parameters.jsCode;
 const codigoMat = flow.nodes.find((n) => n.name === "Materiales Declarados").parameters.jsCode;
 const codigoResp = flow.nodes.find((n) => n.name === "Responder").parameters.jsCode;
+const codigoLog = flow.nodes.find((n) => n.name === "Armar Log").parameters.jsCode;
+const codigoEntregar = flow.nodes.find((n) => n.name === "Entregar").parameters.jsCode;
 
-/** Corre un nodo Code con $input/$() simulados. */
+/** Corre un nodo Code con $input/$()/$execution simulados. */
 function correrCode(js, { items = [], nodos = {} }) {
   const $input = {
     first: () => items[0],
@@ -29,7 +31,8 @@ function correrCode(js, { items = [], nodos = {} }) {
     if (!(nombre in nodos)) throw new Error(`el nodo "${nombre}" no ejecutó en esta rama`);
     return { first: () => nodos[nombre][0], all: () => nodos[nombre] };
   };
-  return new Function("$input", "$", js)($input, $);
+  const $execution = { id: "test-exec" };
+  return new Function("$input", "$", "$execution", js)($input, $, $execution);
 }
 
 // La metadata REAL que la ingesta del visor escribe (chunk colección+material).
@@ -500,16 +503,45 @@ for (const c of casos) {
   if (a.ok !== c.esperaOk) problemas.push(`esperaba ok=${c.esperaOk}, dio ok=${a.ok}`);
 
   // El nodo Responder, con la salida real del auditor. ESTO es lo que ve el cliente.
-  let out;
+  let out, respItems;
   try {
     // El Responder también mira el nodo Agente directo (lee el fallo del parser por su
     // cuenta, sin depender de que el auditor esté sincronizado), así que necesita el mismo
     // contexto de nodos que el auditor.
-    out = correrCode(codigoResp, { items: r, nodos: { Agente: [{ json: c.agente }] } })[0].json.output;
+    respItems = correrCode(codigoResp, { items: r, nodos: { Agente: [{ json: c.agente }] } });
+    out = respItems[0].json.output;
   } catch (e) {
     console.log(`✗ ${c.nombre}\n    Responder EXPLOTÓ: ${e.message}`);
     fallos++;
     continue;
+  }
+
+  // La cadena del log, con la salida real del Responder: Armar Log tiene que guardar las
+  // cotizaciones CRUDAS del Agente (la cantidad declarada — el dato que el auditor no puede
+  // auditar) y Entregar tiene que re-emitir el mensaje intacto aunque el INSERT falle.
+  try {
+    const nodosLog = {
+      "Cuando llega un mensaje": [{ json: { sessionId: "sesion-test", chatInput: c.nombre } }],
+      Agente: [{ json: c.agente }],
+      Responder: respItems,
+    };
+    const fila = correrCode(codigoLog, { items: respItems, nodos: nodosLog })[0].json;
+    const productos = JSON.parse(fila.products);
+    const declaradas = c.agente.output && Array.isArray(c.agente.output.cotizaciones) ? c.agente.output.cotizaciones : [];
+    if (JSON.stringify(productos) !== JSON.stringify(declaradas)) {
+      problemas.push("Armar Log no guarda las cotizaciones CRUDAS del Agente tal cual");
+    }
+    if (JSON.parse(fila.verification).ok !== a.ok) problemas.push("Armar Log: verification.ok no calca al auditor");
+    if (JSON.parse(fila.signals).via !== respItems[0].json.via) problemas.push("Armar Log: signals.via no es la via del Responder");
+    if (fila.bot_message !== out) problemas.push("Armar Log: bot_message no es lo que salió al chat");
+    if (fila.execution_id !== "test-exec") problemas.push("Armar Log: execution_id no viene de $execution");
+
+    // Entregar corre DESPUÉS de Log Turno: su input es la salida del INSERT (cualquier
+    // cosa), y el mensaje lo relee del Responder. Se simula con un item basura a propósito.
+    const entregado = correrCode(codigoEntregar, { items: [{ json: { success: true } }], nodos: nodosLog })[0].json;
+    if (entregado.output !== out) problemas.push("Entregar no re-emite el mensaje del Responder");
+  } catch (e) {
+    problemas.push(`la cadena del log EXPLOTÓ: ${e.message}`);
   }
 
   // El mensaje SIN la cola de auditoría: eso es lo que iría a producción.

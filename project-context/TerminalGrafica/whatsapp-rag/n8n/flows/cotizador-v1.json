@@ -69,8 +69,8 @@
       ],
       "credentials": {
         "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
+          "id": "bxPpuXnXEZpEvGIL",
+          "name": "BOT DB"
         }
       },
       "alwaysOutputData": true
@@ -99,6 +99,57 @@
       "typeVersion": 2,
       "position": [
         1220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Una fila por turno en bot.log. Lo IRREEMPLAZABLE acá es `products`: las cotizaciones\n// CRUDAS del Agente, con la cantidad TAL COMO LA DECLARÓ el modelo. La clase de bug que\n// ni el auditor ni el gate de 132 casos pueden ver (conversión doble, medida inventada)\n// solo se caza comparando esta columna contra lo que escribió el cliente — hasta hoy eso\n// era ir a leer la ejecución por MCP, de a una.\nconst trig = $('Cuando llega un mensaje').first().json;\nconst jAg = $('Agente').first().json;\nconst r = $('Responder').first().json;\n\nconst salida = jAg.output && typeof jAg.output === 'object' ? jAg.output : {};\nconst crudas = Array.isArray(salida.cotizaciones) ? salida.cotizaciones : [];\nconst a = r.auditoria || { ok: true, hallazgos: [], cotizaciones: [] };\nconst via = String(r.via || 'normal');\n\nreturn [{ json: {\n  session_id: String(trig.sessionId || ''),\n  customer_message: String(trig.chatInput || ''),\n  // El mensaje que REALMENTE salió (con la cola de debug mientras exista; al sacarla en\n  // la parte 4, esta columna queda limpia sola).\n  bot_message: String(r.output || ''),\n  // 'ok' = camino feliz. Cualquier otra cosa es la `via` cruda (consulta, vacio,\n  // fallback_texto, fallback_falla_tecnica): contar fallbacks es un GROUP BY de acá.\n  state: via === 'normal' || via === 'derivacion_avanzar' ? 'ok' : via,\n  products: JSON.stringify(crudas),\n  prices: JSON.stringify(a.cotizaciones || []),\n  verification: JSON.stringify({ ok: a.ok !== false, hallazgos: a.hallazgos || [] }),\n  signals: JSON.stringify({ via, fallo_parser: jAg.error != null && jAg.output == null }),\n  execution_id: String($execution.id || ''),\n} }];"
+      },
+      "id": "cot-armar-log",
+      "name": "Armar Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot.log\n  (session_id, customer_message, bot_message, state,\n   products, prices, verification, signals, execution_id)\nvalues ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9)",
+        "options": {
+          "queryReplacement": "={{ [ $json.session_id, $json.customer_message, $json.bot_message, $json.state, $json.products, $json.prices, $json.verification, $json.signals, $json.execution_id ] }}"
+        }
+      },
+      "id": "cot-log-turno",
+      "name": "Log Turno",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1660,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxPpuXnXEZpEvGIL",
+          "name": "BOT DB"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Punto final del flow. Re-emite lo que armó el Responder, así el chat muestra el\n// mensaje aunque el INSERT del log haya fallado (Log Turno va con onError=continue:\n// un fallo de log no puede dejar al cliente sin respuesta).\nconst r = $('Responder').first().json;\nreturn [{ json: { output: r.output, via: r.via, auditoria: r.auditoria } }];"
+      },
+      "id": "cot-entregar",
+      "name": "Entregar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
         0
       ]
     },
@@ -162,8 +213,8 @@
       ],
       "credentials": {
         "postgres": {
-          "id": "vxRQvyIwYEqGpJqc",
-          "name": "Bot Readonly DB"
+          "id": "bxPpuXnXEZpEvGIL",
+          "name": "BOT DB"
         }
       }
     },
@@ -214,7 +265,7 @@
     },
     {
       "parameters": {
-        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo** y **Traer Escalas**: credencial Postgres `BOT_DB` (pooler 5432,\nuser `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`, **schema-cualificada**\n(sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El\nauditor los necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté\nexento, sin `variantes` las presentaciones agrupadas (500 tarjetas) no se\nencuentran, y sin `paquete` la cantidad en piezas se cobra como si fueran paquetes\n(1000 tarjetas × el precio del paquete de 1000).\n\n**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow\nhornea el prompt, los parámetros y el código del auditor: quedarse con la versión\nvieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.",
+        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo**, **Traer Escalas** y **Log Turno**: credencial Postgres `BOT_DB`\n(pooler 5432, user `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`,\n**schema-cualificada** (sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**Log**: cada turno escribe UNA fila en `bot.log` (products = cotizaciones CRUDAS del\nAgente, prices = detalle del auditor, signals.via). Auditar una tanda = un SELECT.\nUn fallo del INSERT no corta la respuesta (onError continue + Entregar re-emite).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El\nauditor los necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté\nexento, sin `variantes` las presentaciones agrupadas (500 tarjetas) no se\nencuentran, y sin `paquete` la cantidad en piezas se cobra como si fueran paquetes\n(1000 tarjetas × el precio del paquete de 1000).\n\n**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow\nhornea el prompt, los parámetros y el código del auditor: quedarse con la versión\nvieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.",
         "height": 520,
         "width": 460
       },
@@ -278,6 +329,39 @@
         [
           {
             "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder": {
+      "main": [
+        [
+          {
+            "node": "Armar Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Log": {
+      "main": [
+        [
+          {
+            "node": "Log Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Turno": {
+      "main": [
+        [
+          {
+            "node": "Entregar",
             "type": "main",
             "index": 0
           }
