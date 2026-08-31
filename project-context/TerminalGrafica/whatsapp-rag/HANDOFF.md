@@ -399,8 +399,49 @@ no tenía marcador, no había dónde inyectarlo) y el auditor lo marcó solo: *"
 cotización(es) pero el mensaje no tiene ningún marcador {Pn}"*. El guardrail funcionó, pero
 el modelo está inventando una medida al declarar. Vale un caso conversacional propio.
 
-**Falta correr**: 19 de los 40 casos conversacionales (los de tolerancia a typos, sinónimos
-no obvios como "araña"/"carnet", cliente enojado, y el resto de la familia 7).
+**Los 19 que faltaban, corridos (ejecuciones 387-406).** La familia 6 —"buscá antes de
+negar", la que nació del fallo real— salió **7/7**: el bot buscó en el catálogo en todos los
+casos y no negó ninguno. Los sinónimos no obvios entraron solos: "araña" → `Porta banner tipo
+X`, "carnet" → `Plastificado carnet`, "anillado" → Encuadernación. La derivación (familia 5)
+y el mínimo (familia 8) también verdes, con la aritmética correcta contra el Excel (porta
+banner $32.000 = caso 127; 4 ojalillos $4.000 = caso 68 × 4; plastificado A4 $2.200 = caso
+68; 5 recetarios $20.000). Los dos guardrails dispararon bien solos: 1000 stickers de 2x2
+METROS → fuera de rango, y 1 talonario → no múltiplo del paquete de 10.
+
+### El patrón que dejó el barrido: el modelo INVENTA la medida que falta
+
+No es un caso aislado — es **el** hallazgo, y aparece en 3 de los 19 turnos nuevos más el que
+ya estaba anotado (ejecución 379):
+
+| Ejecución | El cliente dijo | El modelo declaró |
+|---|---|---|
+| 387 | `hacen porta banners tipo araña?` | 90x190, cantidad 1 → cotizó $32.000 |
+| 391 | `colocar ojalillos en una lona que ya tengo` | cantidad **4** → cotizó $4.000 |
+| 400 | `100 stickers en OPP` | 5x5 → cotizó $8.400 |
+| 379 | `250 stickers` | 5x5 → (sin marcador, no salió) |
+
+Los cuatro son la MISMA falla: falta un dato para cotizar, el prompt dice "preguntá SOLO eso",
+y el modelo en vez de preguntar rellena con la medida de referencia del chunk y cotiza.
+
+**Es peor que el mudo**, porque acá el cliente SÍ recibe un precio — uno de un trabajo que no
+pidió. El auditor no puede verlo: 4 ojalillos a $1.000 cierra perfecto, la aritmética está
+bien. Solo falla la premisa, y la premisa no está en ningún lado para comparar.
+
+La contramedida no puede ser aritmética. Dos caminos, sin decidir:
+1. **Prompt**: hoy dice "para cotizar necesitás producto, medida y cantidad", pero no prohíbe
+   explícitamente TOMAR esos datos del catálogo. La medida de referencia del chunk está ahí
+   justamente para orientar, y el modelo la usa como si fuera el pedido.
+2. **Contrato de salida**: un campo que declare de DÓNDE salió cada medida (`del_cliente` vs
+   `de_referencia`), para que el auditor pueda rechazar lo que el cliente nunca dijo. Más caro
+   pero verificable — hoy no hay forma de auditarlo.
+
+Un matiz que lo hace ambiguo: en 387 el porta banner tipo X **tiene una sola medida** en el
+catálogo, así que "90x190" no es una invención sino el único producto posible. En 391 y 400 sí
+lo es. Puede que la regla correcta sea "solo si el material tiene UNA medida".
+
+**Detalle menor (ejecución 399)**: `carpeta institucional` preguntó "¿sin laminar o laminado?"
+— el caso 2.4 esperaba que fuera directo a la base sin abrir la opción. No es grave (pregunta,
+no cotiza dos), pero es justo lo que TG pidió no hacer.
 
 ## El MCP de n8n — Claude YA VE las ejecuciones
 
