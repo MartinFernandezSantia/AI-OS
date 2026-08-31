@@ -45,8 +45,13 @@ catálogo. Los precios los calcula el sistema a partir de lo que vos declarás.
 Cuando cotizás, hacés dos cosas:
 
 1. En el campo `cotizaciones` declarás QUÉ hay que cotizar: el material exacto como vino de
-   buscar_catalogo, el ancho y el alto de UNA pieza en cm, y cuántas piezas pidió el
-   cliente. Nada más — ni cuentas, ni pliegos, ni totales.
+   buscar_catalogo, el ancho y el alto de UNA pieza en cm, y la cantidad que pidió el
+   cliente TAL CUAL la dijo. Nada más — ni cuentas, ni pliegos, ni totales.
+   - La cantidad va SIN CONVERTIR, aunque el catálogo cobre en otra unidad y te muestre la
+     cuenta hecha: 100 stickers son 100 (no los pliegos que ocupan), 1000 tarjetas son 1000
+     (no 1 paquete), UNA lona de 3x1 es 1 (no 3: los m2 salen de la medida), 2,45 metros de
+     planos son 2.45. El sistema convierte; si ya convertiste vos, lo hace dos veces y el
+     precio sale mal.
 2. En el mensaje escribís el marcador `{P1}` donde iría el precio de la primera cotización,
    `{P2}` para la segunda, y así. El sistema los reemplaza por el total ya calculado.
 
@@ -119,7 +124,8 @@ Junto al mensaje devolvés `cotizaciones`: una entrada por producto que estés c
 ESTE turno, en el MISMO orden que los marcadores del mensaje ({P1} = la primera).
 
 Cada entrada lleva solo cuatro datos: `material_catalogo` (EXACTO como vino de la tool),
-`ancho_cm` y `alto_cm` de UNA pieza, y `cantidad` de piezas pedidas.
+`ancho_cm` y `alto_cm` de UNA pieza, y `cantidad` tal cual la pidió el cliente, sin convertir
+a la unidad de cobro.
 
 Si el turno no cotiza (saludo, repregunta, una consulta que no es de precio),
 `cotizaciones: []` y el mensaje no lleva ningún marcador.

@@ -236,6 +236,17 @@ describe("chunks — coleccion-material", () => {
     );
   });
 
+  // El ejemplo enseña a LEER EL TRAMO, no a convertir la cantidad. Sin esta aclaración el
+  // bot hacía la división él mismo y la declaraba: en la ejecución 412, "100 stickers 7x7"
+  // salió declarado como 6 (los pliegos), el sistema volvió a dividir 6 ÷ 18 = 1 pliego y
+  // cobró $4.000 en vez de $16.800. Cobrar de menos en silencio: la aritmética cierra
+  // (1 × $2.800 → mínimo) y el auditor no tiene contra qué comparar el input.
+  it("el ejemplo aclara que se declaran las piezas, no las unidades de la cuenta", () => {
+    expect(cs[0].texto).toContain(
+      "(La cuenta es para entender el precio: vos declarás las 200 piezas, no 2 pliegos A3.)",
+    );
+  });
+
   it("el ejemplo no aparece donde no hay conversión que hacer (m2, tarifa plana)", () => {
     expect(cs.at(-1)!.texto).not.toContain("Ej.:");
   });
@@ -332,6 +343,17 @@ describe("chunks — coleccion-material", () => {
 
     it("el chunk m2 lleva la misma aclaración (también cotiza medida libre)", () => {
       expect(cs.at(-1)!.texto).toContain("La medida la da SIEMPRE el cliente");
+    });
+
+    // El chunk m2 daba la fórmula (m2 = ancho x alto ÷ 10.000) sin decir que NO hay que
+    // aplicarla. Medido (ejecución 422): "una lona de 3x1" salió declarada como cantidad 3
+    // —los m2— y el auditor volvió a multiplicar por la superficie: 9 m2 por UNA lona,
+    // $198.000 en vez de $66.000. En m2 la conversión de más MULTIPLICA (en pliego divide),
+    // así que el error no tiene techo y va contra el cliente.
+    it("el chunk m2 aclara que la cantidad son piezas, no los m2 de la fórmula", () => {
+      const t = cs.at(-1)!.texto;
+      expect(t).toContain("La fórmula es para entender el precio, NO para aplicarla");
+      expect(t).toContain("una lona de 3x1 es cantidad 1, no 3");
     });
 
     it("en modo item NO aparece: ahí no hay medida que elegir", () => {

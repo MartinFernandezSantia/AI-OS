@@ -287,7 +287,14 @@ function ejemploCadena(r: number, tramos: Tramo[], unidad: string): string | nul
   return (
     `  Ej.: ${numTexto(piezas)} piezas = ${unidadesTexto}` +
     ` (${numTexto(piezas)} ÷ ${numTexto(r)}, redondeando para arriba)` +
-    ` → tramo "${nombreTramo(objetivo, unidad)}", ${money(objetivo.precio)} cada ${unidad}.`
+    ` → tramo "${nombreTramo(objetivo, unidad)}", ${money(objetivo.precio)} cada ${unidad}.` +
+    // El ejemplo muestra la cuenta para que el modelo NO lea el tramo en piezas. Pero
+    // mostrarla también lo invitaba a hacerla: en la ejecución 412 declaró 6 pliegos para
+    // 100 stickers y el sistema volvió a dividir ($4.000 en vez de $16.800). El ejemplo
+    // enseña a leer el tramo, no a convertir la cantidad — y hay que decirlo acá, porque
+    // acá es donde está la tentación.
+    ` (La cuenta es para entender el precio: vos declarás las ${numTexto(piezas)} piezas,` +
+    ` no ${unidadesTexto}.)`
   );
 }
 
@@ -359,8 +366,19 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
     ];
   }
   if (modo === "m2") {
+    // La fórmula está para que el bot ENTIENDA de dónde sale el precio, no para que la
+    // aplique. Medido (ejecución 422, "una lona de 3x1"): declaró cantidad 3 —los m2— y el
+    // auditor multiplicó otra vez por la superficie: 9 m2 por UNA lona, $198.000 en vez de
+    // $66.000. El triple, y en verde: 9 × $22.000 cierra perfecto.
+    //
+    // Es el mismo error que en pliego (ejecución 412), y por la misma razón: mostrar la
+    // cuenta invita a hacerla. Acá pesa más porque no hay techo — en pliego la división
+    // achica el número (cobra de menos), en m2 la multiplicación lo agranda sin límite.
     return [
       "Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).",
+      "La fórmula es para entender el precio, NO para aplicarla: la cantidad son las PIEZAS " +
+        "que pidió el cliente (una lona de 3x1 es cantidad 1, no 3), y los m2 los calcula el " +
+        "sistema a partir de la medida.",
       MEDIDA_LA_DA_EL_CLIENTE,
     ];
   }
