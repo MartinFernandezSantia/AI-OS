@@ -495,6 +495,19 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      comercial: 200 stickers 3x6 salen más baratos en OPP ($7.800) que en papel ($8.800)
      — es lo que dice el Excel (el gate lo valida), pero quizás TG quiera saberlo.
 
+   **Post-smoke (31/08): dos fixes de Martín, EN VIVO (re-publicado).**
+   - **El aviso de precio provisorio ahora también sale en la CONFIRMACIÓN de 2 turnos**
+     (el turno 722: cotiza en un turno, "dale, lo quiero" en el siguiente → derivaba a
+     mail sin el aviso porque `cotizoAlgo` solo miraba ESTE turno). Camino nuevo en el
+     Responder: mensaje que pide ARCHIVOS por mail + monto en `historialTexto` del canal
+     → aviso. En el flow de chat no hay historial y el camino queda apagado solo (try/
+     catch). El contraejemplo de la ejecución 374 (plazos) sigue sin aviso: exige
+     "archivo" + monto previo. 2 tests nuevos.\n   - **EL TELÉFONO NO SE OFRECE** (regla nueva del prompt, del incidente del turno 722
+     que lo daba para avanzar un pedido): pedidos/archivos/presupuestos van por mail o
+     local; el teléfono SOLO ante queja/enojo/pedir un humano. Y la sección **QUEJA /
+     ENOJO** se portó completa del lite (reconocer breve, contactos desde
+     consultar_info_negocio, no inventar ninguno). 2 gates nuevos del prompt (en rojo).
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`

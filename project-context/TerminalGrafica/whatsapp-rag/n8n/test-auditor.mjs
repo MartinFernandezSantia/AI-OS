@@ -486,6 +486,37 @@ const casos = [
     esperaEnMensaje: ["$6.600"],
     noEsperaEnMensaje: ["precio final lo confirmamos"],
   },
+  {
+    // El smoke del 31/08 (turno 722): el cliente CONFIRMA en un turno posterior al de la
+    // cotización — este turno no cotiza nada, pero pide los ARCHIVOS por mail y el precio
+    // vive en el historial del canal. El aviso tiene que salir acá también.
+    nombre: "CONFIRMA el pedido en un turno posterior (archivos + monto en el historial) → aviso",
+    agente: {
+      output: {
+        respuesta: "Para avanzar con el pedido, envianos tus archivos a terminalgrafica@gmail.com.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    historial: "HISTORIAL DE ESTA CONVERSACIÓN:\nCliente: 100 tarjetas doble faz\nVos: Para 100 tarjetas 9x5 doble faz, el total es $16.500\n\n",
+    esperaOk: true,
+    esperaEnMensaje: ["precio final lo confirmamos cuando recibimos el archivo"],
+  },
+  {
+    // Sin monto previo en la charla no hay precio que relativizar: pedir archivos por mail
+    // sin haber cotizado nunca (p. ej. cliente que ya sabe lo que quiere) no lleva aviso.
+    nombre: "pide archivos por mail SIN ningún precio previo → NO suma el aviso",
+    agente: {
+      output: {
+        respuesta: "Para avanzar con el pedido, envianos tus archivos a terminalgrafica@gmail.com.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    historial: "HISTORIAL DE ESTA CONVERSACIÓN:\nCliente: hola\nVos: Hola, ¿en qué te ayudo?\n\n",
+    esperaOk: true,
+    noEsperaEnMensaje: ["precio final lo confirmamos"],
+  },
 ];
 
 let fallos = 0;
@@ -508,7 +539,16 @@ for (const c of casos) {
     // El Responder también mira el nodo Agente directo (lee el fallo del parser por su
     // cuenta, sin depender de que el auditor esté sincronizado), así que necesita el mismo
     // contexto de nodos que el auditor.
-    respItems = correrCode(codigoResp, { items: r, nodos: { Agente: [{ json: c.agente }] } });
+    respItems = correrCode(codigoResp, {
+      items: r,
+      nodos: {
+        Agente: [{ json: c.agente }],
+        // El camino "confirmación en turno posterior" del aviso lee el historial del canal
+        // (variante Chatwoot). Sin `historial` el nodo no existe y el try/catch del
+        // Responder lo apaga — igual que en el flow de chat.
+        ...(c.historial ? { "Cuando llega un mensaje": [{ json: { historialTexto: c.historial } }] } : {}),
+      },
+    });
     out = respItems[0].json.output;
   } catch (e) {
     console.log(`✗ ${c.nombre}\n    Responder EXPLOTÓ: ${e.message}`);
