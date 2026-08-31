@@ -147,12 +147,24 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
       catálogo nuevo.
 
    **Sincronizar el flow después de tocar el Excel o el builder.** Se regenera con
-   `node n8n/build-flow.mjs` y se sube — por la UI o por el MCP (`update_workflow` con
-   `updateNodeParameters`; `setNodeParameter` NO existe). Quedarse con el flow viejo da
+   `node n8n/build-flow.mjs` y se sube — por la UI o por el MCP. Quedarse con el flow viejo da
    errores que **parecen del catálogo y son del flow**: eso costó una sesión entera
    persiguiendo un `modo desconocido` que ya estaba arreglado en el repo.
 
-   Estado del build: **13 nodos**, prompt ~2.394 tokens, auditor verde contra **132/132
+   **Subir un cambio de texto sin re-mandar 43 KB de flow** (corrige la nota vieja que decía
+   que `setNodeParameter` no existe — SÍ existe y es la vía cómoda): `update_workflow` con
+   `{ type: "setNodeParameter", nodeName, path, value }`, donde `path` es un JSON Pointer.
+   Los dos que se tocan seguido:
+   - prompt del sistema → nodo `Agente`, path `/options/systemMessage`
+   - schema de la salida → nodo `Salida · Agente`, path `/inputSchema` (es un STRING con JSON
+     adentro, no un objeto)
+
+   **El texto se saca del JSON emitido, nunca se re-tipea.** Es la regla de "no editar el JSON
+   a mano" aplicada al MCP: transcribir 8 KB de prompt a mano es una desincronización esperando
+   pasar. Volcarlo a un archivo del scratchpad con Node y copiarlo de ahí, y después verificar
+   con `get_workflow_details` que lo que quedó vivo es lo que emitió el builder.
+
+   Estado del build: **13 nodos**, prompt ~2.531 tokens, auditor verde contra **132/132
    casos del Excel** + 11 rindes históricos. `node n8n/build-flow.mjs` re-genera todo;
    `--test` corre solo los tests. `node n8n/test-auditor.mjs` prueba los nodos Code
    (30+ escenarios de cableado, fallback y aviso) contra el JSON ya emitido.
@@ -196,7 +208,24 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    | `1 cartel de PVC espumado de 100x150 cm` | $69.000 | m² por encima del mínimo | $23.000 = se quedó en el mínimo de medio m² |
    | `10 planchas A4 de stickers` | $14.000 | la escala del material combinado | $19.000 = usó el tramo de 1, que solo aplica a una plancha sola |
    | `1 lona 2x0,85 con roll up` | $65.200 | precio cerrado, sin medida | si pide medida, se cargó como m² en vez de material propio |
-   | `escanear 2,45 metros de planos` | $19.600 | medida continua con DECIMALES | $8.000 = declaró `cantidad: 1` (ver "la unidad de cobro", abajo) |
+
+   **La batería de LA CANTIDAD DECLARADA** — correr ESTA después de tocar el schema, el prompt
+   o el chunk. Es la única que ejercita el paso donde el modelo puede adulterar el input, y el
+   gate de 132 casos no lo cubre (le pasa las piezas correctas del Excel, no lo que declara el
+   modelo). Verificada en vivo el 31/08, 9/9 en verde:
+
+   | Escribir en el chat | Total | `cantidad` que DEBE declarar | Si falla |
+   |---|---|---|---|
+   | `una lona de 3x1` | $48.000 | `1` — la lona, no los m² | `3` → $198.000, el triple: el modelo aplicó la fórmula del chunk y el auditor la volvió a aplicar |
+   | `2 lonas de 1,5x2` | $96.000 | `2` — el control: prueba que no declara `1` mecánicamente | si declara 1, se pasó de largo y ahora ignora la cantidad real |
+   | `100 stickers en OPP brillo troquelado de 7x7` | $16.800 | `100` piezas, no 6 pliegos | $4.000 = declaró pliegos y el auditor volvió a dividir. Cobra de MENOS, sin hallazgo |
+   | `cuanto sale escanear 2,45 metros de planos?` | $19.600 | `2.45` — decimales, no `1` | $8.000 = declaró "un trabajo" |
+   | `1000 tarjetas doble faz` | $54.000 | `1000` piezas, no 1 paquete | $54.000.000 si multiplica |
+   | `Necesito 100 stickers en opp` (SIN medida) | — | `[]` + repregunta | si cotiza, volvió a inventar la medida de referencia del chunk |
+
+   Los 3 primeros son los que se rompieron de verdad. En todos: mirar `cotizaciones[].cantidad`
+   en la salida CRUDA del Agente, no solo el total — el total puede estar mal con la aritmética
+   perfecta.
 
    El plan está escrito y
    **revisado punto por punto con Martín** (los prompts quedaron acordados; ver la
@@ -236,9 +265,15 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      Moraleja para chunks futuros: **el bot solo ve el `text` del embedding** — nada de
      deícticos ("la colección", "este material") sin su referente escrito al lado.
 4. **Fase 4 — medir.** Los 132 casos contra el bot en vivo. Ya no mide la aritmética (eso lo
-   fija el gate del build): mide si el modelo ELIGE bien el material y declara bien la
-   cantidad. Sumar los 19 casos conversacionales que faltan correr.
-5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp.
+   fija el gate del build): mide si el modelo ELIGE bien el material y **declara bien la
+   cantidad** — que resultó ser donde vive el bug caro (ver la primera entrada de "Cosas que
+   cuestan sangre"). Los 40 casos conversacionales: **corridos los 40** el 31/08.
+   Lo que queda de esta fase, si se quiere cerrar del todo: los 132 del Excel de una pasada
+   contra el bot vivo (la última medición completa fue 44/46 sobre el catálogo v2).
+5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp. **Antes de ir a prod hay que
+   sacar la cola de debug del Responder**: hoy pega `⚠ auditoría: …` y `(marcadores sin
+   precio: {P1})` al mensaje del cliente. Es deliberado para medir, y está marcado en el
+   código.
 
 ### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
 
@@ -532,6 +567,52 @@ da 403), y si al autorizar se pueden elegir scopes, con `workflow:read` + `execu
 
 ## Cosas que cuestan sangre si no se saben
 
+**El bug caro no está en el cálculo: está en lo que el modelo DECLARA.** Es el patrón que
+más veces mordió, con 5 casos medidos y 4 modos de cobro distintos. La forma siempre es la
+misma: el modelo hace una conversión que le toca al auditor (o rellena un dato que falta), el
+auditor opera sobre ese input adulterado, **y la aritmética cierra perfecto**. La ejecución
+sale verde, `hallazgos: []`, y el precio está mal.
+
+| Pedido | Declaró | Salió | Debía |
+|---|---|---|---|
+| 100 stickers 7x7 | `6` (los pliegos) | $4.000 | $16.800 |
+| una lona de 3x1 | `3` (los m2) | $198.000 | $66.000 |
+| 2,45 m de planos | `1` ("un trabajo") | $8.000 | $19.600 |
+| 100 stickers en OPP (sin medida) | 5x5 inventado | $8.400 | preguntar |
+| 250 stickers (sin medida) | 5x5 inventado | — | preguntar |
+
+**El auditor no puede detectarlo, por diseño.** Re-calcula el total desde el catálogo, que es
+justo lo que hace bien; lo que no tiene es contra qué comparar la PREMISA. `6 pliegos × $2.800`
+es tan válido como `100 piezas ÷ 18`. No hay campo que diga qué pidió el cliente.
+
+**Y el gate de 132 casos tampoco, tampoco por diseño**: alimenta al motor con las piezas
+correctas leídas del Excel, nunca con lo que el modelo declara. El caso 13 del Excel *es* el
+pedido de los stickers 7x7 y da $16.800 en verde. Es [[tests-fixtures-mienten]] de nuevo — el
+paso que se rompe queda afuera por construcción. **Esta clase de bug SOLO aparece corriendo el
+bot de verdad y leyendo la ejecución.** Cuando se toque el schema, el prompt o el chunk, hay
+que probar en vivo los cuatro modos: pliego, m2, paquete y medida continua.
+
+**Antes de culpar al prompt o al modelo, leé el CHUNK que trajo el retrieval.** Tres de los
+cuatro bugs de la sesión del 31/08 estaban en el texto del chunk:
+- El bot cotizaba stickers de 5x5 sin que nadie diera medida. Causa: de los 5 chunks que traía
+  el retrieval, **4 encabezan sus "Medidas de referencia" con 5x5**, cada una con la cuenta ya
+  resuelta de ejemplo. No elegía — tomaba lo primero concreto que veía.
+- El chunk decía "se cotiza CUALQUIER medida" sin decir de DÓNDE sale esa medida.
+- El chunk m2 daba la fórmula (`m2 = ancho x alto ÷ 10.000`) sin decir que NO hay que aplicarla.
+
+La regla general: **mostrarle la cuenta al modelo lo invita a hacerla.** Los ejemplos del chunk
+existen por una buena razón (que no lea el tramo en piezas), así que se quedan — pero cada uno
+tiene que cerrar diciendo qué NO hay que hacer con él. En `chunk.ts` eso vive en
+`MEDIDA_LA_DA_EL_CLIENTE`, la coda de `ejemploCadena()` y la línea de m2.
+
+**Un texto ambiguo en el schema se paga en pesos.** La descripción de `cantidad` decía "EN LA
+UNIDAD DE COBRO que declara el catálogo" mientras el chunk decía, en mayúsculas, "Precio según
+CANTIDAD DE PLIEGOS A3 (no de piezas)". El modelo obedeció al pie de la letra: es lo que hacen.
+La regla correcta es una sola y no admite matices — **lo que dijo el cliente, sin convertir** —
+y el caso del metro lineal, que parecía una excepción, era el mismo principio ("2,45 metros" es
+lo que dice el cliente). Cuando una descripción necesita un "pero si…", probablemente esté mal
+la regla, no el ejemplo.
+
 **Los casos del gate se cargan como escribe el CLIENTE, no ya convertidos.** Es la lección
 más cara de la sesión, y es la de "los fixtures mienten" otra vez: mientras la hoja cargaba
 "100 tarjetas" con Cantidad 1 (un paquete), el paso que convierte piezas→paquetes no lo
@@ -623,6 +704,19 @@ system prompt como ejemplos. NO van al chunk; la fuente única queda intacta.
 aplica por producto o por pedido completo? (el plan asume por producto — confirmar con TG);
 ¿alcanza solo el mail como contacto en v1?; topK inicial 3.
 
+**Lo que quedó abierto al cerrar el 31/08** (nada bloquea seguir):
+- **Un caso que TG tiene que decidir**: `una carpeta institucional` hace repreguntar "¿sin
+  laminar o laminado?" en vez de ir a la base. La colección Papelería comercial no tiene
+  `Material base` marcado, así que el bot no tiene cuál elegir. O se le marca una base en el
+  Excel, o se acepta que ahí pregunte.
+- **La cola de debug del Responder** (`⚠ auditoría:`, `(marcadores sin precio: …)`) sale al
+  mensaje del cliente. Sacarla antes de prod.
+- **Los 132 casos del Excel nunca se corrieron completos contra el catálogo v3** en vivo. La
+  medición de 44/46 es del v2. El gate los cubre aritméticamente, no la elección de material.
+- **Un archivo temporal sin borrar**: `visor/lib/__tests__/ver-chunk-stickers-tmp.test.ts`
+  (y `visor/ver-chunk-tmp.test.ts` de la sesión anterior). No están commiteados. `rm` está
+  denegado para Claude: los borra Martín.
+
 **Nadie abrió el .xlsx para ver cómo quedó visualmente.** No hay LibreOffice en la máquina de
 Claude; toda la validación fue estructural (ZIP íntegro, XML bien formado, contenido correcto,
 e2e del visor). El aspecto — anchos de columna, las 3 columnas nuevas de Materiales, los 7
@@ -640,7 +734,7 @@ node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y 
 
 cd project-context/TerminalGrafica/whatsapp-rag/visor
 pnpm install
-pnpm test        # 110 tests (incluye e2e-tmp.test.ts contra el .xlsx real, no commiteado)
+pnpm test        # 164 tests (los *-tmp.test.ts contra el .xlsx real no se commitean)
 pnpm dev         # http://localhost:3000
 pnpm build
 
