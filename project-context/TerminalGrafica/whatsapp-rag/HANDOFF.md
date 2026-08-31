@@ -152,7 +152,7 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    errores que **parecen del catálogo y son del flow**: eso costó una sesión entera
    persiguiendo un `modo desconocido` que ya estaba arreglado en el repo.
 
-   Estado del build: **12 nodos**, prompt ~2.394 tokens, auditor verde contra **132/132
+   Estado del build: **13 nodos**, prompt ~2.394 tokens, auditor verde contra **132/132
    casos del Excel** + 11 rindes históricos. `node n8n/build-flow.mjs` re-genera todo;
    `--test` corre solo los tests. `node n8n/test-auditor.mjs` prueba los nodos Code
    (30+ escenarios de cableado, fallback y aviso) contra el JSON ya emitido.
@@ -354,12 +354,16 @@ prosa, el output parser la rechazaba (`Invalid JSON in model output`) y el Agent
 NADA. Peor que un precio mal calculado — en WhatsApp real es escribir y que no te conteste
 nadie. Pasa en los turnos que NO cotizan (repregunta: `cotizaciones` vacío, nada que
 declarar), aunque no es determinístico: la misma forma de turno a veces sale bien.
-- Arreglado con `onError: continueRegularOutput` + fallback en el Responder. El fallo NO se
-  tapa: sigue como hallazgo de auditoría y como `via` en la salida, que es lo que hay que
-  contar. Sin ese rastro el arreglo vuelve el problema invisible (la ejecución sale verde).
-- **PENDIENTE: evaluar el `autoFix` del output parser** (reintenta pidiéndole el JSON bien).
-  Bajaría el 19%; el fallback garantiza que nadie quede sin respuesta pero el turno igual se
-  pierde y el cliente tiene que reescribir.
+- **Dos defensas, cada una a una mitad del problema:**
+  1. `autoFix: true` en el output parser (+ nodo `Modelo · Corrector`, que el autoFix EXIGE):
+     reintenta con el LLM y **recupera el turno**. Medido después de prenderlo: **9 de 9
+     turnos recuperados, 0 perdidos** (contra 4 de 21 antes). En las ejecuciones se ve el
+     mecanismo: `Modelo · Corrector` corre y `Salida · Agente` marca 3 sub-runs en vez de 1.
+  2. `onError: continueRegularOutput` + fallback en el Responder: si aun así falla, **sale un
+     mensaje**. Es el piso, no el arreglo.
+- El fallo NO se tapa: sigue como hallazgo de auditoría y como `via` en la salida, que es lo
+  que hay que contar. Sin ese rastro el arreglo vuelve el problema invisible (la ejecución
+  sale verde y un turno perdido se ve igual que uno bueno).
 - Gotcha leído en la ejecución 359: el item del Agente fallado es SOLO `{ error: "<msg>" }`.
   El texto que el modelo escribió queda en el sub-run del parser y **no viaja**, así que no
   se puede reenviar aunque sea una repregunta perfecta.
@@ -387,6 +391,13 @@ el próximo entre solo.
 final lo confirmamos cuando recibimos el archivo y verificamos que sea realizable". Hacen
 falta DOS condiciones —el mail Y que el turno haya cotizado— y la segunda se aprendió
 midiendo: con solo el mail se pegaba en consultas de PLAZOS, donde no hay ningún precio.
+
+**Un hallazgo nuevo, sin resolver** (ejecución 379, `250 stickers` sin medida): el modelo
+repreguntó por la medida Y AL MISMO TIEMPO declaró una cotización de 250 stickers 5x5 por
+$15.400 — una medida que el cliente nunca dio. No llegó ningún precio al cliente (el mensaje
+no tenía marcador, no había dónde inyectarlo) y el auditor lo marcó solo: *"hay 1
+cotización(es) pero el mensaje no tiene ningún marcador {Pn}"*. El guardrail funcionó, pero
+el modelo está inventando una medida al declarar. Vale un caso conversacional propio.
 
 **Falta correr**: 19 de los 40 casos conversacionales (los de tolerancia a typos, sinónimos
 no obvios como "araña"/"carnet", cliente enojado, y el resto de la familia 7).

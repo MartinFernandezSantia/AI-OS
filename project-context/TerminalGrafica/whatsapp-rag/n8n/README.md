@@ -25,7 +25,7 @@ node n8n/armar-prompt.mjs         # solo el prompt: regenera prompt-final.txt y 
 ```
 
 Estado: prompt **~1.889 tokens** (objetivo 2.000, techo duro 3.000 — aborta si se pasa).
-Flow: **12 nodos**. Cotizador: **46/46 casos del Excel** + los 11 rindes históricos.
+Flow: **13 nodos**. Cotizador: **132/132 casos del Excel** + los 11 rindes históricos.
 
 ## El cambio grande: el LLM no escribe precios
 
