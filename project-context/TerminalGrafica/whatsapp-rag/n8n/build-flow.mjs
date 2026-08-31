@@ -36,6 +36,9 @@ const TOP_K_INFO = 3;
 // El id es el de la credencial VIVA en n8n.terminalgrafica.cloud (verificado por MCP el
 // 31/08: el viejo "Bot Readonly DB"/vxRQvyIwYEqGpJqc ya no existe y el update lo rechaza).
 const BOT_DB = { id: "bxPpuXnXEZpEvGIL", name: "BOT DB" };
+// Credencial Gemini VIVA (misma para chat y embeddings). Horneada para que el flow salga
+// cableado al importar/subir por MCP; antes quedaba para la UI.
+const GEMINI_CRED = { googlePalmApi: { id: "ql7KStbm6WaYEaSJ", name: "Google Gemini(PaLM) Api account" } };
 
 // ══════════════════════════════════════════════════════════════════════════════════════
 // Lectura del Excel
@@ -1245,6 +1248,7 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       typeVersion: 1,
       position: [140, 240],
+      credentials: GEMINI_CRED,
     },
     {
       parameters: {
@@ -1297,6 +1301,7 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       typeVersion: 1,
       position: [460, 440],
+      credentials: GEMINI_CRED,
     },
     {
       // 2ª tool RAG: la info del negocio (heredada del bot lite, misma tabla ya poblada).
@@ -1333,6 +1338,7 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       typeVersion: 1,
       position: [820, 440],
+      credentials: GEMINI_CRED,
     },
     {
       parameters: {
@@ -1364,6 +1370,7 @@ const flow = {
       type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       typeVersion: 1,
       position: [640, 440],
+      credentials: GEMINI_CRED,
     },
     {
       parameters: {
@@ -1435,6 +1442,455 @@ const flow = {
   },
   settings: { executionOrder: "v1" },
 };
+
+// ══════════════════════════════════════════════════════════════════════════════════════
+// VARIANTE CHATWOOT (Fase 5 · parte 5 — ingreso F1+F2, portado del bot lite)
+// ══════════════════════════════════════════════════════════════════════════════════════
+// Mismo "medio" que el flow de chat; cambian los EXTREMOS. Se deriva por copia profunda,
+// así cualquier cambio de prompt/auditor/log va a los DOS canales sin duplicar nada.
+//
+// DECISIÓN (Martín, 31/08): la memoria es el HISTORIAL DE CHATWOOT, no la Simple Memory.
+// El adaptador conserva el nombre "Cuando llega un mensaje" para no tocar el medio, y el
+// historial viaja como `historialTexto` que el Agente antepone a su input.
+//
+// SIN Tier-2 (queda para la parte 7: guardrails de canal) y SIN egreso (parte 6): esta
+// variante NO SE ACTIVA hasta tener el Enviar Mensaje — hoy los enlatados sí postean a
+// Chatwoot, pero la respuesta del LLM muere en `Entregar`.
+
+const OUT_CW = SALIDA.replace(/\.json$/, "-chatwoot.json");
+// Salida n8n→Chatwoot por la red interna de Docker (rails:3000). La ENTRADA Chatwoot→n8n
+// va por la URL pública (anti-SSRF de Chatwoot; ver tg-bot-prod-standup).
+const CHATWOOT_BASE_URL = "http://rails:3000";
+// Id VIVO en n8n.terminalgrafica.cloud (leído del flow lite jPZVMdvz5WEHeFl4 el 31/08:
+// el id del builder del lite, KxbAlYAWQ95ZZKQ5, ya no existe — mismo caso que BOT_DB).
+const CHATWOOT_CRED = { id: "2e8slhNsviye1WE7", name: "Chatwoot API Token" };
+
+/** Enlatado que lee account/conversation del WEBHOOK (F1: siempre ejecutó). */
+const cannedWebhook = (id, name, position, texto) => ({
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ content: " + JSON.stringify(texto) + ", message_type: 'outgoing', content_type: 'text', private: false }) }}",
+    options: {},
+  },
+  id,
+  name,
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position,
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+});
+
+/** Enlatado que lee account/conversation FLAT de Decidir (F2). */
+const cannedDecidir = (id, name, position, texto) => ({
+  ...cannedWebhook(id, name, position, texto),
+  parameters: {
+    ...cannedWebhook(id, name, position, texto).parameters,
+    url: "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $json.accountId + '/conversations/' + $json.conversationId + '/messages' }}",
+  },
+});
+
+// ---------- F1: endurecimiento de ingreso (transcrito del lite, que lo transcribió del v10) ----------
+const webhookChatwoot = {
+  // MISMO path/webhookId que el v10/lite: Chatwoot ya entrega ahí. Consecuencia: dos flows
+  // sobre este path NO pueden estar activos a la vez (Chatwoot entrega a uno solo).
+  // rawBody guarda el cuerpo crudo (binario 'data') que necesita el HMAC.
+  parameters: { httpMethod: "POST", path: "chatwoot", options: { rawBody: true } },
+  id: "cw-webhook",
+  name: "Chatwoot Webhook",
+  type: "n8n-nodes-base.webhook",
+  typeVersion: 2,
+  position: [-2200, 0],
+  webhookId: "chatwoot-tg-va",
+};
+
+const verificarHmac = {
+  // Copia EXACTA del lite: valida la firma de Chatwoot (sha256 de `${timestamp}.` + body
+  // crudo con $env.CHATWOOT_WEBHOOK_SECRET). Deja pasar todo con `_hmac.ok`; el corte lo
+  // hace el Filtro Ingreso.
+  parameters: {
+    jsCode:
+      "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n",
+  },
+  id: "cw-verificar-hmac",
+  name: "Verificar HMAC",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [-2000, 0],
+};
+
+const filtroIngreso = {
+  // Solo mensajes ENTRANTES de WhatsApp, con firma válida y SIN agente humano asignado.
+  // Item que no matchea → no pasa → el flujo corta sin responder.
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 3 },
+      conditions: [
+        { id: "cond-hmac", leftValue: "={{ $json._hmac.ok }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } },
+        { id: "cond-event", leftValue: "={{ $json.body.event }}", rightValue: "message_created", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-incoming", leftValue: "={{ $json.body.message_type }}", rightValue: "incoming", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-channel", leftValue: "={{ $json.body.conversation.channel }}", rightValue: "Channel::Whatsapp", operator: { type: "string", operation: "equals", name: "filter.operator.equals" } },
+        { id: "cond-assignee", leftValue: "={{ !$json.body.conversation.meta?.assignee }}", rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } },
+      ],
+      combinator: "and",
+    },
+    looseTypeValidation: true,
+    options: {},
+  },
+  id: "cw-filtro-ingreso",
+  name: "Filtro Ingreso",
+  type: "n8n-nodes-base.filter",
+  typeVersion: 2.3,
+  position: [-1800, 0],
+};
+
+const firewallTier1 = {
+  // La lógica (regex injection + rate-limit por sender + strikes) vive en la función SQL
+  // bot.firewall_check → devuelve `action` ∈ pass/refusal/silence/drop.
+  parameters: {
+    operation: "executeQuery",
+    query: "select * from bot.firewall_check($1, $2, $3)",
+    options: {
+      queryReplacement:
+        "={{ (() => { const b = $('Chatwoot Webhook').first().json.body; const sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? ''; return [ String(sid), b.content || '', b.conversation.id ]; })() }}",
+    },
+  },
+  id: "cw-firewall-tier1",
+  name: "Firewall Tier-1",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [-1600, 0],
+  credentials: { postgres: BOT_DB },
+  // Si la función SQL falla, el error va por main[1] → Fallback Firewall: PRESERVA el
+  // fail-open (action='pass') pero deja el fallo asentado en bot.errors. Sin esto el
+  // firewall se caía MUDO: sin protección Y sin rastro.
+  onError: "continueErrorOutput",
+};
+
+const fallbackFirewall = {
+  parameters: {
+    jsCode: [
+      "const _e = $input.first() || {};",
+      "const _err = _e.error || (_e.json && _e.json.error) || null;",
+      "let _msg = _err ? (_err.message || _err.description || (_err.cause && (_err.cause.message || _err.cause)) || '') : '';",
+      "if (!_msg) { try { _msg = JSON.stringify({ error: _e.error, json: _e.json }); } catch (_x) { _msg = 'sin detalle'; } }",
+      "const _fallo = { message: String(_msg || 'sin detalle').slice(0, 2000), stack: String((_err && _err.stack) || '').slice(0, 4000) };",
+      "return [{ json: { action: 'pass', _fallo } }];",
+    ].join("\n"),
+  },
+  id: "cw-fallback-firewall",
+  name: "Fallback Firewall",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [-1600, 200],
+};
+
+const logFalloFirewall = {
+  // Asienta en bot.errors el fail-open del firewall (adaptado del patrón logFallo del lite).
+  parameters: {
+    operation: "executeQuery",
+    query:
+      "insert into bot.errors (workflow_name, failed_node, message, stack, execution_id, mode)\n" +
+      "values ($1, $2, $3, $4, $5, $6)",
+    options: {
+      queryReplacement:
+        "={{ (() => { const f = ($('Fallback Firewall').first().json._fallo) || {}; return [ String($workflow.name || ''), 'Firewall Tier-1 [fail-open manejado]', String(f.message || 'sin detalle'), String(f.stack || ''), String($execution.id || ''), String($execution.mode || '') ]; })() }}",
+    },
+  },
+  id: "cw-log-fallo-firewall",
+  name: "Log Fallo Firewall",
+  type: "n8n-nodes-base.postgres",
+  typeVersion: 2.6,
+  position: [-1400, 340],
+  credentials: { postgres: BOT_DB },
+  onError: "continueRegularOutput",
+  alwaysOutputData: true,
+};
+
+const mkRule = (id, val, key) => ({
+  conditions: {
+    options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 3 },
+    conditions: [{ id, leftValue: "={{ $json.action }}", rightValue: val, operator: { type: "string", operation: "equals" } }],
+    combinator: "and",
+  },
+  renameOutput: true,
+  outputKey: key,
+});
+
+const switchFirewall = {
+  // 4 salidas + fallback (extra) = pass (fail-open).
+  parameters: {
+    rules: { values: [mkRule("fw-pass", "pass", "pass"), mkRule("fw-refusal", "refusal", "refusal"), mkRule("fw-silence", "silence", "silence"), mkRule("fw-drop", "drop", "drop")] },
+    options: { fallbackOutput: "extra" },
+  },
+  id: "cw-switch-firewall",
+  name: "Switch Firewall",
+  type: "n8n-nodes-base.switch",
+  typeVersion: 3.4,
+  position: [-1400, 0],
+};
+
+const tieneTexto = {
+  // Audio/imagen/archivo → enlatado: el bot solo procesa texto.
+  parameters: {
+    conditions: {
+      options: { caseSensitive: false, leftValue: "", typeValidation: "loose", version: 1 },
+      conditions: [{ id: "cond-content", leftValue: "={{ $('Chatwoot Webhook').first().json.body.content }}", operator: { type: "string", operation: "notEmpty" } }],
+      combinator: "and",
+    },
+    options: {},
+  },
+  id: "cw-tiene-texto",
+  name: "¿Tiene Texto?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2,
+  position: [-1200, 0],
+};
+
+const respuestaNoTexto = cannedWebhook("cw-resp-no-texto", "Respuesta No-Texto", [-1200, 220], "No puedo procesar archivos ni mensajes de voz. Escribime tu consulta y te ayudo con gusto.");
+const mensajeFirewallRefusal = cannedWebhook("cw-fw-refusal", "Mensaje Firewall Refusal", [-1400, 220], "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?");
+const avisoRateFirewall = cannedWebhook("cw-fw-rate", "Aviso Rate Firewall", [-1400, 400], "Perdoná, nos están entrando muchos mensajes juntos y necesitamos un minuto para ordenarnos. Esperanos un momentito y seguimos por acá. Si es urgente, escribinos a terminalgrafica@gmail.com o pasá por el local.");
+const descartarFirewall = {
+  parameters: {},
+  id: "cw-descartar-firewall",
+  name: "Descartar Firewall (drop)",
+  type: "n8n-nodes-base.noOp",
+  typeVersion: 1,
+  position: [-1400, 560],
+};
+
+// ---------- F2: debounce / idempotencia / ráfaga / CAP + memoria del canal ----------
+const waitDebounce = {
+  // Espera 15s antes de leer el historial: deja que llegue la ráfaga entera del cliente.
+  parameters: { amount: 15 },
+  id: "cw-wait-debounce",
+  name: "Wait — Debounce",
+  type: "n8n-nodes-base.wait",
+  typeVersion: 1.1,
+  position: [-1000, 0],
+  webhookId: "wait-debounce-cotizador",
+};
+
+const getHistorial = {
+  // Lee TODA la conversación del canal (Chatwoot ES la memoria). retry x3.
+  parameters: {
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    options: {},
+  },
+  id: "cw-get-historial",
+  name: "Get Historial",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [-800, 0],
+  retryOnFail: true,
+  maxTries: 3,
+  waitBetweenTries: 3000,
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+};
+
+const decidir = {
+  // Copia EXACTA del cerebro del lite/v10: debounce ("soy el último"), idempotencia ("ya
+  // respondí"), ráfaga (NFC), injection barata, CAP 24h y `conversation` (últimos 6 turnos).
+  parameters: {
+    jsCode:
+      "// === DECIDIR — decide QUÉ hacer y arma la conversación ===\nconst webhookData = $('Chatwoot Webhook').first().json;\nconst body = webhookData.body;\nconst myMessageId = body.id;\nconst conversationId = body.conversation.id;\nconst accountId = body.account.id;\n\n// created_at robusto (unix int, string numérico o ISO) → siempre número\nconst num = (v) => {\n  if (v == null) return 0;\n  if (typeof v === 'number') return v;\n  const n = Number(v);\n  if (Number.isFinite(n)) return n;\n  const t = Date.parse(v);\n  return Number.isFinite(t) ? t : 0;\n};\nconst myCreatedAt = num(body.created_at);\n\nconst historialJson = $('Get Historial').first().json;\nconst rawPayload = historialJson.payload;\nconst allMessages = Array.isArray(rawPayload) ? rawPayload : (rawPayload && rawPayload.messages ? rawPayload.messages : []);\n\nconst isIn = (m) => m.message_type === 'incoming' || m.message_type === 0;\nconst isOut = (m) => (m.message_type === 'outgoing' || m.message_type === 1) && !m.private;\nconst hasContent = (m) => m.content && String(m.content).trim().length > 0;\n\nconst sorted = allMessages.slice().sort((a, b) => num(a.created_at) - num(b.created_at));\n\n// DEBOUNCE: el \"último\" es el último ENTRANTE CON TEXTO.\n// Una foto que llega después de la pregunta ya no gana el \"soy el último\".\nconst incoming = sorted.filter((m) => isIn(m) && hasContent(m));\nconst lastIncoming = incoming.length ? incoming[incoming.length - 1] : null;\nif (lastIncoming && myMessageId && lastIncoming.id !== myMessageId) {\n  return [{ json: { action: 'skip', reason: 'no-soy-el-ultimo', conversationId, accountId } }];\n}\n\n// IDEMPOTENCIA: ya hay respuesta posterior a mi mensaje → no repito\nconst repliedAfter = sorted.some((m) => isOut(m) && num(m.created_at) > myCreatedAt);\nif (repliedAfter) {\n  return [{ json: { action: 'skip', reason: 'ya-respondido', conversationId, accountId } }];\n}\n\n// Ráfaga del cliente = entrantes con texto desde la última salida\nlet lastOutIdx = -1;\nfor (let i = sorted.length - 1; i >= 0; i--) {\n  if (isOut(sorted[i])) { lastOutIdx = i; break; }\n}\nconst burst = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m)).map((m) => m.content);\n// NFC: un teclado iOS/macOS que emita acentos DESCOMPUESTOS hace fallar todo match con\n// acento, en silencio y solo para algunos clientes. El catálogo está en NFC; el mensaje no.\nconst mergedUser = burst.join('\\n').normalize('NFC');\n\nif (!mergedUser) {\n  return [{ json: { action: 'skip', reason: 'sin-texto-nuevo', conversationId, accountId } }];\n}\n\n// INJECTION: regex sobre el texto agregado (red barata; Tier-1 la duplica).\nconst INJECTION_PATTERNS = [\n  /ignor[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /olvid[aá].*\\b(instrucciones|reglas|rol)\\b/i,\n  /\\bnuevo rol\\b/i,\n  /ignore (previous|instructions|your)/i,\n  /system prompt/i,\n  /jailbreak/i,\n  /\\bDAN\\b/,\n  /pretend you are/i,\n  /do anything now/i,\n  /forget your instructions/i\n];\nif (INJECTION_PATTERNS.some((p) => p.test(mergedUser))) {\n  return [{ json: { action: 'injection', conversationId, accountId } }];\n}\n\n// CAP DE RESPUESTAS POR CONVERSACIÓN (ventana rodante 24h): tope duro para floods.\nconst CAP_RESPUESTAS = 25;\nconst nowMs = Date.now();\nconst botOut = sorted.filter((m) => isOut(m) && hasContent(m));\nconst botOut24 = botOut.filter((m) => nowMs - num(m.created_at) < 86400000);\nconst CAP_MARK = 'muchos mensajes en esta conversación';\nif (botOut24.length >= CAP_RESPUESTAS) {\n  const capYaAvisado = botOut24.some((m) => String(m.content).toLowerCase().includes(CAP_MARK));\n  if (capYaAvisado) {\n    return [{ json: { action: 'skip', reason: 'cap-ya-avisado', conversationId, accountId } }];\n  }\n  return [{ json: { action: 'cap', conversationId, accountId } }];\n}\n\n// REPLY CITADO (Chatwoot): si el cliente responde CITANDO un mensaje, WhatsApp solo manda\n// el texto de la respuesta. Se resuelve el citado por content_attributes contra el\n// historial y se antepone INLINE. Best-effort: si no viene, es no-op.\nconst burstMsgs = sorted.slice(lastOutIdx + 1).filter((m) => isIn(m) && hasContent(m));\nlet citado = null;\nfor (const bm of burstMsgs) {\n  const ca = bm.content_attributes || {};\n  const refId = ca.in_reply_to, refExt = ca.in_reply_to_external_id;\n  if (refId == null && refExt == null) continue;\n  const q = allMessages.find((x) => (refId != null && x.id === refId) || (refExt != null && (x.source_id === refExt || String(x.source_id) === String(refExt))));\n  if (q && hasContent(q)) { citado = { quien: isOut(q) ? 'tu mensaje' : 'un mensaje suyo', texto: String(q.content).trim() }; break; }\n}\nconst finalUser = citado ? '(Responde citando ' + citado.quien + ': \"' + citado.texto + '\")\\n' + mergedUser : mergedUser;\n\nconst conversation = [];\nconst history = sorted.slice(0, lastOutIdx + 1).slice(-6);\nfor (const m of history) {\n  if (isIn(m) && hasContent(m)) {\n    conversation.push({ role: 'user', content: m.content });\n  } else if (isOut(m) && hasContent(m)) {\n    conversation.push({ role: 'assistant', content: m.content });\n  }\n}\nconversation.push({ role: 'user', content: finalUser });\n\nreturn [{ json: { action: 'process', conversation, userMessage: finalUser, conversationId, accountId } }];\n",
+  },
+  id: "cw-decidir",
+  name: "Decidir",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [-600, 0],
+};
+
+const switchRuteo = {
+  parameters: {
+    rules: {
+      values: [
+        mkRule("rt-skip", "skip", "skip"),
+        mkRule("rt-injection", "injection", "injection"),
+        mkRule("rt-process", "process", "process"),
+        mkRule("rt-cap", "cap", "cap"),
+      ],
+    },
+    options: {},
+  },
+  id: "cw-switch-ruteo",
+  name: "Switch Ruteo",
+  type: "n8n-nodes-base.switch",
+  typeVersion: 3.4,
+  position: [-400, 0],
+};
+
+const descartarDebounce = {
+  parameters: {},
+  id: "cw-descartar-debounce",
+  name: "Descartar (debounce/dup)",
+  type: "n8n-nodes-base.noOp",
+  typeVersion: 1,
+  position: [-200, -160],
+};
+const mensajeAntiInjection = cannedDecidir("cw-anti-injection", "Mensaje Anti-Injection", [-200, 160], "Solo puedo ayudarte con consultas sobre Terminal Gráfica. ¿En qué te puedo orientar?");
+// OJO: el enlatado del lite decía "Rodríguez Peña 3865" y bot.business_info dice "Dorrego
+// 3365" — direcciones DISTINTAS, alguien tiene el dato viejo. Hasta que TG confirme, el
+// enlatado no afirma ninguna: "pasá por el local".
+const mensajeCapEmail = cannedDecidir("cw-cap-email", "Mensaje Cap Email", [-200, 320], "Uy, venimos con muchos mensajes en esta conversación y no quiero que se nos escape nada. Para seguir bien con tu consulta o pedido, escribinos por email a terminalgrafica@gmail.com con el detalle, o pasá por el local. ¡Gracias!");
+const labelCap = {
+  parameters: {
+    method: "POST",
+    url:
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/labels' }}",
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendBody: true,
+    specifyBody: "json",
+    jsonBody: "={{ ({ labels: ['revisar-volumen'] }) }}",
+    options: {},
+  },
+  id: "cw-label-cap",
+  name: "Label Cap",
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: [0, 320],
+  credentials: { httpHeaderAuth: CHATWOOT_CRED },
+  onError: "continueRegularOutput",
+};
+
+const adaptadorChatwoot = {
+  // CONSERVA el nombre del Chat Trigger para no tocar el medio: Armar Log y el Agente
+  // siguen leyendo $('Cuando llega un mensaje') sin enterarse del canal.
+  parameters: {
+    jsCode: [
+      "const d = $('Decidir').first().json;",
+      "const chatInput = String(d.userMessage || '').trim();",
+      "const conversationId = d.conversationId;",
+      "const accountId = d.accountId;",
+      "// d.conversation = [turnos previos..., {role:'user', content: mergedUser}] → el último es",
+      "// el mensaje nuevo (ya va como chatInput); los previos son el historial real del canal.",
+      "const conv = Array.isArray(d.conversation) ? d.conversation : [];",
+      "const previos = conv.slice(0, -1).filter((m) => m && m.content);",
+      "let historialTexto = '';",
+      "if (previos.length) {",
+      "  const lineas = previos.map((m) => (m.role === 'assistant' ? 'Vos' : 'Cliente') + ': ' + String(m.content));",
+      "  historialTexto = 'HISTORIAL DE ESTA CONVERSACIÓN (ya dicho, no lo repitas):\\n' + lineas.join('\\n') + '\\n\\n';",
+      "}",
+      "// _t0: arranque del procesamiento REAL (post-debounce), para medir latencia en el egreso.",
+      "return [{ json: { sessionId: String(conversationId), chatInput, _chatwoot: { accountId, conversationId }, historialTexto, _t0: Date.now() } }];",
+    ].join("\n"),
+  },
+  id: "cw-adaptador",
+  name: "Cuando llega un mensaje",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [0, 0],
+};
+
+const flowCw = JSON.parse(JSON.stringify(flow));
+flowCw.name = "cotizador-v1-chatwoot";
+// Fuera el Chat Trigger (lo reemplaza el adaptador, que hereda su nombre)…
+flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "cot-chat-trigger");
+// …y fuera la Simple Memory: la memoria ES el historial de Chatwoot (decisión de Martín).
+flowCw.nodes = flowCw.nodes.filter((n) => n.id !== "cot-memoria");
+delete flowCw.connections["Memoria"];
+// El Agente antepone el historial del canal a su input. `cotizaciones` sigue declarándose
+// sobre el MENSAJE NUEVO; el historial está rotulado para que no lo confunda con el pedido.
+{
+  const agenteCw = flowCw.nodes.find((n) => n.id === "cot-agente");
+  agenteCw.parameters.text = "={{ ($json.historialTexto || '') + 'MENSAJE NUEVO DEL CLIENTE:\\n' + $json.chatInput }}";
+}
+flowCw.nodes.unshift(
+  webhookChatwoot,
+  verificarHmac,
+  filtroIngreso,
+  firewallTier1,
+  fallbackFirewall,
+  logFalloFirewall,
+  switchFirewall,
+  tieneTexto,
+  respuestaNoTexto,
+  mensajeFirewallRefusal,
+  avisoRateFirewall,
+  descartarFirewall,
+  waitDebounce,
+  getHistorial,
+  decidir,
+  switchRuteo,
+  descartarDebounce,
+  mensajeAntiInjection,
+  mensajeCapEmail,
+  labelCap,
+  adaptadorChatwoot,
+);
+Object.assign(flowCw.connections, {
+  "Chatwoot Webhook": { main: [[{ node: "Verificar HMAC", type: "main", index: 0 }]] },
+  "Verificar HMAC": { main: [[{ node: "Filtro Ingreso", type: "main", index: 0 }]] },
+  "Filtro Ingreso": { main: [[{ node: "Firewall Tier-1", type: "main", index: 0 }]] },
+  "Firewall Tier-1": {
+    main: [
+      [{ node: "Switch Firewall", type: "main", index: 0 }], // main[0] OK
+      [{ node: "Fallback Firewall", type: "main", index: 0 }], // main[1] ERROR → fail-open + log
+    ],
+  },
+  "Fallback Firewall": {
+    main: [
+      [
+        { node: "Switch Firewall", type: "main", index: 0 },
+        { node: "Log Fallo Firewall", type: "main", index: 0 },
+      ],
+    ],
+  },
+  "Switch Firewall": {
+    main: [
+      [{ node: "¿Tiene Texto?", type: "main", index: 0 }], // 0 pass
+      [{ node: "Mensaje Firewall Refusal", type: "main", index: 0 }], // 1 refusal
+      [{ node: "Aviso Rate Firewall", type: "main", index: 0 }], // 2 silence
+      [{ node: "Descartar Firewall (drop)", type: "main", index: 0 }], // 3 drop
+      [{ node: "¿Tiene Texto?", type: "main", index: 0 }], // 4 fallback = pass (fail-open)
+    ],
+  },
+  "¿Tiene Texto?": {
+    main: [
+      [{ node: "Wait — Debounce", type: "main", index: 0 }], // 0 hay texto
+      [{ node: "Respuesta No-Texto", type: "main", index: 0 }], // 1 audio/archivo
+    ],
+  },
+  "Wait — Debounce": { main: [[{ node: "Get Historial", type: "main", index: 0 }]] },
+  "Get Historial": { main: [[{ node: "Decidir", type: "main", index: 0 }]] },
+  Decidir: { main: [[{ node: "Switch Ruteo", type: "main", index: 0 }]] },
+  "Switch Ruteo": {
+    main: [
+      [{ node: "Descartar (debounce/dup)", type: "main", index: 0 }], // 0 skip
+      [{ node: "Mensaje Anti-Injection", type: "main", index: 0 }], // 1 injection
+      [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 2 process → el medio
+      [{ node: "Mensaje Cap Email", type: "main", index: 0 }], // 3 cap
+    ],
+  },
+  "Mensaje Cap Email": { main: [[{ node: "Label Cap", type: "main", index: 0 }]] },
+});
+// La conexión "Cuando llega un mensaje" → Agente SOBREVIVE de la copia: el adaptador
+// hereda el nombre del Chat Trigger a propósito.
+{
+  const notaCw = flowCw.nodes.find((n) => n.id === "cot-nota");
+  if (notaCw) {
+    notaCw.parameters.content +=
+      "\n\n**VARIANTE CHATWOOT (parte 5 — NO ACTIVAR todavía).** Ingreso F1+F2 del lite: " +
+      "Webhook (path `chatwoot`, compartido con el bot lite: UN solo flow activo por vez) → " +
+      "HMAC ($env.CHATWOOT_WEBHOOK_SECRET) → Filtro (WhatsApp entrante, sin humano) → " +
+      "Firewall Tier-1 (bot.firewall_check, fail-open con log a bot.errors) → ¿Tiene Texto? → " +
+      "Wait 15s → Get Historial → Decidir (debounce/idempotencia/ráfaga NFC/CAP) → adaptador. " +
+      "SIN Simple Memory: la memoria es el historial del canal (historialTexto → input del " +
+      "Agente). Falta el EGRESO (parte 6): la respuesta del LLM aún no vuelve a Chatwoot. " +
+      "Credenciales: 'Chatwoot API Token' (HTTP Header) + BOT DB + Gemini.";
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════════════
 // Main
@@ -1524,6 +1980,31 @@ console.log("✓ el auditor reproduce el Excel entero.");
     for (const [campo] of INFO_CABLEADO) console.error(`  - ${campo}`);
     process.exit(1);
   }
+
+  // La variante Chatwoot (parte 5). Lo que se rompe acá se rompe EN SILENCIO en producción:
+  // una Memoria que quedó viva pisa el historial del canal, un adaptador que no emite
+  // chatInput deja al Agente sin input, y un Filtro sin la condición del HMAC deja el
+  // webhook abierto a cualquiera que conozca la URL.
+  const cwNodo = (name) => flowCw.nodes.find((n) => n.name === name);
+  const cwAgente = cwNodo("Agente");
+  const cwAdaptador = cwNodo("Cuando llega un mensaje");
+  const CW_CABLEADO = [
+    ["la Simple Memory se fue de la variante", !cwNodo("Memoria") && !flowCw.connections["Memoria"]],
+    ["el adaptador hereda el nombre del Chat Trigger", cwAdaptador?.type === "n8n-nodes-base.code"],
+    ["el adaptador emite sessionId/chatInput/_chatwoot/historialTexto", ["sessionId:", "chatInput", "_chatwoot:", "historialTexto"].every((f) => (cwAdaptador?.parameters?.jsCode || "").includes(f))],
+    ["el Agente antepone el historial del canal", String(cwAgente?.parameters?.text || "").includes("historialTexto")],
+    ["process del Switch Ruteo entra al medio", flowCw.connections["Switch Ruteo"]?.main?.[2]?.[0]?.node === "Cuando llega un mensaje"],
+    ["el HMAC usa el secret de entorno", (cwNodo("Verificar HMAC")?.parameters?.jsCode || "").includes("$env.CHATWOOT_WEBHOOK_SECRET")],
+    ["el Filtro corta por firma válida", JSON.stringify(cwNodo("Filtro Ingreso")?.parameters || {}).includes("_hmac.ok")],
+    ["el firewall llama a bot.firewall_check", (cwNodo("Firewall Tier-1")?.parameters?.query || "").includes("bot.firewall_check")],
+    ["Decidir normaliza NFC", (cwNodo("Decidir")?.parameters?.jsCode || "").includes("normalize('NFC')")],
+    ["la cadena del log sobrevive en la variante", flowCw.connections["Responder"]?.main?.[0]?.[0]?.node === "Armar Log"],
+  ].filter(([, ok]) => !ok);
+  if (CW_CABLEADO.length) {
+    console.error("\n✗ ABORTADO: el cableado de la variante Chatwoot está incompleto:");
+    for (const [campo] of CW_CABLEADO) console.error(`  - ${campo}`);
+    process.exit(1);
+  }
 }
 
 if (SOLO_TEST) process.exit(0);
@@ -1533,3 +2014,5 @@ console.log(`system prompt: ~${TOKENS_PROMPT} tokens`);
 mkdirSync(path.dirname(SALIDA), { recursive: true });
 writeFileSync(SALIDA, JSON.stringify(flow, null, 2) + "\n");
 console.log(`\n✓ ${flow.nodes.length} nodos → ${path.relative(process.cwd(), SALIDA)}`);
+writeFileSync(OUT_CW, JSON.stringify(flowCw, null, 2) + "\n");
+console.log(`✓ ${flowCw.nodes.length} nodos → ${path.relative(process.cwd(), OUT_CW)} (variante Chatwoot, NO activar sin el egreso)`);
