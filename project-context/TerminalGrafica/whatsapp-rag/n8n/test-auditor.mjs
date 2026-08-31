@@ -369,6 +369,102 @@ const casos = [
     esperaOk: true,
     esperaEnMensaje: ["terminalgrafica@gmail.com"],
   },
+
+  // ── El Agente falla sin salida estructurada ───────────────────────────────────────
+  // Medido en vivo: 2 de 5 turnos de repregunta murieron con "Invalid JSON in model
+  // output" y el cliente no recibió NADA. El nodo va con onError:continueRegularOutput y
+  // el turno llega hasta acá con `.error` y el texto crudo en `.text`.
+  {
+    nombre: "PARSER FALLÓ, texto sin precios → sale el texto del modelo (es una repregunta)",
+    agente: {
+      error: { message: "Model output doesn't fit required format" },
+      text: "Para poder cotizarte los stickers, ¿qué medida y qué cantidad necesitás?",
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    // El fallo SIEMPRE es hallazgo: si no, el fallback lo resuelve en silencio y la
+    // ejecución sale verde sin que nadie sepa cuántas veces pasa.
+    esperaOk: false,
+    esperaEnMensaje: ["¿qué medida y qué cantidad necesitás?"],
+    // Nunca la falla técnica: el texto era perfectamente usable.
+    noEsperaEnMensaje: ["Estamos experimentando problemas"],
+  },
+  {
+    nombre: "PARSER FALLÓ, el texto trae un PRECIO → no sale (no pasó por el cotizador)",
+    agente: {
+      error: { message: "Model output doesn't fit required format" },
+      text: "Los 250 stickers de 3x3 te salen $6.600.",
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: false,
+    esperaEnMensaje: ["Estamos experimentando problemas"],
+    // Este es el punto del caso: ese número no lo calculó nadie. Dejarlo salir abriría
+    // por la puerta de atrás el agujero que el contrato {P1} viene a cerrar.
+    noEsperaEnMensaje: ["$6.600"],
+  },
+  {
+    nombre: "PARSER FALLÓ, el texto trae un MARCADOR crudo → no sale",
+    agente: {
+      error: { message: "Model output doesn't fit required format" },
+      text: "Te sale {P1} por las 250 unidades.",
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: false,
+    esperaEnMensaje: ["Estamos experimentando problemas"],
+    noEsperaEnMensaje: ["{P1}"],
+  },
+  {
+    nombre: "PARSER FALLÓ sin texto → falla técnica, nunca silencio",
+    agente: { error: { message: "Model output doesn't fit required format" } },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: false,
+    esperaEnMensaje: ["Estamos experimentando problemas"],
+  },
+  {
+    // La forma REAL del item, leída de la ejecución 359: el Agente que falla emite solo
+    // `{ error: "<mensaje>" }` — un string, no un objeto, y SIN el texto que el modelo
+    // escribió (queda en el sub-run del output parser y no viaja). Este caso existe para
+    // que el fallback no se rompa con la forma que de verdad llega en producción.
+    nombre: "PARSER FALLÓ con la forma REAL de n8n (error string, sin texto)",
+    agente: { error: "Model output doesn't fit required format" },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: false,
+    esperaEnMensaje: ["Estamos experimentando problemas"],
+  },
+
+  // ── Aviso de precio provisorio (pedido de TG) ─────────────────────────────────────
+  {
+    nombre: "DERIVA a mail para avanzar → suma el aviso de precio provisorio",
+    agente: {
+      output: {
+        respuesta: "Para avanzar con el pedido escribinos a terminalgrafica@gmail.com y te lo coordinamos.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: true,
+    esperaEnMensaje: ["precio final lo confirmamos cuando recibimos el archivo"],
+  },
+  {
+    nombre: "CONSULTA por no cotizable → NO suma el aviso (no se dio ningún precio)",
+    agente: {
+      output: { respuesta: "Te sale {P1}.", cotizaciones: [cot(MD_PAPEL.material, 30, 45, 20)] },
+    },
+    filas: [{ metadata: MD_PAPEL }],
+    esperaOk: false,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    // Avisar que "el precio no es final" cuando no se dio ninguno confunde en vez de cubrir.
+    noEsperaEnMensaje: ["precio final lo confirmamos"],
+  },
+  {
+    nombre: "cotización normal SIN mail → no aparece el aviso",
+    agente: {
+      output: { respuesta: "250 stickers de 3x3 te salen {P1}.", cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)] },
+    },
+    filas: [{ metadata: MD_PAPEL }],
+    esperaOk: true,
+    esperaEnMensaje: ["$6.600"],
+    noEsperaEnMensaje: ["precio final lo confirmamos"],
+  },
 ];
 
 let fallos = 0;
@@ -388,7 +484,10 @@ for (const c of casos) {
   // El nodo Responder, con la salida real del auditor. ESTO es lo que ve el cliente.
   let out;
   try {
-    out = correrCode(codigoResp, { items: r })[0].json.output;
+    // El Responder también mira el nodo Agente directo (lee el fallo del parser por su
+    // cuenta, sin depender de que el auditor esté sincronizado), así que necesita el mismo
+    // contexto de nodos que el auditor.
+    out = correrCode(codigoResp, { items: r, nodos: { Agente: [{ json: c.agente }] } })[0].json.output;
   } catch (e) {
     console.log(`✗ ${c.nombre}\n    Responder EXPLOTÓ: ${e.message}`);
     fallos++;
