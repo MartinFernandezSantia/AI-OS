@@ -11,8 +11,10 @@ import path from "node:path";
 import { abrir, cadenasDe, dec } from "../visor/scripts/lib-xlsx.mjs";
 
 const AQUI = import.meta.dirname;
-/** Techo duro: más que esto y el prompt vuelve a pesar más que los datos. */
-const TOPE_TOKENS = 3000;
+/** Techo duro: más que esto y el prompt vuelve a pesar más que los datos.
+ * 3000→3050 el 2026-08-31 al sumar la regla anti pregunta+cotización (ejecución 732):
+ * el prompt quedó en ~3010. Si vuelve a chocar, toca RECORTAR, no subir de nuevo. */
+const TOPE_TOKENS = 3050;
 const OBJETIVO_TOKENS = 2000;
 /** Castellano ≈ 3,3 chars por token. Estimación, igual que visor/lib/tokens.ts. */
 const CHARS_POR_TOKEN = 3.3;

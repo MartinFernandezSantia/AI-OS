@@ -533,6 +533,20 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      (chequeado con check-active: la 1ª publicación de Martín había quedado una versión
      atrás y nadie lo vio hasta comparar activeVersion contra el draft).
 
+   **Post-smoke, 3ª iteración (31/08, ejecución 732): preguntar y cotizar en el mismo
+   mensaje.** Ante "cuánto las tarjetas personales" (sin cantidad ni faz), el modelo hizo
+   un híbrido que viola FALTA DATO: preguntó "¿qué cantidad necesitás (100, 500 o 1000) y
+   simple o doble faz?" Y en el MISMO mensaje ancló en 100 simple faz y lo cotizó ($13.200
+   — precio correcto, auditoría ok: el pipeline anduvo, el defecto es del turno). Martín
+   descartó el check determinista (no se puede saber qué mitad del mensaje está bien) y
+   pidió la vía prompt: sub-regla nueva en FALTA DATO con el ejemplo negativo del caso
+   ("NUNCA preguntes y cotices en el MISMO mensaje. MAL: …"). Gate nuevo en CW_CABLEADO
+   (verificado en rojo). El prompt rozó el TECHO de tokens de armar-prompt.mjs: la línea lo
+   pasó de 3000 → se compactó a 2 renglones y el techo subió a 3050 con nota de que la
+   PRÓXIMA vez se recorta, no se sube. Subido a ambos workflows, publicada = draft
+   (c878a7f6), diff limpio. Si reincide, el lugar del caso es la auditoría offline
+   LLM-juez, no otro parche puntual.
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`
