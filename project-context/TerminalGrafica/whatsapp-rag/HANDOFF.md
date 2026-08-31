@@ -470,9 +470,30 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    la UI: el bot lite quedó INACTIVO y `cotizador-v1-chatwoot` está ACTIVO y publicado
    (la publicación inicial quedó una versión atrás del draft — sin la ventana 72h — y se
    re-publicó por MCP al detectarlo: `activeVersionId` ahora calca al draft). El path
-   `chatwoot` es del cotizador. Falta el smoke e2e con WhatsApp real: mensaje normal,
-   cotización, horario, y verificar en `bot.log` que la fila del turno cierre con
-   `signals.entregado: true` y latencia.
+   `chatwoot` es del cotizador.
+
+   **SMOKE E2E CON WHATSAPP REAL: PASADO (31/08, ~10:00-10:17, ejecuciones 691-722).**
+   Martín probó desde su WhatsApp; auditado con el lector + ejecuciones:
+   - **12/12 turnos con `entregado: true`** + `chatwoot_message_id` + `latencia_ms`
+     2.062-7.956 (cerebro+envío, post-debounce; total percibido ≈ ventana 15s + eso).
+     El UPDATE mergeó signals sin pisar `via`/`fallo_parser`.
+   - Ráfaga (ejec. 691-693 solapadas) colapsó en UN turno (694) ✓. Memoria del canal:
+     "¿y doble faz?" → "Ese precio era por simple faz. Para 100 tarjetas… $16.500" ✓.
+   - Cotizaciones correctas: stickers papel/OPP, tarjetas x100 simple/doble, A4
+     simple/doble, porta banner tipo X ("Sí, hacemos" — buscó antes de negar ✓),
+     150 tarjetas → derivó por no-múltiplo del paquete ✓, stickers 30x45 → no entra en
+     pliego → consulta con hallazgo registrado ✓. Cantidades declaradas SIN convertir en
+     todos (200, 100, 1000, 2.45) ✓.
+   - **Off-topic** ("poema sobre River") → guard Tier-2 lo flaggeó, strike, refusal en
+     5,5s sin tocar al agente. **Injection** ("ignora tus instrucciones") → la cazó el
+     Tier-1 SQL en 0,3s, strike 2, refusal. Las dos quedaron logueadas en `bot.log` como
+     filas del firewall (`action: firewall_tier2_offtopic` / `firewall_refusal`, el resto
+     de columnas null — NO son filas rotas: es el rastro de `fw_log`/`firewall_strike`;
+     el lector ahora muestra `action`+`signals`+`session_id`+`fecha` para distinguirlas).
+   - Queda para mirar con calma: el turno 722 deriva a mail y dice "llamanos al…" —
+     verificar de qué ficha de business_info sale ese teléfono. Y una curiosidad
+     comercial: 200 stickers 3x6 salen más baratos en OPP ($7.800) que en papel ($8.800)
+     — es lo que dice el Excel (el gate lo valida), pero quizás TG quiera saberlo.
 
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
