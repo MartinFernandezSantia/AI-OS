@@ -673,7 +673,14 @@ const ESQUEMA_SALIDA = {
           // tarjetas" es 1000, no 1. La conversión a unidades de cobro la hace el auditor
           // con `paquete` del catálogo. Cambiar esto a paquetes le devuelve al modelo una
           // cuenta que ya no tiene que hacer, y las dos lecturas dejan de distinguirse.
-          cantidad: { type: "number", description: "Piezas que pidió el cliente (1000 tarjetas = 1000, aunque se vendan por paquete)." },
+          cantidad: {
+            type: "number",
+            description:
+              "Cuánto pidió el cliente, EN LA UNIDAD DE COBRO que declara el catálogo. " +
+              "Casi siempre son piezas (1000 tarjetas = 1000, aunque se vendan por paquete). " +
+              "Pero si el chunk dice que se cobra por metro lineal, van los METROS y admite " +
+              "decimales (2,45 metros de planos = 2.45, NO 1).",
+          },
         },
       },
     },

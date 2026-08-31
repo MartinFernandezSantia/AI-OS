@@ -1036,5 +1036,17 @@
     "Ancho (cm)": "29.7",
     "Alto (cm)": "42",
     "Precio correcto": "4800"
+  },
+  {
+    "Pedido": "escaneo de 2,45 metros de planos (medida con decimales)",
+    "Cantidad": "2.45",
+    "Material": "Escaneo de planos",
+    "Precio correcto": "19600"
+  },
+  {
+    "Pedido": "escaneo de 0,5 metros de planos (activa el mínimo por trabajo)",
+    "Cantidad": "0.5",
+    "Material": "Escaneo de planos",
+    "Precio correcto": "4000"
   }
 ]

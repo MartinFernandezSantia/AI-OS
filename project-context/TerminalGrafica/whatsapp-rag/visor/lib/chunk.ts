@@ -12,6 +12,7 @@
 import { rinde, type Geometria } from "./geometria";
 import {
   escalaDe,
+  esMedidaContinua,
   geometriaDe,
   modoDe,
   num,
@@ -162,8 +163,23 @@ const PLURALES: Record<string, string> = {
   bobina: "bobinas",
 };
 
+/** Adjetivos que acompañan a un sustantivo de unidad y tienen que concordar con su plural.
+ *  Sin esto "metro lineal" salía "metros lineal" en cada tramo de la escala. Lista CERRADA
+ *  por el mismo motivo que PLURALES: una palabra que no esté acá se lee raro, pero no se
+ *  inventa una regla que pluralice mal un caso que nadie previó. */
+const ADJETIVOS: Record<string, string> = {
+  lineal: "lineales",
+  cuadrado: "cuadrados",
+  corrido: "corridos",
+};
+
 const pluralUnidad = (unidad: string): string =>
-  unidad.replace(/^(\p{L}+)/u, (w) => PLURALES[w.toLowerCase()] ?? w);
+  unidad
+    .replace(/^(\p{L}+)/u, (w) => PLURALES[w.toLowerCase()] ?? w)
+    .replace(/\s(\p{L}+)/u, (todo, w) => {
+      const p = ADJETIVOS[String(w).toLowerCase()];
+      return p ? " " + p : todo;
+    });
 
 /**
  * La escala como texto legible.
@@ -324,6 +340,20 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
     ];
   }
   if (modo === "m2") return ["Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000)."];
+  // Unidad de cobro que es una MEDIDA, no una cosa contable. Sin esta línea el modelo lee
+  // "Precio por metro lineal" como cuánto sale un metro —cierto— y declara `cantidad: 1`
+  // porque para él 2,45 metros de planos es UN trabajo. El bot cobró $8.000 en vez de
+  // $19.600 y el auditor no pudo verlo: 1 × $8.000 cierra solo.
+  if (modo === "item" && esMedidaContinua(unidad)) {
+    // La frase NO usa pluralUnidad: solo pluraliza la primera palabra y "metro lineal"
+    // salía como "metros lineal". Es el mismo bug que las "2 a 100 unidads" — texto roto
+    // que pasa los tests en verde y solo se ve leyendo el chunk.
+    const u = unidad.trim();
+    return [
+      `Se cobra por ${u.toUpperCase()}: la cantidad se declara en ${u} (no en piezas), ` +
+        `y admite decimales — 2,45 ${u} se declara como 2,45.`,
+    ];
+  }
   return [];
 }
 

@@ -131,6 +131,27 @@ export function modoDe(unidad: string): "pliego" | "m2" | "item" | "otro" {
   return "otro";
 }
 
+/**
+ * ¿La unidad de cobro es una MEDIDA CONTINUA (metro lineal) y no una cosa contable?
+ *
+ * Las dos son modo `item` —se cobra cantidad × precio— pero el cliente las pide distinto, y
+ * ahí está la trampa: "2,45 metros de planos" es UNA pieza con una medida, no 2,45 piezas.
+ * El modelo, que declara `cantidad` en piezas, mandó `cantidad: 1` y el bot cobró $8.000 en
+ * vez de $19.600 — sin hallazgo del auditor, porque 1 × $8.000 es internamente coherente.
+ * Cobrar de menos en silencio es peor que derivar: nadie se entera.
+ *
+ * Por eso el chunk de estos materiales tiene que decir EN QUÉ UNIDAD declarar la cantidad
+ * (ver `lineasMotor` en chunk.ts). Es la misma lección que el proyecto ya aprendió dos veces:
+ * la relación entre lo que pide el cliente y la unidad de cobro es un DATO del catálogo, no
+ * algo que el prompt deba despejar turno a turno.
+ *
+ * Hoy matchea un solo material (Escaneo de planos). La función existe para que el próximo
+ * —"impresión por metro lineal", "corte por metro"— entre solo, sin que nadie se acuerde.
+ */
+export function esMedidaContinua(unidad: string): boolean {
+  return /^metro lineal\b/.test(unidad.trim().toLowerCase());
+}
+
 /** Arma los Datos desde las hojas crudas. Hojas ausentes quedan como lista vacía. */
 export function datosDeHojas(hojas: Record<string, string[][]>): Datos {
   const de = (nombre: string) => (hojas[nombre] ? objetos(hojas[nombre]) : []);

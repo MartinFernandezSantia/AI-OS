@@ -4,8 +4,8 @@
 // Hace dos cosas:
 //   1. CORRIGE las 7 filas de materiales por paquete que estaban cargadas en unidades
 //      (Cantidad 1 = "un paquete de 100"). Los precios esperados NO cambian.
-//   2. AGREGA los 37 casos de datos-casos-cobertura.mjs, uno por cada material que no
-//      tenía ninguno. Con ellos los 73 materiales del catálogo quedan cubiertos.
+//   2. AGREGA los casos de los módulos `datos-casos-*.mjs`: la cobertura por material (uno
+//      por cada uno que no tenía ninguno → los 73 cubiertos) y los de medida continua.
 //
 // Por qué importa la convención: mientras la hoja cargó la cantidad ya dividida, el gate
 // del build NUNCA ejerció la conversión piezas→paquetes — el bug del $54.000.000 que sí
@@ -16,6 +16,11 @@
 //   CATALOGO=Catalogo-TG-v3.xlsx node …                    → sobre otra copia
 import { XLSX, chequearLock, abrir, cadenasDe, dec, indiceCadenas, guardar } from "./lib-xlsx.mjs";
 import { CASOS_COBERTURA } from "./datos-casos-cobertura.mjs";
+import { CASOS_MEDIDA_CONTINUA } from "./datos-casos-medida-continua.mjs";
+
+// Todo lo que va a la hoja. Idempotente por el texto del Pedido: correrlo de nuevo agrega
+// solo lo que falta, así que sumar un módulo de datos nuevo no duplica lo ya cargado.
+const A_CARGAR = [...CASOS_COBERTURA, ...CASOS_MEDIDA_CONTINUA];
 
 const APLICAR = process.argv.includes("--apply");
 
@@ -140,8 +145,8 @@ function celda(letra, fila, valor) {
   return `<c r="${letra}${fila}"${s} t="s"><v>${SS.idDe(String(valor))}</v></c>`;
 }
 
-const nuevos = CASOS_COBERTURA.filter((c) => !pedidosExistentes.has(String(c["Pedido"]).trim()));
-const saltados = CASOS_COBERTURA.length - nuevos.length;
+const nuevos = A_CARGAR.filter((c) => !pedidosExistentes.has(String(c["Pedido"]).trim()));
+const saltados = A_CARGAR.length - nuevos.length;
 
 let filasXml = "";
 nuevos.forEach((c, i) => {

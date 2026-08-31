@@ -320,6 +320,44 @@ describe("chunks — coleccion-material", () => {
     expect(cs.at(-1)!.texto).toContain("Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).");
   });
 
+  describe("unidad de cobro que es una MEDIDA, no una cosa contable", () => {
+    // El bot cobró $8.000 por 2,45 metros de planos en vez de $19.600: el modelo declaró
+    // `cantidad: 1` porque para él 2,45 metros es UN trabajo, y el auditor no pudo verlo
+    // (1 × $8.000 cierra solo). El chunk tiene que decir en qué unidad va la cantidad.
+    const porMetro: Datos = {
+      ...datos,
+      materiales: datos.materiales.map((m) => ({ ...m, Unidad: "metro lineal" })),
+    };
+    const texto = chunks(porMetro, "coleccion-material")[0].texto;
+
+    it("dice que la cantidad se declara en la unidad de cobro, no en piezas", () => {
+      expect(texto).toContain("Se cobra por METRO LINEAL");
+      expect(texto).toContain("(no en piezas)");
+    });
+
+    it("avisa que admite decimales, con el ejemplo que falló en vivo", () => {
+      expect(texto).toContain("2,45 metro lineal se declara como 2,45");
+    });
+
+    it("el plural concuerda en el adjetivo: 'metros lineales', nunca 'metros lineal'", () => {
+      // pluralUnidad pluralizaba solo la PRIMERA palabra y la escala decía "2 a 10 metros
+      // lineal". Mismo bug que "2 a 100 unidads": texto roto que pasa los tests en verde y
+      // solo se ve leyendo el chunk.
+      // Ojo con la aserción: "metros lineal" es substring de "metros lineales", así que un
+      // `not.toContain` a secas falla siempre. Hay que anclar el final de la palabra.
+      expect(texto).not.toMatch(/metros lineal(?!es)/);
+      expect(texto).toContain("metros lineales");
+    });
+
+    it("una unidad contable NO lleva esa línea", () => {
+      const porUnidad: Datos = {
+        ...datos,
+        materiales: datos.materiales.map((m) => ({ ...m, Unidad: "unidad" })),
+      };
+      expect(chunks(porUnidad, "coleccion-material")[0].texto).not.toContain("Se cobra por");
+    });
+  });
+
   it("con separación 0, la línea dice 'sin separación entre piezas'", () => {
     const sinSep: Datos = {
       ...datos,
