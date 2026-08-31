@@ -27,6 +27,11 @@ const GEMINI_MODEL = "models/gemini-3.1-flash-lite";
 const EMBEDDING_MODEL = "models/gemini-embedding-001"; // el MISMO que la ingesta del visor
 const TABLA_RAG = "bot.rag_catalog"; // schema-cualificada: sin schema consulta public y devuelve [] EN VERDE
 const TOP_K = 5; // de 7 chunks en total; subido a mano en n8n antes del humo. Revisar en Fase 4.
+// La 2ª tool (Fase 5 · parte 3): la info operativa del negocio, heredada del bot lite.
+// La tabla ya está poblada y curada (9 fichas: horario, dirección, pagos/seña, envíos,
+// urgentes, plazos, redes, canal informativo) — verificado en vivo el 31/08.
+const TABLA_INFO = "bot.rag_business_info";
+const TOP_K_INFO = 3;
 /** Credencial Postgres. Se re-cablea en la UI al importar; el id acá es el del n8n de dev. */
 // El id es el de la credencial VIVA en n8n.terminalgrafica.cloud (verificado por MCP el
 // 31/08: el viejo "Bot Readonly DB"/vxRQvyIwYEqGpJqc ya no existe y el update lo rechaza).
@@ -1093,6 +1098,13 @@ const DESC_TOOL = [
   "cliente en sus palabras (ej.: 'stickers redondos para autos', 'cartel para vidriera').",
 ].join(" ");
 
+const DESC_TOOL_INFO = [
+  "La información operativa OFICIAL de Terminal Gráfica: horario de atención, dirección,",
+  "formas de pago y seña, envíos, pedidos urgentes, plazos de entrega y redes sociales.",
+  "Usala cuando el cliente pregunta algo del NEGOCIO (no de un producto). Lo que devuelve",
+  "es autoritativo: se afirma tal cual.",
+].join(" ");
+
 const flow = {
   name: "cotizador-v1",
   nodes: [
@@ -1289,6 +1301,42 @@ const flow = {
       position: [460, 440],
     },
     {
+      // 2ª tool RAG: la info del negocio (heredada del bot lite, misma tabla ya poblada).
+      parameters: {
+        mode: "retrieve-as-tool",
+        toolName: "consultar_info_negocio",
+        toolDescription: DESC_TOOL_INFO,
+        // Schema-cualificada, mismo gotcha que bot.rag_catalog.
+        tableName: TABLA_INFO,
+        topK: TOP_K_INFO,
+        options: {
+          columnNames: {
+            values: {
+              idColumnName: "id",
+              vectorColumnName: "embedding",
+              contentColumnName: "text",
+              metadataColumnName: "metadata",
+            },
+          },
+        },
+      },
+      id: "cot-pgvector-info",
+      name: "consultar_info_negocio",
+      type: "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      typeVersion: 1.3,
+      position: [820, 240],
+      credentials: { postgres: BOT_DB },
+    },
+    {
+      // Cada nodo PGVector necesita SU sub-nodo de embeddings; mismo modelo y credencial.
+      parameters: { modelName: EMBEDDING_MODEL },
+      id: "cot-embeddings-info",
+      name: "Embeddings Info (Google Gemini)",
+      type: "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      typeVersion: 1,
+      position: [820, 440],
+    },
+    {
       parameters: {
         schemaType: "manual",
         inputSchema: JSON.stringify(ESQUEMA_SALIDA, null, 2),
@@ -1375,7 +1423,11 @@ const flow = {
     Modelo: { ai_languageModel: [[{ node: "Agente", type: "ai_languageModel", index: 0 }]] },
     Memoria: { ai_memory: [[{ node: "Agente", type: "ai_memory", index: 0 }]] },
     buscar_catalogo: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
+    consultar_info_negocio: { ai_tool: [[{ node: "Agente", type: "ai_tool", index: 0 }]] },
     "Embeddings (Google Gemini)": { ai_embedding: [[{ node: "buscar_catalogo", type: "ai_embedding", index: 0 }]] },
+    "Embeddings Info (Google Gemini)": {
+      ai_embedding: [[{ node: "consultar_info_negocio", type: "ai_embedding", index: 0 }]],
+    },
     "Salida · Agente": { ai_outputParser: [[{ node: "Agente", type: "ai_outputParser", index: 0 }]] },
     // El corrector cuelga del PARSER, no del Agente: es el que reintenta cuando la salida
     // no valida. Sin esta conexión, `autoFix: true` no tiene con qué corregir.
@@ -1453,6 +1505,25 @@ console.log("✓ el auditor reproduce el Excel entero.");
   if (LOG_CABLEADO.length) {
     console.error("\n✗ ABORTADO: el cableado del log (bot.log) está incompleto:");
     for (const [campo, , frag] of LOG_CABLEADO) console.error(`  - ${campo} (falta "${frag}")`);
+    process.exit(1);
+  }
+
+  // La tool de info del negocio (Fase 5 · parte 3). El fallo típico acá es SILENCIOSO:
+  // una tabla sin schema consulta public y devuelve [] en verde, y un prompt que no nombra
+  // la tool deja al modelo sin saber que existe — en ambos casos el bot "anda" y contesta
+  // de memoria. Se verifica el trío: nodo con tabla cualificada, embeddings conectados,
+  // prompt que la nombra.
+  const nodoInfo = flow.nodes.find((n) => n.name === "consultar_info_negocio");
+  const conexInfo = flow.connections["Embeddings Info (Google Gemini)"];
+  const INFO_CABLEADO = [
+    ["nodo consultar_info_negocio con tabla schema-cualificada", nodoInfo?.parameters?.tableName === "bot.rag_business_info"],
+    ["embeddings de info conectados a la tool", conexInfo?.ai_embedding?.[0]?.[0]?.node === "consultar_info_negocio"],
+    ["la tool como ai_tool del Agente", flow.connections["consultar_info_negocio"]?.ai_tool?.[0]?.[0]?.node === "Agente"],
+    ["el prompt nombra consultar_info_negocio", SYSTEM_PROMPT.includes("consultar_info_negocio")],
+  ].filter(([, ok]) => !ok);
+  if (INFO_CABLEADO.length) {
+    console.error("\n✗ ABORTADO: el cableado de consultar_info_negocio está incompleto:");
+    for (const [campo] of INFO_CABLEADO) console.error(`  - ${campo}`);
     process.exit(1);
   }
 }
