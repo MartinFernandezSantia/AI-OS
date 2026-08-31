@@ -146,6 +146,65 @@ describe("lineaPrecio — la unidad se imprime tal cual viene del Excel", () => 
   it("material sin escala no genera línea", () => {
     expect(lineaPrecio("Cartón", [])).toBe("");
   });
+
+  describe("el plural de la unidad", () => {
+    const conTramos = (unidad: string) =>
+      lineaPrecio(
+        "X",
+        escalaDe(
+          [
+            { Material: "X", Unidad: unidad, Desde: "1", Hasta: "10", "Precio por unidad": "100" },
+            { Material: "X", Unidad: unidad, Desde: "11", "Precio por unidad": "90" },
+          ],
+          "X",
+        ),
+      );
+
+    it('"unidad" hace "unidades", no "unidads"', () => {
+      // Salía mal y salía AL TEXTO QUE LEE EL CLIENTE: "2 a 100 unidads". Lo escribía una
+      // regla que agregaba "s" a todo lo que terminara en letra.
+      const l = conTramos("unidad");
+      expect(l).toContain("11 unidades o más");
+      expect(l).not.toContain("unidads");
+    });
+
+    it('"m2" queda intacto: no es una palabra que se pluralice', () => {
+      // El borde opuesto, y el que rompió el primer arreglo: con la regla del castellano
+      // ("-es" tras consonante) esto pasaba a "mes2", porque el 2 no es letra y el
+      // sustantivo capturado quedaba en "m".
+      const l = conTramos("m2");
+      expect(l).toContain("m2");
+      expect(l).not.toContain("mes2");
+    });
+
+    it("pluraliza el sustantivo y deja el calificador quieto", () => {
+      expect(conTramos("pliego A3")).toContain("pliegos A3");
+      expect(conTramos("paquete de 100 tarjetas")).toContain("paquetes de 100 tarjetas");
+      expect(conTramos("metro lineal")).toContain("metros lineal");
+    });
+
+    it("una unidad que no está en la tabla queda sin pluralizar, no inventada", () => {
+      const l = conTramos("bobinota 30x40");
+      expect(l).toContain("bobinota 30x40");
+      expect(l).not.toContain("bobinotas");
+      expect(l).not.toContain("bobinotaes");
+    });
+
+    it("y el visor avisa de esa unidad, para que no pase inadvertida", () => {
+      const conBobinota: Datos = {
+        ...datos,
+        materiales: [{ Material: "Z", Unidad: "bobinota 30x40", Desde: "1", "Precio por unidad": "9000" }],
+        productos: [{ "Colección": "Stickers con forma", Producto: "Algo", Material: "Z" }],
+      };
+      expect(avisos(conBobinota).join("\n")).toContain("bobinota");
+    });
+
+    it('pero NO avisa de "m2": es un símbolo, no una palabra sin plural', () => {
+      // El guard miraba la primera palabra, y en "m2" eso es "m" — que no está en la tabla
+      // ni tiene por qué estarlo. Avisaba siempre, en un catálogo perfectamente sano.
+      expect(avisos(datos).join("\n")).not.toContain("no tiene plural cargado");
+    });
+  });
 });
 
 describe("chunks — coleccion-material", () => {

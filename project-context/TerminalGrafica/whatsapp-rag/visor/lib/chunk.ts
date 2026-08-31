@@ -137,12 +137,33 @@ const numTexto = (n: number): string => n.toLocaleString("es-AR");
 
 /**
  * Plural de una unidad de cobro para rotular tramos: "pliego A3" → "pliegos A3".
+ *
  * Se pluraliza SOLO la primera palabra (el sustantivo; lo que sigue es el calificador de
- * tamaño). "m2" queda igual porque no termina en letra — y así una unidad nueva del cliente
- * no se rompe: en el peor caso queda sin pluralizar, que se lee raro pero no miente.
+ * tamaño). Los sustantivos son una lista CERRADA: el catálogo tiene una docena de unidades
+ * y cada una se escribe como se dice.
+ *
+ * Antes esto era una regla ("+s" si termina en letra) y se equivocaba en los dos bordes:
+ * escribía "unidads" — que salía al texto que lee el cliente — y al arreglarlo con la regla
+ * del castellano ("-es" tras consonante) rompía "m2", que pasaba a "mes2" porque el 2 no es
+ * letra y el sustantivo capturado quedaba en "m". Una tabla no tiene bordes.
+ *
+ * Una palabra que no esté acá queda SIN pluralizar: se lee raro pero no inventa.
  */
+const PLURALES: Record<string, string> = {
+  pliego: "pliegos",
+  unidad: "unidades",
+  hoja: "hojas",
+  paquete: "paquetes",
+  pack: "packs",
+  metro: "metros",
+  item: "items",
+  ítem: "ítems",
+  plancha: "planchas",
+  bobina: "bobinas",
+};
+
 const pluralUnidad = (unidad: string): string =>
-  unidad.replace(/^(\p{L}+)/u, (w) => (/[a-záéíóúñ]$/i.test(w) ? w + "s" : w));
+  unidad.replace(/^(\p{L}+)/u, (w) => PLURALES[w.toLowerCase()] ?? w);
 
 /**
  * La escala como texto legible.
@@ -773,6 +794,32 @@ export function avisos(datos: Datos): string[] {
             `"${COL_SIN_MINIMO}" = sí en su fila de Materiales.`,
         );
       }
+    }
+  }
+
+  // Unidad cuyo sustantivo no está en la tabla de plurales: el chunk sale con el tramo sin
+  // pluralizar ("2 a 10 bobinota"), que se lee mal en el texto que ve el cliente. No es
+  // grave —el número está bien— pero es invisible si nadie mira el chunk, y así fue como
+  // "unidads" llegó al catálogo cargado.
+  {
+    const sinPlural = new Set<string>();
+    for (const m of datos.materiales) {
+      const u = String(m["Unidad"] ?? "").trim();
+      if (!u) continue;
+      // Se mira la UNIDAD ENTERA, no la primera palabra: en "m2" el sustantivo capturado
+      // es "m", que no está en la tabla ni tiene por qué estarlo — "m2" es un símbolo y se
+      // escribe igual en singular y en plural. Avisar por la letra suelta convertía un
+      // caso correcto en un aviso permanente. (Me pasó al escribir este mismo guard.)
+      if (!/^\p{L}+(\s|$)/u.test(u)) continue;
+      const sustantivo = u.match(/^(\p{L}+)/u)![1];
+      if (PLURALES[sustantivo.toLowerCase()]) continue;
+      sinPlural.add(sustantivo.toLowerCase());
+    }
+    for (const s of sinPlural) {
+      out.push(
+        `La unidad que empieza con "${s}" no tiene plural cargado: los tramos van a decir ` +
+          `"2 a 10 ${s}" en vez de pluralizarlo. Agregalo a PLURALES en visor/lib/chunk.ts.`,
+      );
     }
   }
 
