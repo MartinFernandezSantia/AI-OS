@@ -319,6 +319,27 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      corregido. De paso se sincronizó `Auditar Cotización` (el vivo no tenía el manejo de
      `fallo_parser` que el repo ya emitía — otra vez el flow viejo).
 
+   **Parte 3 — HECHA y verificada en vivo (31/08): `consultar_info_negocio` de vuelta.**
+   El flow pasó a **18 nodos**: 2ª tool PGVector sobre `bot.rag_business_info` + su
+   sub-nodo de embeddings (mismo modelo/credencial que el otro — cada PGVector necesita el
+   suyo). La tabla ya estaba poblada y curada del bot lite (9 fichas: horario, dirección,
+   pagos/seña, envíos, urgentes, plazos, redes, canal informativo) — verificado con SELECT
+   antes de cablear, para no caer en el `[]` en verde. La fuente sigue siendo
+   `bot.business_info`; **decisión: se reusa tal cual por ahora**, mover la info a una hoja
+   del Excel queda para cuando TG quiera editarla él.
+   - Prompt: DOS tools + regla de info AUTORITATIVA (afirmar tal cual, responder solo lo
+     preguntado). ~2.751 tokens (techo 3.000).
+   - Gate nuevo del trío (tabla schema-cualificada + embeddings conectados + prompt que
+     nombra la tool), verificado EN ROJO. El fallo típico acá es silencioso.
+   - Probado en vivo: dirección, envíos (afirma la política, no deriva), pagos/seña, y el
+     COMBO cotización+horario en un turno (usó las dos tools: $6.600 + horario). Regresión
+     0: batería de la cantidad 5/5 tras el cambio de prompt.
+   - **Hallazgo del vivo, ya arreglado**: preguntado "¿hasta qué hora están hoy?" el bot
+     respondía "hoy hasta las 20 hs" — y NO SABE QUÉ DÍA ES (un sábado sería mentira).
+     Regla nueva en el prompt: no adivinar el día, dar el horario completo. Si algún día se
+     quiere que sepa la fecha, hay que inyectarla por expresión de n8n, no por texto
+     horneado (el build fija la fecha del build, no la del turno).
+
 ### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
 
 El Excel pasó a `Catalogo-TG-v3.xlsx` (el v2 no se toca) con los 61 productos que mandó
