@@ -2498,7 +2498,8 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["el prompt prohíbe ofrecer el teléfono", SYSTEM_PROMPT.includes("EL TELÉFONO NO SE OFRECE")],
     ["el prompt maneja queja/enojo con contactos de la tool", SYSTEM_PROMPT.includes("QUEJA / ENOJO / PEDIR UN HUMANO")],
     // ejecución 732: preguntó la cantidad Y cotizó por 100 en el mismo mensaje
-    ["el prompt prohíbe preguntar y cotizar en el mismo turno", SYSTEM_PROMPT.includes("NUNCA preguntes y cotices en el MISMO mensaje")],
+    ["el prompt prohíbe preguntar y cotizar el mismo trabajo", SYSTEM_PROMPT.includes("NUNCA preguntes y cotices el MISMO trabajo")],
+    ["el prompt prohíbe el cierre ¿necesitabas algo más?", SYSTEM_PROMPT.includes('con "¿necesitabas algo más?" ni similares')],
   ].filter(([, ok]) => !ok);
   if (INFO_CABLEADO.length) {
     console.error("\n✗ ABORTADO: el cableado de consultar_info_negocio está incompleto:");

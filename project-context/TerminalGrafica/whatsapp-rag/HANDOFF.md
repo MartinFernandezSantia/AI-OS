@@ -545,7 +545,14 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    pasó de 3000 → se compactó a 2 renglones y el techo subió a 3050 con nota de que la
    PRÓXIMA vez se recorta, no se sube. Subido a ambos workflows, publicada = draft
    (c878a7f6), diff limpio. Si reincide, el lugar del caso es la auditoría offline
-   LLM-juez, no otro parche puntual.
+   LLM-juez, no otro parche puntual. **Refinada en el mismo día (2 pedidos de Martín)**:
+   (a) la prohibición es POR TRABAJO — con dos pedidos distintos el bot SÍ puede cotizar
+   el completo y preguntar el dato del otro; (b) se eliminó el cierre "¿necesitabas algo
+   más?": CIERRE ahora dice que el mensaje TERMINA en la cotización/respuesta (editado
+   también en "Cómo escribir"). 2 gates (en rojo — ojo: un gate cuyo substring cruza el
+   wrap de línea del md nunca matchea; usar tramos de UNA línea). El techo volvió a chocar
+   y esta vez se RECORTÓ (las líneas nuevas, compactadas): ~3024 tokens. Publicada = draft
+   (091ae11e), diff limpio.
 
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
