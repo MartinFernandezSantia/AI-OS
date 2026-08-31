@@ -270,18 +270,37 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    cuestan sangre"). Los 40 casos conversacionales: **corridos los 40** el 31/08.
    Lo que queda de esta fase, si se quiere cerrar del todo: los 132 del Excel de una pasada
    contra el bot vivo (la última medición completa fue 44/46 sobre el catálogo v2).
-5. **Fase 5 — producción.** Firewall + Chatwoot + WhatsApp. **Antes de ir a prod hay que
-   sacar la cola de debug del Responder**: hoy pega `⚠ auditoría: …` y `(marcadores sin
-   precio: {P1})` al mensaje del cliente. Es deliberado para medir, y está marcado en el
-   código.
+5. **Fase 5 — producción, dividida en partes (acordado con Martín):**
+   1) `bot.log` en el flow actual → 2) cerrar Fase 4 con el SELECT → 3) info del negocio de
+   vuelta al bot (el cotizador quedó sin `consultar_info_negocio`) → 4) sacar la cola de
+   debug del Responder → 5) ingreso Chatwoot (F1+F2 del caparazón del lite, adaptados) →
+   6) egreso (F3+F4) → 7) guardrails de canal (Verificador v2, diferido de v1) →
+   8) WhatsApp real + go-live. Cada parte se prueba en vivo antes de seguir.
 
-   **El log en Supabase (`bot.log`) es además la herramienta de medición.** Hoy auditar un
-   caso cuesta 2 llamadas MCP (ejecutar + leer la ejecución) y el rate limit corta cerca de
-   los 100 — por eso los 132 quedaron a medio correr. Con cada turno escribiendo su fila
-   (entrada, material declarado, cantidad, total, `via`, hallazgos), auditar la tanda entera
-   pasa a ser **un SELECT**. Vale la pena guardar los campos que hoy hay que ir a buscar a la
-   ejecución: sobre todo `cotizaciones[].cantidad` CRUDA del Agente, que es donde vive la
-   clase de bug que ni el auditor ni el gate pueden ver.
+   **Parte 1 — HECHA y verificada en vivo (31/08).** El flow pasó a **16 nodos**:
+   `Responder → Armar Log → Log Turno → Entregar`.
+   - **Armar Log** (Code) arma la fila: `products` = cotizaciones **CRUDAS** del Agente (la
+     cantidad TAL COMO LA DECLARÓ — el dato que ni el auditor ni el gate ven), `prices` =
+     detalle del auditor, `verification` = hallazgos, `signals` = `{via, fallo_parser}`,
+     `state` = 'ok' o la via cruda, `execution_id`.
+   - **Log Turno** (Postgres INSERT en `bot.log`, `onError: continue`): un fallo de log no
+     corta la respuesta. **Entregar** re-emite el mensaje del Responder — el Chat Trigger
+     muestra el ÚLTIMO nodo, así que el terminal no puede ser el INSERT.
+   - Gate de cableado nuevo en el builder (verificado EN ROJO antes de confiar en él) y la
+     cadena del log ejercitada en todos los escenarios de `test-auditor.mjs`.
+   - Verificado leyendo las filas DE VUELTA de la base (ejecuciones 533/534 → filas 76/77),
+     no solo el `success` del INSERT. El camino `fallo_parser` quedó cubierto solo por el
+     harness — en vivo no se puede forzar a demanda.
+   - **Workflow lector `leer-bot-log (dev)`** (`lThuFmf27HkM5dAR`): webhook GET
+     (`?limit=N&session=S`) + SELECT sobre `bot.log`, se ejecuta manual por MCP. Es LA
+     herramienta de la Parte 2: auditar una tanda = 1 ejecución de este workflow, no 132
+     lecturas por MCP.
+   - **Ojo al auditar**: `bot.log` conserva filas del bot LITE viejo (ids ≤ 75, `signals`
+     con `etapa`/`latencia_ms`). Las del cotizador se distinguen por `signals.via`.
+   - La credencial viva de Postgres en n8n es **`BOT DB` (`bxPpuXnXEZpEvGIL`)**; el id viejo
+     del builder ("Bot Readonly DB") ya no existe y el MCP lo rechaza. El builder quedó
+     corregido. De paso se sincronizó `Auditar Cotización` (el vivo no tenía el manejo de
+     `fallo_parser` que el repo ya emitía — otra vez el flow viejo).
 
 ### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
 
