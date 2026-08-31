@@ -264,12 +264,24 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      así el bot puede sugerir alternativas aunque el retrieval traiga un solo chunk.
      Moraleja para chunks futuros: **el bot solo ve el `text` del embedding** — nada de
      deícticos ("la colección", "este material") sin su referente escrito al lado.
-4. **Fase 4 — medir.** Los 132 casos contra el bot en vivo. Ya no mide la aritmética (eso lo
-   fija el gate del build): mide si el modelo ELIGE bien el material y **declara bien la
-   cantidad** — que resultó ser donde vive el bug caro (ver la primera entrada de "Cosas que
-   cuestan sangre"). Los 40 casos conversacionales: **corridos los 40** el 31/08.
-   Lo que queda de esta fase, si se quiere cerrar del todo: los 132 del Excel de una pasada
-   contra el bot vivo (la última medición completa fue 44/46 sobre el catálogo v2).
+4. **Fase 4 — medir. CERRADA (31/08): los 132 del Excel contra el bot vivo → 130/132
+   (98,5%).** Ejecuciones 536-667, auditadas con UN SELECT vía `leer-bot-log` (la Parte 2 de
+   la Fase 5). Cero fallbacks, cero hallazgos del auditor, la cantidad declarada vino
+   correcta en TODOS los casos (decimales del escaneo incluidos; el pack de libros declaró 1).
+   Los 2 fallos son de ELECCIÓN de material, no de aritmética ni de cantidad:
+   - **#53 `1 banner roll-up 85x200`** → eligió `Lona 2x0,85 m con porta banner roll up`
+     ($65.200) en vez de `Banner roll-up` ($38.000). **Huele a DUPLICADO del catálogo**:
+     85x200 cm y 2x0,85 m son el mismo producto físico, uno con el precio viejo del v2 y
+     otro con el precio cerrado que trajo el cliente. Preguntarle a TG cuál vale y retirar
+     el otro del Excel — mientras convivan, el precio depende de qué chunk gane el retrieval.
+   - **#72 `1 talonario x10`** → eligió `Anotadores personalizados en negro` ($4.000) en vez
+     de `Talonarios x10` ($54.000): leyó "x10" como parte de la medida. `10 talonarios de
+     factura` (#51) salió perfecto, así que es la fraseología del caso, no el producto.
+   Procedimiento para repetir la tanda (cuando se toque chunk/prompt/schema): extraer los
+   casos del Excel (hoja `Casos de prueba`, SIN las notas entre paréntesis del Pedido),
+   lanzar por MCP `execute_workflow` en tandas de a 6 con ~18s entre tandas (así el rate
+   limit del MCP no corta: esta vez pasaron los 132), y auditar con el SELECT del lector.
+   Scripts de la corrida en el scratchpad (extraer-casos / auditar-tanda); se rehacen rápido.
 5. **Fase 5 — producción, dividida en partes (acordado con Martín):**
    1) `bot.log` en el flow actual → 2) cerrar Fase 4 con el SELECT → 3) info del negocio de
    vuelta al bot (el cotizador quedó sin `consultar_info_negocio`) → 4) sacar la cola de
@@ -292,9 +304,14 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      no solo el `success` del INSERT. El camino `fallo_parser` quedó cubierto solo por el
      harness — en vivo no se puede forzar a demanda.
    - **Workflow lector `leer-bot-log (dev)`** (`lThuFmf27HkM5dAR`): webhook GET
-     (`?limit=N&session=S`) + SELECT sobre `bot.log`, se ejecuta manual por MCP. Es LA
-     herramienta de la Parte 2: auditar una tanda = 1 ejecución de este workflow, no 132
-     lecturas por MCP.
+     (`?limit=N&session=S&desde=<exec>&hasta=<exec>`) + SELECT compacto sobre `bot.log`
+     (execution_id, state, via, products, precios, hallazgos, msg recortado). Es LA
+     herramienta de auditoría: una tanda = 1 llamada, no 132.
+     **Cómo usarlo sin quemar contexto**: publicarlo un momento (`publish_workflow`),
+     `curl` al webhook desde la máquina local (estamos en AR, el geo-block no corta) con
+     `-o archivo.json`, y despublicarlo. El webhook necesita `responseMode: lastNode` +
+     `responseData: allEntries` (ya quedó así) — sin eso devuelve "Workflow was started" o
+     solo la primera fila. Queda NO publicado por defecto.
    - **Ojo al auditar**: `bot.log` conserva filas del bot LITE viejo (ids ≤ 75, `signals`
      con `etapa`/`latencia_ms`). Las del cotizador se distinguen por `signals.via`.
    - La credencial viva de Postgres en n8n es **`BOT DB` (`bxPpuXnXEZpEvGIL`)**; el id viejo
@@ -738,9 +755,12 @@ aplica por producto o por pedido completo? (el plan asume por producto — confi
   Excel, o se acepta que ahí pregunte.
 - **La cola de debug del Responder** (`⚠ auditoría:`, `(marcadores sin precio: …)`) sale al
   mensaje del cliente. Sacarla antes de prod.
-- **Los 132 casos del Excel nunca se corrieron completos contra el catálogo v3** en vivo. La
-  medición de 44/46 es del v2. El gate los cubre aritméticamente, no la elección de material.
-  **DECISIÓN 31/08: esperar al log en Supabase (Fase 5), no scriptear la lectura ahora.**
+- ~~**Los 132 casos del Excel nunca se corrieron completos contra el catálogo v3** en vivo.~~
+  **HECHO con el log de la Fase 5: 130/132** (ver Fase 4). Quedan las 2 preguntas de
+  elección de material (#53 banner roll-up duplicado → preguntar a TG; #72 "1 talonario
+  x10" → fraseología). La decisión de esperar al log fue correcta: la tanda entera se
+  auditó con un SELECT.
+  Contexto de aquel intento por MCP (sirve como referencia del rate limit):
   Se intentó por MCP y se llegó a **97 lanzados, 28 auditados — 28/28 exactos** (stickers en
   los 4 materiales, etiquetas, vinilo UV con mínimo facturable, carteles; incluye el caso del
   redondeo). Ahí cortó el **rate limit del MCP**: cada caso cuesta 2 llamadas (ejecutar +
