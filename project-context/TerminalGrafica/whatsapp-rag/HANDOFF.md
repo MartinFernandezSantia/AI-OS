@@ -502,7 +502,8 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      Responder: mensaje que pide ARCHIVOS por mail + monto en `historialTexto` del canal
      → aviso. En el flow de chat no hay historial y el camino queda apagado solo (try/
      catch). El contraejemplo de la ejecución 374 (plazos) sigue sin aviso: exige
-     "archivo" + monto previo. 2 tests nuevos.\n   - **EL TELÉFONO NO SE OFRECE** (regla nueva del prompt, del incidente del turno 722
+     "archivo" + monto previo. 2 tests nuevos.
+   - **EL TELÉFONO NO SE OFRECE** (regla nueva del prompt, del incidente del turno 722
      que lo daba para avanzar un pedido): pedidos/archivos/presupuestos van por mail o
      local; el teléfono SOLO ante queja/enojo/pedir un humano. Y la sección **QUEJA /
      ENOJO** se portó completa del lite (reconocer breve, contactos desde
