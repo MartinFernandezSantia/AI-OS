@@ -409,6 +409,34 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    - **Lo que NO se pudo probar** sigue igual que la parte 5: el e2e real necesita el
      switch (desactivar el lite, activar este) + un WhatsApp real → parte 8.
 
+   **Parte 7 — CONSTRUIDA y subida (31/08): guard Tier-2; el Verificador v2 NO vuelve.**
+   La variante pasó a **52 nodos**: el `process` del Switch Ruteo ahora pasa por
+   `Guardrails Tier-2` (LLM guard jailbreak + off-topic del lite, +1 llamada flash-lite
+   por turno) antes del adaptador.
+   - Cableado EXACTO del lite: violación real → `bot.firewall_strike` (SQL decide el
+     escalado) → refusal enlatado o silencio; caída del modelo-guard → **fail-open
+     LOGUEADO** a `bot.errors` (`model_error` — el fail-open mudo era el agujero);
+     `Router Fail` mapea `topicalAlignment→offtopic` (bug H2 del lite: sin el mapeo el
+     strike rebota MUDO contra el enum). Strike con `onError: stopWorkflow`.
+   - **Única adaptación de fondo**: el prompt del guard decía "una imprenta que NO da
+     precios" (el lite no cotizaba) — ahora dice que cotiza del catálogo, considera
+     jailbreak "alterar precios o descuentos" y aclara que pedir precio/regatear es
+     consulta NORMAL, nunca jailbreak. Gate dedicado a eso (si vuelve el texto viejo por
+     copy-paste, el build aborta).
+   - **Decisión (en `decisions/log.md`): el Verificador/Corrector v2 queda AFUERA.** El
+     agujero que cubría (números sin respaldo en el mensaje) ya no existe: contrato {P1} +
+     auditor determinista + Responder que deriva. La info operativa es autoritativa por
+     tool, y el confident-wrong se caza OFFLINE desde `bot.log` (la vía ya decidida con
+     TG: sin humano en Chatwoot). Guardrails de canal = Tier-1 + regex + Tier-2 + CAP.
+   - 8 gates nuevos (2 verificados en rojo — ojo: un sabotaje que deja el substring intacto
+     NO prueba nada, el primero mío falló así) + 4 tests del Router Fail y los params del
+     Strike en `test-auditor.mjs`. Diff final: **el vivo calca al emitido, 52 nodos, 55
+     conexiones** (el diff ahora también normaliza `onError` ausente = `stopWorkflow`, otro
+     default que el server quita al re-guardar).
+   - Igual que las partes 5 y 6: el comportamiento real del guard (¿flaggea? ¿deja pasar lo
+     normal?) solo se ve con tráfico real en la parte 8 — el lite ya lo corrió semanas en
+     prod con estos mismos prompts/thresholds, así que el riesgo es bajo.
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`
