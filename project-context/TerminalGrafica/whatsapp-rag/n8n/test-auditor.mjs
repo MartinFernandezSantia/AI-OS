@@ -433,16 +433,18 @@ const casos = [
 
   // ── Aviso de precio provisorio (pedido de TG) ─────────────────────────────────────
   {
-    nombre: "DERIVA a mail para avanzar → suma el aviso de precio provisorio",
+    // El turno que SÍ lo lleva: cotizó y además cierra hacia el mail para avanzar. Las dos
+    // condiciones juntas — con el mail solo alcanzaba de más (ver el caso de plazos).
+    nombre: "COTIZA y deriva a mail para avanzar → suma el aviso de precio provisorio",
     agente: {
       output: {
-        respuesta: "Para avanzar con el pedido escribinos a terminalgrafica@gmail.com y te lo coordinamos.",
-        cotizaciones: [],
+        respuesta: "Son {P1}. Para avanzar escribinos a terminalgrafica@gmail.com y te lo coordinamos.",
+        cotizaciones: [cot(MD_PAPEL.material, 3, 3, 250)],
       },
     },
-    filas: [{ material: null, sin_cotizaciones: true }],
+    filas: [{ metadata: MD_PAPEL }],
     esperaOk: true,
-    esperaEnMensaje: ["precio final lo confirmamos cuando recibimos el archivo"],
+    esperaEnMensaje: ["$6.600", "precio final lo confirmamos cuando recibimos el archivo"],
   },
   {
     nombre: "CONSULTA por no cotizable → NO suma el aviso (no se dio ningún precio)",
@@ -453,6 +455,22 @@ const casos = [
     esperaOk: false,
     esperaEnMensaje: ["terminalgrafica@gmail.com"],
     // Avisar que "el precio no es final" cuando no se dio ninguno confunde en vez de cubrir.
+    noEsperaEnMensaje: ["precio final lo confirmamos"],
+  },
+  {
+    // Medido en vivo (ejecución 374): el cliente preguntó CUÁNDO estaría listo, el bot
+    // derivó bien a mail, y el aviso se pegó igual en un turno sin ningún precio. El mail
+    // solo no alcanza como señal: el prompt manda a mail plazos, envíos y cliente enojado.
+    nombre: "DERIVA a mail por PLAZOS (sin cotizar) → NO suma el aviso",
+    agente: {
+      output: {
+        respuesta: "Para consultar plazos de entrega escribinos a terminalgrafica@gmail.com o acercate al local.",
+        cotizaciones: [],
+      },
+    },
+    filas: [{ material: null, sin_cotizaciones: true }],
+    esperaOk: true,
+    esperaEnMensaje: ["terminalgrafica@gmail.com"],
     noEsperaEnMensaje: ["precio final lo confirmamos"],
   },
   {
