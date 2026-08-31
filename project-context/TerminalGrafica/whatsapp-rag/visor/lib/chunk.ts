@@ -325,6 +325,24 @@ function itemProducto(p: Fila, unidad: string, geo: Geometria | null, tramos: Tr
 }
 
 /**
+ * La mitad que le faltaba a "se cotiza cualquier medida": de DÓNDE sale esa medida.
+ *
+ * Medido en vivo (ejecución 400, "100 stickers en OPP" sin medida): el bot cotizó 100
+ * stickers de 5x5. No los eligió — de los 5 chunks que trajo el retrieval, 4 encabezan sus
+ * "Medidas de referencia" con 5x5, y cada una viene con la cuenta ya hecha de ejemplo. Es
+ * una plantilla de cotización servida y lista. El chunk le decía que PODÍA cotizar cualquier
+ * medida y no le decía que la medida la tiene que haber dicho el cliente, así que el modelo
+ * hizo lo razonable con lo que tenía: agarró la primera.
+ *
+ * Es la peor clase de falla del bot: la aritmética cierra (5x5 a $8.400 está bien calculado),
+ * así que el auditor no puede verla. Solo está mal la premisa, y la premisa no vive en ningún
+ * campo contra el cual comparar. El cliente recibe el precio de un trabajo que no pidió.
+ */
+const MEDIDA_LA_DA_EL_CLIENTE =
+  "La medida la da SIEMPRE el cliente: si no la dijo, preguntala — no cotices con una de " +
+  "las de referencia. Los ejemplos de abajo muestran cómo se hace la cuenta, no qué pidió.";
+
+/**
  * Las líneas que habilitan la medida libre. El chunk lleva los DATOS que la fórmula de
  * encaje consume (área útil, separación, unidad); la fórmula general vive en la hoja
  * Instrucciones → el system prompt del bot, para no repetirla (y desalinearla) por chunk.
@@ -336,10 +354,16 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
       : "sin separación entre piezas";
     return [
       "Se cotiza CUALQUIER medida en cm; las de abajo son referencias de tamaños populares.",
+      MEDIDA_LA_DA_EL_CLIENTE,
       `Área útil del ${unidad || "pliego"}: ${numTexto(geo.utilAncho)}x${numTexto(geo.utilAlto)} cm · ${sep}.`,
     ];
   }
-  if (modo === "m2") return ["Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000)."];
+  if (modo === "m2") {
+    return [
+      "Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).",
+      MEDIDA_LA_DA_EL_CLIENTE,
+    ];
+  }
   // Unidad de cobro que es una MEDIDA, no una cosa contable. Sin esta línea el modelo lee
   // "Precio por metro lineal" como cuánto sale un metro —cierto— y declara `cantidad: 1`
   // porque para él 2,45 metros de planos es UN trabajo. El bot cobró $8.000 en vez de

@@ -320,6 +320,33 @@ describe("chunks — coleccion-material", () => {
     expect(cs.at(-1)!.texto).toContain("Se cotiza cualquier medida (m2 = ancho x alto en cm ÷ 10.000).");
   });
 
+  describe("de dónde sale la medida (el bot cotizaba una que el cliente no dio)", () => {
+    // Medido en vivo: "100 stickers en OPP" (sin medida) → cotizó 5x5, la primera referencia
+    // de 4 de los 5 chunks que trajo el retrieval. El chunk habilitaba cualquier medida y no
+    // decía que la tiene que dar el cliente. La aritmética cerraba, así que el auditor no
+    // podía verlo: el precio salía bien calculado para un trabajo que nadie pidió.
+    it("el chunk pliego dice que la medida la da el cliente y que las de abajo son ejemplos", () => {
+      expect(cs[0].texto).toContain("La medida la da SIEMPRE el cliente");
+      expect(cs[0].texto).toContain("no cotices con una de las de referencia");
+    });
+
+    it("el chunk m2 lleva la misma aclaración (también cotiza medida libre)", () => {
+      expect(cs.at(-1)!.texto).toContain("La medida la da SIEMPRE el cliente");
+    });
+
+    it("en modo item NO aparece: ahí no hay medida que elegir", () => {
+      // Un anillado se vende A4 y punto. Meter la aclaración sería ruido, y peor: sugeriría
+      // que hay una medida que preguntar cuando el producto ya la trae cerrada.
+      const porUnidad: Datos = {
+        ...datos,
+        materiales: datos.materiales.map((m) => ({ ...m, Unidad: "unidad" })),
+      };
+      expect(chunks(porUnidad, "coleccion-material")[0].texto).not.toContain(
+        "La medida la da SIEMPRE el cliente",
+      );
+    });
+  });
+
   describe("unidad de cobro que es una MEDIDA, no una cosa contable", () => {
     // El bot cobró $8.000 por 2,45 metros de planos en vez de $19.600: el modelo declaró
     // `cantidad: 1` porque para él 2,45 metros es UN trabajo, y el auditor no pudo verlo
