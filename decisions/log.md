@@ -646,3 +646,13 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** que el modelo declare en unidades de cobro y el auditor no convierta (le devuelve al LLM la cuenta que este rediseño le sacó, y vuelve la clase de error aritmético que llevó de 27/46 a 44/46) · detectar la doble conversión en el auditor (no es detectable: no existe ningún campo con lo que pidió el cliente contra el cual comparar) · agregar al contrato un campo que declare la unidad de la cantidad (más superficie para que el modelo se equivoque, y no resuelve el relleno de datos faltantes) · dejarlo solo en el prompt (las tres capas decían lo mismo mal; el chunk es el que el modelo lee más cerca del dato).
 
 **Owner:** Martin.
+
+## 2026-08-31 — El Verificador v2 no vuelve: guardrails de canal = Tier-2 + auditoría offline
+
+**Decision:** la parte 7 de la Fase 5 porta a la variante Chatwoot el firewall Tier-2 del bot lite (LLM guard de jailbreak + off-topic antes del núcleo, con strike SQL, refusal/silencio y fail-open logueado) y deja definitivamente afuera al Verificador/Corrector inline (el 2º agente que revisaba el mensaje contra el catálogo). Los guardrails de contenido quedan en tres capas que ya existen: el contrato {P1} + auditor determinista (el modelo no puede tipear un precio: todo monto sin respaldo deriva a consulta), la tool `consultar_info_negocio` autoritativa (la política oficial no se inventa), y la auditoría offline sobre `bot.log` (products = lo que el modelo declaró crudo, para cazar confident-wrong desde los logs).
+
+**Why:** el Verificador existía en el lite porque el mensaje podía llevar números y afirmaciones sin respaldo — ese agujero ya no existe por diseño: el Responder deriva ante cualquier monto que no haya pasado por el cotizador determinista. Lo que el Verificador cubriría hoy (una afirmación de capacidad equivocada, un tono raro) no es detectable con confianza por un 2º LLM inline y sí aparece en la auditoría offline, que además es la vía ya decidida con TG (sin humano en Chatwoot, revisión por logs). Re-meterlo costaría 1-2 llamadas LLM más por turno y latencia, para una red que las tres capas existentes ya tejen mejor.
+
+**Alternatives considered:** portar el Verificador+Corrector del lite (redundante con el auditor determinista para precios, y el loop de remediación era la parte más frágil del lite) · un Verificador "light" solo de afirmaciones de capacidad (el prompt ya prohíbe negar sin buscar, y el falso positivo bloquearía respuestas buenas) · nada de Tier-2 (dejaría el canal real sin guard de jailbreak/off-topic que el lite ya probó en prod, por una sola llamada barata).
+
+**Owner:** Martin.
