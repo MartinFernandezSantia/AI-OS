@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n"
+        "jsCode": "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err }, _ingresoTs: Date.now() }, pairedItem: { item: i } });\n}\n\nreturn out;\n"
       },
       "id": "cw-verificar-hmac",
       "name": "Verificar HMAC",
@@ -410,7 +410,7 @@
     },
     {
       "parameters": {
-        "amount": 15
+        "amount": "={{ (() => { const t0 = Number($('Verificar HMAC').first().json._ingresoTs || 0); if (!t0) return 15; return Math.max(0, 15 - (Date.now() - t0) / 1000); })() }}"
       },
       "id": "cw-wait-debounce",
       "name": "Wait — Debounce",
@@ -982,7 +982,7 @@
     },
     {
       "parameters": {
-        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo**, **Traer Escalas** y **Log Turno**: credencial Postgres `BOT_DB`\n(pooler 5432, user `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`,\n**schema-cualificada** (sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**Log**: cada turno escribe UNA fila en `bot.log` (products = cotizaciones CRUDAS del\nAgente, prices = detalle del auditor, signals.via). Auditar una tanda = un SELECT.\nUn fallo del INSERT no corta la respuesta (onError continue + Entregar re-emite).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El\nauditor los necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté\nexento, sin `variantes` las presentaciones agrupadas (500 tarjetas) no se\nencuentran, y sin `paquete` la cantidad en piezas se cobra como si fueran paquetes\n(1000 tarjetas × el precio del paquete de 1000).\n\n**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow\nhornea el prompt, los parámetros y el código del auditor: quedarse con la versión\nvieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.\n\n**VARIANTE CHATWOOT (parte 5 — NO ACTIVAR todavía).** Ingreso F1+F2 del lite: Webhook (path `chatwoot`, compartido con el bot lite: UN solo flow activo por vez) → HMAC ($env.CHATWOOT_WEBHOOK_SECRET) → Filtro (WhatsApp entrante, sin humano) → Firewall Tier-1 (bot.firewall_check, fail-open con log a bot.errors) → ¿Tiene Texto? → Wait 15s → Get Historial → Decidir (debounce/idempotencia/ráfaga NFC/CAP) → GUARD TIER-2 (parte 7: LLM guard jailbreak/off-topic del lite; violación → bot.firewall_strike → refusal/silencio; caída del guard → fail-open LOGUEADO a bot.errors; el Verificador v2 quedó AFUERA: {P1}+auditor cubren precios, confident-wrong se audita offline desde bot.log) → adaptador. SIN Simple Memory: la memoria es el historial del canal (historialTexto → input del Agente). EGRESO (parte 6): Entregar → Preparar Envio → Enviar Mensaje (rails:3000) → Chequear Envio (entrega = id de Chatwoot, no status HTTP) → ¿Se Entregó? (no → Label Envío Fallido) → Actualizar Entrega (UPDATE de la fila de bot.log del turno: mergea signals con entregado/latencia_ms/chatwoot_message_id; state='envio_fallido' si no llegó; si el UPDATE falla, crashea → Error Workflow tg-bot-error). Credenciales: 'Chatwoot API Token' (HTTP Header) + BOT DB + Gemini. Para activar (parte 8): desactivar el bot lite primero — comparten el path 'chatwoot'.",
+        "content": "## Cotizador v1 — qué cablear al importar\n\nGenerado por `n8n/build-flow.mjs` desde el Excel del catálogo. **No editar acá**:\nlos cambios se pierden en la próxima generación. Prompt y parámetros salen del Excel.\n\n**1) Modelo** y **Embeddings (Google Gemini)**: la MISMA credencial *Google Gemini(PaLM) API*\n(API key de Google AI Studio). Chat: `models/gemini-3.1-flash-lite`. Embeddings: `models/gemini-embedding-001` —\nel MISMO modelo que usó la ingesta del visor, o los vectores no comparan.\n\n**2) buscar_catalogo**, **Traer Escalas** y **Log Turno**: credencial Postgres `BOT_DB`\n(pooler 5432, user `bot_runtime.<ref>`, SSL Ignore). Table Name: `bot.rag_catalog`,\n**schema-cualificada** (sin el `bot.` consulta public y devuelve [] en verde, sin error).\n\n**Log**: cada turno escribe UNA fila en `bot.log` (products = cotizaciones CRUDAS del\nAgente, prices = detalle del auditor, signals.via). Auditar una tanda = un SELECT.\nUn fallo del INSERT no corta la respuesta (onError continue + Entregar re-emite).\n\n**3) Antes de probar**: la tabla tiene que estar re-ingestada desde el visor con\n`escala`, `es_base`, `sin_minimo`, `variantes` y `paquete` en la metadata. El\nauditor los necesita: un chunk viejo sin `sin_minimo` cotiza el mínimo aunque esté\nexento, sin `variantes` las presentaciones agrupadas (500 tarjetas) no se\nencuentran, y sin `paquete` la cantidad en piezas se cobra como si fueran paquetes\n(1000 tarjetas × el precio del paquete de 1000).\n\n**Re-generar y re-importar SIEMPRE que cambie el Excel o este builder.** El flow\nhornea el prompt, los parámetros y el código del auditor: quedarse con la versión\nvieja da errores que parecen del catálogo (\"modo desconocido\") y son del flow.\n\n**Parámetros horneados**: mínimo por trabajo $4000 · redondeo $100 ·\ntope de sanity $1800000. Si cambian en el Excel, re-generar y re-importar.\n\n**VARIANTE CHATWOOT (parte 5 — NO ACTIVAR todavía).** Ingreso F1+F2 del lite: Webhook (path `chatwoot`, compartido con el bot lite: UN solo flow activo por vez) → HMAC ($env.CHATWOOT_WEBHOOK_SECRET) → Filtro (WhatsApp entrante, sin humano) → Firewall Tier-1 (bot.firewall_check, fail-open con log a bot.errors) → ¿Tiene Texto? → GUARD TIER-2 (parte 7, PRE-debounce: clasifica el texto crudo del webhook así su llamada LLM se solapa con la ventana; violación → bot.firewall_strike → refusal/silencio; caída del guard → fail-open LOGUEADO a bot.errors; el Verificador v2 quedó AFUERA: {P1}+auditor cubren precios, confident-wrong se audita offline desde bot.log) → Wait DINÁMICO (15s menos lo ya consumido desde el ingreso, _ingresoTs del HMAC) → Get Historial → Decidir (debounce/idempotencia/ráfaga NFC/CAP) → adaptador. SIN Simple Memory: la memoria es el historial del canal (historialTexto → input del Agente). EGRESO (parte 6): Entregar → Preparar Envio → Enviar Mensaje (rails:3000) → Chequear Envio (entrega = id de Chatwoot, no status HTTP) → ¿Se Entregó? (no → Label Envío Fallido) → Actualizar Entrega (UPDATE de la fila de bot.log del turno: mergea signals con entregado/latencia_ms/chatwoot_message_id; state='envio_fallido' si no llegó; si el UPDATE falla, crashea → Error Workflow tg-bot-error). Credenciales: 'Chatwoot API Token' (HTTP Header) + BOT DB + Gemini. Para activar (parte 8): desactivar el bot lite primero — comparten el path 'chatwoot'.",
         "height": 520,
         "width": 460
       },
@@ -1139,7 +1139,7 @@
     {
       "parameters": {
         "operation": "classify",
-        "text": "={{ $('Decidir').first().json.userMessage }}",
+        "text": "={{ $('Chatwoot Webhook').first().json.body.content }}",
         "guardrails": {
           "jailbreak": {
             "value": {
@@ -1188,7 +1188,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+        "jsCode": "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\n// PRE-DEBOUNCE: Decidir no corrió todavía — todo sale del webhook.\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: b.conversation.id,\n    accountId: b.account.id,\n    userMessage: String(b.content || ''),\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n"
       },
       "id": "cw-router-fail-tier2",
       "name": "Router Fail Tier-2",
@@ -1327,7 +1327,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://rails:3000/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+        "url": "={{ 'http://rails:3000/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -1737,7 +1737,7 @@
       "main": [
         [
           {
-            "node": "Wait — Debounce",
+            "node": "Guardrails Tier-2",
             "type": "main",
             "index": 0
           }
@@ -1802,7 +1802,7 @@
         ],
         [
           {
-            "node": "Guardrails Tier-2",
+            "node": "Cuando llega un mensaje",
             "type": "main",
             "index": 0
           }
@@ -1872,7 +1872,7 @@
         ],
         [
           {
-            "node": "Cuando llega un mensaje",
+            "node": "Wait — Debounce",
             "type": "main",
             "index": 0
           }

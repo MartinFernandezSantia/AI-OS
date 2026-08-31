@@ -410,9 +410,22 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      switch (desactivar el lite, activar este) + un WhatsApp real → parte 8.
 
    **Parte 7 — CONSTRUIDA y subida (31/08): guard Tier-2; el Verificador v2 NO vuelve.**
-   La variante pasó a **52 nodos**: el `process` del Switch Ruteo ahora pasa por
-   `Guardrails Tier-2` (LLM guard jailbreak + off-topic del lite, +1 llamada flash-lite
-   por turno) antes del adaptador.
+   La variante pasó a **52 nodos**, con el guard `Guardrails Tier-2` (LLM jailbreak +
+   off-topic del lite, +1 llamada flash-lite por mensaje).
+   **Reubicado a pedido de Martín: el guard corre PRE-debounce y el debounce es DINÁMICO.**
+   Cadena: `¿Tiene Texto? → Guardrails Tier-2 → (sin violación) → Wait dinámico → Get
+   Historial → Decidir → Switch Ruteo → adaptador`. El Wait espera
+   `max(0, 15 − transcurrido desde el ingreso)` usando `_ingresoTs` que estampa `Verificar
+   HMAC` (fallback: 15 fijos si falta la marca) — así la llamada del guard se SOLAPA con
+   la ventana del debounce en vez de sumarle latencia. Consecuencias del reorden:
+   - El guard clasifica el TEXTO CRUDO del webhook (`body.content`), no la ráfaga mergeada
+     (Decidir aún no corrió). NINGÚN nodo Tier-2 puede leer `$('Decidir')` — la ref tiraría
+     error en runtime; hay gate que lo fija y el mock de los tests ni incluye a Decidir
+     (si el código lo leyera, el test explota).
+   - En una ráfaga, cada mensaje entrante paga su clasificación aunque después pierda el
+     debounce (antes solo el ganador llegaba al guard). Más llamadas, baratas en flash-lite.
+   - Strike/Refusal leen account/conversation del webhook (patrón de los enlatados del
+     firewall).
    - Cableado EXACTO del lite: violación real → `bot.firewall_strike` (SQL decide el
      escalado) → refusal enlatado o silencio; caída del modelo-guard → **fail-open
      LOGUEADO** a `bot.errors` (`model_error` — el fail-open mudo era el agujero);
@@ -428,11 +441,12 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      auditor determinista + Responder que deriva. La info operativa es autoritativa por
      tool, y el confident-wrong se caza OFFLINE desde `bot.log` (la vía ya decidida con
      TG: sin humano en Chatwoot). Guardrails de canal = Tier-1 + regex + Tier-2 + CAP.
-   - 8 gates nuevos (2 verificados en rojo — ojo: un sabotaje que deja el substring intacto
-     NO prueba nada, el primero mío falló así) + 4 tests del Router Fail y los params del
-     Strike en `test-auditor.mjs`. Diff final: **el vivo calca al emitido, 52 nodos, 55
-     conexiones** (el diff ahora también normaliza `onError` ausente = `stopWorkflow`, otro
-     default que el server quita al re-guardar).
+   - 13 gates nuevos (verificados en rojo — ojo: un sabotaje que deja el substring intacto
+     NO prueba nada, el primero mío falló así) + 7 tests en `test-auditor.mjs`: Router
+     Fail, params del Strike, y el amount del Wait dinámico (5s consumidos → ~10; vencida
+     → 0; sin marca → 15). Diff final: **el vivo calca al emitido, 52 nodos, 55
+     conexiones** (el diff normaliza más defaults que el server quita al re-guardar:
+     `onError` ausente = `stopWorkflow`, `operation` ausente del guardrails = `classify`).
    - Igual que las partes 5 y 6: el comportamiento real del guard (¿flaggea? ¿deja pasar lo
      normal?) solo se ve con tráfico real en la parte 8 — el lite ya lo corrió semanas en
      prod con estos mismos prompts/thresholds, así que el riesgo es bajo.

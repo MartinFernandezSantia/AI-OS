@@ -1523,12 +1523,13 @@ const webhookChatwoot = {
 };
 
 const verificarHmac = {
-  // Copia EXACTA del lite: valida la firma de Chatwoot (sha256 de `${timestamp}.` + body
-  // crudo con $env.CHATWOOT_WEBHOOK_SECRET). Deja pasar todo con `_hmac.ok`; el corte lo
-  // hace el Filtro Ingreso.
+  // Copia del lite: valida la firma de Chatwoot (sha256 de `${timestamp}.` + body crudo
+  // con $env.CHATWOOT_WEBHOOK_SECRET). Deja pasar todo con `_hmac.ok`; el corte lo hace
+  // el Filtro Ingreso. Agregado nuestro: `_ingresoTs` marca el ARRANQUE de la ejecución —
+  // el Wait del debounce lo usa para descontar lo que ya consumieron firewall y guard.
   parameters: {
     jsCode:
-      "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err } }, pairedItem: { item: i } });\n}\n\nreturn out;\n",
+      "const crypto = require('crypto');\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json      = items[i].json;\n  const secret    = $env.CHATWOOT_WEBHOOK_SECRET;\n  const received  = json.headers['x-chatwoot-signature'];\n  const timestamp = json.headers['x-chatwoot-timestamp'];\n\n  let ok = false, expected = null, rawLen = null, rawPreview = null, err = null;\n  try {\n    const rawBuf = await this.helpers.getBinaryDataBuffer(i, 'data');   // 'data' = nombre de la prop binaria\n    rawLen = rawBuf.length;\n    rawPreview = rawBuf.toString('utf8').slice(0, 60);\n\n    const signed = Buffer.concat([Buffer.from(`${timestamp}.`), rawBuf]);\n    expected = 'sha256=' + crypto.createHmac('sha256', secret).update(signed).digest('hex');\n\n    ok = !!received\n      && expected.length === received.length\n      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n  } catch (e) {\n    err = String(e.message || e);\n  }\n\n  out.push({ json: { ...json, _hmac: { ok, expected, received, timestamp, rawLen, rawPreview, err }, _ingresoTs: Date.now() }, pairedItem: { item: i } });\n}\n\nreturn out;\n",
   },
   id: "cw-verificar-hmac",
   name: "Verificar HMAC",
@@ -1679,8 +1680,14 @@ const descartarFirewall = {
 
 // ---------- F2: debounce / idempotencia / ráfaga / CAP + memoria del canal ----------
 const waitDebounce = {
-  // Espera 15s antes de leer el historial: deja que llegue la ráfaga entera del cliente.
-  parameters: { amount: 15 },
+  // Debounce DINÁMICO (pedido de Martín): la ventana son 15s desde el ARRANQUE de la
+  // ejecución (_ingresoTs del HMAC), no 15s desde acá. El guard Tier-2 corre ANTES que
+  // este Wait, así su llamada LLM (~1-3s) se solapa con la ventana en vez de sumarse:
+  // el total sigue siendo ~15s. Si _ingresoTs faltara, cae a los 15 fijos.
+  parameters: {
+    amount:
+      "={{ (() => { const t0 = Number($('Verificar HMAC').first().json._ingresoTs || 0); if (!t0) return 15; return Math.max(0, 15 - (Date.now() - t0) / 1000); })() }}",
+  },
   id: "cw-wait-debounce",
   name: "Wait — Debounce",
   type: "n8n-nodes-base.wait",
@@ -1806,10 +1813,16 @@ const adaptadorChatwoot = {
 };
 
 // ---------- F5: FIREWALL TIER-2 (parte 7) — LLM guard jailbreak + off-topic, del lite ----------
-// Va en la salida `process` del Switch Ruteo, ANTES del núcleo LLM. Cableado EXACTO del lite:
-//   Guardrails Tier-2 (classify) → [main0] ¿Violación Real? ; [main1] Router Fail → ¿Violación Real?
-//   ¿Violación Real? → [sí] Strike Tier-2 → Switch Strike → refusal/silencio ; [no] sigue al medio.
-// Fail-open ante caída del modelo-guard (pero LOGUEADA a bot.errors). +1 llamada LLM por turno.
+// Va ANTES del debounce (pedido de Martín): ¿Tiene Texto? → guard → Wait dinámico. Así la
+// llamada LLM del guard se SOLAPA con la ventana del debounce en vez de sumarle latencia.
+// Consecuencias de correr pre-debounce (distinto del lite, que lo tenía post-Decidir):
+//   · clasifica el TEXTO CRUDO del webhook (body.content), no la ráfaga mergeada — cada
+//     mensaje entrante paga su clasificación aunque después pierda el debounce (+llamadas
+//     en ráfagas; flash-lite las hace baratas);
+//   · account/conversation/sender salen del webhook, no de Decidir (que aún no corrió).
+// Cableado del lite: Guardrails (classify) → [main0] ¿Violación Real? ; [main1] Router Fail
+//   → ¿Violación Real? → [sí] Strike → Switch Strike → refusal/silencio ; [no] → debounce.
+// Fail-open ante caída del modelo-guard (pero LOGUEADA a bot.errors).
 // La ÚNICA adaptación de fondo: el contexto del prompt jailbreak decía "una imprenta que NO
 // da precios" — este bot SÍ cotiza. Lo demás, verbatim: bot.firewall_strike y el enum
 // bot.accion (firewall_tier2_jailbreak / firewall_tier2_offtopic) ya viven en la base.
@@ -1823,7 +1836,7 @@ const adaptadorChatwoot = {
 const guardrailsTier2 = {
   parameters: {
     operation: "classify",
-    text: "={{ $('Decidir').first().json.userMessage }}",
+    text: "={{ $('Chatwoot Webhook').first().json.body.content }}",
     guardrails: {
       jailbreak: {
         value: {
@@ -1861,11 +1874,12 @@ const modeloGuardrails = {
 };
 
 const routerFailTier2 = {
-  // Copia EXACTA del lite: distingue violación REAL (guard disparado) de caída del modelo-guard
-  // (fail-open). Mapea topicalAlignment→offtopic para que calce con el enum bot.accion (bug H2).
+  // Del lite, ADAPTADO a pre-debounce: distingue violación REAL (guard disparado) de caída
+  // del modelo-guard (fail-open) y mapea topicalAlignment→offtopic (bug H2 del enum).
+  // Como Decidir todavía no corrió, TODO sale del webhook: conversation/account/content.
   parameters: {
     jsCode:
-      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\nconst decidir = $('Decidir').first().json;\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: decidir.conversationId,\n    accountId: decidir.accountId,\n    userMessage: decidir.userMessage,\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n",
+      "// Rama Fail del Guardrails Tier-2. Distingue una VIOLACIÓN REAL (jailbreak/topical\n// flaggeado por el modelo) de una CAÍDA del modelo-guard (executionFailed) o un item\n// de error del nodo. Fail-open ante caída: no penaliza, deja seguir al LLM principal\n// (que ya degrada a handoff si Gemini está caído).\nconst j = $input.first().json;\nconst checks = Array.isArray(j.checks) ? j.checks : [];\nconst violated = checks.filter((c) => c && c.triggered && !c.executionFailed);\nconst realViolation = violated.length > 0;\n// guardError: si el guard se CAYÓ (executionFailed), capturamos el detalle para bot.errors.\nconst _failedCheck = checks.find((c) => c && c.executionFailed);\nconst guardError = _failedCheck ? String(_failedCheck.error || _failedCheck.reason || _failedCheck.message || 'guard executionFailed').slice(0, 500) : '';\n// reason = nombre del guard que disparó (jailbreak | topicalAlignment)\n// H2 (2026-08-05): n8n nombra el guard 'topicalAlignment', pero el enum\n// bot.accion usa 'offtopic'. firewall_strike arma 'firewall_tier2_' || reason,\n// asi que sin mapeo escribia 'firewall_tier2_topicalAlignment' (inexistente en\n// el enum) -> el fw_log rebotaba MUDO y el refusal topical no quedaba logueado.\n// 'jailbreak' ya coincide con el enum (firewall_tier2_jailbreak), no se toca.\nconst MAP_REASON = { topicalAlignment: 'offtopic' };\nconst rawName = realViolation ? String(violated[0].name || 'tier2') : 'model_error';\nconst reason = MAP_REASON[rawName] || rawName;\n\n// PRE-DEBOUNCE: Decidir no corrió todavía — todo sale del webhook.\nconst b = $('Chatwoot Webhook').first().json.body;\nconst sid = b.sender?.id ?? b.conversation?.meta?.sender?.id ?? '';\n\nreturn [{\n  json: {\n    realViolation,\n    reason,\n    senderKey: String(sid),\n    conversationId: b.conversation.id,\n    accountId: b.account.id,\n    userMessage: String(b.content || ''),\n    guardError,\n  },\n  pairedItem: { item: 0 },\n}];\n",
   },
   id: "cw-router-fail-tier2",
   name: "Router Fail Tier-2",
@@ -1924,11 +1938,12 @@ const switchStrikeTier2 = {
 };
 
 const mensajeRefusalTier2 = {
-  // Enlatado de rechazo Tier-2. Lee $('Decidir') (en esta rama $json es el resultado del strike).
+  // Enlatado de rechazo Tier-2. Pre-debounce no hay Decidir: account/conversation salen
+  // del webhook (mismo patrón que los enlatados del firewall).
   parameters: {
     method: "POST",
     url:
-      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Decidir').first().json.accountId + '/conversations/' + $('Decidir').first().json.conversationId + '/messages' }}",
+      "={{ '" + CHATWOOT_BASE_URL + "/api/v1/accounts/' + $('Chatwoot Webhook').first().json.body.account.id + '/conversations/' + $('Chatwoot Webhook').first().json.body.conversation.id + '/messages' }}",
     authentication: "genericCredentialType",
     genericAuthType: "httpHeaderAuth",
     sendBody: true,
@@ -2221,7 +2236,7 @@ Object.assign(flowCw.connections, {
   },
   "¿Tiene Texto?": {
     main: [
-      [{ node: "Wait — Debounce", type: "main", index: 0 }], // 0 hay texto
+      [{ node: "Guardrails Tier-2", type: "main", index: 0 }], // 0 hay texto → guard ANTES del debounce
       [{ node: "Respuesta No-Texto", type: "main", index: 0 }], // 1 audio/archivo
     ],
   },
@@ -2232,12 +2247,12 @@ Object.assign(flowCw.connections, {
     main: [
       [{ node: "Descartar (debounce/dup)", type: "main", index: 0 }], // 0 skip
       [{ node: "Mensaje Anti-Injection", type: "main", index: 0 }], // 1 injection
-      [{ node: "Guardrails Tier-2", type: "main", index: 0 }], // 2 process → F5 antes del medio
+      [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 2 process → el medio (el guard ya corrió, pre-debounce)
       [{ node: "Mensaje Cap Email", type: "main", index: 0 }], // 3 cap
     ],
   },
   "Mensaje Cap Email": { main: [[{ node: "Label Cap", type: "main", index: 0 }]] },
-  // F5 — Firewall Tier-2 (LLM guard). ¿Violación Real? [no] → sigue al medio (adaptador).
+  // F5 — Firewall Tier-2 (LLM guard, PRE-debounce). ¿Violación Real? [no] → Wait dinámico.
   "Guardrails Tier-2": {
     main: [
       [{ node: "¿Violación Real Tier-2?", type: "main", index: 0 }], // 0 clasificado
@@ -2255,7 +2270,7 @@ Object.assign(flowCw.connections, {
   "¿Violación Real Tier-2?": {
     main: [
       [{ node: "Strike Tier-2", type: "main", index: 0 }], // 0 true = violación → strike
-      [{ node: "Cuando llega un mensaje", type: "main", index: 0 }], // 1 false = OK → sigue al medio
+      [{ node: "Wait — Debounce", type: "main", index: 0 }], // 1 false = OK → debounce (descuenta lo consumido)
     ],
   },
   "Strike Tier-2": { main: [[{ node: "Switch Strike Tier-2", type: "main", index: 0 }]] },
@@ -2278,11 +2293,13 @@ Object.assign(flowCw.connections, {
       "Webhook (path `chatwoot`, compartido con el bot lite: UN solo flow activo por vez) → " +
       "HMAC ($env.CHATWOOT_WEBHOOK_SECRET) → Filtro (WhatsApp entrante, sin humano) → " +
       "Firewall Tier-1 (bot.firewall_check, fail-open con log a bot.errors) → ¿Tiene Texto? → " +
-      "Wait 15s → Get Historial → Decidir (debounce/idempotencia/ráfaga NFC/CAP) → " +
-      "GUARD TIER-2 (parte 7: LLM guard jailbreak/off-topic del lite; violación → " +
-      "bot.firewall_strike → refusal/silencio; caída del guard → fail-open LOGUEADO a " +
-      "bot.errors; el Verificador v2 quedó AFUERA: {P1}+auditor cubren precios, " +
-      "confident-wrong se audita offline desde bot.log) → adaptador. " +
+      "GUARD TIER-2 (parte 7, PRE-debounce: clasifica el texto crudo del webhook así su " +
+      "llamada LLM se solapa con la ventana; violación → bot.firewall_strike → " +
+      "refusal/silencio; caída del guard → fail-open LOGUEADO a bot.errors; el Verificador " +
+      "v2 quedó AFUERA: {P1}+auditor cubren precios, confident-wrong se audita offline " +
+      "desde bot.log) → Wait DINÁMICO (15s menos lo ya consumido desde el ingreso, " +
+      "_ingresoTs del HMAC) → Get Historial → Decidir (debounce/idempotencia/ráfaga " +
+      "NFC/CAP) → adaptador. " +
       "SIN Simple Memory: la memoria es el historial del canal (historialTexto → input del " +
       "Agente). EGRESO (parte 6): Entregar → Preparar Envio → Enviar Mensaje (rails:3000) → " +
       "Chequear Envio (entrega = id de Chatwoot, no status HTTP) → ¿Se Entregó? (no → Label " +
@@ -2395,7 +2412,7 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["el adaptador hereda el nombre del Chat Trigger", cwAdaptador?.type === "n8n-nodes-base.code"],
     ["el adaptador emite sessionId/chatInput/_chatwoot/historialTexto", ["sessionId:", "chatInput", "_chatwoot:", "historialTexto"].every((f) => (cwAdaptador?.parameters?.jsCode || "").includes(f))],
     ["el Agente antepone el historial del canal", String(cwAgente?.parameters?.text || "").includes("historialTexto")],
-    ["process del Switch Ruteo pasa por el guard Tier-2", flowCw.connections["Switch Ruteo"]?.main?.[2]?.[0]?.node === "Guardrails Tier-2"],
+    ["process del Switch Ruteo entra al medio", flowCw.connections["Switch Ruteo"]?.main?.[2]?.[0]?.node === "Cuando llega un mensaje"],
     ["el HMAC usa el secret de entorno", (cwNodo("Verificar HMAC")?.parameters?.jsCode || "").includes("$env.CHATWOOT_WEBHOOK_SECRET")],
     ["el Filtro corta por firma válida", JSON.stringify(cwNodo("Filtro Ingreso")?.parameters || {}).includes("_hmac.ok")],
     ["el firewall llama a bot.firewall_check", (cwNodo("Firewall Tier-1")?.parameters?.query || "").includes("bot.firewall_check")],
@@ -2414,12 +2431,18 @@ console.log("✓ el auditor reproduce el Excel entero.");
     // Tier-2 (parte 7). El guard tiene DOS caminos de fallo y los dos tienen que estar:
     // la rama Fail del nodo (fail-open ruteado) y el log del model_error (fail-open mudo = el
     // agujero). Y una violación real tiene que TERMINAR en refusal/silencio, nunca en el medio.
-    ["el guard clasifica el mensaje de Decidir", String(cwNodo("Guardrails Tier-2")?.parameters?.text || "").includes("$('Decidir')")],
+    // El guard corre PRE-debounce: clasifica el texto crudo del webhook y NADA del bloque
+    // Tier-2 puede referirse a Decidir (que a esa altura no ejecutó — la ref tira error).
+    ["el guard clasifica el texto crudo del webhook", String(cwNodo("Guardrails Tier-2")?.parameters?.text || "").includes("$('Chatwoot Webhook')")],
+    ["el guard corre entre ¿Tiene Texto? y el debounce", flowCw.connections["¿Tiene Texto?"]?.main?.[0]?.[0]?.node === "Guardrails Tier-2" && flowCw.connections["¿Violación Real Tier-2?"]?.main?.[1]?.[0]?.node === "Wait — Debounce"],
+    ["ningún nodo Tier-2 lee Decidir (no corrió aún)", ["Guardrails Tier-2", "Router Fail Tier-2", "Strike Tier-2", "Mensaje Refusal Tier-2", "Log Fallo Guard"].every((n) => !JSON.stringify(cwNodo(n)?.parameters || {}).includes("$('Decidir')"))],
+    ["el HMAC estampa _ingresoTs", (cwNodo("Verificar HMAC")?.parameters?.jsCode || "").includes("_ingresoTs: Date.now()")],
+    ["el debounce descuenta lo ya consumido", String(cwNodo("Wait — Debounce")?.parameters?.amount || "").includes("_ingresoTs") && String(cwNodo("Wait — Debounce")?.parameters?.amount || "").includes("Math.max(0, 15")],
     ["el prompt del guard sabe que este bot SÍ cotiza", String(cwNodo("Guardrails Tier-2")?.parameters?.guardrails?.jailbreak?.value?.prompt || "").includes("cotiza precios") && !String(cwNodo("Guardrails Tier-2")?.parameters?.guardrails?.jailbreak?.value?.prompt || "").includes("NO da precios")],
     ["el modelo del guard está cableado (ai_languageModel)", flowCw.connections["Modelo · Guardrails"]?.ai_languageModel?.[0]?.[0]?.node === "Guardrails Tier-2"],
     ["la rama Fail del guard rutea Y loguea", flowCw.connections["Router Fail Tier-2"]?.main?.[0]?.some((c) => c.node === "¿Violación Real Tier-2?") && flowCw.connections["Router Fail Tier-2"]?.main?.[0]?.some((c) => c.node === "Log Fallo Guard")],
     ["violación real → strike → refusal/silencio", flowCw.connections["¿Violación Real Tier-2?"]?.main?.[0]?.[0]?.node === "Strike Tier-2" && flowCw.connections["Switch Strike Tier-2"]?.main?.[0]?.[0]?.node === "Mensaje Refusal Tier-2" && flowCw.connections["Switch Strike Tier-2"]?.main?.[1]?.[0]?.node === "Silencio Tier-2"],
-    ["sin violación → sigue al medio", flowCw.connections["¿Violación Real Tier-2?"]?.main?.[1]?.[0]?.node === "Cuando llega un mensaje"],
+    ["sin violación → sigue al debounce", flowCw.connections["¿Violación Real Tier-2?"]?.main?.[1]?.[0]?.node === "Wait — Debounce"],
     ["el Router Fail mapea topicalAlignment→offtopic (enum)", (cwNodo("Router Fail Tier-2")?.parameters?.jsCode || "").includes("topicalAlignment: 'offtopic'")],
     ["el strike crashea si falla (no reincidencia muda)", cwNodo("Strike Tier-2")?.onError === "stopWorkflow"],
   ].filter(([, ok]) => !ok);
