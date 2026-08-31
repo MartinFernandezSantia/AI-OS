@@ -592,8 +592,12 @@ const flowCw = JSON.parse(readFileSync(path.join(AQUI, "flows/cotizador-v1-chatw
 const codigoDecidir = flowCw.nodes.find((n) => n.name === "Decidir").parameters.jsCode;
 const codigoAdaptador = flowCw.nodes.find((n) => n.name === "Cuando llega un mensaje").parameters.jsCode;
 
-/** Mensaje de historial de Chatwoot. */
-const msj = (id, tipo, content, created_at, extra = {}) => ({ id, message_type: tipo, content, created_at, ...extra });
+// Los timestamps sintéticos se trasladan a una base RECIENTE en SEGUNDOS unix — como los
+// manda la API real de Chatwoot. Ejercita la normalización s→ms de `enMs` y sobrevive a
+// la ventana de 72h (un offset crudo tipo `100` quedaría filtrado como mensaje del '70).
+const BASE_S = Math.floor(Date.now() / 1000) - 600;
+/** Mensaje de historial de Chatwoot (offset en "ticks" sobre la base). */
+const msj = (id, tipo, content, t, extra = {}) => ({ id, message_type: tipo, content, created_at: BASE_S + t, ...extra });
 /** Corre Decidir con un webhook + historial sintéticos. */
 const decidir = (webhookBody, mensajes) =>
   correrCode(codigoDecidir, {
@@ -603,7 +607,7 @@ const decidir = (webhookBody, mensajes) =>
     },
   })[0].json;
 
-const cuerpo = (id, created_at) => ({ id, created_at, conversation: { id: 7 }, account: { id: 1 } });
+const cuerpo = (id, t) => ({ id, created_at: BASE_S + t, conversation: { id: 7 }, account: { id: 1 } });
 const chequeoCw = (nombre, cond, detalle) => {
   console.log(`  ${cond ? "✓" : "✗"} ${nombre}${cond ? "" : `  →  ${detalle}`}`);
   if (!cond) fallos++;
@@ -640,12 +644,15 @@ const chequeoCw = (nombre, cond, detalle) => {
   chequeoCw("injection → enlatado", d.action === "injection", JSON.stringify(d));
 }
 {
-  // CAP 24h: 25 salidas recientes → cap; si el aviso ya se dio → skip.
-  const muchas = Array.from({ length: 25 }, (_, i) => msj(100 + i, "outgoing", "r" + i, Date.now() - 1000 - i));
-  const dCap = decidir(cuerpo(10, Date.now()), [...muchas, msj(10, "incoming", "hola", Date.now())]);
+  // CAP 24h: 25 salidas recientes → cap; si el aviso ya se dio → skip. Los created_at en
+  // SEGUNDOS unix, como los manda la API: antes de la normalización enMs este filtro
+  // comparaba segundos contra Date.now() en ms y el CAP jamás disparaba (bug heredado del
+  // lite, mudo en prod).
+  const muchas = Array.from({ length: 25 }, (_, i) => msj(100 + i, "outgoing", "r" + i, -1 - i));
+  const dCap = decidir(cuerpo(10, 500), [...muchas, msj(10, "incoming", "hola", 500)]);
   chequeoCw("cap 24h → cap", dCap.action === "cap", JSON.stringify(dCap));
-  const conAviso = [...muchas.slice(0, 24), msj(99, "outgoing", "uy, venimos con muchos mensajes en esta conversación", Date.now() - 500), msj(10, "incoming", "hola", Date.now())];
-  const dAvisado = decidir(cuerpo(10, Date.now()), conAviso);
+  const conAviso = [...muchas.slice(0, 24), msj(99, "outgoing", "uy, venimos con muchos mensajes en esta conversación", 400), msj(10, "incoming", "hola", 500)];
+  const dAvisado = decidir(cuerpo(10, 500), conAviso);
   chequeoCw("cap ya avisado → skip", dAvisado.action === "skip" && dAvisado.reason === "cap-ya-avisado", JSON.stringify(dAvisado));
 }
 {
@@ -670,6 +677,32 @@ const chequeoCw = (nombre, cond, detalle) => {
   const d = decidir(cuerpo(10, 100), [msj(10, "incoming", "hola", 100)]);
   const a = correrCode(codigoAdaptador, { nodos: { Decidir: [{ json: d }] } })[0].json;
   chequeoCw("primer contacto: historialTexto vacío", a.historialTexto === "", JSON.stringify(a.historialTexto));
+}
+{
+  // VENTANA 72h: lo más viejo que 72h desaparece de la memoria del turno. La conversación
+  // de WhatsApp en Chatwoot es la misma por meses; un pedido de hace 4 días no puede
+  // colarse en el historial que ve el Agente ni contar como "última salida" de la ráfaga.
+  const CUATRO_DIAS = -4 * 86400;
+  const d = decidir(cuerpo(30, 100), [
+    msj(20, "incoming", "quiero 500 tarjetas", CUATRO_DIAS),
+    msj(21, "outgoing", "salen $54.000", CUATRO_DIAS + 60),
+    msj(30, "incoming", "hola, precio de stickers?", 100),
+  ]);
+  chequeoCw(
+    "mensajes de hace 4 días fuera del historial",
+    d.action === "process" && d.conversation.length === 1 && d.userMessage === "hola, precio de stickers?",
+    JSON.stringify(d),
+  );
+  // …pero un reply CITANDO un mensaje viejo lo resuelve igual (se busca sin la ventana).
+  const dCita = decidir(cuerpo(31, 100), [
+    msj(21, "outgoing", "salen $54.000", CUATRO_DIAS + 60),
+    msj(31, "incoming", "y con otro papel?", 100, { content_attributes: { in_reply_to: 21 } }),
+  ]);
+  chequeoCw(
+    "reply citado a un mensaje viejo se resuelve",
+    dCita.action === "process" && dCita.userMessage.includes('citando tu mensaje: "salen $54.000"'),
+    JSON.stringify(dCita.userMessage),
+  );
 }
 
 // ── El egreso (parte 6): Preparar Envio → Chequear Envio → Actualizar Entrega ─────────

@@ -451,6 +451,29 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      normal?) solo se ve con tráfico real en la parte 8 — el lite ya lo corrió semanas en
      prod con estos mismos prompts/thresholds, así que el riesgo es bajo.
 
+   **Ventana de memoria 72h + fix de unidades (31/08, pedido de Martín).** `Decidir` corta
+   el historial de la conversación a las últimas 72h ANTES de computar nada: la
+   conversación de WhatsApp en Chatwoot es la misma por meses, y sin el corte el historial
+   que ve el Agente podía traer un pedido de hace un mes como si fuera de hoy. El corte
+   alcanza a debounce, ráfaga, CAP y al historial del turno; el **reply citado NO se
+   corta** (se resuelve contra el historial completo: citar un mensaje viejo es legítimo).
+   La API de Chatwoot no filtra por fecha (solo pagina por id), por eso el corte vive en
+   `Decidir`, no en `Get Historial`.
+   **De paso, un bug mudo heredado del lite**: el payload de la API trae `created_at` en
+   SEGUNDOS unix y el CAP de 24h lo comparaba contra `Date.now()` en ms — esa comparación
+   no podía dar verdadera nunca (el CAP jamás disparó en prod). Ahora TODO timestamp pasa
+   por `enMs` (normaliza s→ms) antes de comparar: idempotencia, CAP, ventana. Los tests
+   del Decidir migraron a timestamps en segundos unix reales (como manda la API), que es
+   lo que ejercita la normalización — los offsets crudos de antes eran fixture mintiendo.
+
+   **🚀 PARTE 8 EN CURSO (31/08): EL COTIZADOR ESTÁ EN VIVO.** Martín hizo el switch desde
+   la UI: el bot lite quedó INACTIVO y `cotizador-v1-chatwoot` está ACTIVO y publicado
+   (la publicación inicial quedó una versión atrás del draft — sin la ventana 72h — y se
+   re-publicó por MCP al detectarlo: `activeVersionId` ahora calca al draft). El path
+   `chatwoot` es del cotizador. Falta el smoke e2e con WhatsApp real: mensaje normal,
+   cotización, horario, y verificar en `bot.log` que la fila del turno cierre con
+   `signals.entregado: true` y latencia.
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`
