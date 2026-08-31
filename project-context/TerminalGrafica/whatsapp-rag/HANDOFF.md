@@ -340,6 +340,39 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
      quiere que sepa la fecha, hay que inyectarla por expresión de n8n, no por texto
      horneado (el build fija la fecha del build, no la del turno).
 
+   **Parte 5 — CONSTRUIDA y subida (31/08): la variante Chatwoot, ingreso F1+F2.**
+   `build-flow.mjs` ahora emite DOS flows: el de chat (18 nodos) y
+   `flows/cotizador-v1-chatwoot.json` (**37 nodos**, workflow `3vNAAe0sr7sMgPUa` en n8n,
+   **INACTIVO — no activar hasta la parte 6**: los enlatados sí postean a Chatwoot, pero la
+   respuesta del LLM muere en `Entregar` porque falta el egreso).
+   - **Decisión de Martín: la memoria es el HISTORIAL DE CHATWOOT.** La variante saca la
+     Simple Memory; el adaptador (que hereda el nombre "Cuando llega un mensaje" para no
+     tocar el medio) emite `historialTexto` y el `text` del Agente lo antepone al mensaje
+     nuevo. El log y todo el medio quedan idénticos por copia profunda.
+   - F1+F2 portados VERBATIM del lite: webhook (path `chatwoot` — compartido con el bot
+     lite ACTIVO: un solo flow activo por vez), HMAC, Filtro (WhatsApp entrante sin humano,
+     firma válida), Firewall Tier-1 con fail-open LOGUEADO a `bot.errors`, ¿Tiene Texto?,
+     Wait 15s, Get Historial, Decidir (debounce/idempotencia/ráfaga NFC/CAP/reply citado),
+     Switch Ruteo. El `process` va DIRECTO al medio (Tier-2 queda para la parte 7).
+   - Gate de 10 cableados de la variante (Memoria ausente, adaptador completo, HMAC con
+     `$env`, firewall, NFC, cadena del log), verificado EN ROJO. 12 tests nuevos en
+     `test-auditor.mjs`: Decidir y adaptador contra historiales sintéticos de Chatwoot.
+   - Subido por MCP en 5 tandas de operaciones (esqueleto SDK + addNode/addConnection
+     generados DESDE el emitido) y verificado con un **diff programático** vivo-vs-emitido
+     (37 nodos, 37 conexiones, credenciales y settings — el diff normaliza los comentarios
+     del jsCode: los rulers difieren en largo al tipear por MCP, el código debe ser
+     idéntico). Ese diff ya pagó: cazó un Responder que transcribí resumido.
+   - **Credenciales vivas, horneadas en el builder**: Chatwoot API Token
+     `2e8slhNsviye1WE7` y Gemini `ql7KStbm6WaYEaSJ` (los ids del builder del lite estaban
+     viejos, mismo caso que BOT_DB).
+   - **Lo que NO se pudo probar**: el e2e real. El HMAC exige la firma del secret y el
+     canal es el webhook de Chatwoot — se prueba recién al switchear (desactivar el lite,
+     activar este) con un WhatsApp real, después de la parte 6.
+   - **Pregunta para TG que dejó el port**: el enlatado del CAP del lite decía "Rodríguez
+     Peña 3865, Mar del Plata" y `bot.business_info` dice "Dorrego 3365" — direcciones
+     DISTINTAS, una es vieja. El enlatado nuevo no afirma ninguna ("pasá por el local")
+     hasta que TG confirme cuál es.
+
    **Parte 4 — HECHA y verificada en vivo (31/08): la cola de debug ya no sale al cliente.**
    El Responder dejó de pegar `⚠ auditoría:` y `(marcadores sin precio: …)` al mensaje, en
    los DOS caminos (normal y fallback del parser). El rastro vive en `bot.log`
