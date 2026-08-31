@@ -544,7 +544,8 @@ for (const c of casos) {
     problemas.push(`la cadena del log EXPLOTÓ: ${e.message}`);
   }
 
-  // El mensaje SIN la cola de auditoría: eso es lo que iría a producción.
+  // Desde la Fase 5 · parte 4 el mensaje YA sale limpio: la cola de debug se retiró y el
+  // rastro vive en bot.log. `limpio` queda por compatibilidad con los casos viejos.
   const limpio = out.split("\n\n⚠ auditoría:")[0].split("\n(marcadores sin precio:")[0];
 
   for (const t of c.esperaEnMensaje ?? []) {
@@ -553,9 +554,15 @@ for (const c of casos) {
   for (const t of c.noEsperaEnMensaje ?? []) {
     if (limpio.includes(t)) problemas.push(`el mensaje NO debería decir "${t}"`);
   }
-  // Invariante global: ningún marcador crudo puede llegar al chat, pase lo que pase.
+  // Invariantes globales: ningún marcador crudo puede llegar al chat, y desde la parte 4
+  // NINGÚN veredicto interno tampoco — el rastro va a bot.log, no al cliente.
   if (/\{P\d+\}/.test(limpio)) problemas.push("quedó un marcador {Pn} sin sustituir");
-  if (!a.ok && !out.includes("⚠ auditoría:")) problemas.push("el veredicto NO llegó al mensaje");
+  if (out.includes("⚠ auditoría:") || out.includes("marcadores sin precio")) {
+    problemas.push("la cola de debug volvió a salir al cliente");
+  }
+  if (!a.ok && !(r[0].json.auditoria.hallazgos || []).length) {
+    problemas.push("turno con !ok pero sin hallazgos: el rastro para bot.log se perdió");
+  }
 
   if (problemas.length) fallos++;
   console.log(`${problemas.length ? "✗" : "✓"} ${c.nombre}`);
