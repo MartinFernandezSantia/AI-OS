@@ -120,7 +120,14 @@ export function modoDe(unidad: string): "pliego" | "m2" | "item" | "otro" {
   // La lista es EXPLÍCITA a propósito: si el default fuera `item`, una unidad mal escrita
   // ("pliegos A3" en plural, "metro2") cotizaría como ítem en silencio en vez de fallar.
   // `otro` sigue siendo "no sé qué es esto" y el auditor lo rechaza.
-  if (/^(unidad|hoja|paquete|pack|item|ítem)\b/.test(u)) return "item";
+  // "metro lineal" entra acá y NO en m2: se cobra cantidad × precio (3 metros de plano
+  // escaneado = 3 × $8.000), no ancho × alto. El nombre engaña — lo que lo define es que
+  // el cliente pide una cantidad, no una medida de dos ejes.
+  //
+  // Dice "metro lineal" completo, no "metro" a secas: con el prefijo suelto, "metro
+  // cuadrado" también caería en `item` y cobraría por cantidad un material que se cotiza
+  // por superficie. El precio saldría plausible y nadie lo notaría.
+  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
   return "otro";
 }
 

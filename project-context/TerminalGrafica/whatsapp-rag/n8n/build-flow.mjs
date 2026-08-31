@@ -323,7 +323,11 @@ function modoDe(unidad) {
   const u = String(unidad).trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
-  if (/^(unidad|hoja|paquete|pack|item|ítem)\b/.test(u)) return "item";
+  // "metro lineal" entra acá y NO en m2: se cobra cantidad × precio (3 metros de plano
+  // escaneado = 3 × $8.000), no ancho × alto. Es "metro lineal" completo y no "metro" a
+  // secas: con el prefijo suelto, "metro cuadrado" cobraría por cantidad algo que se
+  // cotiza por superficie.
+  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
   return "otro";
 }
 
@@ -516,6 +520,10 @@ function correrTests() {
       ["pliego A3", "pliego"], ["pliego A4", "pliego"],
       ["m2", "m2"], ["m²", "m2"],
       ["unidad", "item"], ["hoja", "item"], ["paquete de 100", "item"], ["pack", "item"],
+      // El nombre engaña: se cobra cantidad × precio, no ancho × alto. Y el par de abajo
+      // es el que importa: con el prefijo escrito "metro" a secas, el CUADRADO también
+      // caía en item y cobraba por cantidad algo que se cotiza por superficie.
+      ["metro lineal", "item"], ["metro cuadrado", "otro"],
       ["bobina", "otro"], ["", "otro"],
     ];
     for (const [unidad, esperado] of CASOS_MODO) {

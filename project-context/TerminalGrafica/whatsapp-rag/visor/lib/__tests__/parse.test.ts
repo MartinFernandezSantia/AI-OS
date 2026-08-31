@@ -163,13 +163,15 @@ describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
     expect(modoDe("hoja")).toBe("item");
     expect(modoDe("paquete de 100")).toBe("item");
     expect(modoDe("pack")).toBe("item");
+    // El metro LINEAL también: el escaneo de planos se cobra 3 metros × $8.000, que es
+    // cantidad × precio. El nombre suena a medida, pero el cliente pide una cantidad.
+    expect(modoDe("metro lineal")).toBe("item");
   });
 
   it("una unidad desconocida no se hace pasar por ninguno de los modos", () => {
     // `otro` sigue siendo el cajón de errores, NO el default de item: si lo fuera, una
     // unidad mal escrita cotizaría de a ítem en silencio en vez de fallar.
     expect(modoDe("plancha 30x40")).toBe("otro");
-    expect(modoDe("metro lineal")).toBe("otro");
     expect(modoDe("bobina")).toBe("otro");
     expect(modoDe("")).toBe("otro");
   });
@@ -181,6 +183,10 @@ describe("modoDe — la rama de cálculo se deriva por prefijo", () => {
   });
 
   it("'metro cuadrado' NO es 'm2': queda huérfano, sin fórmula", () => {
+    // Y desde que existe "metro lineal" este test cuida algo más: si la lista dijera
+    // "metro" a secas, "metro cuadrado" caería en `item` y cobraría cantidad × precio un
+    // material que se cotiza por superficie. Salió plausible y sin error — lo atajó este
+    // test cuando el prefijo se escribió corto.
     expect(modoDe("metro cuadrado")).toBe("otro");
   });
 });
