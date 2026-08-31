@@ -408,6 +408,43 @@ banner $32.000 = caso 127; 4 ojalillos $4.000 = caso 68 × 4; plastificado A4 $2
 68; 5 recetarios $20.000). Los dos guardrails dispararon bien solos: 1000 stickers de 2x2
 METROS → fuera de rango, y 1 talonario → no múltiplo del paquete de 10.
 
+### El modelo hace la cuenta que le toca al auditor (2 cobros mal, RESUELTO)
+
+Tres fallas medidas en vivo, una misma causa: **el modelo convierte la cantidad a la unidad
+de cobro, y el auditor la vuelve a convertir.** El error queda invisible porque la aritmética
+cierra sola — lo único mal es el input, y el input no tiene contra qué compararse.
+
+| Ejec. | Pedido | Declaró | Salió | Debía | Dirección |
+|---|---|---|---|---|---|
+| 412 | 100 stickers 7x7 | `6` (pliegos) | $4.000 | $16.800 | cobra de MENOS |
+| 422 | una lona de 3x1 | `3` (m2) | $198.000 | $66.000 | cobra el TRIPLE |
+| — | 2,45 m de planos | `1` ("un trabajo") | $8.000 | $19.600 | cobra de MENOS |
+
+**La causa raíz era una instrucción mía mal escrita.** El schema decía *"cantidad: EN LA
+UNIDAD DE COBRO que declara el catálogo"*, y el chunk de stickers dice, en mayúsculas,
+*"Precio según CANTIDAD DE PLIEGOS A3 (no de piezas)"*. El modelo obedeció al pie de la letra.
+El caso del metro lineal, que motivó aquel texto, no era una excepción a "declarar lo que dijo
+el cliente" — era un ejemplo de ella (el cliente DICE "2,45 metros").
+
+Arreglado en las tres capas que le hablan al modelo, porque las tres decían lo mismo mal:
+- **schema** (`build-flow.mjs`): "lo que pidió el cliente, EN SUS PALABRAS y sin convertir".
+- **prompt** (`system-prompt-v1.md`): la regla, con los 4 ejemplos (piezas / paquete / m2 /
+  medida continua).
+- **chunk** (`visor/lib/chunk.ts`): el ejemplo de la cuenta ahora cierra con *"vos declarás
+  las 200 piezas, no 2 pliegos A3"*, y el de m2 aclara que la fórmula es para entender el
+  precio, no para aplicarla. El ejemplo existe para que el bot no lea el tramo en piezas —
+  se queda, pero mostrar la cuenta invitaba a hacerla.
+
+Verificado en vivo (ejecuciones 423-425): lona 3x1 → $66.000 · stickers+lona → $6.600 y
+$32.000 · **2 lonas de 1,5x2 → cantidad 2, $96.000** (o sea que distingue piezas de m2, no
+declara 1 mecánicamente). Sin regresión en pliego, item, paquete y mínimo.
+
+**Por qué el gate de 132 casos no lo agarra, y no puede.** Alimenta al motor con las piezas
+correctas leídas del Excel; nunca con lo que el modelo declara. El caso 13 del Excel ES este
+pedido y da $16.800 en verde. Es el mismo agujero que [[tests-fixtures-mienten]]: el paso que
+se rompe queda afuera por construcción. **Esta clase de bug solo aparece corriendo el bot de
+verdad y leyendo la ejecución.**
+
 ### El patrón que dejó el barrido: el modelo INVENTA la medida que falta
 
 No es un caso aislado — es **el** hallazgo, y aparece en 3 de los 19 turnos nuevos más el que
@@ -422,6 +459,20 @@ ya estaba anotado (ejecución 379):
 
 Los cuatro son la MISMA falla: falta un dato para cotizar, el prompt dice "preguntá SOLO eso",
 y el modelo en vez de preguntar rellena con la medida de referencia del chunk y cotiza.
+
+**RESUELTO — y la causa no era el modelo, era el chunk.** Leyendo el retrieval de la 400: de
+los 5 chunks que trajo, **4 encabezan sus "Medidas de referencia" con 5x5**, y cada una viene
+con la cuenta ya resuelta de ejemplo. El chunk decía "se cotiza CUALQUIER medida" y nunca
+decía de DÓNDE sale esa medida, así que el modelo agarraba la primera que veía. No elegía:
+tomaba lo único concreto que tenía delante. El chunk ahora dice *"La medida la da SIEMPRE el
+cliente: si no la dijo, preguntala"*, en pliego y en m2 (no en item, donde la medida ya viene
+cerrada). Verificado en vivo tras re-ingestar (ejecución 411): `Necesito 100 stickers en opp`
+→ **pregunta la medida**, `cotizaciones: []`, ningún precio. Mismo mensaje que antes cotizaba
+$8.400 de una medida inventada.
+
+Queda como lección general: cuando el bot "elige mal", mirar primero QUÉ le llegó en el
+retrieval. Tres de los cuatro bugs de esta sesión estaban en el texto del chunk, no en el
+prompt ni en el modelo.
 
 **Es peor que el mudo**, porque acá el cliente SÍ recibe un precio — uno de un trabajo que no
 pidió. El auditor no puede verlo: 4 ojalillos a $1.000 cierra perfecto, la aritmética está
