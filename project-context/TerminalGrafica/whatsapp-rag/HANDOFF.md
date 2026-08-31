@@ -275,6 +275,14 @@ con el título pelado) y otra tenía una descripción que ya no nombraba lo que 
    precio: {P1})` al mensaje del cliente. Es deliberado para medir, y está marcado en el
    código.
 
+   **El log en Supabase (`bot.log`) es además la herramienta de medición.** Hoy auditar un
+   caso cuesta 2 llamadas MCP (ejecutar + leer la ejecución) y el rate limit corta cerca de
+   los 100 — por eso los 132 quedaron a medio correr. Con cada turno escribiendo su fila
+   (entrada, material declarado, cantidad, total, `via`, hallazgos), auditar la tanda entera
+   pasa a ser **un SELECT**. Vale la pena guardar los campos que hoy hay que ir a buscar a la
+   ejecución: sobre todo `cotizaciones[].cantidad` CRUDA del Agente, que es donde vive la
+   clase de bug que ni el auditor ni el gate pueden ver.
+
 ### El catálogo del cliente, cargado (2026-08-30) — y los tres bugs que destapó
 
 El Excel pasó a `Catalogo-TG-v3.xlsx` (el v2 no se toca) con los 61 productos que mandó
@@ -713,6 +721,22 @@ aplica por producto o por pedido completo? (el plan asume por producto — confi
   mensaje del cliente. Sacarla antes de prod.
 - **Los 132 casos del Excel nunca se corrieron completos contra el catálogo v3** en vivo. La
   medición de 44/46 es del v2. El gate los cubre aritméticamente, no la elección de material.
+  **DECISIÓN 31/08: esperar al log en Supabase (Fase 5), no scriptear la lectura ahora.**
+  Se intentó por MCP y se llegó a **97 lanzados, 28 auditados — 28/28 exactos** (stickers en
+  los 4 materiales, etiquetas, vinilo UV con mínimo facturable, carteles; incluye el caso del
+  redondeo). Ahí cortó el **rate limit del MCP**: cada caso cuesta 2 llamadas (ejecutar +
+  leer), y con 8 en paralelo el servidor devuelve `Too many requests`.
+  - **No es configurable, y se verificó de dónde sale**: n8n NO tiene rate limiting nativo en
+    su API REST, y el Traefik de Dokploy no tiene ningún middleware de `rateLimit` (grep sobre
+    `/etc/dokploy/traefik/` vacío). Queda el limiter de la capa MCP/OAuth de n8n, que no expone
+    variable de entorno — habría que parchear el código. **Pegarle a `/api/v1/` NO lo esquiva**
+    si algún día el límite pasa a estar en el proxy.
+  - **Por qué esperar al log es mejor que un script**: con el firewall / `bot.log` escribiendo
+    cada turno en Supabase, auditar los 132 pasa a ser **un SELECT**, no 132 lecturas por MCP.
+    Y sirve igual en producción con clientes reales, no solo para correr la planilla.
+  - Gotcha al diagnosticar desde el VPS: `curl` al dominio devuelve **403 por el geo-block
+    solo-AR de Cloudflare** (la IP del datacenter no es argentina) — ese 403 no es un rate
+    limit y ese test no mide nada. Es el mismo hairpin de [[tg-bot-prod-standup]].
 - **Un archivo temporal sin borrar**: `visor/lib/__tests__/ver-chunk-stickers-tmp.test.ts`
   (y `visor/ver-chunk-tmp.test.ts` de la sesión anterior). No están commiteados. `rm` está
   denegado para Claude: los borra Martín.
