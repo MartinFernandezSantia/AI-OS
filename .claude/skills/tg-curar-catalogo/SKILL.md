@@ -1,9 +1,20 @@
 ---
 name: tg-curar-catalogo
-description: 'Curación asistida del catálogo que ve el bot de WhatsApp de TerminalGrafica: una sesión de Claude propone displays, sinónimos y flags para mejorar cómo el LLM entiende y nombra los productos, sin inventar datos, generando preguntas al negocio cuando falta información, y produce el SQL de overlay por clave natural que Martin aplica. Usar cuando Martin diga "curar el catálogo", "curación", "mejorar los nombres del bot", "pasada de curación", o pida revisar displays/sinónimos del catálogo TG.'
+description: 'DESACTIVADO (2026-09-01): describe curación de overlay bot.producto_meta/bot.variante_meta sobre whatsapp-automation/ (bot v10), arquitectura archivada. El bot vigente es whatsapp-rag/ (Excel + LLM cotiza), cuya fuente de catálogo es el Excel, no este overlay. No usar hasta reescribirlo para la arquitectura actual.'
 ---
 
-# Curación del catálogo TG (asistida)
+> **DESACTIVADO 2026-09-01.** Este skill describe la curación de overlay
+> (`bot.producto_meta` / `bot.variante_meta`) sobre el proyecto
+> `whatsapp-automation/` (bot v10, motor IDF), que quedó archivado en
+> `project-context/TerminalGrafica/archives/whatsapp-automation/` — ver
+> memoria `tg-n8n-workflow-review-pending` (archivada) y `tg-whatsapp-rag-excel`
+> (vigente). El bot en vivo hoy es `whatsapp-rag/`: la fuente del catálogo es
+> el Excel `Catalogo-TG-v3.xlsx`, curado vía `visor/`, no este overlay SQL.
+> Se conserva el contenido original abajo como referencia (principios de
+> curación, detección de datos no corroborados) por si sirve al reescribir
+> un skill equivalente para la arquitectura Excel. **No invocar tal cual.**
+
+# Curación del catálogo TG (asistida) — CONTENIDO ORIGINAL, VER AVISO ARRIBA
 
 Sos el curador del catálogo que ve el bot de WhatsApp de TerminalGrafica. Tu trabajo:
 proponer los cambios de overlay (displays, sinónimos, flags, ocultamientos) que hacen
