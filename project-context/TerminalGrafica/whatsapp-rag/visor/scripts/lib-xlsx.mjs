@@ -57,7 +57,15 @@ export function abrir() {
     if (!e) throw new Error(`no existe la entrada ${n}`);
     return e;
   };
-  return { entradas, get };
+  // xl/sharedStrings.xml es la única entrada que puede faltar LEGÍTIMAMENTE: un .xlsx
+  // guardado por openpyxl reescribe TODO el archivo con las cadenas inline (t="inlineStr" +
+  // <is><t>…</t></is> en la propia celda) y borra sharedStrings.xml entero. Es OOXML válido
+  // (Excel/LibreOffice lo abren sin problema). Los scripts de ESCRITURA (los que agregan
+  // filas) siguen necesitando sharedStrings para poder registrar cadenas nuevas — para esos,
+  // `get("xl/sharedStrings.xml")` debe seguir tirando. `getOpcional` es para LECTURA
+  // tolerante: devuelve `null` en vez de tirar cuando la entrada no existe.
+  const getOpcional = (n) => entradas.find((x) => x.nombre === n) ?? null;
+  return { entradas, get, getOpcional };
 }
 
 export const dec = (s) =>
@@ -66,15 +74,72 @@ export const dec = (s) =>
    .replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 export const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Las cadenas de sharedStrings, en orden. Un <si> puede tener varios <t>. */
+/**
+ * Mapa rId → Target de un xl/_rels/workbook.xml.rels. Tolera CUALQUIER orden de atributos
+ * dentro de <Relationship>: LibreOffice escribe `Id="rId1" ... Target="worksheets/sheet1.xml"`,
+ * pero openpyxl escribe `Target="/xl/worksheets/sheet1.xml" Id="rId1"` (Target ANTES que Id).
+ * Un regex que asuma el orden de LibreOffice (`Id="..."[^>]*Target="..."`) no matchea nada
+ * contra un archivo guardado por openpyxl y deja el mapa vacío en silencio. También normaliza
+ * el Target: openpyxl lo escribe absoluto ("/xl/worksheets/sheet1.xml"), LibreOffice relativo
+ * a xl/ ("worksheets/sheet1.xml") — se devuelve siempre relativo a xl/, sin la barra inicial.
+ */
+export function relsDe(relsXml) {
+  const mapa = {};
+  for (const m of relsXml.matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+    const attrs = m[1];
+    const id = attrs.match(/\bId="([^"]+)"/)?.[1];
+    const target = attrs.match(/\bTarget="([^"]+)"/)?.[1];
+    if (!id || !target) continue;
+    mapa[id] = target.replace(/^\/?xl\//, "");
+  }
+  return mapa;
+}
+
+/** Las cadenas de sharedStrings, en orden. Un <si> puede tener varios <t>.
+ *  `ssXml` puede venir vacío/undefined (archivo sin sharedStrings.xml, p. ej. guardado por
+ *  openpyxl): devuelve la lista vacía en vez de romper. */
 export function cadenasDe(ssXml) {
   const out = [];
+  if (!ssXml) return out;
   for (const m of ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
     let t = "";
     for (const tm of m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) t += dec(tm[1]);
     out.push(t);
   }
   return out;
+}
+
+/** Concatena los <t> de un <is>…</is> (rich text inline: puede haber más de uno). Usado
+ *  para celdas t="inlineStr" (formato que deja openpyxl al guardar: el texto vive DENTRO de
+ *  la celda en vez de un índice a sharedStrings). */
+function textoInlineDe(cuerpoCelda) {
+  const is = cuerpoCelda.match(/<is>([\s\S]*?)<\/is>/)?.[1] ?? "";
+  let t = "";
+  for (const tm of is.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) t += dec(tm[1]);
+  return t;
+}
+
+/**
+ * Resuelve el valor de texto/número de una celda ya parseada, tolerando los tres formatos
+ * que aparecen en este repo:
+ *   - t="s"         → índice a sharedStrings (formato LibreOffice/Excel tradicional)
+ *   - t="inlineStr" → texto inline en <is><t>…</t></is> (formato que deja openpyxl)
+ *   - sin t (o t="n"/t="str") → el <v> crudo, decodificado
+ *
+ * `attrs` son los atributos de la celda (el texto entre `<c` y el `>`/`/>` de apertura).
+ * `cuerpo` es todo lo que hay entre la apertura y `</c>` (vacío/undefined si es self-closing).
+ * `cadenas` es el array de sharedStrings ya resuelto (cadenasDe(...)), puede venir vacío.
+ * Devuelve `undefined` si la celda no tiene valor (self-closing o sin <v>/<is>).
+ */
+export function valorCelda(attrs, cuerpo, cadenas) {
+  if (/ t="inlineStr"/.test(attrs)) {
+    if (!cuerpo) return undefined;
+    return textoInlineDe(cuerpo);
+  }
+  if (!cuerpo) return undefined;
+  const v = cuerpo.match(/<v>([\s\S]*?)<\/v>/)?.[1];
+  if (v === undefined) return undefined;
+  return / t="s"/.test(attrs) ? (cadenas[Number(v)] ?? "") : dec(v);
 }
 
 /**

@@ -129,9 +129,11 @@ NO toquen los rangos de Datos → Validación por su cuenta.
 Estas tres reglas son para Claude, no para ustedes. Si le pasan el archivo por chat,
 conviene que estén a la vista:
 
->    1. Abrir SIEMPRE con load_workbook(ruta). NUNCA con data_only=True: eso borra de forma
->       permanente las fórmulas de la hoja _listas y rompe los desplegables, sin ningún error
->       visible.
+>    1. Abrir SIEMPRE con load_workbook(ruta). NUNCA con data_only=True.
+>       data_only=True borra las 598 fórmulas de la hoja _listas de forma permanente, y el
+>       daño NO se ve: los desplegables siguen mostrando la lista vieja congelada, así que
+>       todo parece funcionar. Pero desde ese momento ningún material ni colección que se
+>       cargue vuelve a aparecer nunca en el desplegable. Verificado, no es teórico.
 >    2. La lista de materiales válidos se lee de la hoja Materiales, NO de la hoja _listas
 >       (en _listas hay fórmulas, no valores).
 >    3. La hoja _listas es generada: no leerla, no escribirla, no "arreglarla".

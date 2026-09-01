@@ -16,22 +16,26 @@
 //
 // Sale con código 1 si hay errores (para poder usarlo como gate), 0 si solo hay avisos.
 
-import { XLSX, abrir, dec, rinde } from "./lib-xlsx.mjs";
+import { XLSX, abrir, cadenasDe, relsDe, rinde, valorCelda } from "./lib-xlsx.mjs";
 
-const { get } = abrir();
+const { get, getOpcional } = abrir();
 const leer = (n) => get(n).contenido.toString("utf8");
+// sharedStrings.xml puede no existir: un .xlsx guardado por openpyxl reescribe todas las
+// cadenas inline (t="inlineStr") y borra la entrada entera. Ausencia ≠ error.
+const leerOpcional = (n) => getOpcional(n)?.contenido.toString("utf8") ?? "";
 
 // ── lectura de hojas ───────────────────────────────────────────────────────────────────
 const wb = leer("xl/workbook.xml");
-const rels = leer("xl/_rels/workbook.xml.rels");
+const RID = relsDe(leer("xl/_rels/workbook.xml.rels"));
 const HOJAS = [...wb.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="(rId\d+)"[^>]*\/?>/g)].map((m) => ({
   nombre: m[1],
-  ruta: "xl/" + (rels.match(new RegExp(`Id="${m[2]}"[^>]*Target="([^"]+)"`))?.[1] ?? "").replace(/^\/?xl\//, ""),
+  ruta: "xl/" + (RID[m[2]] ?? ""),
 }));
 
-const CADENAS = [...leer("xl/sharedStrings.xml").matchAll(/<si>([\s\S]*?)<\/si>/g)]
-  // Un <si> puede traer varios <t> (rich text): se concatenan, no se toma el primero.
-  .map((m) => [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => dec(t[1])).join(""));
+// Ausente en un .xlsx guardado por openpyxl (ver comentario de leerOpcional): CADENAS queda
+// vacía y las celdas t="s" simplemente no aparecen en ese formato (openpyxl las deja
+// t="inlineStr", resuelto en valorCelda).
+const CADENAS = cadenasDe(leerOpcional("xl/sharedStrings.xml"));
 
 /** Devuelve las filas de una hoja como objetos {encabezado: valor}, más su número de fila. */
 function filasDe(hoja) {
@@ -54,9 +58,11 @@ function filasDe(hoja) {
       if (!ref || c[2]) continue; // sin referencia, o self-closing = celda vacía
       const resto = m[2].slice(c.index + c[0].length);
       const cuerpo = resto.slice(0, resto.indexOf("</c>"));
-      const v = cuerpo.match(/<v>([\s\S]*?)<\/v>/)?.[1];
-      if (v === undefined) continue;
-      celdas[ref] = / t="s"/.test(attrs) ? (CADENAS[Number(v)] ?? "") : dec(v);
+      // valorCelda resuelve los tres formatos: t="s" (shared string), t="inlineStr" (texto
+      // inline, formato que deja openpyxl al guardar) y el resto (<v> crudo).
+      const val = valorCelda(attrs, cuerpo, CADENAS);
+      if (val === undefined) continue;
+      celdas[ref] = val;
     }
     filas.push({ n, celdas });
   }
@@ -114,6 +120,29 @@ if (faltantes.length) {
 const colecciones = filasDe("Colecciones");
 const materiales = filasDe("Materiales");
 const productos = filasDe("Productos");
+
+// ── los desplegables siguen vivos ──────────────────────────────────────────────────────
+// La hoja _listas alimenta los desplegables de Colección/Material con fórmulas que leen los
+// únicos de Materiales y Colecciones. Si alguien abre el archivo con openpyxl y
+// `data_only=True`, esas fórmulas se BORRAN y quedan los últimos valores congelados como
+// texto: los desplegables siguen mostrando la lista vieja, así que el daño no se ve —
+// simplemente nada de lo que se cargue de ahí en más vuelve a aparecer en ellos.
+// Verificado empíricamente, es la razón por la que este chequeo existe.
+{
+  const hojaListas = HOJAS.find((h) => h.nombre === "_listas");
+  if (hojaListas) {
+    const xml = leer(hojaListas.ruta);
+    const formulas = (xml.match(/<f\b[^>]*t="array"/g) || []).length;
+    if (formulas === 0) {
+      err("_listas", 1,
+        "la hoja _listas perdió sus fórmulas: los desplegables quedaron CONGELADOS con la lista vieja. " +
+        "Pasa al abrir el archivo con data_only=True. Todo lo que se cargue desde ahora no va a aparecer " +
+        "en los desplegables. Hay que regenerar la copia y volver a cargar sobre una limpia.");
+    } else if (formulas < 100) {
+      avi("_listas", 1, `la hoja _listas tiene ${formulas} fórmulas (se esperaban ~598). Puede haberse recortado el rango.`);
+    }
+  }
+}
 
 const nombresColeccion = new Set(colecciones.filas.map((c) => c["Colección"]).filter(Boolean));
 const nombresMaterial = new Set(materiales.filas.map((m) => m["Material"]).filter(Boolean));

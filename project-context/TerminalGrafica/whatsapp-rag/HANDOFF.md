@@ -21,6 +21,65 @@ contento. Dos problemas con lo que había:
 
 Se salva RAG + firewall. Todo lo demás estaba en discusión.
 
+## En curso: el cliente carga el catálogo con SU Claude (2026-09-01)
+
+TG va a cargar productos él mismo, pasándole el Excel a su propia instancia de Claude
+(Cowork). Se le entrega **`Catalogo-TG-cliente.xlsx`**: las 3 hojas de datos +
+`Instrucciones` reescritas + `_listas` oculta. `Parámetros` y `Casos de prueba` NO viajan
+(son el motor de pruebas interno), y tampoco la PARTE 1 de Instrucciones, que alimenta el
+system prompt del bot. Plan completo en `plans/copia-catalogo-cliente.md`.
+
+Lo que se arregló para que eso fuera posible — todos bugs que rompían **en silencio**:
+- **Los dropdowns estaban muertos de hecho.** El rango de Data Validation de `Productos`
+  llegaba a la fila 72 con 100 filas cargadas, y `_listas` era una lista estática con 11
+  materiales contra los 69 en uso. Ahora `Productos` va a 500, `Colecciones!C` (que tenía
+  el mismo bug, sin que nadie lo viera) a 300, y `_listas` son 598 fórmulas matriciales
+  que leen los únicos de `Materiales`/`Colecciones`. Se descartó `UNIQUE`/spill: el archivo
+  viaja entre LibreOffice y el Excel del cliente y el soporte no es parejo.
+- `lib-xlsx.mjs` defaulteaba al **v2**: un script sin `CATALOGO=` leía el catálogo viejo y
+  parecía no hacer nada. Ahora apunta al v3.
+
+**Verificado con openpyxl en un lab aislado** (es el viaje real que hace el archivo en
+Cowork): un `load_workbook()` + `save()` normal **no rompe nada** — sobreviven las 598
+fórmulas, las Data Validations, los defined names y la hoja oculta. Dos hallazgos que sí
+importan:
+- **`data_only=True` es corrupción silenciosa.** Borra las 598 fórmulas y deja los últimos
+  valores CONGELADOS como texto: los desplegables siguen mostrando la lista vieja, así que
+  todo parece andar, pero nada de lo que se cargue vuelve a aparecer en ellos. Está avisado
+  en las Instrucciones que lee el Claude del cliente, y `validar-catalogo.mjs` lo detecta.
+- **openpyxl elimina `xl/sharedStrings.xml`** y migra los textos a `t="inlineStr"`. Es OOXML
+  válido, pero los scripts del repo asumían que esa entrada existe: hay que leer los dos
+  formatos o no se puede auditar lo que vuelve del cliente.
+
+`visor/scripts/validar-catalogo.mjs` es el gate de vuelta: referencias rotas, escalas con
+huecos, unidades que caen en modo `otro`, pliegos sin geometría, piezas que no entran,
+duplicados. **No audita decisiones comerciales** — si TG sube un precio o retira un
+producto, es su negocio (decisión de Martin). Verificado en rojo, no solo en verde.
+
+**Pendiente que se le avisó a TG en las Instrucciones**: los troquelados por m² (los imanes
+que trajeron) **no se pueden cargar todavía** — ver la sección del modo rollo abajo.
+
+## Pendiente: separación en m² (el "modo rollo")
+
+TG trajo imanes troquelados que se cobran por m² y necesitan 3 mm entre piezas. El motor
+**no aplica separación en modo m²** (`build-flow.mjs:267-272` es `(ancho × alto) ÷ 10.000 ×
+cantidad` y nada más). Ya hay un material en producción con el mismo agujero:
+**`Vinilo UV troquelado`** (fila 25, $28.000/m²) — le falta la separación.
+
+Diseño acordado (detalle en `plans/copia-catalogo-cliente.md`, "Fase 5-bis"): se reusa
+`Área útil ancho (cm)` como ancho útil del rollo, con el alto vacío. Un m² con esa columna
+cargada se cotiza por encaje en rollo; vacía, por superficie plana como hoy — así los 8 m²
+actuales no cambian. **La rotación se elige por LARGO CONSUMIDO, no por piezas por fila**:
+imán 8×5, 200u, rollo 100 → la orientación de 12 por fila consume 90,1 cm y la de 18 por
+fila, 99,6. Resolverlo con el `Math.max` de `rinde()` da $44.800 en vez de $40.500, por eso
+va función nueva y no un flag en `rinde()`.
+
+**`Vinilo UV troquelado` queda AFUERA de ese cambio**: activarle el modo rollo mueve 5 de
+sus 6 casos de prueba (+12% a +20%) y se barrieron todos los anchos de rollo de 60 a 200 cm
+sin encontrar ninguno que los preserve. O sea que hoy TG cobra de menos ahí — pero si el
+precio ya contemplaba el desperdicio, corregirlo sería cobrar dos veces. **Es una pregunta
+para TG, no un refactor.**
+
 ## Dónde está todo
 
 ```
@@ -44,11 +103,16 @@ project-context/TerminalGrafica/whatsapp-rag/
     workflow-n8n-v1.md                    ← el plan de la Fase 3 (trim, auditor, acuerdos)
     system-prompt-v1.md                   ← LA PLANTILLA del prompt (esto se edita)
     visor-chunks.md                       ← el plan del visor + la ampliación de ingesta
+    copia-catalogo-cliente.md             ← el plan de la copia para TG + el modo rollo
   visor/                     ← app Next 16, la herramienta de trabajo
     lib/{xlsx,parse,chunk,tokens}.ts      ← lógica pura (la reusa la ingesta)
     lib/{embeddings,db,actions}.ts        ← server-only: ingesta
     scripts/*.mjs                          ← edición quirúrgica del .xlsx (ver abajo)
       datos-*.mjs / cargar-*.mjs           ← los DATOS separados del escritor: se revisan sin leer código
+      generar-copia-cliente.mjs            ← el v3 → Catalogo-TG-cliente.xlsx (saca 2 hojas, hornea _listas)
+      instrucciones-cliente.md             ← EL TEXTO que lee TG (y su Claude). Se edita ACÁ, no en el Excel
+      render-instrucciones-cliente.mjs     ← ese .md → la hoja Instrucciones
+      validar-catalogo.mjs                 ← el gate de vuelta: calidad del dato, no decisiones comerciales
       cargar-casos-cobertura.mjs           ← corrige cantidades + agrega casos (idempotente por Pedido)
       quitar-precio-descripcion.mjs        ← saca precios literales de las descripciones
       pendientes-cliente.mjs               ← qué del Excel del cliente falta cargar (y por qué)
