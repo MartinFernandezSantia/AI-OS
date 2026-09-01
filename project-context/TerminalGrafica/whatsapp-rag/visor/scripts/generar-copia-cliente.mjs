@@ -5,10 +5,15 @@
 //   2. Borra las hojas "Parámetros" y "Casos de prueba" (motor de pruebas interno) tocando
 //      workbook.xml + workbook.xml.rels + [Content_Types].xml + el array de entradas del ZIP.
 //      Los r:id/sheetId de las hojas restantes NO se renumeran (los huecos son válidos).
-//   3. Deja la vista inicial en "Instrucciones" (activeTab, tabSelected, topLeftCell/activeCell A1).
-//   4. Hornea los valores cacheados <v> de las 598 fórmulas array de "_listas" (si no,
+//   3. Agrega la hoja "Pendientes" (vacía, 4 columnas de texto libre: Producto, Descripción,
+//      Cómo se cobra, Notas) reusando el r:id/sheetId/archivo que quedaron libres al borrar
+//      "Parámetros" — para que el cliente anote ahí un producto que no encaja en ninguna
+//      forma de cobro del catálogo, en vez de forzarlo. Se ubica después de Materiales y
+//      antes de "_listas" (oculta).
+//   4. Deja la vista inicial en "Instrucciones" (activeTab, tabSelected, topLeftCell/activeCell A1).
+//   5. Hornea los valores cacheados <v> de las 598 fórmulas array de "_listas" (si no,
 //      Excel puede abrir con los dropdowns vacíos hasta el primer recálculo).
-//   5. Marca docProps/core.xml con un título para el cliente.
+//   6. Marca docProps/core.xml con un título para el cliente.
 //
 // Lo que NO hace este script: no toca la hoja "Instrucciones" (eso lo hace, aparte,
 // render-instrucciones-cliente.mjs corriendo CATALOGO=Catalogo-TG-cliente.xlsx --apply).
@@ -25,7 +30,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { cadenasDe, dec, empaquetar } from "./lib-xlsx.mjs";
+import { cadenasDe, dec, empaquetar, esc, indiceCadenas } from "./lib-xlsx.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const FORCE = process.argv.includes("--force");
@@ -192,6 +197,94 @@ for (const h of aBorrar) {
 const archivosABorrar = new Set(aBorrar.map((h) => h.archivoZip));
 let entradasNuevas = entradas.filter((e) => !archivosABorrar.has(e.nombre));
 
+// ── 4.5) agregar la hoja "Pendientes" (solo en la copia cliente) ──────────────────────
+//
+// Para cuando el cliente quiere cargar un producto cuya forma de cobro no encaja con el
+// catálogo (ver "LO QUE NO ENCAJA" en instrucciones-cliente.md): lo anota acá en vez de
+// forzarlo a pliego/m2/item. 4 columnas de texto libre, sin dropdowns, hoja vacía lista
+// para completar. Reusa el rId y el número de sheetN.xml que quedaron libres al borrar
+// "Parámetros" (rId7 → sheet5.xml, sheetId 5) — más simple que inventar uno nuevo y
+// perfectamente válido (huecos en sheetId/rId son legales en OOXML, como ya asume este
+// mismo script para las hojas que NO se renumeran tras el borrado).
+const PENDIENTES_NOMBRE = "Pendientes";
+const PENDIENTES_SHEET_ID = 5; // libre: era el sheetId de "Parámetros"
+const PENDIENTES_RID = "rId7"; // libre: era el r:id de "Parámetros"
+const PENDIENTES_ARCHIVO_REL = "worksheets/sheet5.xml"; // libre: era el archivo de "Parámetros"
+const PENDIENTES_ARCHIVO_ZIP = `xl/${PENDIENTES_ARCHIVO_REL}`;
+const PENDIENTES_ENCABEZADOS = ["Producto", "Descripción", "Cómo se cobra", "Notas"];
+
+if (entradasNuevas.some((e) => e.nombre === PENDIENTES_ARCHIVO_ZIP)) {
+  throw new Error(`${PENDIENTES_ARCHIVO_ZIP} ya existe — el rId/archivo elegido para "Pendientes" no está libre`);
+}
+if (hojasWb.some((h) => h.nombre === PENDIENTES_NOMBRE)) {
+  throw new Error(`ya existe una hoja "${PENDIENTES_NOMBRE}" en el origen — no debería`);
+}
+
+// Registrar los 4 encabezados en sharedStrings (reusa si ya existieran, agrega si no).
+const ssEntradaPend = entradasNuevas.find((e) => e.nombre === "xl/sharedStrings.xml");
+if (!ssEntradaPend) throw new Error("no está xl/sharedStrings.xml — no se puede registrar la hoja Pendientes");
+const indicePend = indiceCadenas(ssEntradaPend);
+const idxEncabezados = PENDIENTES_ENCABEZADOS.map((t) => indicePend.idDe(t));
+indicePend.aplicar();
+
+// style s="5" = el estilo de header que ya usan todas las hojas de datos (font blanco
+// bold, fill oscuro sólido) — ver sheet2.xml (Colecciones) fila 1. Nada nuevo en styles.xml.
+const HEADER_S = 5;
+const filaHeader =
+  `<row r="1" customFormat="false" ht="28" hidden="false" customHeight="true" outlineLevel="0" collapsed="false">` +
+  idxEncabezados
+    .map((idx, i) => `<c r="${String.fromCharCode(65 + i)}1" s="${HEADER_S}" t="s"><v>${idx}</v></c>`)
+    .join("") +
+  `</row>`;
+
+const ULTIMA_FILA = 300; // mismo tope que usan los dataValidation de sqref en otras hojas (p. ej. C2:C300 en Colecciones)
+const pendientesXml =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+  `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xr2="http://schemas.microsoft.com/office/spreadsheetml/2015/revision2" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">` +
+  `<sheetPr filterMode="false"><pageSetUpPr fitToPage="false"/></sheetPr>` +
+  `<dimension ref="A1:D${ULTIMA_FILA}"/>` +
+  `<sheetViews><sheetView showFormulas="false" showGridLines="true" showRowColHeaders="true" showZeros="true" rightToLeft="false" tabSelected="false" showOutlineSymbols="true" defaultGridColor="true" view="normal" topLeftCell="A1" colorId="64" zoomScale="100" zoomScaleNormal="100" zoomScalePageLayoutView="100" workbookViewId="0">` +
+  `<pane xSplit="0" ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>` +
+  `<selection pane="topLeft" activeCell="A1" activeCellId="0" sqref="A1"/>` +
+  `<selection pane="bottomLeft" activeCell="A2" activeCellId="1" sqref="A2"/>` +
+  `</sheetView></sheetViews>` +
+  `<sheetFormatPr defaultColWidth="8.54296875" defaultRowHeight="15" customHeight="true" zeroHeight="false" outlineLevelRow="0" outlineLevelCol="0"></sheetFormatPr>` +
+  `<cols>` +
+  `<col collapsed="false" customWidth="true" hidden="false" outlineLevel="0" max="1" min="1" style="0" width="26"/>` +
+  `<col collapsed="false" customWidth="true" hidden="false" outlineLevel="0" max="2" min="2" style="0" width="45"/>` +
+  `<col collapsed="false" customWidth="true" hidden="false" outlineLevel="0" max="3" min="3" style="0" width="45"/>` +
+  `<col collapsed="false" customWidth="true" hidden="false" outlineLevel="0" max="4" min="4" style="0" width="34"/>` +
+  `</cols>` +
+  `<sheetData>${filaHeader}</sheetData>` +
+  `<printOptions headings="false" gridLines="false" gridLinesSet="true" horizontalCentered="false" verticalCentered="false"/>` +
+  `<pageMargins left="0.747916666666667" right="0.747916666666667" top="0.984027777777778" bottom="0.984027777777778" header="0.511811023622047" footer="0.511811023622047"/>` +
+  `<pageSetup paperSize="9" scale="100" fitToWidth="1" fitToHeight="1" pageOrder="downThenOver" orientation="portrait" blackAndWhite="false" draft="false" cellComments="none" horizontalDpi="300" verticalDpi="300" copies="1"/>` +
+  `<headerFooter differentFirst="false" differentOddEven="false"><oddHeader></oddHeader><oddFooter></oddFooter></headerFooter>` +
+  `</worksheet>`;
+
+entradasNuevas.push({ nombre: PENDIENTES_ARCHIVO_ZIP, contenido: Buffer.from(pendientesXml, "utf8") });
+
+// workbook.xml: agregar <sheet> al final de <sheets> — <sheets> cierra justo antes de
+// <definedNames>, y como "_listas" es la última hoja (oculta, al final siempre), anclar
+// ahí inserta a Pendientes INMEDIATAMENTE ANTES de "_listas". Orden final de pestañas:
+// Instrucciones, Colecciones, Productos, Materiales, Pendientes, _listas (oculta).
+const sheetTagListas = hojasWb.find((h) => h.nombre === "_listas")?.tag;
+if (!sheetTagListas) throw new Error('no se encontró el <sheet> de "_listas" en workbook.xml para anclar la inserción');
+if (!wbNuevo.includes(sheetTagListas)) throw new Error('no se pudo anclar el <sheet> de "_listas" en el workbook.xml ya editado');
+const sheetTagPendientes = `<sheet name="${esc(PENDIENTES_NOMBRE)}" sheetId="${PENDIENTES_SHEET_ID}" state="visible" r:id="${PENDIENTES_RID}"/>`;
+wbNuevo = wbNuevo.replace(sheetTagListas, `${sheetTagPendientes}${sheetTagListas}`);
+
+// xl/_rels/workbook.xml.rels: agregar la Relationship de Pendientes (al final, antes de </Relationships>).
+const relPendientes = `<Relationship Id="${PENDIENTES_RID}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="${PENDIENTES_ARCHIVO_REL}"/>`;
+if (!/<\/Relationships>/.test(relsNuevo)) throw new Error("no se encontró </Relationships> para insertar la Relationship de Pendientes");
+relsNuevo = relsNuevo.replace(/<\/Relationships>/, `${relPendientes}</Relationships>`);
+
+// [Content_Types].xml: agregar el Override de sheet5.xml (mismo ContentType que las demás
+// hojas de worksheet), al final antes de </Types>.
+const overridePendientes = `<Override PartName="/${PENDIENTES_ARCHIVO_ZIP}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`;
+if (!/<\/Types>/.test(ctNuevo)) throw new Error("no se encontró </Types> para insertar el Override de Pendientes");
+ctNuevo = ctNuevo.replace(/<\/Types>/, `${overridePendientes}</Types>`);
+
 // ── 5) vista inicial: Instrucciones (sheet1) tabSelected + topLeftCell/activeCell A1 ───
 
 const sheet1Nombre = "xl/worksheets/sheet1.xml";
@@ -263,8 +356,6 @@ if (CACHEAR_LISTAS) {
 
   let listasXml = listasEntrada.contenido.toString("utf8");
 
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
   function inyectarCache(xml, columna, valores) {
     let out = xml;
     let n = 0;
@@ -322,6 +413,7 @@ entradasNuevas = entradasNuevas.map((e) => {
 console.log(`\norigen:   ${ORIGEN}`);
 console.log(`destino:  ${DESTINO}`);
 console.log(`\nhojas eliminadas: ${HOJAS_A_BORRAR.join(", ")}`);
+console.log(`hoja agregada: "${PENDIENTES_NOMBRE}" (${PENDIENTES_RID} → ${PENDIENTES_ARCHIVO_ZIP}, sheetId=${PENDIENTES_SHEET_ID}) — vacía, encabezados: ${PENDIENTES_ENCABEZADOS.join(" | ")}`);
 console.log(`entradas ZIP: ${entradas.length} → ${entradasNuevas.length}`);
 console.log(`activeTab → 0 (Instrucciones), tabSelected/topLeftCell/activeCell → A1 en sheet1`);
 console.log(`título docProps/core.xml → "${TITULO}"`);

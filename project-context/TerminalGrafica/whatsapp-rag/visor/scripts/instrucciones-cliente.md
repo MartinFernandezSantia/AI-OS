@@ -11,6 +11,7 @@ Cada producto dice de qué material se hace, y el precio sale del material.
 Colecciones — las familias de productos. Su descripción encabeza el bloque que lee el bot.
 Productos   — lo que se ofrece. La cantidad NO va acá: la pide el cliente.
 Materiales  — precios y tramos. Un material sin escala por volumen = un solo tramo.
+Pendientes  — para lo que NO encaja en este catálogo (ver más abajo).
 _listas     — hoja OCULTA y AUTOMÁTICA. Se llena sola con lo que carguen en Materiales y
               en Colecciones. NO la abran ni escriban en ella: si escriben ahí, los
               desplegables dejan de actualizarse.
@@ -57,6 +58,12 @@ Un material = una o más filas en Materiales, todas con el MISMO nombre en la co
 >    El último tramo va con Hasta VACÍO: significa 'de acá en adelante'.
 >    Ejemplo de escala: 1 a 1 → 2500 · 2 a 10 → 2200 · 11 a 50 → 2000 · 101 a (vacío) → 1710
 
+Un precio fijo por producto (uno que no se calcula por m2 ni por pliego, sino que ya sale
+cerrado) es el caso más simple de la escala: UNA fila con Unidad 'unidad', Desde 1, Hasta
+vacío, y el precio final en 'Precio por unidad'.
+>    Ejemplo real: "Lona 2x0,85 m con porta banner roll up" — Unidad: unidad · Desde: 1 ·
+>    Precio por unidad: 65200. El producto no lleva Ancho ni Alto: no hay medida que pedir.
+
 ## DE DÓNDE SALE EL RINDE ("Piezas por unidad de cobro")
 
 Ya NO se carga a mano para los pliegos. La geometría se declara UNA vez por material en
@@ -80,18 +87,29 @@ se va a calcular con la fórmula equivocada y sin ningún aviso.
 >    'metro cuadrado' NO es lo mismo que 'm2': no empieza igual, así que no entra en modo m2
 >    y queda sin fórmula. Para metros cuadrados escriban siempre 'm2'.
 
-## UNA FORMA DE COBRO NUEVA: AVISENNOS
+## LO QUE NO ENCAJA: LA HOJA PENDIENTES
 
-Hoy el archivo sabe cobrar por pliego, por m2 y por unidad suelta.
-Si necesitan cobrar de una manera que hoy no existe (por hora, por metro lineal, por kilo),
-NO lo carguen: avisennos. Hay que escribir la fórmula del cálculo de nuestro lado, y sin eso
-el bot no sabe pasar de lo que pide el cliente al total, y va a improvisar.
+Va a haber productos que no entran en ninguna de las formas de cobro de este catálogo.
+Para esos casos NO fuercen la carga (no inventen una unidad parecida, no elijan el material
+que más se acerca): anótenlo en la hoja Pendientes, con estas columnas:
+>    Producto:      el nombre del producto.
+>    Descripción:   qué es, igual que en un producto normal.
+>    Cómo se cobra: en sus palabras, cómo cobran ese trabajo hoy. No hace falta que sea
+>                   "por m2" ni "por pliego" — cuenten cómo es en la realidad del taller.
+>    Notas:         cualquier aclaración extra (precios de referencia, casos raros, etc.)
 
-## TROQUELADOS POR M2: TODAVÍA NO
+Nosotros lo revisamos y ajustamos el catálogo y el bot para poder cotizarlo. No se pierde:
+queda ahí como referencia hasta que se resuelva.
 
-Si un material se cobra por m2 y va TROQUELADO (necesita separación entre las piezas),
-avisennos en vez de cargarlo. El sistema todavía no sabe tener en cuenta esa separación
-cuando el cobro es por m2, así que cotizaría de menos sin avisar.
+Dos casos que YA SABEMOS que van a esta hoja:
+
+Si necesitan cobrar de una manera que hoy no existe (por hora, por metro lineal, por kilo):
+hay que escribir la fórmula del cálculo de nuestro lado, y sin eso el bot no sabe pasar de
+lo que pide el cliente al total, y va a improvisar.
+
+Si un material se cobra por m2 y va TROQUELADO (necesita separación entre las piezas):
+el sistema todavía no sabe tener en cuenta esa separación cuando el cobro es por m2, así
+que cotizaría de menos sin avisar.
 >    Es el caso de los imanes troquelados. Estamos trabajando en eso.
 
 ## ERRORES QUE ROMPEN EN SILENCIO
