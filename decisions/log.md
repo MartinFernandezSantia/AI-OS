@@ -656,3 +656,23 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** portar el Verificador+Corrector del lite (redundante con el auditor determinista para precios, y el loop de remediación era la parte más frágil del lite) · un Verificador "light" solo de afirmaciones de capacidad (el prompt ya prohíbe negar sin buscar, y el falso positivo bloquearía respuestas buenas) · nada de Tier-2 (dejaría el canal real sin guard de jailbreak/off-topic que el lite ya probó en prod, por una sola llamada barata).
 
 **Owner:** Martin.
+
+## 2026-09-01 — Los defectos conversacionales van por prompt + auditoría offline, no un agente editor inline
+
+**Decision:** ante el híbrido de la ejecución 732 (el bot preguntó la cantidad Y cotizó por 100 en el mismo mensaje), la corrección va como regla del system prompt ("NUNCA preguntes y cotices el MISMO trabajo", con el ejemplo negativo del caso; refinada: la prohibición es por trabajo, con dos pedidos distintos puede cotizar uno y preguntar el otro). Se descartó tanto el check determinista (no se puede saber qué mitad del mensaje está bien) como el segundo agente "editor" post-auditor que Martin propuso evaluar (leer historial + salida y corregir estilo/coherencia inline). Si la clase de defecto reincide, el lugar es la auditoría offline LLM-juez sobre bot.log, que convierte cada clase repetida en regla o check — no otro parche caliente.
+
+**Why:** un editor inline necesita su propio guardián determinista (puede romper {P1}, tipear montos, meter el teléfono) y termina reconstruyendo el loop de remediación que el rediseño eliminó; además es probabilidad, no garantía, al costo fijo de +2-4s y una llamada más POR TURNO para defectos que aparecieron 1 vez en ~40 ejecuciones. Es la misma razón por la que el Verificador v2 no volvió (decisión 2026-08-31): el LLM verifica bien offline, donde no puede romper nada ni sumar latencia.
+
+**Alternatives considered:** check determinista pregunta+cotización (descartado por Martin: recortar el mensaje exige saber qué parte está bien) · agente editor inline (arriba) · no hacer nada y medir (el caso ya confundió a un usuario real en la primera prueba).
+
+**Owner:** Martin.
+
+## 2026-09-01 — El techo de tokens del system prompt se recorta, no se sube
+
+**Decision:** el TOPE_TOKENS de armar-prompt.mjs subió UNA vez de 3000 a 3050 (para la regla anti pregunta+cotización) con la condición escrita en el propio guard: la próxima vez que el prompt choque el techo, se compacta o se saca una regla — el número no se vuelve a subir. En la misma sesión ya pagó: el segundo choque (cierre "¿algo más?" + regla por-trabajo) se resolvió compactando las líneas nuevas, y el prompt quedó en ~3024.
+
+**Why:** el prompt del cotizador crece una regla por incidente y cada regla nueva pesa en TODOS los turnos; un techo que se sube cuando molesta no es techo, es un contador. El valor del guard no es el número exacto sino obligar la conversación "¿qué sacamos?" cada vez que se quiere meter más — sin él, el prompt vuelve a pesar más que los datos (el motivo original del tope).
+
+**Alternatives considered:** subirlo generosamente a 3500 (elimina la fricción que es justamente el mecanismo) · recortar reglas viejas ya en esta sesión (riesgoso tocar conducta que funciona sin un incidente que lo pida).
+
+**Owner:** Martin.
