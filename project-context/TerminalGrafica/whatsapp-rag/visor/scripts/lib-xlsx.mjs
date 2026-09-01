@@ -114,8 +114,9 @@ export function indiceCadenas(ssEntry) {
   };
 }
 
-/** Reempaqueta y escribe el .xlsx. Llamar SOLO con --apply y sin lock. */
-export function guardar(entradas) {
+/** Reempaqueta las entradas en el buffer binario de un .xlsx (ZIP store). No escribe a
+ *  disco: lo separado de `guardar()` para poder volcar a un destino distinto de XLSX. */
+export function empaquetar(entradas) {
   const crc32 = (() => {
     const TB = new Int32Array(256);
     for (let i = 0; i < 256; i++) {
@@ -154,7 +155,12 @@ export function guardar(entradas) {
   eo.writeUInt32LE(0x06054b50, 0);
   eo.writeUInt16LE(entradas.length, 8); eo.writeUInt16LE(entradas.length, 10);
   eo.writeUInt32LE(dir.length, 12); eo.writeUInt32LE(cuerpo.length, 16);
-  fs.writeFileSync(XLSX, Buffer.concat([cuerpo, dir, eo]));
+  return Buffer.concat([cuerpo, dir, eo]);
+}
+
+/** Reempaqueta y escribe el .xlsx. Llamar SOLO con --apply y sin lock. */
+export function guardar(entradas) {
+  fs.writeFileSync(XLSX, empaquetar(entradas));
 }
 
 /** La misma fórmula de encaje que visor/lib/geometria.ts, duplicada a propósito: los

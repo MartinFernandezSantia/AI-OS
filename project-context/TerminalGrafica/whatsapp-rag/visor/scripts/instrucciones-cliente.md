@@ -127,7 +127,7 @@ NO toquen los rangos de Datos → Validación por su cuenta.
 ## SI TRABAJAN ESTE ARCHIVO CON CLAUDE
 
 Estas tres reglas son para Claude, no para ustedes. Si le pasan el archivo por chat,
-convienen que estén a la vista:
+conviene que estén a la vista:
 
 >    1. Abrir SIEMPRE con load_workbook(ruta). NUNCA con data_only=True: eso borra de forma
 >       permanente las fórmulas de la hoja _listas y rompe los desplegables, sin ningún error
