@@ -604,10 +604,9 @@ $99.000 y un libro suelto $30.000 · 5 plastificados A4 $11.000 sin dividir · 2
 deriva · y los caminos viejos intactos (250 stickers $6.600 rinde 104, lona 90x60 $8.600).
 Un turno con volantes + stickers cotizó los dos modos a la vez, cada uno con su cuenta.
 
-**Pendiente que salió de las pruebas**: `500 tarjetas kraft` cotiza $88.000 = 5 × el x100,
-porque en kraft solo existe el paquete de 100. La cuenta está bien, el precio no: en las
-otras líneas 500 sale bastante menos que 5×100. **Falta pedirle a TG el precio de 500 y
-1000 en kraft.**
+**Kraft 500/1000 — CERRADO (2026-09-01)**: TG confirmó que no existen paquetes de 500 ni
+1000 en kraft. `500 tarjetas kraft` = 5 × el paquete de 100 ($88.000) es el precio correcto;
+no se toca nada.
 
 ### Los últimos 6 pendientes (2026-08-31) — y qué queda abierto
 
@@ -646,21 +645,29 @@ Tres decisiones que vale la pena no reabrir:
 - **Las lonas van como material propio**, no como una medida de Lona: el precio incluye la
   estructura y es cerrado. Lo dice la nota del propio cliente.
 
-**Queda abierto — para preguntarle a TG:**
+**Queda abierto — para preguntarle a TG (actualizado 2026-09-01 con las respuestas):**
 
-1. **Gigantografías** — la columna PRECIO está vacía y la línea apunta a "Lona Front Brillo
-   $16.000 el m²", que ya es nuestra Lona. ¿Es lo mismo o algo distinto? Aunque el precio no
-   cambie, hay un dato que sí falta y el bot debería tener: **ancho máximo 1,52 m en lona,
-   1,48 m en vinilo**; más grande lleva empalme.
+1. ~~**Gigantografías**~~ **RESUELTO a medias**: TG confirmó que la gigantografía ES la Lona
+   ($16.000 el m²). Falta: agregar "gigantografía" a los sinónimos de los banners de lona en
+   el Excel (hoy el bot no la encuentra por ese nombre), y TG NO respondió los anchos
+   máximos (¿1,52 m lona / 1,48 m vinilo, más grande con empalme?) — repreguntar.
 2. **Marco para fotos y photocall** — $34.000 el m², pero el material que describe (vinilo
-   montado en corrugado) ya está a $30.000. ¿Adicional, o precio viejo?
+   montado en corrugado) ya está a $30.000. ¿Adicional, o precio viejo? (sin respuesta aún)
 3. **Imanes personalizados** — la escala está completa ($8.500 / $7.800 desde 4 / $7.200
    desde 11) pero Martin no confirmó la unidad y falta la medida. Además los troquelados con
-   forma arrancan "desde $62.000 el medio m²": ¿otro material o consulta?
-
-**Una decisión de negocio que dejó el aviso del visor:** una plancha A4 sola cotiza **$4.000**
-en vez de $1.900, porque el mínimo por trabajo la levanta. ¿Una plancha suelta es un trabajo
-entero (queda así) o un agregado como el laminado (marcar `Sin mínimo por trabajo` = sí)?
+   forma arrancan "desde $62.000 el medio m²": ¿otro material o consulta? (sin respuesta aún)
+4. **Banner roll-up vs kit** (ex "duplicado", refinado con Martin): en el Excel, `Banner
+   roll-up 85x200 cm` ($38.000, "con estructura de aluminio y bolso. Listo para usar") y
+   `Lona 2x0,85 m con porta banner roll up` ($65.200, "incluye las dos cosas") describen
+   AMBOS el kit completo con la MISMA medida y sinónimos compartidos ("roll up", "banner
+   enrollable"). Martin dice que son cosas distintas — entonces la distinción falta en las
+   descripciones. Preguntar a TG qué incluye cada uno (¿el de $38.000 es solo la lona de
+   recambio? ¿otra calidad?) y corregir descripciones + sinónimos para que no se pisen.
+5. **Plancha A4 — medidas**: TG confirmó que el mínimo por trabajo está bien ($4.000 una
+   plancha sola). Pero el material no tiene área útil ni separación cargadas, así que el bot
+   no puede decir cuántos stickers entran (los pliegos A3 sí las tienen y el motor calcula
+   el rinde). Pedir a TG el área útil de la plancha A4 y la separación entre stickers; si la
+   plancha no se vende "por medida del sticker", preguntar en qué casos se usa.
 
 ### El barrido conversacional (2026-08-31) — el bot dejaba al cliente sin respuesta
 
