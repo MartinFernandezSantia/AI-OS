@@ -339,6 +339,26 @@ export const COLECCION_NUEVA = {
   C: "Iman impresión laminada y corte", // Material base
 };
 
+// ── Fase 3: casos de prueba rotos por renombre (§10 del plan) ─────────────────────────
+//
+// 4 casos referencian el nombre VIEJO del material tras los renombres que trajo el
+// cliente (§0.1 del plan — verificado que Productos ya apuntaba bien a los nuevos, solo
+// nuestra hoja interna Casos de prueba quedó con el nombre viejo). Mismo precio, mecánico.
+// Los casos 119/120 (Encuadernación abrochada / fresada) NO cambian: esos materiales
+// siguen con el mismo nombre, solo el PRODUCTO se renombró (que el caso no referencia).
+export const CASOS_A_RENOMBRAR = [
+  { fila: 63, columna: "C", de: "Anillado plástico", a: "Anillado plástico A4/Oficio" },
+  { fila: 68, columna: "C", de: "Laminado", a: "Laminado A4" },
+  { fila: 72, columna: "C", de: "Anillado plástico", a: "Anillado plástico A4/Oficio" },
+  { fila: 118, columna: "C", de: "Anillado metálico wire-o", a: "Anillado metálico hasta 3/4 pulgada" },
+];
+
+// El caso 122 ("20 troquelados y corte a medida... → $1.000") referencia el material
+// "Troquelado y corte a medida", que ya no existe (se apartó a Pendientes su sucesor con
+// otra forma de cobro, ver A_PENDIENTES). Se retira: no hay dato al que actualizarlo sin
+// inventar un precio que TG no dio.
+export const CASOS_A_BORRAR = [122];
+
 // ── §9: agrupar por Familia (junto con PRODUCTOS_NUEVOS de arriba) ────────────────────
 //
 // Familia agrupa en UN chunk los materiales de una misma familia que YA tienen producto

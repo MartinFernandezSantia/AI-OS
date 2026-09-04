@@ -18,6 +18,12 @@
 // borrado de una hoja se calcula sobre las filas originales y se aplica de una sola pasada
 // (nunca se re-lee la hoja entre un borrado y el siguiente de la misma hoja).
 //
+// NO ES IDEMPOTENTE: si se corre --apply dos veces sobre el mismo archivo, la segunda
+// aborta ("no encontré la fila N para borrar") porque esos números ya no existen. Si hay
+// que retocar algo después de aplicar, hacerlo con un script chico y focalizado sobre el
+// resultado (ver actualizar-casos-prueba-v4.mjs, que SÍ es idempotente, para el paso de
+// Casos de prueba — ese va aparte justamente por esto).
+//
 //   CATALOGO=../Catalogo-TG-v4-wip.xlsx node visor/scripts/cargar-catalogo-v4.mjs           (dry run)
 //   CATALOGO=../Catalogo-TG-v4-wip.xlsx node visor/scripts/cargar-catalogo-v4.mjs --apply
 
@@ -255,6 +261,11 @@ function reapuntar(hoja, columna, cambios) {
   );
   resumen.push({ paso: "7. Familia (planos/plotter/microperforado)", detalle: `${n} celda(s) en Materiales!L` });
 }
+
+// El paso 8 (actualizar Casos de prueba) vive en actualizar-casos-prueba-v4.mjs, aparte:
+// los pasos 1-7 de ARRIBA no son idempotentes (operan por número de fila fijo del archivo
+// del cliente tal cual llegó) y no se pueden re-correr sobre un wip ya procesado. Casos de
+// prueba sí es idempotente y se corre después, las veces que haga falta.
 
 // ── informe ───────────────────────────────────────────────────────────────────────────
 for (const r of resumen) console.log(`${r.paso.padEnd(45)} ${r.detalle}`);
