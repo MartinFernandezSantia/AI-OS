@@ -3,6 +3,74 @@
 > Archivo compartido y sobrescrito entre sesiones. Sin fechas: refleja el estado actual.
 > Al terminar una sesión, actualizalo — no lo dupliques ni le agregues secciones por fecha.
 
+## 🚧 EN CURSO: limpieza del catálogo v4 — falta SOLO la Fase 5 (subir a producción)
+
+TG mandó un catálogo actualizado (`Catalogo-TG.xlsx`, cargado por él con su propio Claude:
+166 productos, 165 materiales, casi duplicó el v3). Plan completo en
+`plans/limpieza-catalogo-v4.md`. Fases 0-4 **hechas y commiteadas** (9 commits, del
+`0eaf3f1`/`e048208` en adelante hasta `2573208`): el catálogo de trabajo
+`Catalogo-TG-v4-wip.xlsx` valida en **0 errores** (era 19+16), el build da **131/131
+casos verdes** + 11 rindes históricos, y los 111 chunks generados ya se leyeron a mano
+(Merchandising, Folletos, Puntas redondeadas, Planos/Plotter, Microperforado, todo OK).
+
+**De paso se encontraron y arreglaron 4 bugs preexistentes** (mismo patrón: un regex que
+asumía el orden de atributos `Id` antes que `Target` en `<Relationship>`, y openpyxl —el
+formato que deja el Claude del cliente al guardar— los escribe al revés, dejando el mapa
+de relaciones vacío EN SILENCIO): `volcar-hoja.mjs`, `armar-prompt.mjs`, `build-flow.mjs`
+y **`xlsx.ts`** (el lector que corre en el BROWSER — sin el fix, subir el catálogo al
+visor daba **0 chunks sin ningún error visible**). Los 4 verificados sin regresión contra
+`Catalogo-TG-v3.xlsx` (LibreOffice).
+
+**Quedó en la hoja `Pendientes` del v4** (con el dato intacto, no se inventó nada): Corte
+a medida, Troquelado (corte con forma), y los 2 Talonarios de rifas — los tres necesitan
+un modo de cobro que el motor no tiene hoy ("precio total del tramo": el precio del tramo
+es un TOTAL fijo, no por unidad — ver detalle en el plan, sección "Decisiones tomadas").
+**Consecuencia**: el bot pierde temporalmente la cotización de troquelado sobre impreso
+(existía en el v3 con otro nombre/precio) hasta que se diseñe ese modo.
+
+### Lo único que falta: Fase 5 — promover y subir a producción
+
+**Por qué no se hizo ya**: el MCP de n8n (`n8n-tg`) necesita autorización OAuth que esta
+sesión no pudo completar (no hay flujo interactivo). Los pasos 1-2 (renombrar + re-ingesta
+del visor) SÍ se podrían hacer sin el MCP, pero se dejaron para la misma sesión que suba
+el flow, así todo el go-live queda auditado junto — no tiene sentido re-ingestar los
+chunks nuevos y dejar el flow viejo activo (deriva en confusiones "parece el catálogo y es
+el flow", ya documentado más abajo en este archivo).
+
+**Prompt para la próxima sesión** (pegar tal cual al arrancar):
+
+> Retomá la Fase 5 del plan `plans/limpieza-catalogo-v4.md` (limpieza del catálogo v4 de
+> TG). Las Fases 0-4 ya están hechas y commiteadas — no las repitas. Antes de nada, andá a
+> `project-context/TerminalGrafica/whatsapp-rag/` y confirmá que el MCP `n8n-tg` está
+> autorizado (probá `search_workflows` o similar). Si no lo está, pedime que lo autorice
+> desde `/mcp` antes de seguir.
+>
+> Pasos, en orden, cada uno con su gate:
+> 1. `cp Catalogo-TG-v4-wip.xlsx Catalogo-TG-v4.xlsx` — el v3 NO se toca (es el rollback).
+>    Actualizar el default de `visor/scripts/lib-xlsx.mjs` (línea `XLSX`) al v4.
+> 2. Re-ingestar desde el VISOR, no por CLI (`pnpm dev` en `visor/`, subir
+>    `Catalogo-TG-v4.xlsx`, revisar la caja ámbar de avisos antes de confirmar). Verificar
+>    el conteo de chunks en la base (~111, no asumir el número — contarlo).
+> 3. `CATALOGO=Catalogo-TG-v4.xlsx node n8n/build-flow.mjs` (aborta sin la variable, a
+>    propósito). Emite los 2 flows; el que importa es `cotizador-v1-chatwoot.json`, el que
+>    está ACTIVO en producción (`3vNAAe0sr7sMgPUa`).
+> 4. Subir por el MCP de n8n con `update_workflow` — el texto se saca del JSON EMITIDO,
+>    nunca se re-tipea a mano (volcarlo a un archivo del scratchpad y copiar de ahí).
+>    Después: diff programático vivo-vs-emitido, y verificar que `activeVersionId` quede
+>    igual al draft (ya pasó una vez que la publicación quedó una versión atrás sin que
+>    nadie lo viera).
+> 5. Correr la batería de pruebas en vivo que lista el plan (sección "Verificación
+>    end-to-end"): los 4 casos de regresión + los 10 casos nuevos (folletos, puntas
+>    redondeadas, millar, Merchandising, el material apartado que debe derivar limpio).
+>    Auditar con `leer-bot-log (dev)` (`lThuFmf27HkM5dAR`), no a mano.
+> 6. Avisarle a TG: (a) las 4 preguntas abiertas del plan (duplicado Anotadores/Tacos,
+>    Encuadernación fresada, cobertura de planos, confirmación del recargo de corte a
+>    medida) — ninguna bloquea, pero conviene cerrarlas; (b) que troquelado/talonarios/
+>    corte a medida quedan sin cotizar por ahora (derivan a consulta), no perdidos.
+>
+> Si algo sale mal: rollback es re-ingestar `Catalogo-TG-v3.xlsx` desde el visor + re-build
+> + re-subir el flow — el v3 nunca se tocó en ningún paso de este trabajo.
+
 ## Qué es esto en una línea
 
 Rediseño del bot de WhatsApp de Terminal Gráfica: el Excel pasa a ser la fuente única y el
