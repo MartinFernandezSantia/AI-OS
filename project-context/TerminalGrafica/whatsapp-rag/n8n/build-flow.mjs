@@ -13,7 +13,7 @@
 // fuente única; este script es el único lugar que la traduce a JSON de n8n.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { abrir, cadenasDe, dec } from "../visor/scripts/lib-xlsx.mjs";
+import { abrir, cadenasDe, dec, relsDe } from "../visor/scripts/lib-xlsx.mjs";
 import { prompt as SYSTEM_PROMPT, tokens as TOKENS_PROMPT } from "./armar-prompt.mjs";
 
 const AQUI = import.meta.dirname;
@@ -64,10 +64,13 @@ console.log(`catálogo: ${XLSX}`);
 const { entradas } = abrir();
 const leer = (n) => entradas.find((e) => e.nombre === n).contenido.toString("utf8");
 const wbXml = leer("xl/workbook.xml");
-const HOJAS = [...wbXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="(rId\d+)"[^>]*\/?>/g)].map((m) => ({ nombre: m[1], rid: m[2] }));
-const RID_TARGET = Object.fromEntries(
-  [...leer("xl/_rels/workbook.xml.rels").matchAll(/<Relationship Id="(rId\d+)"[^>]*Target="([^"]+)"/g)].map((m) => [m[1], m[2]]),
-);
+const HOJAS = [...wbXml.matchAll(/<sheet\b[^>]*\/>/g)].map((m) => ({
+  nombre: m[0].match(/\bname="([^"]*)"/)?.[1],
+  rid: m[0].match(/\br:id="([^"]*)"/)?.[1],
+}));
+// relsDe tolera el orden de atributos que usa openpyxl (Target antes que Id) — un regex
+// que asuma Id primero deja el mapa vacío en silencio contra un catálogo guardado así.
+const RID_TARGET = relsDe(leer("xl/_rels/workbook.xml.rels"));
 const CADENAS = cadenasDe(leer("xl/sharedStrings.xml"));
 
 /** "AB12" → 27 (índice 0-based de la columna). */
@@ -81,7 +84,7 @@ function indiceColumna(ref) {
 function matriz(nombreHoja) {
   const h = HOJAS.find((x) => x.nombre === nombreHoja);
   if (!h) throw new Error(`el Excel no tiene la hoja "${nombreHoja}"`);
-  const xml = leer("xl/" + RID_TARGET[h.rid].replace(/^\//, ""));
+  const xml = leer("xl/" + RID_TARGET[h.rid]);
   const out = [];
   for (const fila of xml.matchAll(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
     const celdas = [];

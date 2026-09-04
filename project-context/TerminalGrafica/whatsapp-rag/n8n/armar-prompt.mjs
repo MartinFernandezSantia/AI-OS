@@ -8,7 +8,7 @@
 //   node n8n/armar-prompt.mjs
 import fs from "node:fs";
 import path from "node:path";
-import { abrir, cadenasDe, dec } from "../visor/scripts/lib-xlsx.mjs";
+import { abrir, cadenasDe, dec, relsDe } from "../visor/scripts/lib-xlsx.mjs";
 
 const AQUI = import.meta.dirname;
 /** Techo duro: más que esto y el prompt vuelve a pesar más que los datos.
@@ -21,15 +21,20 @@ const CHARS_POR_TOKEN = 3.3;
 
 const { entradas } = abrir();
 const wbXml = entradas.find((e) => e.nombre === "xl/workbook.xml").contenido.toString("utf8");
-const hojas = [...wbXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="(rId\d+)"[^>]*\/?>/g)].map((m) => ({ nombre: m[1], rid: m[2] }));
+const hojas = [...wbXml.matchAll(/<sheet\b[^>]*\/>/g)].map((m) => ({
+  nombre: m[0].match(/\bname="([^"]*)"/)?.[1],
+  rid: m[0].match(/\br:id="([^"]*)"/)?.[1],
+}));
 const rels = entradas.find((e) => e.nombre === "xl/_rels/workbook.xml.rels").contenido.toString("utf8");
-const ridToTarget = Object.fromEntries([...rels.matchAll(/<Relationship Id="(rId\d+)"[^>]*Target="([^"]+)"/g)].map((m) => [m[1], m[2]]));
+// relsDe tolera el orden de atributos que usa openpyxl (Target antes que Id) — ver el
+// comentario en lib-xlsx.mjs. Un regex que asuma Id primero deja el mapa vacío en silencio.
+const ridToTarget = relsDe(rels);
 const cadenas = cadenasDe(entradas.find((e) => e.nombre === "xl/sharedStrings.xml").contenido.toString("utf8"));
 
 /** Filas de una hoja como arrays de celdas con dato. */
 function filas(nombreHoja) {
   const h = hojas.find((x) => x.nombre === nombreHoja);
-  const xml = entradas.find((e) => e.nombre === "xl/" + ridToTarget[h.rid].replace(/^\//, "")).contenido.toString("utf8");
+  const xml = entradas.find((e) => e.nombre === "xl/" + ridToTarget[h.rid]).contenido.toString("utf8");
   const out = [];
   for (const fila of xml.matchAll(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
     const celdas = [];
