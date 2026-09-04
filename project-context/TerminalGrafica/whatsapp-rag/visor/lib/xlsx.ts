@@ -140,11 +140,19 @@ export async function leerXlsx(buf: ArrayBuffer): Promise<Hojas> {
   const wb = F["xl/workbook.xml"];
   if (!wb) throw new Error("No parece un .xlsx: falta xl/workbook.xml.");
 
+  // Un .xlsx guardado por openpyxl (el que trae el cliente) escribe los atributos de
+  // <Relationship> en otro orden: Target ANTES que Id. Un regex que asuma "Id primero"
+  // (como este lo hacía) deja `rels` vacío EN SILENCIO contra ese archivo — cada hoja
+  // pierde su `target`, el loop de abajo las descarta todas con `continue`, y el resultado
+  // es 0 chunks sin ningún error visible. Se matchea el tag completo y se extrae cada
+  // atributo por separado, sin asumir orden (mismo criterio que relsDe() en
+  // visor/scripts/lib-xlsx.mjs, que los scripts de Node ya usan para esto).
   const rels: Record<string, string> = {};
-  for (const m of (F["xl/_rels/workbook.xml.rels"] ?? "").matchAll(
-    /<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g,
-  )) {
-    rels[m[1]] = m[2];
+  for (const m of (F["xl/_rels/workbook.xml.rels"] ?? "").matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+    const attrs = m[1];
+    const id = attrs.match(/\bId="([^"]+)"/)?.[1];
+    const target = attrs.match(/\bTarget="([^"]+)"/)?.[1];
+    if (id && target) rels[id] = target;
   }
 
   const ss = sharedStrings(F["xl/sharedStrings.xml"]);
