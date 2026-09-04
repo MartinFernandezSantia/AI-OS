@@ -192,8 +192,20 @@ for (const [nombre, tramos] of porMaterial) {
     }
   }
   if (escala.length && escala[escala.length - 1].hasta !== null) {
-    avi("Materiales", escala[escala.length - 1].fila,
-      `"${nombre}": el último tramo termina en ${escala[escala.length - 1].hasta}. Una cantidad mayor no matchea ningún tramo — dejá "Hasta" vacío para que signifique "de acá en adelante".`);
+    const ultimo = escala[escala.length - 1];
+    // Si la fila trae Nota, quien cargó el dato ya decidió a propósito no dar tarifa más
+    // allá de ese tope (p. ej. "el PDF no da tramo para más de N unidades, no inventar") —
+    // el consejo genérico de "dejá Hasta vacío" sería EQUIVOCADO ahí: derivar a consulta es
+    // el comportamiento correcto, no un olvido a corregir.
+    const filaOrig = tramos.find((t) => t._fila === ultimo.fila);
+    if (filaOrig?.["Nota"]) {
+      avi("Materiales", ultimo.fila,
+        `"${nombre}": el último tramo termina en ${ultimo.hasta}; por encima el bot deriva a consulta. ` +
+        `Parece deliberado (hay una nota en esta fila) — si es así, está bien así.`);
+    } else {
+      avi("Materiales", ultimo.fila,
+        `"${nombre}": el último tramo termina en ${ultimo.hasta}. Una cantidad mayor no matchea ningún tramo — dejá "Hasta" vacío para que signifique "de acá en adelante".`);
+    }
   }
 
   // Geometría: obligatoria en pliego (de ahí sale el rinde), inútil en m2 por ahora.
@@ -281,9 +293,9 @@ for (const p of productos.filas) {
 
 // ── crecimiento ────────────────────────────────────────────────────────────────────────
 const topes = [
-  ["Productos", productos.filas.at(-1)?._fila ?? 0, 500],
-  ["Materiales", materiales.filas.at(-1)?._fila ?? 0, 300],
-  ["Colecciones", colecciones.filas.at(-1)?._fila ?? 0, 300],
+  ["Productos", productos.filas.at(-1)?._fila ?? 0, 600],
+  ["Materiales", materiales.filas.at(-1)?._fila ?? 0, 600],
+  ["Colecciones", colecciones.filas.at(-1)?._fila ?? 0, 600],
 ];
 for (const [hoja, ultima, tope] of topes) {
   if (ultima > tope * 0.8) {
