@@ -907,6 +907,74 @@ Dos avisos: el dominio está tras el **geo-block solo-AR de Cloudflare** (desde 
 da 403), y si al autorizar se pueden elegir scopes, con `workflow:read` + `execution:read`
 (+ `workflow:write` si se quiere importar sin UI) alcanza — no hace falta `credential:read`.
 
+## Prod: mensajes que se pierden antes de llegar al bot (2026-09-04)
+
+En el log de `sidekiq` aparece, intermitente:
+
+```
+[ActiveJob] [WebhookJob] Exception: Invalid webhook URL https://n8n.terminalgrafica.cloud/webhook/chatwoot : Net::ReadTimeout
+```
+
+**"Invalid webhook URL" es engañoso**: la URL está bien. Chatwoot atrapa todos los errores
+de red bajo el mismo rescue, así que un timeout se reporta como URL inválida.
+
+11 en la semana, 7 de ellos entre las 19:58 y 20:43 UTC del 04/09. **La ejecución no aparece
+en n8n**: el POST no llega a la capa de aplicación. Sin resolver.
+
+Descartado con evidencia: no es saturación de Sidekiq (colas en 0), no es un cron pisando el
+firewall (no hay crontab de root ni timers cada pocos minutos — cae la hipótesis del
+`ufw reload` de rangos de Cloudflare), no es rotación de logs (el json.log está entero).
+
+**El problema de fondo no es el timeout: el canal de entrada no tiene observabilidad.** Once
+mensajes perdidos y ninguna fuente que diga dónde. Traefik no tenía access log (Dokploy no lo
+habilita) y n8n casi no loguea (~20 líneas en 4 horas, casi todas "Refresh token rotated").
+Si el POST no llega a n8n no hay fila en `bot.log`, no hay ejecución, no hay rastro: un
+cliente escribe, el bot no contesta, y el único indicio es una línea de WARN que alguien
+tiene que salir a buscar.
+
+**Hecho**: access log de Traefik prendido y persistiendo (`.bak-<ts>` del `traefik.yml` al
+lado). El `filePath` **tiene que caer dentro de `dynamic/`** — es el único directorio del
+host montado en el contenedor; a secas en `/etc/dokploy/traefik/` escribe en la capa efímera
+y se pierde en el restart. Traefik solo parsea `.yml`/`.yaml`/`.toml`, así que un `.log` ahí
+no lo molesta.
+
+```yaml
+accessLog:
+  filePath: /etc/dokploy/traefik/dynamic/access.log
+  format: json
+  bufferingSize: 0
+```
+
+Cuando se repita:
+
+```bash
+sudo grep '"RequestPath":"/webhook/chatwoot"' /etc/dokploy/traefik/dynamic/access.log \
+  | grep -oE '"DownstreamStatus":[0-9]+|"Duration":[0-9]+|"time":"[^"]+"'
+```
+
+504 o Duration alto → llegó a Traefik y n8n no contestó. 200 con Duration bajo → el problema
+es de Chatwoot hacia afuera. No aparece → nunca llegó a Traefik (Cloudflare/DNS/hairpin).
+
+Deja dos pendientes: **rotar el access.log** (con `bufferingSize: 0` crece sin límite) y
+**`api.insecure: true`**, que expone el dashboard de Traefik sin auth en el 8080.
+
+### Gotchas al diagnosticar en el VPS
+
+- **Los contenedores no se llaman `rails`/`n8n`.** Dokploy prefija con el stack:
+  `ai-chatbot-tg-whatsapp-stack-tmpv1c-{rails,sidekiq,n8n,redis,postgres}-1` + `dokploy-traefik`.
+  Un `docker logs rails` da "No such container" y los `grep -c` devuelven 0 — que se lee como
+  "no pasa nada" y es mentira.
+- **Los `WebhookJob` corren en `sidekiq`, no en `rails`.**
+- **El host está en `-03` y los contenedores loguean en UTC.** Un timestamp de Chatwoot de las
+  20:43 es 17:43 del host. Filtrar por hora sin corregirlo devuelve vacío. Usar
+  `docker logs --timestamps`.
+- `sudo ls /var/lib/docker/containers/<id>*/` falla con wildcard (lo expande tu shell, sin
+  permisos): `sudo sh -c 'ls ...'`.
+- Reiniciar `dokploy-traefik` corta todo el stack unos segundos y un YAML mal formado lo deja
+  caído: backup con timestamp y verificar el `tail` ANTES del restart.
+- Ruido: el `AxiosError 400` de Google Sheets en n8n es un dropdown del editor, no el flow.
+  En el access log, una pestaña del editor abierta hace polling a `/collaboration/write-lock`.
+
 ## Decisiones ya tomadas (no reabrir sin motivo)
 
 | Tema | Decisión |
