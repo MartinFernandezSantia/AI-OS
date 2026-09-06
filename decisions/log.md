@@ -676,3 +676,23 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** subirlo generosamente a 3500 (elimina la fricción que es justamente el mecanismo) · recortar reglas viejas ya en esta sesión (riesgoso tocar conducta que funciona sin un incidente que lo pida).
 
 **Owner:** Martin.
+
+## 2026-09-06 — Excel multi-hoja etapa 9: `description` la manda el builder, la RPC no se toca
+
+**Decision:** ante el hallazgo de OpenCode de que `bulk_upsert_pricing_rules_v2` hace `description = coalesce(v_rule.description, '')` en el UPDATE (y la hoja `Precios especiales` no tiene columna Descripción, así que el UPDATE pisaría con `''` la nota interna que el plan dice "no se toca"), el arreglo va en el builder del payload, no en la RPC: el classifier de override expone `existingDescription` en el `OverridePreviewRow` **fuera de `parsed`**, y el builder manda `description: r.existingDescription ?? ''`. Altas escriben `''`, updates reescriben el mismo valor (no-op verificable). Va con un comentario en el builder explicando por qué se manda un campo que la hoja no expone, apuntando al coalesce de la RPC.
+
+**Why:** poner `coalesce(..., description)` en la RPC arreglaría la etapa 9 rompiendo las hojas 2-8: hoy vaciar la celda `Descripción` es la única forma de blanquearla desde el Excel, y con el coalesce preservador esa celda vacía pasaría a significar "no cambiar" — el usuario perdería la capacidad de borrarla. `confirmation` sí puede usar coalesce porque ninguna hoja lo expone opcionalmente. Además el plan de las etapas 4-9 prohíbe explícitamente tocar la RPC ("si alguna parece necesitarlo, revisar el diseño antes de modificarla"), y al revisarlo el diseño aguanta. El campo va fuera de `parsed` porque `parsed` es, en las 9 hojas, exclusivamente "lo que dice el Excel" — es la invariante que sostiene el diff, y meterle un valor de DB invita a que alguien lo pinte como columna o lo compare en un `FieldDiff`.
+
+**Alternatives considered:** migración que cambia la RPC a `coalesce(..., description)` (rompe el borrado de descripciones en 5 hojas + despliegue) · copiar `existing.description` dentro de `parsed` como propuso OpenCode (contamina el objeto parseado y el diff) · agregar columna `Descripción` a la hoja 9 (el plan la excluye a propósito: `effect.description` y `pricing_rules.description` son cosas distintas y la hoja expone la condición, que es la que el empleado ve al cotizar).
+
+**Owner:** Martin.
+
+## 2026-09-06 — `Requiere confirmación` inconsistente en un grupo de tramos = warning
+
+**Decision:** en las etapas 5 y 8 (hojas de tramos que sí exponen `Requiere confirmación`), filas del mismo grupo con valores distintos en esa columna dan **warning** y gana la fila líder — sumado al mismo `Set` de `differing` que ya usan `Nombre`/`Descripción`, no como bloque aparte. `Activa` y `Modo` siguen siendo ERROR de todo el grupo.
+
+**Why:** el criterio que separa ERROR de warning en `quantity-prices.ts` no es "campo de regla repetido", es si elegir en silencio **reinterpreta los datos de las otras filas**. `Modo` mezclado hace que un tramo de "50" pase de $50 a 50% sin que nadie lo vea, y `Activa` deja ambiguo si la regla aplica; `Requiere confirmación` es un flag de UI para el empleado y tomar el de la líder no altera ningún tramo. Va al `Set` unificado para que el mensaje salga como uno solo ("valores distintos en Nombre/Requiere confirmación") en vez de apilar warnings.
+
+**Alternatives considered:** ERROR como `Activa`/`Modo` (desproporcionado: bloquea un import entero por un flag que no cambia ningún número) · dejarlo sin definir como estaba el plan (garantiza que cada implementador elija distinto entre la etapa 5 y la 8).
+
+**Owner:** Martin.
