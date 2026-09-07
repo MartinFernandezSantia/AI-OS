@@ -101,7 +101,7 @@ const modoDe = (unidad) => {
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
   if (u.startsWith("modelo")) return "fijo";
-  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
+  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal|talonario)\b/.test(u)) return "item";
   return "otro";
 };
 

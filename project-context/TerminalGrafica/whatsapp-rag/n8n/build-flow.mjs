@@ -286,7 +286,10 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
   const tramo = tramoDe(escala, unidades);
   if (!tramo) return { ok: false, motivo: 'ningún tramo de la escala cubre ' + unidades + ' unidades' };
 
-  const bruto = modo === 'fijo' ? Number(tramo.precio) : unidades * Number(tramo.precio);
+  const bruto =
+    // fijo: monto único; tramo con "precio total": el precio ES el total del tramo, no se
+    // multiplica por las unidades (troquelado 1-10 piezas = $10.000 enteros).
+    modo === 'fijo' || tramo.precio_total ? Number(tramo.precio) : unidades * Number(tramo.precio);
   // El mínimo por trabajo cubre el armado y el montaje de una PRODUCCIÓN. Las colecciones
   // marcadas "Sin mínimo por trabajo" son agregados sobre un trabajo ya cobrado (laminado,
   // ojalillos): ahí el mínimo multiplicaría por 12 el precio de laminar una hoja.
@@ -328,6 +331,9 @@ function catalogoDe(material) {
       hasta: num(m["Hasta"]),
       precio: num(m["Precio por unidad"]) ?? 0,
       ...(num(m["Mínimo facturable"]) !== null && { minimo_facturable: num(m["Mínimo facturable"]) }),
+      // El precio de ESTE tramo es el TOTAL del tramo (troquelado 1-10 piezas = $10.000),
+      // no por unidad. La marca es por fila: mismo mecanismo que la escala del chunk.
+      ...(/^(s[ií]|x|1|true|v)$/i.test(String(m["Precio total por tramo"] ?? "").trim()) && { precio_total: true }),
     }))
     .sort((a, b) => a.desde - b.desde);
   const unidad = filas[0]["Unidad"] ?? "";
@@ -358,8 +364,9 @@ function modoDe(unidad) {
   // "metro lineal" entra acá y NO en m2: se cobra cantidad × precio (3 metros de plano
   // escaneado = 3 × $8.000), no ancho × alto. Es "metro lineal" completo y no "metro" a
   // secas: con el prefijo suelto, "metro cuadrado" cobraría por cantidad algo que se
-  // cotiza por superficie.
-  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
+  // cotiza por superficie. "talonario" es un ítem contable (las rifas se piden por
+  // talonario y la escala está en talonarios).
+  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal|talonario)\b/.test(u)) return "item";
   return "otro";
 }
 
@@ -559,6 +566,10 @@ function correrTests() {
       // es el que importa: con el prefijo escrito "metro" a secas, el CUADRADO también
       // caía en item y cobraba por cantidad algo que se cotiza por superficie.
       ["metro lineal", "item"], ["metro cuadrado", "otro"],
+      // Las rifas se piden "2 talonarios": la escala está en talonarios (100 números cada
+      // uno). El par de abajo es el typo defensivo: el plural "talonarios" NO matchea
+      // "talonario" (no hay borde de palabra antes de la s) y tiene que romper visible.
+      ["talonario de 100", "item"], ["talonario rifas", "item"], ["talonarios", "otro"],
       // El recargo por diseño: un monto único que no depende de la cantidad. El par de
       // abajo es el typo defensivo: "modelado" no es "modelo" y tiene que romper visible.
       ["modelo de corte", "fijo"], ["modelado", "otro"],

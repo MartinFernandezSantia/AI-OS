@@ -13,6 +13,7 @@ import { rinde, type Geometria } from "./geometria";
 import {
   escalaDe,
   esMedidaContinua,
+  esSi,
   geometriaDe,
   modoDe,
   num,
@@ -97,9 +98,6 @@ export const COL_FAMILIA = "Familia";
  */
 export const COL_PAQUETE = "Piezas por paquete";
 
-/** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
-const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
-
 const CONOCIDAS = new Set([
   "Colección",
   "Producto",
@@ -154,6 +152,7 @@ const PLURALES: Record<string, string> = {
   plancha: "planchas",
   bobina: "bobinas",
   modelo: "modelos",
+  talonario: "talonarios",
 };
 
 /** Adjetivos que acompañan a un sustantivo de unidad y tienen que concordar con su plural.
@@ -193,12 +192,16 @@ export function escalaTexto(tramos: Tramo[], unidad = ""): string {
   const suf = plural ? " " + plural : "";
   return tramos
     .map((t) => {
-      if (t.hasta === null) return `${t.desde}${suf} o más: ${money(t.precio)}`;
+      // Un tramo marcado "Precio total por tramo" es un monto ÚNICO para todo el rango
+      // (troquelado 1-10 piezas = $10.000 enteros): sin la marca, el modelo leería el
+      // precio como por-unidad y multiplicaría. "TOTAL" es la señal.
+      const marca = t.total ? " TOTAL" : "";
+      if (t.hasta === null) return `${t.desde}${suf} o más: ${money(t.precio)}${marca}`;
       if (t.desde === t.hasta) {
         // Un solo valor: va en singular ("1 pliego A3", no "1 pliegos A3").
-        return `${t.desde}${unidad ? " " + unidad : ""}: ${money(t.precio)}`;
+        return `${t.desde}${unidad ? " " + unidad : ""}: ${money(t.precio)}${marca}`;
       }
-      return `${t.desde} a ${t.hasta}${suf}: ${money(t.precio)}`;
+      return `${t.desde} a ${t.hasta}${suf}: ${money(t.precio)}${marca}`;
     })
     .join(" · ");
 }
@@ -398,6 +401,17 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
         "como la pida el cliente (1 modelo, 3 modelos) — el sistema cobra el monto único.",
     ];
   }
+  // Los talonarios de rifas se cobran por talonario (100 números cada uno) y la escala
+  // está en talonarios, pero el cliente habla de "números de rifa". Sin la guía, el
+  // modelo declararía 200 por "200 números" y el tramo saltaría al de 100+ talonarios
+  // (100 veces más caro). Misma lección que el metro lineal: la unidad en la que declara
+  // la cantidad es un DATO del catálogo, no algo que el prompt despeje turno a turno.
+  if (modo === "item" && /^talonario\b/.test(unidad.trim().toLowerCase())) {
+    return [
+      "Se cobra por TALONARIO (100 números): la cantidad se declara en talonarios, no en " +
+        "números de rifa. '2 talonarios' se declara como 2.",
+    ];
+  }
   return [];
 }
 
@@ -465,6 +479,7 @@ function escalaMeta(tramos: Tramo[]): Record<string, unknown>[] {
     hasta: t.hasta,
     precio: t.precio,
     ...(t.minimo !== null && { minimo_facturable: t.minimo }),
+    ...(t.total && { precio_total: true }),
   }));
 }
 

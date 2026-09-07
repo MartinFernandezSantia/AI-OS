@@ -19,6 +19,10 @@ export interface Tramo {
   minimo: number | null;
   /** Unidad de cobro del material: define el MODO de cálculo ('pliego' | 'm2'). */
   unidad: string;
+  /** El precio de ESTE tramo es el TOTAL del tramo, no por unidad (troquelado 1-10 piezas
+   *  = $10.000 enteros). La marca es POR TRAMO: el troquelado la tiene en el primero y los
+   *  demás multiplican por pieza como siempre. */
+  total?: boolean;
 }
 
 /** Lo que el visor necesita del archivo, ya parseado. */
@@ -62,6 +66,9 @@ export function num(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Un "sí" del Excel, tolerante a como lo escriba el cliente (sí/si/x/1/true). */
+export const esSi = (v: unknown): boolean => /^(s[ií]|x|1|true|v)$/i.test(String(v ?? "").trim());
+
 /**
  * Escala de un material: sus tramos ordenados por `Desde`.
  * La hoja puede traerlos desordenados; el orden lo garantizamos acá, no el Excel.
@@ -75,6 +82,7 @@ export function escalaDe(materiales: Fila[], material: string): Tramo[] {
       precio: num(m["Precio por unidad"]) ?? 0,
       minimo: num(m["Mínimo facturable"]),
       unidad: m["Unidad"] ?? "",
+      ...(esSi(m["Precio total por tramo"]) && { total: true }),
     }))
     .sort((a, b) => a.desde - b.desde);
 }
@@ -130,7 +138,9 @@ export function modoDe(unidad: string): "pliego" | "m2" | "item" | "fijo" | "otr
   // Dice "metro lineal" completo, no "metro" a secas: con el prefijo suelto, "metro
   // cuadrado" también caería en `item` y cobraría por cantidad un material que se cotiza
   // por superficie. El precio saldría plausible y nadie lo notaría.
-  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
+  // "talonario" es un ítem contable: las rifas se piden "2 talonarios" y la escala está
+  // en talonarios (ver el aviso en validar-catalogo sobre la escala en números).
+  if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal|talonario)\b/.test(u)) return "item";
   return "otro";
 }
 
