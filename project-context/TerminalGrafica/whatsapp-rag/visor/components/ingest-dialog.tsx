@@ -72,7 +72,17 @@ export function IngestDialog({
           }}
         >
           <div className="w-full max-w-md rounded-lg border bg-[var(--color-surface)] p-5 shadow-lg">
-            {(e.fase === "confirmar" || e.fase === "ingestando") && (
+            {e.fase === "ingestando" && (
+              <div className="flex flex-col items-center justify-center gap-3 py-8">
+                <span
+                  aria-hidden="true"
+                  className="size-9 animate-spin rounded-full border-2 border-[var(--color-border-strong)] border-t-[var(--color-primary)]"
+                />
+                <p className="text-sm text-[var(--color-text-muted)]">Cargando el catálogo…</p>
+              </div>
+            )}
+
+            {(e.fase === "confirmar") && (
               <>
                 <h2 className="text-base font-semibold">Cargar el catálogo del bot</h2>
 
@@ -115,17 +125,15 @@ export function IngestDialog({
                 <div className="mt-5 flex justify-end gap-2">
                   <button
                     onClick={cerrar}
-                    disabled={e.fase === "ingestando"}
-                    className="rounded-md px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] disabled:opacity-50"
+                    className="rounded-md px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={() => confirmar(e.preview)}
-                    disabled={e.fase === "ingestando"}
-                    className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-sm text-[var(--color-primary-foreground)] hover:opacity-90 disabled:opacity-60"
+                    className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-sm text-[var(--color-primary-foreground)] hover:opacity-90"
                   >
-                    {e.fase === "ingestando" ? "Cargando…" : "Sí, cargar"}
+                    Sí, cargar
                   </button>
                 </div>
               </>
