@@ -30,3 +30,12 @@ project-context/**/zonaprop/
 
 # Locks de LibreOffice/Excel: aparecen mientras un archivo está abierto
 .~lock.*#
+
+# TG whatsapp-rag — catálogos transitorios / copias cliente / backups de LibreOffice
+project-context/TerminalGrafica/whatsapp-rag/Catalogo-TG-cliente.xlsx
+project-context/TerminalGrafica/whatsapp-rag/Catalogo-TG-v3-wip.xlsx
+project-context/TerminalGrafica/whatsapp-rag/Catalogo-TG-v3.xlsx.bak-*
+
+# scratch suelto en la raíz del AIOS (no es del proyecto)
+/modal.png
+/tmp-entries.json

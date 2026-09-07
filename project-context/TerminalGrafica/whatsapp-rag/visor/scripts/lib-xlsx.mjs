@@ -13,7 +13,7 @@ import zlib from "node:zlib";
  *  trabajando) sin tocar el default ni el original. */
 export const XLSX = process.env.CATALOGO
   ? path.resolve(process.env.CATALOGO)
-  : path.resolve(import.meta.dirname, "../../Catalogo-TG-v3.xlsx");
+  : path.resolve(import.meta.dirname, "../../Catalogo-TG-v4.xlsx");
 
 /** LibreOffice deja este archivo mientras el .xlsx está abierto. Escribir con el archivo
  *  abierto = el próximo guardado del usuario pisa el cambio. */
