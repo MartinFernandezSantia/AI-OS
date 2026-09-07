@@ -45,7 +45,6 @@ PASO 3 — Producto. En la hoja Productos, primera fila libre:
 Depende del modo del material, y es al revés en cada uno:
 >    Modo pliego → el MATERIAL necesita 'Área útil ancho/alto (cm)' y 'Separación (cm)';
 >                  no lleva mínimo facturable. El producto deja el rinde VACÍO: se calcula.
->                  'Piezas por unidad de cobro' se carga SOLO para unidades no geométricas.
 >    Modo m2     → el MATERIAL necesita 'Mínimo facturable'. El producto deja el rinde vacío.
 
 Una columna vacía no es un error: es lo que hace que el bot no vea datos que no corresponden.
@@ -64,17 +63,15 @@ vacío, y el precio final en 'Precio por unidad'.
 >    Ejemplo real: "Lona 2x0,85 m con porta banner roll up" — Unidad: unidad · Desde: 1 ·
 >    Precio por unidad: 65200. El producto no lleva Ancho ni Alto: no hay medida que pedir.
 
-## DE DÓNDE SALE EL RINDE ("Piezas por unidad de cobro")
+## DE DÓNDE SALE EL RINDE
 
-Ya NO se carga a mano para los pliegos. La geometría se declara UNA vez por material en
+Ya NO se carga a mano. La geometría se declara UNA vez por material en
 la hoja Materiales ('Área útil ancho/alto (cm)' y 'Separación (cm)') y el rinde se
 calcula solo: el bot lo resuelve para cualquier medida que pida el cliente.
 >    Troquelado o medio corte: área útil 28 x 44 cm, separación 0,3 cm.
 >    Solo impresión:           área útil 31 x 46 cm, separación 0.
 
-La columna 'Piezas por unidad de cobro' queda SOLO para unidades no geométricas — una
-bobina, una plancha — donde el rinde es dato del taller, no geometría. Si se carga,
-manda sobre el cálculo.
+El rinde sale SIEMPRE de la geometría: no hay columna para cargarlo a mano.
 
 ## CUIDADO CON LOS NOMBRES PARECIDOS
 

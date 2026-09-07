@@ -233,7 +233,7 @@ const redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);
  * Re-calcula una cotización desde los datos del CATÁLOGO (no desde lo que declaró el LLM).
  * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar.
  */
-function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_cargado, sin_minimo, paquete }) {
+function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_minimo, paquete }) {
   const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);
   if (!(q > 0)) return { ok: false, motivo: 'cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
@@ -263,8 +263,7 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, rinde_c
       unidades = q;
     }
   } else if (modo === 'pliego') {
-    // El rinde cargado a mano gana sobre el cálculo (unidades no geométricas: bobina, plancha).
-    r = rinde_cargado != null ? Number(rinde_cargado) : rinde(a, h, geometria);
+    r = rinde(a, h, geometria);
     if (!(r > 0)) return { ok: false, motivo: 'la pieza no entra en la unidad de cobro (rinde 0) — derivar a consulta' };
     unidades = Math.ceil(q / r - 1e-9);
   } else if (modo === 'm2') {
@@ -405,9 +404,6 @@ function correrTests() {
       // La exención es de la COLECCIÓN; el caso solo nombra el material, así que se cruza
       // por los productos igual que lo hace el chunk.
       sin_minimo: sinMinimoDeMaterial(material),
-      // La columna del caso es el rinde ESPERADO, no un dato de entrada: si se lo pasáramos,
-      // el test no probaría la fórmula de encaje, solo la aritmética que viene después.
-      rinde_cargado: null,
       // El paquete, igual que en producción (el auditor lo lee de `md.paquete` del chunk).
       // Faltaba, y el hueco era grave: la hoja cargaba la Cantidad ya convertida a unidades
       // de cobro ("100 tarjetas" con Cantidad 1), así que la división piezas→paquetes —el
@@ -836,7 +832,6 @@ function codeAuditor() {
     "    cantidad: c.cantidad,",
     "    escala: md.escala,",
     "    geometria: md.geometria,",
-    "    rinde_cargado: null,",
     "    // Exención del mínimo por trabajo: la marca es de la COLECCIÓN, viene en el chunk.",
     "    sin_minimo: md.sin_minimo === true,",
     "    // Piezas por paquete. El modelo declara `cantidad` en PIEZAS ('mil tarjetas') y esto",

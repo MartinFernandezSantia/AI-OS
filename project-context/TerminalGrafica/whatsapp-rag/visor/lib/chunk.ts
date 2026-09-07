@@ -34,11 +34,6 @@ export interface Chunk {
 
 /** Columnas de Productos que tienen lugar propio en la plantilla del chunk. Cualquier otra
  *  se emite genérica al final del ítem — así una columna nueva del cliente entra sin código. */
-/** Cuántas piezas salen de UNA unidad de cobro (un pliego, una plancha, una bobina…).
- *  Para las unidades geométricas (pliego) YA NO se carga a mano: se calcula desde la
- *  geometría del material. La columna queda para unidades donde el rinde es dato del
- *  taller (una bobina, una plancha) — y si viene cargada, gana sobre el cálculo. */
-export const COL_RINDE = "Piezas por unidad de cobro";
 
 /** El material que se cotiza cuando el cliente no pide una opción especial. Vive en la
  *  hoja Colecciones (una por colección) porque la elección es del negocio, no del bot:
@@ -112,19 +107,16 @@ const CONOCIDAS = new Set([
   "Material",
   "Ancho (cm)",
   "Alto (cm)",
-  COL_RINDE,
   COL_FORMATO,
 ]);
 
 /**
- * El rinde efectivo de un producto: la columna cargada (dato del taller) manda; si no
- * está y hay geometría + medidas, se calcula; si no hay nada, null. Un 0 calculado
- * significa "no entra en el área útil" — se devuelve tal cual para que `avisos` lo vea,
- * pero el chunk no lo emite (0 es falsy en los call sites).
+ * El rinde efectivo de un producto, calculado SIEMPRE desde la geometría del material
+ * (la columna cargada a mano ya no existe). Con medidas + geometría devuelve el rinde;
+ * sin alguna de las dos, null. Un 0 calculado significa "no entra en el área útil" — se
+ * devuelve tal cual para que `avisos` lo vea, pero el chunk no lo emite (0 es falsy).
  */
 export function rindeEfectivo(p: Fila, geo: Geometria | null): number | null {
-  const cargado = num(p[COL_RINDE]);
-  if (cargado !== null) return cargado;
   const a = num(p["Ancho (cm)"]);
   const h = num(p["Alto (cm)"]);
   if (geo && a !== null && h !== null) return rinde(a, h, geo);
@@ -809,24 +801,18 @@ export function avisos(datos: Datos): string[] {
 
     const nombre = p["Producto"] ?? "(sin nombre)";
     const geo = geometriaDe(datos.materiales, mat);
-    const cargado = num(p[COL_RINDE]);
     const a = num(p["Ancho (cm)"]);
     const h = num(p["Alto (cm)"]);
     const calculado = geo && a !== null && h !== null ? rinde(a, h, geo) : null;
 
-    if (cargado === null && calculado === null) {
-      // Sin columna ni geometría: el chunk sale con precio pero sin rinde, y el bot inventa.
+    if (calculado === null) {
+      // Sin geometría no hay de dónde calcular el rinde: el chunk sale con precio pero
+      // sin cuántas piezas entran, y el bot no puede dividir (inventaría el número).
       out.push(
-        `${nombre}: sin rinde — el material "${mat}" no tiene geometría (área útil + separación) ` +
-          `y la columna "${COL_RINDE}" está vacía. El bot no va a poder cotizarlo.`,
+        `${nombre}: sin rinde — el material "${mat}" no tiene geometría (área útil + separación). ` +
+          `El bot no va a poder cotizarlo.`,
       );
-    } else if (cargado !== null && calculado !== null && cargado !== calculado) {
-      // Dos fuentes que no coinciden: gana el dato cargado (lo puso un humano a propósito).
-      out.push(
-        `${nombre}: la columna dice ${cargado} pero la geometría de "${mat}" calcula ${calculado}. ` +
-          `Se usa ${cargado}; revisar cuál está mal.`,
-      );
-    } else if (cargado === null && calculado === 0) {
+    } else if (calculado === 0) {
       out.push(
         `${nombre} (${a}x${h} cm): no entra en el área útil de "${mat}" en ninguna orientación. ` +
           `La referencia sale sin rinde; el bot debe derivar a consulta.`,

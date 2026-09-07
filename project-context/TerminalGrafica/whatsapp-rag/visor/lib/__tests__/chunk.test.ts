@@ -700,16 +700,10 @@ describe("chunks — producto", () => {
   });
 });
 
-describe("el rinde: columna cargada vs geometría", () => {
-  it("la columna no se filtra al chunk como columna desconocida", () => {
-    const conColumna: Datos = {
-      ...datos,
-      productos: [{ ...datos.productos[0], "Piezas por unidad de cobro": "104" }],
-    };
-    // Si no estuviera en CONOCIDAS, saldría como "Piezas por unidad de cobro: 104".
-    expect(chunks(conColumna, "coleccion-material")[0].texto).not.toContain(
-      "Piezas por unidad de cobro:",
-    );
+describe("el rinde se calcula por geometría", () => {
+  it("calcula el rinde desde la geometría del material", () => {
+    // 3x3 en un pliego de 28x44 con separación 0,3 → 104.
+    expect(rindeEfectivo(datos.productos[0], { utilAncho: 28, utilAlto: 44, separacion: 0.3 })).toBe(104);
   });
 
   it("el alias viejo 'Piezas por pliego' YA NO se acepta: sale como columna desconocida", () => {
@@ -720,14 +714,7 @@ describe("el rinde: columna cargada vs geometría", () => {
     expect(chunks(conAlias, "coleccion-material")[0].texto).toContain("Piezas por pliego: 104");
   });
 
-  it("la columna cargada GANA sobre el cálculo (dato del taller)", () => {
-    const p = { ...datos.productos[0], "Piezas por unidad de cobro": "99" };
-    expect(rindeEfectivo(p, { utilAncho: 28, utilAlto: 44, separacion: 0.3 })).toBe(99);
-    const conColumna: Datos = { ...datos, productos: [p, datos.productos[1]] };
-    expect(chunks(conColumna, "coleccion-material")[0].texto).toContain("entran 99 por pliego A3");
-  });
-
-  it("sin columna ni geometría no hay rinde (null) y el ítem no dice 'entran'", () => {
+  it("sin geometría no hay rinde (null) y el ítem no dice 'entran'", () => {
     const sinGeo: Datos = {
       ...datos,
       materiales: datos.materiales.map(
@@ -738,17 +725,10 @@ describe("el rinde: columna cargada vs geometría", () => {
     expect(chunks(sinGeo, "coleccion-material")[0].texto).not.toContain("entran");
   });
 
-  it("el rinde cargado sirve para cualquier unidad, no solo pliego", () => {
+  it("una unidad 'otro' no tiene línea de medida libre (ni rinde: sin geometría)", () => {
     const bobina: Datos = {
       colecciones: [{ "Colección": "Cintas", "Descripción": "Cintas impresas." }],
-      productos: [
-        {
-          "Colección": "Cintas",
-          Producto: "Cinta 2 cm",
-          Material: "Bobina 50 m",
-          "Piezas por unidad de cobro": "200",
-        },
-      ],
+      productos: [{ "Colección": "Cintas", Producto: "Cinta 2 cm", Material: "Bobina 50 m" }],
       materiales: [
         { Material: "Bobina 50 m", Unidad: "bobina", Desde: "1", "Precio por unidad": "45000" },
       ],
@@ -756,7 +736,7 @@ describe("el rinde: columna cargada vs geometría", () => {
       hojas: [],
     };
     const t = chunks(bobina, "coleccion-material")[0].texto;
-    expect(t).toContain("entran 200 por bobina");
+    expect(t).not.toContain("entran");
     expect(t).not.toContain("pliego");
     // Una unidad "otro" no tiene fórmula de medida libre: sin línea habilitante.
     expect(t).not.toContain("Se cotiza");
@@ -850,7 +830,7 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(avisos(dos)).toHaveLength(2);
   });
 
-  it("producto pliego sin geometría ni rinde cargado: el bot no va a poder cotizar", () => {
+  it("producto pliego sin geometría: el bot no va a poder cotizar", () => {
     const sinGeo: Datos = {
       ...datos,
       materiales: datos.materiales.map(
@@ -861,19 +841,6 @@ describe("avisos — lo que el chunk no puede mostrar", () => {
     expect(a).toHaveLength(2); // los dos productos pliego del fixture
     expect(a[0]).toContain("Stickers 3x3 cm");
     expect(a[0]).toContain("no va a poder cotizarlo");
-  });
-
-  it("columna cargada y geometría que no coinciden: drift, gana el dato cargado", () => {
-    const conDrift: Datos = {
-      ...datos,
-      productos: [{ ...datos.productos[0], "Piezas por unidad de cobro": "99" }],
-    };
-    // Dejar UN solo producto huerfaniza los materiales de los otros dos, y esos avisos son
-    // correctos pero no son los que este test mira. Se filtra por el aviso bajo prueba.
-    const a = avisos(conDrift).filter((x) => x.includes("la columna dice"));
-    expect(a).toHaveLength(1);
-    expect(a[0]).toContain("la columna dice 99");
-    expect(a[0]).toContain("calcula 104");
   });
 
   it("la MISMA medida en dos materiales y sin base marcada: hay que elegir una", () => {
