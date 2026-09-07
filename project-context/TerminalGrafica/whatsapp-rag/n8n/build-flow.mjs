@@ -201,9 +201,10 @@ function rinde(ancho, alto, geo) {
 // ══════════════════════════════════════════════════════════════════════════════════════
 // El re-cálculo determinista — también UN SOLO string
 // ══════════════════════════════════════════════════════════════════════════════════════
-// Es la fórmula de la PARTE 1 de Instrucciones, en código. Se emite dentro del nodo Code y
-// se evalúa acá contra los 46 casos del Excel: si el Excel y este código no coinciden, el
-// build falla. Ese es el punto — el auditor tiene que reproducir la planilla del cliente.
+// La especificación del cálculo, en código — Instrucciones (para el cliente) no la
+// describe, solo cubre cómo cargar el catálogo. Se emite dentro del nodo Code y se evalúa
+// acá contra los casos del Excel: si el Excel y este código no coinciden, el build falla.
+// Ese es el punto — el auditor tiene que reproducir la planilla del cliente.
 const FUENTE_COTIZAR = `
 /**
  * El tramo de la escala que contiene \`n\` unidades de cobro. \`hasta\` vacío = "de acá en

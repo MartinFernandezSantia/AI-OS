@@ -50,29 +50,11 @@ function filas(nombreHoja) {
   return out;
 }
 
-// ── La PARTE 1 (la fórmula de cotización) YA NO VA AL PROMPT ─────────────────────────
-// Desde v2 el LLM no calcula: declara qué cotizar y el nodo Code hace la cuenta (ver el
-// auditor en build-flow.mjs). La fórmula sigue viviendo en el Excel y la sigue consumiendo
-// el auditor a través de FUENTE_COTIZAR — pero el modelo ya no la necesita.
-//
-// Se sigue LEYENDO y validando igual: si el cliente reescribe esas líneas, el build tiene
-// que romper. La PARTE 1 es la especificación del cálculo, y `build-flow.mjs` verifica que
-// el auditor la reproduzca contra los 46 casos. Perder la validación sería perder el aviso
-// de que la fuente de verdad cambió.
-const instr = filas("Instrucciones").map((f) => f[0]);
-const ini = instr.findIndex((l) => /PARTE 1/.test(l));
-const fin = instr.findIndex((l) => /PARTE 2/.test(l));
-if (ini < 0 || fin < 0) throw new Error("no encontré los separadores de PARTE 1/2");
-const ESPERADAS = [
-  /hoja Materiales: '([^']+)' y '([^']+)'/,
-  /Buscar en Materiales el tramo/,
-  /el mínimo por trabajo de la hoja Parámetros/,
-  /Redondear al múltiplo indicado en Parámetros/,
-];
-const PARTE_1 = instr.slice(ini + 1, fin).join("\n").trim();
-for (const re of ESPERADAS) {
-  if (!re.test(PARTE_1)) throw new Error(`la PARTE 1 ya no dice: ${re}`);
-}
+// ── Instrucciones YA NO TIENE la fórmula de cotización ───────────────────────────────
+// Instrucciones es para el cliente (y su asistente de IA) y solo cubre cómo CARGAR el
+// catálogo — nunca fue leída por el prompt del bot. La especificación del cálculo vive
+// SOLO en build-flow.mjs (FUENTE_COTIZAR), validada ahí contra los casos del Excel; no
+// hay un espejo en Instrucciones que este script tenga que chequear.
 
 // ── {{PARAMETROS}} ─────────────────────────────────────────────────────────────────────
 // Van al prompt solo para que el bot pueda EXPLICARLOS si el cliente pregunta. Aplicarlos
@@ -89,7 +71,7 @@ if (sinResolver) throw new Error(`placeholders sin resolver: ${sinResolver.join(
 const tokens = Math.round(prompt.length / CHARS_POR_TOKEN);
 fs.writeFileSync(path.join(AQUI, "prompt-final.txt"), prompt);
 
-console.log(`PARTE_1: ${PARTE_1.length} ch (validada, NO inyectada) · PARAMETROS: ${PARAMETROS.length} ch`);
+console.log(`PARAMETROS: ${PARAMETROS.length} ch`);
 console.log(`\nprompt: ${prompt.length} chars · ~${tokens} tokens → n8n/prompt-final.txt`);
 if (tokens > TOPE_TOKENS) {
   console.error(`\n✗ ABORTADO: ${tokens} tokens supera el techo de ${TOPE_TOKENS}.`);
