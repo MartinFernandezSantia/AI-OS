@@ -153,6 +153,13 @@ conviene que estén a la vista:
 >       (en _listas hay fórmulas, no valores).
 >    3. La hoja _listas es generada: no leerla, no escribirla, no "arreglarla".
 
+## ANTES DE MANDARNOS EL ARCHIVO
+
+Si cargan con Claude, pídanle que corra la skill `tg-validar-catalogo` sobre el archivo antes
+de mandarlo. Revisa las 4 hojas y avisa los errores que Excel no marca (material mal escrito,
+unidad sin fórmula, tramos con huecos, pieza que no entra) antes de que lleguen a nosotros.
+No hace falta instalar nada — la skill lee el .xlsx directo.
+
 ## DESPUÉS DE EDITAR
 
 Guarden el archivo y mándennoslo. Nosotros lo revisamos y lo integramos al catálogo del bot.

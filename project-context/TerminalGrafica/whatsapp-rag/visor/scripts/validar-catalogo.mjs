@@ -12,6 +12,10 @@
 // fórmula de encaje de lib-xlsx.mjs. Los scripts no importan TS, así que se duplica — el
 // mismo precedente que ya sentó `rinde()`. Si cambia parse.ts, cambia esto.
 //
+// ESTAS MISMAS 22 REGLAS también viven, portadas a lenguaje natural, en la skill
+// .claude/skills/tg-validar-catalogo/SKILL.md (para que TG las corra en su propio Claude,
+// sin Node). Si agregás, sacás o cambiás una regla acá, actualizá esa skill también.
+//
 //   CATALOGO=Catalogo-TG-cliente.xlsx node scripts/validar-catalogo.mjs
 //
 // Sale con código 1 si hay errores (para poder usarlo como gate), 0 si solo hay avisos.
