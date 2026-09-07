@@ -231,9 +231,12 @@ const redondear = (n, paso) => (paso > 0 ? Math.round(n / paso) * paso : n);
 
 /**
  * Re-calcula una cotización desde los datos del CATÁLOGO (no desde lo que declaró el LLM).
- * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar.
+ * Devuelve { ok, total, ... } o { ok: false, motivo } cuando no se puede cotizar. Si el
+ * motivo es el paquete que no cierra exacto, la prop \`alternativas\` trae las cantidades de
+ * paquete más cercanas (inferior y superior) con su total real, para que el flujo las pueda
+ * ofrecer. \`material\` es SOLO para rotular esas alternativas; el cálculo no lo usa.
  */
-function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_minimo, paquete }) {
+function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_minimo, paquete, material }) {
   const a = Number(ancho_cm), h = Number(alto_cm), q = Number(cantidad);
   if (!(q > 0)) return { ok: false, motivo: 'cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
@@ -255,9 +258,22 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
       //
       // Se exige división EXACTA: TG vende paquetes cerrados, no cantidades intermedias.
       // 150 tarjetas no son 1,5 paquetes ni se redondean a 2 (eso sería cobrarle 200 y
-      // entregarle 150, una decisión comercial que no es del bot). Va a consulta.
+      // entregarle 150, una decisión comercial que no es del bot). No hay precio para la
+      // cantidad pedida, PERO las cantidades de paquete más cercanas (inferior y superior)
+      // son cotizaciones REALES: se calculan re-llamando al motor con el múltiplo exacto.
+      // El Responder (etapa 6) podrá ofrecerlas; la etapa 5 solo las computa.
       if (Math.abs(q / p - Math.round(q / p)) > 1e-9) {
-        return { ok: false, motivo: 'se vende en paquetes de ' + p + ' y ' + q + ' no es múltiplo — derivar a consulta' };
+        const alt = [];
+        for (const piezas of [Math.floor(q / p) * p, Math.ceil(q / p) * p]) {
+          if (!(piezas > 0) || piezas === q) continue;
+          const r2 = cotizar({ modo, ancho_cm, alto_cm, cantidad: piezas, escala, geometria, sin_minimo, paquete, material });
+          if (r2.ok) alt.push({ cantidad: piezas, total: r2.total, material: material || null });
+        }
+        return {
+          ok: false,
+          motivo: 'se vende en paquetes de ' + p + ' y ' + q + ' no es múltiplo — derivar a consulta',
+          ...(alt.length && { alternativas: alt }),
+        };
       }
       unidades = Math.round(q / p);
     } else {
@@ -436,7 +452,30 @@ function correrTests() {
       // bug del $54.000.000— no la ejercía NINGÚN caso. Ahora la Cantidad va en PIEZAS,
       // como la escribe el cliente, y esta línea es la que hace que el gate la cubra.
       paquete: paqueteDeMaterial(material),
+      // Rotula las alternativas igual que producción.
+      material,
     });
+
+    // Caso de ALTERNATIVAS de paquete: la columna de precio dice "Alternativas: c=$t · c=$t".
+    // Es un "no cotizable" que SÍ tiene camino: las cantidades de paquete más cercanas.
+    const textoPrecio = String(c["Precio correcto"] ?? "").trim();
+    if (/^Alternativas:/i.test(textoPrecio)) {
+      const pares = [...textoPrecio.matchAll(/(\d+(?:[.,]\d+)*)=\$?(\d+)/g)]
+        .map((m) => ({ cantidad: num(m[1]), total: num(m[2]) }))
+        .sort((a, b) => a.cantidad - b.cantidad);
+      const got = (r.alternativas || [])
+        .map((a) => ({ cantidad: a.cantidad, total: a.total }))
+        .sort((a, b) => a.cantidad - b.cantidad);
+      const ok = !r.ok && got.length === pares.length &&
+        got.every((g, i) => g.cantidad === pares[i].cantidad && g.total === pares[i].total);
+      if (r.ok) fallos.push(`caso "${c["Pedido"]}": esperaba NO cotizable con alternativas, cotizó $${r.total}`);
+      else if (!ok) {
+        const gotTxt = got.map((g) => `${g.cantidad}=${g.total}`).join(" · ") || "(ninguna)";
+        const queroTxt = pares.map((p) => `${p.cantidad}=${p.total}`).join(" · ");
+        fallos.push(`caso "${c["Pedido"]}": alternativas [${gotTxt}] ≠ [${queroTxt}]`);
+      } else okCasos++;
+      continue;
+    }
 
     if (esperado === null) {
       // Caso "Derivar a consulta": el texto en la columna de precio es el resultado esperado.
@@ -534,10 +573,16 @@ function correrTests() {
 
     // Cantidad intermedia: TG vende paquetes cerrados. 150 no es 1,5 paquetes ni se
     // redondea a 2 — va a consulta. (El modelo ya respondía esto solo; ahora el auditor
-    // no lo puede contradecir con un número.)
+    // no lo puede contradecir con un número.) Pero las cantidades de paquete más cercanas
+    // SÍ son cotizaciones reales, y tienen que venir en `alternativas`.
     const intermedia = pack(150, 100, cien);
     if (intermedia.ok) {
       fallos.push(`paquete: 150 piezas de a 100 cotizó $${intermedia.total} en vez de derivar`);
+    } else {
+      const alts = (intermedia.alternativas || []).map((a) => `${a.cantidad}=${a.total}`).join(" · ");
+      if (alts !== "100=16500 · 200=33000") {
+        fallos.push(`paquete: 150 piezas de a 100 esperaba alternativas "100=16500 · 200=33000", dio "${alts || "(ninguna)"}"`);
+      }
     }
 
     // Sin `paquete` NO se divide: la mayoría de los ítems se cobran de a uno y dividir ahí
@@ -871,13 +916,47 @@ function codeAuditor() {
     "    // Piezas por paquete. El modelo declara `cantidad` en PIEZAS ('mil tarjetas') y esto",
     "    // se cobra por paquete: sin el dato del catálogo, las dos cosas se multiplicaban.",
     "    paquete: md.paquete,",
+    "    // Solo rotula las alternativas cuando el paquete no cierra exacto.",
+    "    material: etiqueta,",
     "  });",
     "",
     "  if (!r.ok) {",
-    "    // La pieza no entra en el pliego, la medida es inválida, no hay tramo que la cubra…",
-    "    // Sea cual sea el motivo, NO hay precio: el mensaje no puede salir con un número.",
+    "    // Sin precio: el mensaje no puede salir con un número. Pero si el paquete no cerraba",
+    "    // exacto, el pedido SÍ se vende en las cantidades de paquete más cercanas — cada una",
+    "    // con su total real, calculado acá por el MISMO motor, no estimado. Las de la misma",
+    "    // presentación ya vienen de cotizar(); se suman las de las otras presentaciones de la",
+    "    // familia (el chunk agrupado las trae en `variantes`).",
+    "    const alternativas = Array.isArray(r.alternativas) ? r.alternativas.slice() : [];",
+    "    for (const v of Array.isArray(md.variantes) ? md.variantes : []) {",
+    "      const n = String(v.material || '');",
+    "      if (!n || n === etiqueta) continue;",
+    "      const rv = cotizar({",
+    "        modo: v.modo, ancho_cm: c.ancho_cm, alto_cm: c.alto_cm, cantidad: c.cantidad,",
+    "        escala: v.escala, geometria: md.geometria, sin_minimo: v.sin_minimo,",
+    "        paquete: v.paquete, material: n,",
+    "      });",
+    "      if (rv.ok) alternativas.push({ cantidad: c.cantidad, total: rv.total, material: n });",
+    "      else if (Array.isArray(rv.alternativas)) alternativas.push(...rv.alternativas);",
+    "    }",
+    "    // Dedupe por material+cantidad y orden por total: una misma opción puede salir por dos",
+    "    // caminos, y el redactor (etapa 6) quiere las opciones de menor a mayor precio.",
+    "    const vistos = new Set();",
+    "    const unicas = alternativas",
+    "      .filter((a) => {",
+    "        const k = String(a.material || '') + '#' + a.cantidad;",
+    "        if (vistos.has(k)) return false;",
+    "        vistos.add(k);",
+    "        return true;",
+    "      })",
+    "      .sort((a, b) => a.total - b.total);",
     "    hallazgos.push(etiqueta + ': no cotizable (' + r.motivo + ')');",
-    "    detalle.push({ material: etiqueta, estado: 'no_cotizable', motivo: r.motivo, precio: null });",
+    "    detalle.push({",
+    "      material: etiqueta,",
+    "      estado: 'no_cotizable',",
+    "      motivo: r.motivo,",
+    "      precio: null,",
+    "      ...(unicas.length && { alternativas: unicas }),",
+    "    });",
     "    continue;",
     "  }",
     "",
@@ -2471,6 +2550,8 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["geometria", "geometria: md.geometria"],
     ["sin_minimo", "sin_minimo: md.sin_minimo"],
     ["paquete", "paquete: md.paquete"],
+    ["material", "material: etiqueta"],
+    ["alternativas", "alternativas"],
   ];
   const sinCablear = CABLEADOS.filter(([, frag]) => !jsAuditor.includes(frag));
   if (sinCablear.length) {
@@ -2486,6 +2567,8 @@ console.log("✓ el auditor reproduce el Excel entero.");
   const FALTANTES = [
     ["paquete", "paquete: paqueteDeMaterial(material)"],
     ["sin_minimo", "sin_minimo: sinMinimoDeMaterial(material)"],
+    ["material", "material,"],
+    ["alternativas (el gate las lee del Excel)", "Alternativas:"],
   ].filter(([, frag]) => !gateSrc.includes(frag));
   if (FALTANTES.length) {
     console.error("\n✗ ABORTADO: el gate de casos no le pasa a cotizar() lo que sí pasa producción:");

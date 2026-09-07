@@ -164,6 +164,11 @@ const casos = [
     // TG vende paquetes cerrados. 150 no son 1,5 paquetes ni se redondea a 2 (eso sería
     // cobrarle 200 y entregarle 150). El modelo ya respondía esto solo — leído en la
     // ejecución 304, con "Y 50?" — y ahora el auditor no lo puede contradecir.
+    //
+    // PERO (etapa 5) el pedido SÍ se vende en las cantidades de paquete más cercanas: la
+    // misma presentación (100/200) y las otras de la familia (500/1000). Cada alternativa
+    // es una cotización REAL calculada por el motor, no una estimación. En esta etapa aún
+    // no se presentan (el Responder sigue derivando); la etapa 6 las redacta.
     agente: {
       output: {
         respuesta: "150 tarjetas salen {P1}.",
@@ -173,6 +178,12 @@ const casos = [
     filas: [{ metadata: MD_TARJETAS }],
     esperaOk: false,
     esperaEnMensaje: ["terminalgrafica@gmail.com"],
+    esperaAlternativas: [
+      { material: "Tarjetas 9x5 simple faz x100", cantidad: 100, total: 13200 },
+      { material: "Tarjetas 9x5 simple faz x100", cantidad: 200, total: 26400 },
+      { material: "Tarjetas 9x5 simple faz x500", cantidad: 500, total: 28000 },
+      { material: "Tarjetas 9x5 simple faz x1000", cantidad: 1000, total: 42000 },
+    ],
   },
   {
     nombre: "agrupado · el modelo declara 1 (paquetes) en vez de las piezas",
@@ -632,6 +643,16 @@ for (const c of casos) {
   }
   for (const t of c.noEsperaEnMensaje ?? []) {
     if (limpio.includes(t)) problemas.push(`el mensaje NO debería decir "${t}"`);
+  }
+  // Alternativas de paquete (etapa 5): la cotización que no cierra exacto tiene que traer
+  // las cantidades de paquete más cercanas con su total real — las de la misma presentación
+  // y las de las otras de la familia (el chunk agrupado las trae en `variantes`).
+  if (c.esperaAlternativas) {
+    const noCots = (a.cotizaciones || []).filter((x) => x.estado === "no_cotizable");
+    const got = (noCots[0] && noCots[0].alternativas) || [];
+    const gotStr = got.map((g) => `${g.material}#${g.cantidad}=${g.total}`).sort().join(" · ");
+    const wantStr = c.esperaAlternativas.map((g) => `${g.material}#${g.cantidad}=${g.total}`).sort().join(" · ");
+    if (gotStr !== wantStr) problemas.push(`alternativas: [${gotStr || "(ninguna)"}] ≠ [${wantStr}]`);
   }
   // Invariantes globales: ningún marcador crudo puede llegar al chat, y desde la parte 4
   // NINGÚN veredicto interno tampoco — el rastro va a bot.log, no al cliente.
