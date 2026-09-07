@@ -50,7 +50,7 @@ export function Dropzone({ onArchivo, cargando, cargado }: Props) {
         }}
       />
       {cargando ? (
-        <p className="text-sm text-[var(--color-text-muted)]">Parseando…</p>
+        <p className="text-sm text-[var(--color-text-muted)]">Procesando…</p>
       ) : cargado ? (
         <p className="text-sm text-[var(--color-text-muted)]">
           <span className="font-medium text-[var(--color-foreground)]">{cargado}</span>
@@ -60,7 +60,7 @@ export function Dropzone({ onArchivo, cargando, cargado }: Props) {
         <>
           <p className="text-base font-medium">Arrastrá el .xlsx del catálogo</p>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            o hacé clic para elegirlo. Se parsea en tu navegador: no sale de tu máquina.
+            o hacé clic para elegirlo. Se procesa en tu navegador: no sale de tu máquina.
           </p>
         </>
       )}

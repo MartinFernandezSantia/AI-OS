@@ -56,9 +56,9 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <header className="mb-6">
-        <h1 className="text-xl font-semibold">Visor de chunks</h1>
+        <h1 className="text-xl font-semibold">Visor del catálogo</h1>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-          Los bloques de texto que va a leer el bot, tal cual se van a embeber. Todo en memoria:
+          Los bloques de texto que va a leer el bot, tal cual se van a cargar. Todo en memoria:
           no escribe a ninguna base.
         </p>
       </header>
@@ -78,8 +78,8 @@ export default function Page() {
             <div className="mt-4 rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-soft)] p-4">
               <p className="text-sm font-medium text-[var(--color-warning)]">
                 {problemas.length === 1
-                  ? "1 problema que el chunk no muestra"
-                  : `${problemas.length} problemas que los chunks no muestran`}
+                  ? "1 problema que el bloque no muestra"
+                  : `${problemas.length} problemas que los bloques no muestran`}
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {problemas.map((a, i) => (
@@ -107,7 +107,7 @@ export default function Page() {
 
           {actuales.length === 0 ? (
             <p className="mt-6 rounded-lg border bg-[var(--color-surface)] p-6 text-center text-sm text-[var(--color-text-muted)]">
-              El archivo se leyó pero no salió ningún chunk. ¿Tiene las hojas Productos y
+              El archivo se leyó pero no salió ningún bloque. ¿Tiene las hojas Productos y
               Materiales con esos nombres?
             </p>
           ) : (

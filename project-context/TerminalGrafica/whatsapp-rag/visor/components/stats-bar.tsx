@@ -49,7 +49,7 @@ export function StatsBar({ hojas, stats, conteos, estrategia, onEstrategia }: Pr
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
-        <Dato label="Chunks" valor={String(stats.chunks)} />
+        <Dato label="Bloques" valor={String(stats.chunks)} />
         <Dato label="Caracteres" valor={stats.chars.toLocaleString("es-AR")} />
         <Dato label="Tokens aprox." valor={"~" + stats.tokens.toLocaleString("es-AR")} />
         <Dato

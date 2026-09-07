@@ -60,7 +60,7 @@ export function IngestDialog({
         disabled={e.fase === "cargando"}
         className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-sm text-[var(--color-primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        {e.fase === "cargando" ? "Consultando…" : `Ingestar ${nChunks} chunks`}
+        {e.fase === "cargando" ? "Consultando…" : `Cargar ${nChunks} bloques`}
       </button>
 
       {e.fase !== "cerrado" && e.fase !== "cargando" && (
@@ -74,7 +74,7 @@ export function IngestDialog({
           <div className="w-full max-w-md rounded-lg border bg-[var(--color-surface)] p-5 shadow-lg">
             {(e.fase === "confirmar" || e.fase === "ingestando") && (
               <>
-                <h2 className="text-base font-semibold">Ingestar al catálogo del bot</h2>
+                <h2 className="text-base font-semibold">Cargar el catálogo del bot</h2>
 
                 <div className="mt-4 divide-y rounded-md bg-[var(--color-sunken)] px-3 py-1">
                   <Fila label="Destino">
@@ -90,8 +90,8 @@ export function IngestDialog({
                       `${e.preview.filasActuales} filas`
                     )}
                   </Fila>
-                  <Fila label="Se insertan">{e.preview.aInsertar} chunks</Fila>
-                  <Fila label="Embeddings">
+                  <Fila label="Se van a insertar">{e.preview.aInsertar} bloques</Fila>
+                  <Fila label="Costo estimado">
                     ~{e.preview.tokens.toLocaleString("es-AR")} tokens (~US$
                     {e.preview.usd.toFixed(5)})
                   </Fila>
@@ -125,7 +125,7 @@ export function IngestDialog({
                     disabled={e.fase === "ingestando"}
                     className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-sm text-[var(--color-primary-foreground)] hover:opacity-90 disabled:opacity-60"
                   >
-                    {e.fase === "ingestando" ? "Ingestando…" : "Sí, ingestar"}
+                    {e.fase === "ingestando" ? "Cargando…" : "Sí, cargar"}
                   </button>
                 </div>
               </>
@@ -135,7 +135,7 @@ export function IngestDialog({
               <>
                 <h2 className="text-base font-semibold">Listo</h2>
                 <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-                  {e.insertadas} chunks en <code className="font-mono text-xs">{e.destino}</code>.
+                  {e.insertadas} bloques en <code className="font-mono text-xs">{e.destino}</code>.
                   El bot ya lee esto.
                 </p>
                 <div className="mt-5 flex justify-end">
@@ -152,7 +152,7 @@ export function IngestDialog({
             {e.fase === "error" && (
               <>
                 <h2 className="text-base font-semibold text-[var(--color-danger)]">
-                  No se pudo ingestar
+                  No se pudo cargar
                 </h2>
                 <p className="mt-2 text-sm text-[var(--color-text-muted)]">
                   La tabla quedó como estaba: la escritura va en una transacción.
