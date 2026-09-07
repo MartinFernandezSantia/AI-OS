@@ -93,10 +93,23 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** El modo se decide por PREFIJO. La lista de `item` es explícita a propósito: si fuera el
- *  default, una unidad mal escrita ("pliegos A3" en plural) cotizaría como ítem en silencio
- *  en vez de fallar. `otro` es el bucket de error. `fijo` es un monto único por trabajo. */
-const modoDe = (unidad) => {
+/** El modo se decide por PREFIJO, o por la columna "Modo de cálculo" cuando está cargada
+ *  (etapa 7: la columna manda; el prefijo es el fallback para lo que no la tiene). La lista
+ *  de `item` es explícita a propósito: si fuera el default, una unidad mal escrita
+ *  ("pliegos A3" en plural) cotizaría como ítem en silencio en vez de fallar. `otro` es el
+ *  bucket de error. `fijo` es un monto único por trabajo. */
+const modoDe = (unidad, modoCol) => {
+  const m = String(modoCol ?? "").trim().toLowerCase();
+  if (m) {
+    if (m.startsWith("superficie")) return "m2";
+    if (m === "fijo") return "fijo";
+    if (m === "tramo total") return "item";
+    if (m.startsWith("proporcional")) {
+      // "proporcional" cubre pliego e item: el prefijo de la unidad decide cuál.
+    } else {
+      return "otro";
+    }
+  }
   const u = String(unidad ?? "").trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
@@ -160,16 +173,29 @@ for (const m of materiales.filas) {
 
 for (const [nombre, tramos] of porMaterial) {
   const unidad = tramos.find((t) => t["Unidad"])?.["Unidad"] ?? "";
-  const modo = modoDe(unidad);
+  const modoCol = tramos.find((t) => t["Modo de cálculo"])?.["Modo de cálculo"] ?? "";
+  const modo = modoDe(unidad, modoCol);
   const f0 = tramos[0]._fila;
 
   if (!unidad) {
     err("Materiales", f0, `"${nombre}": sin Unidad. Sin unidad no hay forma de cobrarlo.`);
   } else if (modo === "otro") {
     err("Materiales", f0,
-      `"${nombre}": la unidad "${unidad}" no corresponde a ninguna forma de cobro conocida. ` +
-      `Tiene que empezar con "pliego", "m2" o "modelo", o ser una de: unidad, hoja, paquete, pack, item, metro lineal. ` +
+      `"${nombre}": la unidad "${unidad}"${modoCol ? ` y el modo "${modoCol}"` : ""} no corresponden a ninguna forma de cobro conocida. ` +
+      `La unidad tiene que empezar con "pliego", "m2" o "modelo", o ser una de: unidad, hoja, paquete, pack, item, metro lineal, talonario. ` +
+      `Si usás la columna "Modo de cálculo", tiene que ser: proporcional, superficie, fijo o tramo total. ` +
       `Ojo: "metro cuadrado" NO es "m2" (no empieza igual) y queda sin fórmula.`);
+  }
+
+  // Etapa 7: la columna "Modo de cálculo" y la unidad se contradicen. Aviso, no error — la
+  // carga la valida TG y la puede corregir; el objetivo es que el desacuerdo se vea.
+  if (modoCol && modo !== "otro") {
+    const modoPrefijo = modoDe(unidad);
+    if (modoPrefijo !== modo) {
+      avi("Materiales", f0,
+        `"${nombre}": el "Modo de cálculo" cargado ("${modoCol}") da "${modo}", pero la unidad "${unidad}" se lee como "${modoPrefijo}". ` +
+        `Si el cambio es deliberado, ok; si no, una de las dos está mal.`);
+    }
   }
 
   // Escala: tramos ordenados, sin huecos ni superposiciones, y el último abierto.

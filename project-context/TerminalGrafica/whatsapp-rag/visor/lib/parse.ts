@@ -111,15 +111,31 @@ export function geometriaDe(materiales: Fila[], material: string): Geometria | n
 }
 
 /**
- * Modo de cálculo derivado de la unidad. Es lo que decide la rama del cálculo, mientras que
- * la unidad se muestra tal cual (el tamaño del pliego lo pone el cliente, no el código).
+ * Modo de cálculo derivado de la unidad, o de la columna "Modo de cálculo" cuando está
+ * cargada (la columna manda: es la forma EXPLÍCITA con la que TG declara el modo, y la
+ * unidad queda como la entiende el negocio). Sin la columna, el fallback es el prefijo.
  *
  * Se matchea por PREFIJO: "pliego A3", "pliego A4" y "pliego" son todos modo pliego. Si se
  * comparara por igualdad, un "pliego A4" nuevo caería en silencio al modo m2 y cotizaría mal.
  *
  * `fijo` es un monto único que NO depende de la cantidad (el recargo por diseño de corte).
+ * Valores de la columna: proporcional (multiplica cantidad × precio; el prefijo decide
+ * pliego vs item) · superficie (m2) · fijo · tramo total (ítem cuyo precio de tramo es
+ * total). Cualquier otro valor cae en `otro` y rompe el build: no cotiza en silencio.
  */
-export function modoDe(unidad: string): "pliego" | "m2" | "item" | "fijo" | "otro" {
+export function modoDe(unidad: string, modoCol?: string): "pliego" | "m2" | "item" | "fijo" | "otro" {
+  const m = String(modoCol ?? "").trim().toLowerCase();
+  if (m) {
+    if (m.startsWith("superficie")) return "m2";
+    if (m === "fijo") return "fijo";
+    if (m === "tramo total") return "item";
+    if (m.startsWith("proporcional")) {
+      // "proporcional" cubre pliego e item: la columna dice que se multiplica, el prefijo
+      // de la unidad decide cuál de los dos.
+    } else {
+      return "otro";
+    }
+  }
   const u = unidad.trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";

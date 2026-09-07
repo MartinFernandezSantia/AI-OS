@@ -367,7 +367,7 @@ function catalogoDe(material) {
   const geoFila = filas.find((m) => m["Área útil ancho (cm)"] && m["Área útil alto (cm)"]);
   return {
     unidad,
-    modo: modoDe(unidad),
+    modo: modoDe(unidad, filas[0]["Modo de cálculo"]),
     escala,
     geometria: geoFila
       ? {
@@ -382,8 +382,22 @@ function catalogoDe(material) {
 /** Modo por PREFIJO de la unidad (calca visor/lib/parse.ts): "pliego A4" es modo pliego.
  *  Con igualdad, una unidad nueva caería al modo equivocado sin ningún aviso.
  *  `item` es lista explícita, no default: ver el comentario en parse.ts.
- *  `fijo` es un monto único que no depende de la cantidad (el recargo por diseño de corte). */
-function modoDe(unidad) {
+ *  `fijo` es un monto único que no depende de la cantidad (el recargo por diseño de corte).
+ *  La columna "Modo de cálculo", si está cargada, MANDA sobre el prefijo: es la forma
+ *  explícita con la que TG declara el modo. Valores: proporcional/superficie/fijo/tramo
+ *  total. Cualquier otro valor cae en `otro` y aborta el build. */
+function modoDe(unidad, modoCol) {
+  const m = String(modoCol ?? "").trim().toLowerCase();
+  if (m) {
+    if (m.startsWith("superficie")) return "m2";
+    if (m === "fijo") return "fijo";
+    if (m === "tramo total") return "item";
+    if (m.startsWith("proporcional")) {
+      // "proporcional" cubre pliego e item: el prefijo de la unidad decide cuál.
+    } else {
+      return "otro";
+    }
+  }
   const u = String(unidad).trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
@@ -635,11 +649,30 @@ function correrTests() {
       const got = modoDe(unidad);
       if (got !== esperado) fallos.push(`modoDe("${unidad}"): esperaba "${esperado}", dio "${got}"`);
     }
-    // Y lo que de verdad importa: que NINGÚN material del Excel caiga en `otro`.
+    // La columna "Modo de cálculo" (etapa 7): manda sobre el prefijo, y un valor inválido
+    // tiene que caer en `otro` — el bucket de error, no un modo de silencio.
+    const CASOS_MODO_COLUMNA = [
+      ["m2", "superficie", "m2"],
+      ["m²", "superficie m2", "m2"],
+      ["modelo de corte", "fijo", "fijo"],
+      ["talonario de 100", "tramo total", "item"],
+      ["pliego A3", "proporcional", "pliego"],
+      ["unidad", "proporcional", "item"],
+      ["m2", "proporcional", "m2"],
+      ["pliego A3", "superficie", "m2"], // la columna manda aunque la unidad diga pliego
+      ["pliego A3", "churrasco", "otro"], // valor inválido → rompe visible
+      ["m2", "", "m2"], // columna vacía → fallback al prefijo
+    ];
+    for (const [unidad, columna, esperado] of CASOS_MODO_COLUMNA) {
+      const got = modoDe(unidad, columna);
+      if (got !== esperado) fallos.push(`modoDe("${unidad}", "${columna}"): esperaba "${esperado}", dio "${got}"`);
+    }
+    // Y lo que de verdad importa: que NINGÚN material del Excel caiga en `otro` (la columna
+    // incluida, si está cargada).
     for (const m of MATERIALES) {
       const unidad = m["Unidad"] ?? "";
-      if (modoDe(unidad) === "otro") {
-        fallos.push(`el material "${m["Material"]}" tiene unidad "${unidad}", que no es un modo conocido — no se va a poder cotizar`);
+      if (modoDe(unidad, m["Modo de cálculo"]) === "otro") {
+        fallos.push(`el material "${m["Material"]}" tiene unidad "${unidad}"${m["Modo de cálculo"] ? ` y modo "${m["Modo de cálculo"]}"` : ""}, que no es un modo conocido — no se va a poder cotizar`);
       }
     }
   }
