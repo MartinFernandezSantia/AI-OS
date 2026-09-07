@@ -72,6 +72,11 @@ lo tenga cargado, no exigirlo fila por fila.
 - **"Modo de cálculo" contradice la Unidad**: si la columna dice una cosa y el prefijo de la
   Unidad sugiere otra, avisalo (no es error — puede ser un cambio deliberado, pero hay que
   confirmarlo).
+- **"Modo de cálculo" distinto entre tramos del mismo material**: como esta columna se lee del
+  grupo (la gana la primera fila que la tenga cargada), un valor distinto en un tramo
+  posterior no rompe nada hoy — pero es dato inconsistente: alguien cargó "tramo total" en el
+  primer tramo y se olvidó de repetirlo en los siguientes, que quedaron en "proporcional".
+  Avisalo igual, para que se cargue igual en las 22 filas del material.
 - **Tramo sin precio o precio 0**: error directo.
 - **"Hasta" vacío en un tramo que no es el último**: solo el último tramo puede quedar
   abierto. Si un tramo del medio lo tiene vacío, es un error de carga.
