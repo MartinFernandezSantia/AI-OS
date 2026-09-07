@@ -20,6 +20,8 @@ const codigoMat = flow.nodes.find((n) => n.name === "Materiales Declarados").par
 const codigoResp = flow.nodes.find((n) => n.name === "Responder").parameters.jsCode;
 const codigoLog = flow.nodes.find((n) => n.name === "Armar Log").parameters.jsCode;
 const codigoEntregar = flow.nodes.find((n) => n.name === "Entregar").parameters.jsCode;
+const codigoArmar = flow.nodes.find((n) => n.name === "Armar Prompt Alternativas").parameters.jsCode;
+const codigoFusionar = flow.nodes.find((n) => n.name === "Fusionar Alternativas").parameters.jsCode;
 
 /** Corre un nodo Code con $input/$()/$execution simulados. */
 function correrCode(js, { items = [], nodos = {} }) {
@@ -669,6 +671,50 @@ for (const c of casos) {
   console.log(`    ok=${a.ok}${a.hallazgos.length ? "  →  " + a.hallazgos.join(" · ") : ""}`);
   console.log(`    mensaje: ${limpio.replace(/\n/g, " ⏎ ")}`);
   for (const p of problemas) console.log(`    ✗ ${p}`);
+}
+
+// ── Etapa 6: las alternativas se PRESENTAN (auditor → redactor → fusionar → responder) ──
+// El redactor real es un LLM; acá se simula con un mensaje que usa los marcadores de las
+// alternativas (como haría el nodo Agente "Redactar Alternativas"). Lo que se prueba es el
+// CABLEADO determinista: que el auditor emita las alternativas con precio, que el redactor
+// pueda referenciarlas por su marcador, y que el Responder inyecte los montos sin derivar.
+console.log("\n— Alternativas presentadas (etapa 6) —");
+{
+  const agente = {
+    output: {
+      respuesta: "150 tarjetas salen {P1}.",
+      cotizaciones: [cot("Tarjetas 9x5 simple faz x100", 9, 5, 150)],
+    },
+  };
+  const auditor = correrCode(codigo, { items: [{ json: { metadata: MD_TARJETAS } }], nodos: { Agente: [{ json: agente }] } })[0].json;
+  const cots = auditor.auditoria.cotizaciones || [];
+  const alts = cots
+    .map((c, i) => (c.estado === "alternativa" ? { marcador: `{P${i + 1}}`, cantidad: c.cantidad, material: c.material } : null))
+    .filter(Boolean);
+  const reemplazada = cots.some((c) => c.estado === "no_cotizable" && c.reemplazada);
+  if (!alts.length || !reemplazada) {
+    console.log(`✗ el auditor no emitió alternativas como cotizaciones con precio (alts=${alts.length}, reemplazada=${reemplazada})`);
+    fallos++;
+  } else {
+    // El prompt del redactor tiene que nombrar cada alternativa con su marcador.
+    const promptItem = correrCode(codigoArmar, { items: [{ json: auditor }] })[0].json;
+    for (const a of alts) {
+      if (!String(promptItem.prompt).includes(a.marcador)) {
+        console.log(`✗ el prompt del redactor no menciona ${a.marcador}`);
+        fallos++;
+      }
+    }
+    // Redactor simulado: usa los marcadores. Después Fusionar lee el auditor y arma el item
+    // que el Responder ve (los montos se inyectan de `cots`, que ya traen las alternativas).
+    const redactorSalida = [{ json: { output: "Para 150 tarjetas te ofrecemos " + alts.map((a) => `${a.cantidad} de ${a.material} por ${a.marcador}`).join(", ") + ". ¿Cuál te va?" } }];
+    const fusion = correrCode(codigoFusionar, { items: redactorSalida, nodos: { "Auditar Cotización": [{ json: auditor }] } })[0].json;
+    const resp = correrCode(codigoResp, { items: [{ json: fusion }], nodos: { Agente: [{ json: agente }] } })[0].json;
+    const out = String(resp.output || "");
+    const ok = resp.via !== "consulta" && out.includes("$13.200") && out.includes("$42.000") && !/\{P\d+\}/.test(out);
+    console.log(`${ok ? "✓" : "✗"} dos alternativas con sus precios inyectados y via=${resp.via}`);
+    console.log(`    mensaje: ${out}`);
+    if (!ok) fallos++;
+  }
 }
 
 // El nodo "Materiales Declarados" por separado.

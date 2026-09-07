@@ -593,7 +593,8 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
         L.push(
           `Son presentaciones distintas del mismo producto: cada una tiene su precio cerrado ` +
             `y no se calcula proporcionalmente. Si el cliente pide una cantidad que no está ` +
-            `en la lista, confirmala por mail.`,
+            `en la lista, declarala igual: el sistema va a ofrecer las cantidades de paquete ` +
+            `más cercanas con su precio.`,
         );
       }
 

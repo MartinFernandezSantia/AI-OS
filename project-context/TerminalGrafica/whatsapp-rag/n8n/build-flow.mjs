@@ -955,8 +955,17 @@ function codeAuditor() {
     "      estado: 'no_cotizable',",
     "      motivo: r.motivo,",
     "      precio: null,",
+    "      // El Responder NO deriva por esta cotización si fue reemplazada por alternativas",
+    "      // (etapa 6): el turno ya ofrece las opciones con su precio.",
+    "      reemplazada: unicas.length > 0,",
     "      ...(unicas.length && { alternativas: unicas }),",
     "    });",
+    "    // Cada alternativa entra como una cotización MÁS con precio (etapa 6): el redactor",
+    "    // la referencia con su marcador ({P2}, {P3}…) y el Responder inyecta el monto. La",
+    "    // posición en detalle define el número del marcador.",
+    "    for (const a of unicas) {",
+    "      detalle.push({ material: a.material, estado: 'alternativa', cantidad: a.cantidad, precio: a.total });",
+    "    }",
     "    continue;",
     "  }",
     "",
@@ -1113,8 +1122,10 @@ const CODE_RESPONDER = [
   "});",
   "",
   "// Una cotización que no se pudo calcular pero cuyo marcador el modelo nunca escribió:",
-  "// igual hay que derivar, porque el turno prometía un precio que no existe.",
-  "if (cots.some((c) => c.precio == null)) derivar = true;",
+  "// igual hay que derivar, porque el turno prometía un precio que no existe. EXCEPCIÓN",
+  "// (etapa 6): una cotización marcada `reemplazada` no prometió ningún precio — el redactor",
+  "// la sustituyó por las alternativas, que ya entraron a `cots` CON precio.",
+  "if (cots.some((c) => c.precio == null && !c.reemplazada)) derivar = true;",
   "",
   "// El modelo tipeó un precio en vez de usar el marcador. Ese número no pasó por el",
   "// cálculo: es exactamente lo que este rediseño elimina, así que no puede salir. Se mira",
@@ -1273,6 +1284,140 @@ const DESC_TOOL_INFO = [
   "es autoritativo: se afirma tal cual.",
 ].join(" ");
 
+// ══════════════════════════════════════════════════════════════════════════════════════
+// Etapa 6 — las alternativas de paquete se PRESENTAN (el auditor calcula, un LLM redacta)
+// ══════════════════════════════════════════════════════════════════════════════════════
+// El auditor nunca compone texto para el cliente: calcula las alternativas y las emite como
+// cotizaciones CON precio (entradas de `detalle`), cada una con su marcador implícito (su
+// posición en detalle). Un IF detecta el caso, un LLM reescribe el mensaje usando SOLO los
+// marcadores, y el Responder sigue siendo el único que inyecta montos — así ningún número
+// que llega al cliente salió de la imaginación de un modelo.
+
+/** Armar Prompt Alternativas: el mensaje que recibe el LLM redactor. */
+const CODE_ARMAR_PROMPT_ALT = [
+  "// El auditor ya emitió las alternativas como cotizaciones CON precio. Este nodo solo las",
+  "// lista con su marcador ({P2}, {P3}…) y le pasa al redactor el mensaje original + las",
+  "// opciones. El redactor NUNCA escribe cifras: cada precio va con su marcador.",
+  "const j = $input.first().json;",
+  "const a = j.auditoria || { ok: true, cotizaciones: [] };",
+  "const cots = Array.isArray(a.cotizaciones) ? a.cotizaciones : [];",
+  "const money = (n) => '$' + Number(n).toLocaleString('es-AR');",
+  "const lineas = [];",
+  "for (let i = 0; i < cots.length; i++) {",
+  "  const c = cots[i];",
+  "  if (c.estado !== 'alternativa' || c.precio == null) continue;",
+  "  lineas.push('- {P' + (i + 1) + '}: ' + c.cantidad + ' de ' + c.material + ' — ' + money(c.precio));",
+  "}",
+  "const prompt =",
+  "  'Mensaje original del bot:\\n\"\"\"\\n' + String(j.respuesta || '') + '\\n\"\"\"\\n\\n' +",
+  "  'Opciones ya cotizadas (cada una con el marcador que la reemplaza en el mensaje):\\n' +",
+  "  lineas.join('\\n') + '\\n\\n' +",
+  "  'Reescribí el mensaje ofreciendo esas opciones. NUNCA escribas cifras ni montos: cada ' +",
+  "  'precio va con su marcador {Pn}. No inventes cantidades ni materiales fuera de la lista.';",
+  "return [{ json: { prompt, ...j } }];",
+].join("\n");
+
+/** System prompt del LLM redactor (nodo Agente dedicado, sin tools ni memoria). */
+const REDACTOR_SYSTEM = [
+  "Sos el redactor de WhatsApp de Terminal Gráfica (imprenta). No atendés al cliente por tu",
+  "cuenta: reescribís un mensaje ya redactado para que ofrezca opciones de compra.",
+  "",
+  "Recibís el mensaje original (con marcadores {P1}, {P2}…) y las opciones ya cotizadas,",
+  "cada una con su marcador, su cantidad y su material. Reescribí el mensaje ofreciéndole al",
+  "cliente las opciones válidas, con la cantidad y el material de cada una.",
+  "",
+  "REGLAS DURAS:",
+  "- NUNCA escribas cifras ni montos: cada precio va con su marcador {Pn} (el marcador ya",
+  "  dice el número; el sistema lo reemplaza).",
+  "- NUNCA inventes cantidades, materiales ni opciones que no estén en la lista.",
+  "- Usá el marcador de cada opción tal cual viene; no repitas marcadores.",
+  "- Mantené el tono del original: cordial, rioplatense, sin emojis, corto.",
+  "- Si el original pedía confirmar por mail, reemplazá esa parte por la oferta de opciones.",
+].join("\n");
+
+/** Fusionar Alternativas: pega el texto del redactor al auditorio, con salvaguarda. */
+const CODE_FUSIONAR_ALT = [
+  "// El redactor devolvió el mensaje reescrito (solo texto). Se fusiona con el veredicto del",
+  "// auditor, que ya trae las alternativas como cotizaciones CON precio: el Responder va a",
+  "// inyectar los montos en los marcadores que el redactor usó.",
+  "//",
+  "// Salvaguarda: si el redactor falló (onError continue) o no usó ningún marcador pese a",
+  "// haber opciones con precio, se cae al mensaje ORIGINAL del Agente — y el Responder lo",
+  "// deriva a consulta (la cotización original sigue sin precio y con `reemplazada`). Mejor",
+  "// derivar que mandar opciones sin precio.",
+  "const j = $('Auditar Cotización').first().json;",
+  "const raw = $input.first().json;",
+  "const redactado = String(raw.output ?? raw.text ?? '').trim();",
+  "const cots = Array.isArray(j.auditoria && j.auditoria.cotizaciones) ? j.auditoria.cotizaciones : [];",
+  "const hayAlternativas = cots.some((c) => c.estado === 'alternativa' && c.precio != null);",
+  "const conMarcadores = /\\{P\\d+\\}/.test(redactado);",
+  "const respuesta = hayAlternativas && !conMarcadores ? String(j.respuesta || '') : redactado;",
+  "return [{ json: { ...j, respuesta } }];",
+].join("\n");
+
+// Los nodos en sí (se agregan al array `flow.nodes` más abajo).
+const IF_HAY_ALTERNATIVAS = {
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 2 },
+      combinator: "and",
+      conditions: [
+        {
+          leftValue:
+            "={{ $json.auditoria.cotizaciones.some(c => c.estado === 'no_cotizable' && c.alternativas && c.alternativas.length) }}",
+          rightValue: true,
+          operator: { type: "boolean", operation: "true", singleValue: true },
+        },
+      ],
+    },
+    options: {},
+  },
+  id: "cot-if-alternativas",
+  name: "¿Hay Alternativas?",
+  type: "n8n-nodes-base.if",
+  typeVersion: 2.2,
+  position: [1100, 0],
+};
+const NODO_ARMAR_PROMPT = {
+  parameters: { jsCode: CODE_ARMAR_PROMPT_ALT },
+  id: "cot-armar-prompt-alt",
+  name: "Armar Prompt Alternativas",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [1100, 200],
+};
+const NODO_REDACTOR = {
+  parameters: {
+    promptType: "define",
+    text: "={{ $json.prompt }}",
+    options: { systemMessage: REDACTOR_SYSTEM },
+  },
+  id: "cot-redactor",
+  name: "Redactar Alternativas",
+  type: "@n8n/n8n-nodes-langchain.agent",
+  typeVersion: 1.9,
+  position: [1300, 200],
+  // Si el LLM falla, el item sigue (continue) y Fusionar cae al mensaje original → CONSULTA.
+  onError: "continueRegularOutput",
+};
+const NODO_MODELO_ALT = {
+  parameters: { modelName: GEMINI_MODEL, options: { temperature: 0.2, maxOutputTokens: 500 } },
+  id: "cot-modelo-alt",
+  name: "Modelo · Alternativas",
+  type: "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+  typeVersion: 1,
+  position: [1300, 400],
+  credentials: GEMINI_CRED,
+};
+const NODO_FUSIONAR = {
+  parameters: { jsCode: CODE_FUSIONAR_ALT },
+  id: "cot-fusionar-alt",
+  name: "Fusionar Alternativas",
+  type: "n8n-nodes-base.code",
+  typeVersion: 2,
+  position: [1500, 200],
+};
+
 const flow = {
   name: "cotizador-v1",
   nodes: [
@@ -1359,6 +1504,11 @@ const flow = {
       // emite un solo item con el veredicto del turno completo.
       executeOnce: false,
     },
+    IF_HAY_ALTERNATIVAS,
+    NODO_ARMAR_PROMPT,
+    NODO_REDACTOR,
+    NODO_MODELO_ALT,
+    NODO_FUSIONAR,
     {
       parameters: { jsCode: CODE_RESPONDER },
       id: "cot-responder",
@@ -1588,7 +1738,18 @@ const flow = {
     Agente: { main: [[{ node: "Materiales Declarados", type: "main", index: 0 }]] },
     "Materiales Declarados": { main: [[{ node: "Traer Escalas", type: "main", index: 0 }]] },
     "Traer Escalas": { main: [[{ node: "Auditar Cotización", type: "main", index: 0 }]] },
-    "Auditar Cotización": { main: [[{ node: "Responder", type: "main", index: 0 }]] },
+    "Auditar Cotización": { main: [[{ node: "¿Hay Alternativas?", type: "main", index: 0 }]] },
+    // Etapa 6: con alternativas, el redactor las presenta (y vuelve a converger en Responder);
+    // sin alternativas, directo. Responder sigue siendo el único emisor de texto.
+    "¿Hay Alternativas?": {
+      main: [
+        [{ node: "Armar Prompt Alternativas", type: "main", index: 0 }], // 0 true = hay alternativas
+        [{ node: "Responder", type: "main", index: 0 }], // 1 false = camino normal
+      ],
+    },
+    "Armar Prompt Alternativas": { main: [[{ node: "Redactar Alternativas", type: "main", index: 0 }]] },
+    "Redactar Alternativas": { main: [[{ node: "Fusionar Alternativas", type: "main", index: 0 }]] },
+    "Fusionar Alternativas": { main: [[{ node: "Responder", type: "main", index: 0 }]] },
     Responder: { main: [[{ node: "Armar Log", type: "main", index: 0 }]] },
     "Armar Log": { main: [[{ node: "Log Turno", type: "main", index: 0 }]] },
     "Log Turno": { main: [[{ node: "Entregar", type: "main", index: 0 }]] },
@@ -1605,6 +1766,10 @@ const flow = {
     // no valida. Sin esta conexión, `autoFix: true` no tiene con qué corregir.
     "Modelo · Corrector": {
       ai_languageModel: [[{ node: "Salida · Agente", type: "ai_languageModel", index: 0 }]],
+    },
+    // Etapa 6: el redactor de alternativas es un Agente dedicado con su propio modelo.
+    "Modelo · Alternativas": {
+      ai_languageModel: [[{ node: "Redactar Alternativas", type: "ai_languageModel", index: 0 }]],
     },
   },
   settings: { executionOrder: "v1" },
@@ -2673,6 +2838,10 @@ console.log("✓ el auditor reproduce el Excel entero.");
     ["sin violación → sigue al debounce", flowCw.connections["¿Violación Real Tier-2?"]?.main?.[1]?.[0]?.node === "Wait — Debounce"],
     ["el Router Fail mapea topicalAlignment→offtopic (enum)", (cwNodo("Router Fail Tier-2")?.parameters?.jsCode || "").includes("topicalAlignment: 'offtopic'")],
     ["el strike crashea si falla (no reincidencia muda)", cwNodo("Strike Tier-2")?.onError === "stopWorkflow"],
+    // Etapa 6: el redactor de alternativas (se replica por copia profunda del medio).
+    ["el IF de alternativas rutea al redactor y converge en Responder", flowCw.connections["¿Hay Alternativas?"]?.main?.[0]?.[0]?.node === "Armar Prompt Alternativas" && flowCw.connections["Fusionar Alternativas"]?.main?.[0]?.[0]?.node === "Responder" && flowCw.connections["¿Hay Alternativas?"]?.main?.[1]?.[0]?.node === "Responder"],
+    ["el redactor usa su modelo cableado (ai_languageModel)", flowCw.connections["Modelo · Alternativas"]?.ai_languageModel?.[0]?.[0]?.node === "Redactar Alternativas"],
+    ["el redactor prohíbe escribir cifras (solo marcadores)", String(cwNodo("Redactar Alternativas")?.parameters?.options?.systemMessage || "").includes("NUNCA escribas cifras")],
   ].filter(([, ok]) => !ok);
   if (CW_CABLEADO.length) {
     console.error("\n✗ ABORTADO: el cableado de la variante Chatwoot está incompleto:");
