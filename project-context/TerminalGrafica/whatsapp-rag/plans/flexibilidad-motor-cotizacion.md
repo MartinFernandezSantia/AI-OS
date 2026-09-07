@@ -59,11 +59,41 @@ cotice autónomamente los casos que hoy derivan a mail.
    `cotizador-v1-chatwoot.json` (54 nodos, EN PRODUCCIÓN). Vale para las 7 etapas, no solo para
    las que agregan nodos: cualquier cambio de motor, de contrato del LLM o de texto se valida en
    chat primero. El port a chatwoot es siempre el último paso de la etapa, nunca simultáneo.
+9. **El repo es la verdad; lo que hay en n8n se pisa.** Verificado el 06/09: el flow
+   `cotizador-v1` (chat) en n8n tiene un experimento sin portar — la tool `buscar_catalogo`
+   partida en `buscar_productos` + `buscar_materiales`, con su prompt (3 tools en vez de 2).
+   Ese cambio **no está en el repo ni en producción**: `cotizador-v1-chatwoot` vivo es idéntico
+   byte a byte al JSON commiteado. Decisión de Martin: se descarta. Al subir el primer build,
+   el chat vuelve a 2 tools — es esperado, no una regresión.
 
 ## Git
 
 Rama nueva desde la actual, **un commit por etapa**, formato convencional
 (`feat(tg-cotizador): …`). No mergear a main hasta validar en vivo.
+
+### Estado del árbol antes de empezar — resolver PRIMERO
+
+La rama `feat/dashboard-catalogo-b26` tiene cambios sin commitear que **no son de este plan**.
+No arrastrarlos a los commits del trabajo nuevo: van en sus propios commits temáticos, antes de
+abrir la rama.
+
+**Bloqueante — `Catalogo-TG-v4.xlsx` está sin trackear.** Es el catálogo vigente, el que todo
+este plan lee y modifica, y no está en git. Commitearlo **antes** de la etapa 1: sin ese punto
+de partida versionado, ningún cambio al Excel es reversible. Junto con él va
+`visor/scripts/lib-xlsx.mjs` (default v3→v4), que es el cambio que lo pone en uso — los dos en
+un mismo commit, porque uno sin el otro deja el repo incoherente.
+
+El resto, decidir sin mezclar:
+- **Borrados** de `Catalogo-TG-v2.xlsx`, `Catalogo-cliente-PENDIENTES.xlsx` y
+  `Catalogo_WhatsApp_Terminal_Grafica (1).xlsx`: son catálogos superados. Confirmar con Martin
+  y commitear como limpieza aparte.
+- **Sin trackear que probablemente no van al repo**: los `.bak-2026*` (respaldos de una sesión
+  de edición), `Catalogo-TG-v3-wip.xlsx`, `modal.png`, `tmp-entries.json`. Candidatos a
+  `.gitignore` o a borrar, no a commitear.
+- `Catalogo-TG-cliente.xlsx` y los scripts `cargar-offset-pliego.mjs` /
+  `datos-offset-pliego.mjs`: preguntar — parecen trabajo real de otra tanda.
+
+Recién con el árbol limpio, abrir la rama.
 
 ## Verificación de cada etapa
 
@@ -107,8 +137,12 @@ para verificar que el toolchain de escritura del `.xlsx` funciona en manos de qu
   columna — reescribirlo para que solo señale la geometría faltante. El aviso #2 (drift
   columna-vs-cálculo, `:823-828`) **desaparece entero**: sin columna no hay drift.
 - `n8n/build-flow.mjs:435-439`: el gate que verifica el rinde esperado del caso. La columna F de
-  `Casos de prueba` (29 filas cargadas) es **otra columna** y se conserva — decidir si el gate
-  sigue leyéndola desde ahí (recomendado: sí, es el único chequeo de rinde contra el Excel).
+  `Casos de prueba` (**28** filas cargadas sobre 131 de datos) es **otra columna** y se conserva
+  — el gate sigue leyéndola de ahí: es el único chequeo de rinde contra el Excel.
+  **Cuidado: una de esas 28 celdas vale `0`** (fila 45, `20 stickers 30x45 cm` — rinde 0 = la
+  pieza no entra en el pliego, y el caso espera derivación). Un conteo o un filtro con
+  truthiness de JS (`if (fila.F)`) la descarta y rompe ese caso. `0` es un valor cargado, no
+  ausente.
 - `n8n/listar-casos.mjs:8`, `visor/scripts/cargar-casos-cobertura.mjs:134` (array `COLS`).
 - `cotizar()`: el parámetro `rinde_cargado` y su rama (`build-flow.mjs:267`) quedan muertos —
   borrarlos. No está en `CABLEADOS` (`:2439`), así que no rompe gates.
@@ -138,8 +172,16 @@ el modo nuevo, con su fila única de escala. Retirar de `Pendientes` la fila cor
 - `CASOS_MODO` (`build-flow.mjs:550-563`): sumar el par `["<unidad>", "fijo"]` y un par
   defensivo de typo → `"otro"`.
 - `FUENTE_COTIZAR` (`:207-299`): rama nueva antes del `else` de `:276`. Toma el precio del único
-  tramo, ignora `cantidad` para el monto, y **sigue pasando por mínimo por trabajo y redondeo**
-  como los demás modos. Devolver el mismo shape de output (`unidades_cobradas: 1`).
+  tramo, ignora `cantidad` para el monto, y redondea como los demás modos. Devolver el mismo
+  shape de output (`unidades_cobradas: 1`).
+
+**PREGUNTA ABIERTA A TG — resolver antes de codear el mínimo.** El plan original asumía que
+`fijo` pasa por el mínimo por trabajo. La nota del Excel dice textualmente: *"Confirmar con TG
+si es un recargo POR TRABAJO (una vez, sin importar las piezas) antes de diseñarlo"*. No está
+confirmado. Para los $5.000 del corte a medida da igual (supera el mínimo de $4.000), pero como
+regla general un recargo que se agrega a un trabajo ya cotizado aplicaría el mínimo **dos
+veces**. Si TG confirma que es un agregado, la fila va marcada `Sin mínimo por trabajo` (columna
+que ya existe, `COL_SIN_MINIMO`) y no hace falta lógica nueva. **Preguntar antes de asumir.**
 - `visor/lib/chunk.ts` `lineasMotor()` (`:357-400`): línea propia para que el chunk diga que el
   precio no depende de la cantidad.
 
@@ -148,26 +190,44 @@ el modo nuevo, con su fila única de escala. Retirar de `Pendientes` la fila cor
 
 ---
 
-## Etapa 3 — Modo de cobro `tramo total`
+## Etapa 3 — Tramos con precio total (marca POR TRAMO, no por material)
 
-La escala tiene rangos por cantidad, pero el precio del rango es el TOTAL, no el unitario.
-Cubre troquelado y talonarios de rifas.
+**Corrección sobre el diseño original.** El plan asumía que troquelado y rifas eran el mismo
+caso ("modo tramo total"). El texto literal del Excel dice otra cosa:
 
-**Casos primero:** por cada material, un caso en el borde inferior y otro en el superior del
-mismo tramo con **idéntico** `Precio correcto` (ej. 3 piezas y 9 piezas → $10.000), más uno del
-tramo siguiente. Eso fija que dentro del tramo no escala.
+- **Troquelado** — `1-10 piezas: $10.000 TOTAL fijo (no por pieza). 11-50: $1.000/pieza.
+  51-100: $800/pieza. 101-500: $600/pieza.` Es **MIXTO**: solo el primer tramo es total plano;
+  los otros tres son precio por pieza, que el motor **ya cotiza bien hoy sin ningún cambio**.
+- **Rifas** — los 6 tramos son total puro (`100-249→$7.200 · 250-499→$9.600 · …`).
 
-**Excel:** alta de troquelado y las dos rifas en `Materiales` con sus escalas; baja de las tres
-filas en `Pendientes`.
+Un modo a nivel material no puede expresar el troquelado: cotizaría 30 piezas como $1.000 en vez
+de $30.000. Por eso la marca de "este precio es el total del tramo" va **en la fila del tramo**,
+no en el material. Los tramos sin marca siguen multiplicando como siempre. Con un solo mecanismo
+quedan cubiertos los dos casos: troquelado marca 1 tramo de 4, rifas marcan los 6.
 
-**Motor:** misma mecánica que la etapa 2 — prefijo en las 3 copias de `modoDe()`, par en
-`CASOS_MODO`, rama en `FUENTE_COTIZAR`. La rama es casi el modo `item`: busca el tramo por
-cantidad con `tramoDe()` (que ya existe) y **saltea la multiplicación** — el precio del tramo es
-el total. Después, mínimo y redondeo normales.
+**Excel:** columna nueva en `Materiales` (booleana, junto a `Precio por unidad`), marcada por
+fila de tramo. Alta de troquelado y las dos rifas; baja de esas filas en `Pendientes`.
 
-**Riesgo a cubrir con un caso explícito:** que un material `tramo total` mal cargado como `item`
-multiplique (5 × $10.000 = $50.000). Un caso de `CASOS_MODO` que fije la unidad → modo evita
-que se cuele.
+**Motor** (`FUENTE_COTIZAR`, `build-flow.mjs:207-299`): **no es un modo nuevo** y `modoDe()` no
+se toca. Es una bifurcación dentro del cálculo del total, después de `tramoDe()`: si el tramo
+elegido está marcado, el total es el precio del tramo; si no, se multiplica por unidades como
+hoy. Mínimo y redondeo iguales para ambos. Propagar la marca desde `parse.ts` al `meta.escala`
+del chunk, porque el auditor lee la escala de ahí.
+
+**Casos (imprescindibles, el troquelado es el que puede salir mal en silencio):**
+- Troquelado 3 piezas y 9 piezas → **ambos $10.000** (dentro del tramo total no escala).
+- Troquelado 30 piezas → **$30.000** (tramo por pieza: 30 × $1.000). Este es el caso que
+  atrapa el error de marcar todo el material como total.
+- Troquelado 11 y 50 piezas → bordes del tramo por pieza.
+- Rifas: un caso por tramo marcado, en el borde inferior y superior del mismo tramo.
+
+**Las rifas tienen un SEGUNDO problema, independiente de este.** Su escala está indexada en
+**números de rifa**, no en talonarios (la unidad que pediría el cliente: "2 talonarios" = 200
+números). Es una conversión 1:100 — exactamente lo que hace `paquete` en modo `item`, pero al
+revés (el paquete divide piezas→unidades; acá hay que multiplicar talonarios→números). Resolver
+esto **antes** de dar de alta las rifas, o cargarlas en la etapa siguiente: si se cargan con la
+escala en números y el cliente pide talonarios, cotiza 100 veces menos. Decidir con TG en qué
+unidad pide el cliente.
 
 ---
 
@@ -176,7 +236,12 @@ que se cuele.
 Que el cliente pueda declarar la cantidad **en la unidad de cobro** ("3 m² de vinilo") en vez de
 pieza + medida. Ambos caminos convergen al mismo cálculo de mínimo, tramo y total.
 
-Generalizar a **cualquier material en modo `m2` o `metro lineal`**, no solo vinilo.
+**Alcance real: solo `m2`.** `metro lineal` ya resuelve el camino directo hoy — cae en modo
+`item`, y `item` está explícitamente exento del guard de medida (`build-flow.mjs:242`), así que
+acepta la cantidad sin ancho/alto y admite decimales. Ya hay 4 casos verdes que lo prueban
+(escaneo de planos: 1 m, 3 m, 2,45 m con decimales, y 0,5 m activando el mínimo), y el chunk ya
+le explica al modelo cómo declararlo (`esMedidaContinua()`, `parse.ts:151`, usado en
+`chunk.ts:389-397`). **En metro lineal no se toca el motor**: si acaso, sumar un caso más.
 
 **Contrato del LLM** (`ESQUEMA_SALIDA`, `build-flow.mjs:671-726`): hoy `ancho_cm`/`alto_cm` son
 obligatorios. Sumar un camino alternativo donde el modelo declare la cantidad en la unidad de
@@ -193,8 +258,17 @@ que enterarse ("el mínimo que trabajamos es 0,5 m²"). Eso vive en la presentac
 cálculo: revisar `plans/system-prompt-v1.md:85-91` (`## Presentar el precio`), que ya tiene la
 regla de presentar el mínimo como cantidad.
 
-**Casos:** por cada modo (m² y metro lineal), un caso por cada camino de entrada que dé el mismo
-total, y uno donde el mínimo se dispare por el camino directo.
+**Casos:** en m², un caso por cada camino de entrada que dé el mismo total, y uno donde el
+mínimo se dispare por el camino directo. En metro lineal alcanza con un caso de confirmación
+(el camino ya está cubierto por los 4 existentes).
+
+**Presupuesto de tokens — tarea real de esta etapa, no advertencia.** Enseñarle al modelo el
+camino directo suma texto al prompt, que hoy está en 3.024/3.050. **Hay que recortar sí o sí**
+antes de agregar. Buscar el recorte en las secciones más redundantes de
+`plans/system-prompt-v1.md` (los 4 ejemplos de cantidad sin convertir, `:57-61`, admiten
+compresión), medir con `node n8n/armar-prompt.mjs`, y recién después sumar lo nuevo. Si no
+entra, el ejemplo del camino directo va al **chunk** del material (como ya hace
+`esMedidaContinua()`), no al prompt: el chunk no paga el techo.
 
 ---
 
@@ -218,8 +292,11 @@ auditor ya lo desarma (`build-flow.mjs:809-812`) — **no hace falta ir a la bas
   Cada alternativa es una cotización real ya calculada por el mismo motor, no una estimación.
 - Propagarlo en el `detalle[]` del auditor (`build-flow.mjs:851`), junto al `estado:'no_cotizable'`.
 - Sumar el campo a `CABLEADOS` (`:2439-2445`) para que no se pueda borrar en silencio.
-- La coda del chunk de familia (`chunk.ts:569-575`) hoy dice *"confirmala por mail"* — actualizar
-  ese texto, porque deja de ser cierto.
+
+La coda del chunk de familia (`chunk.ts:569-575`, hoy *"confirmala por mail"*) **no se toca en
+esta etapa**: recién deja de ser cierta cuando el bot sabe presentar alternativas, en la 6. Si
+se cambia acá, el modelo lee "ofrecé opciones" sin tener precio que mostrar y el Responder lo
+manda igual a `CONSULTA`. Se cambia en la etapa 6.
 
 **Casos:** pedido no múltiplo con familia de una sola presentación (solo inferior/superior);
 pedido no múltiplo con familia de varias presentaciones (que aparezcan las de otras
@@ -241,6 +318,43 @@ viven `{Pn}`, el regex de teléfono `RE_TEL:1042` y el aviso de precio provisori
 
 **Prompt del nodo:** recibe solo las alternativas ya calculadas y redacta. Prohibido inventar
 números o cantidades que no estén en la entrada.
+
+### Los guards del Responder tirarían las alternativas — cómo se resuelve
+
+El Responder tiene dos guards duros que un texto con precios redactado por un LLM **no
+sobrevive**:
+
+1. `if (cots.some((c) => c.precio == null)) derivar = true;` (`:1007-1009`) — basta una
+   cotización sin precio en el turno para derivar el mensaje entero.
+2. `RE_PRECIO` (`:1011-1026`) — extrae todo monto con `$` del texto **ya sustituido** y lo
+   busca en la lista de precios inyectados, **consumiendo de a uno** (`splice`). Lo que no
+   matchea → `derivar = true`. El match es por string exacto, así que también cae un precio
+   correcto **formateado distinto** (`$6600` vs `$6.600`) o **repetido** dos veces cuando hay
+   una sola cotización.
+
+**Solución: no se toca ningún guard.** Cada alternativa entra al turno como una **cotización
+más** en `cots`, con su `precio` ya calculado por el auditor, y el segundo LLM la referencia con
+su marcador (`{P1}`, `{P2}`, …) igual que hace hoy con el precio principal. Así los montos que
+llegan al texto son *inyectados*, no tipeados, y ambos guards siguen intactos sin excepciones.
+
+Consecuencias a implementar:
+- El auditor emite las alternativas como entradas de `cots` con precio, no solo dentro de
+  `detalle[]`. Ojo con el guard 1: la cotización original sigue teniendo `precio: null`
+  (es la que no se pudo cotizar) — hay que distinguir "sin precio porque falló" de "sin precio
+  porque fue reemplazada por alternativas", o el turno deriva igual. Es el punto exacto donde
+  esta etapa toca el Responder, y el único.
+- El prompt del segundo LLM recibe las alternativas **con su número de marcador**, y tiene
+  prohibido escribir cifras: solo marcadores.
+- Un caso de prueba que verifique que un mensaje con dos alternativas sale con ambos precios
+  inyectados y `via != 'consulta'`.
+
+**Regla que queda para siempre:** cualquier monto visible en un mensaje tiene que pasar por su
+propio `{Pn}`. Un desglose explicativo con cifras escritas a mano (ej. "son $10.000 fijos hasta
+10 piezas") es incompatible con el guard — si en algún momento hace falta mostrar una escala,
+va sin el signo `$` o con marcador por cifra.
+
+**La coda del chunk de familia** (`chunk.ts:569-575`) se actualiza **acá**, no en la etapa 5:
+recién ahora el bot puede realmente ofrecer las opciones que el texto promete.
 
 **Los dos flows.** Aplica la regla general (chat primero, chatwoot después), acá con más peso
 porque se agregan nodos: `cotizador-v1-chatwoot.json` es copia profunda del medio, así que el
