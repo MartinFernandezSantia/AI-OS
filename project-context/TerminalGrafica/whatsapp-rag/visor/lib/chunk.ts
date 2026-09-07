@@ -375,6 +375,11 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
       "La fórmula es para entender el precio, NO para aplicarla: la cantidad son las PIEZAS " +
         "que pidió el cliente (una lona de 3x1 es cantidad 1, no 3), y los m2 los calcula el " +
         "sistema a partir de la medida.",
+      // El camino DIRECTO: si el cliente pide la cantidad en m² ("3 m² de vinilo"), no hay
+      // pieza ni medida — la cantidad ES la unidad de cobro. Sin esta línea, el modelo no
+      // sabe que puede declarar sin ancho/alto y repregunta o inventa una medida.
+      "Si el cliente pide directo en m² ('3 m² de vinilo'), la cantidad ES 3 y no mandes " +
+        "medida: el sistema la toma como los m2 de superficie.",
       MEDIDA_LA_DA_EL_CLIENTE,
     ];
   }

@@ -240,7 +240,9 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
   // La medida solo hace falta donde el precio depende de ella. Un anillado o un ojalillo
   // no tienen tamaño: son el trabajo. Exigirla ahí dejaría fuera media colección. Y un
   // modo fijo es un monto único: no depende ni de la medida ni de la cantidad.
-  if (modo !== 'item' && modo !== 'fijo' && (!(a > 0) || !(h > 0))) return { ok: false, motivo: 'medida inválida' };
+  // En m2 hay DOS caminos de entrada: pieza con medida (una lona de 3x1) o cantidad
+  // DIRECTA en la unidad de cobro ("3 m² de vinilo", sin medida) — la rama de abajo decide.
+  if (modo !== 'item' && modo !== 'fijo' && modo !== 'm2' && (!(a > 0) || !(h > 0))) return { ok: false, motivo: 'medida inválida' };
 
   let unidades, r = null;
   if (modo === 'item') {
@@ -268,8 +270,17 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
     if (!(r > 0)) return { ok: false, motivo: 'la pieza no entra en la unidad de cobro (rinde 0) — derivar a consulta' };
     unidades = Math.ceil(q / r - 1e-9);
   } else if (modo === 'm2') {
-    const m2Pieza = (a * h) / 10000;
-    unidades = m2Pieza * q;
+    // DOS caminos de entrada, y de ahí en adelante el cálculo es idéntico:
+    //  · pieza + medida: el cliente pidió piezas ("una lona de 3x1") → cantidad 1 y los
+    //    m2 salen de ancho×alto;
+    //  · cantidad DIRECTA en la unidad de cobro: "3 m² de vinilo" → cantidad 3, sin medida.
+    // El modelo nunca convierte entre caminos: declara lo que dijo el cliente.
+    if (a > 0 && h > 0) {
+      const m2Pieza = (a * h) / 10000;
+      unidades = m2Pieza * q;
+    } else {
+      unidades = q;
+    }
     // El mínimo facturable vive en el tramo (columna "Mínimo facturable" del material).
     const min = Number((escala.find((t) => t.minimo_facturable != null) || {}).minimo_facturable || 0);
     if (min > 0 && unidades < min) unidades = min;
@@ -704,35 +715,36 @@ const ESQUEMA_SALIDA = {
         "marcadores {P1}, {P2}… del mensaje. Vacío si no cotizaste.",
       items: {
         type: "object",
-        required: ["material_catalogo", "ancho_cm", "alto_cm", "cantidad"],
+        required: ["material_catalogo", "cantidad"],
         properties: {
           material_catalogo: {
             type: "string",
             description: "El nombre del material EXACTO como vino de buscar_catalogo.",
           },
-          ancho_cm: { type: "number", description: "Ancho de UNA pieza, en cm." },
-          alto_cm: { type: "number", description: "Alto de UNA pieza, en cm." },
+          ancho_cm: {
+            type: "number",
+            description:
+              "Ancho de UNA pieza, en cm. SOLO si el cliente pidió piezas con medida. Si " +
+              "pidió directo en la unidad de cobro ('3 m² de vinilo', '2,45 metros de " +
+              "planos'), NO lo mandes: va solo la cantidad.",
+          },
+          alto_cm: {
+            type: "number",
+            description:
+              "Alto de UNA pieza, en cm. SOLO si el cliente pidió piezas con medida; si " +
+              "pidió directo en la unidad de cobro, no lo mandes.",
+          },
           // La regla es LO QUE DIJO EL CLIENTE, tal cual, sin convertir. El auditor hace
           // toda conversión: divide por el rinde (pliego), por el paquete (item x100), o
-          // multiplica por la superficie (m2).
-          //
-          // La versión anterior decía "EN LA UNIDAD DE COBRO que declara el catálogo" y eso
-          // se cobró de menos en vivo (ejecución 412): el chunk de stickers dice "Precio
-          // según CANTIDAD DE PLIEGOS A3 (no de piezas)", así que para 100 stickers de 7x7
-          // el modelo declaró 6 —los pliegos, obedeciendo al pie de la letra— y el auditor
-          // volvió a dividir: 6 ÷ 18 = 1 pliego. $4.000 en vez de $16.800. La división
-          // aplicada dos veces, invisible para el auditor porque 1 × $2.800 cierra solo.
-          //
-          // El caso de "metro lineal" que motivó aquel texto no era una excepción a esta
-          // regla, era un ejemplo de ella: el cliente DICE "2,45 metros", y 2.45 es lo que
-          // hay que declarar. Lo que estaba mal ahí era declarar 1 ("un trabajo"), que
-          // tampoco es lo que dijo el cliente.
+          // multiplica por la superficie (m2). Y si el cliente pidió DIRECTO en la unidad
+          // de cobro (m², metros lineales), la cantidad ES esa unidad, sin medida.
           cantidad: {
             type: "number",
             description:
               "Lo que pidió el cliente, EN SUS PALABRAS y sin convertir a nada: 100 stickers " +
-              "= 100 · 1000 tarjetas = 1000 · UNA lona de 3x1 = 1 (no 3, los m2 los calcula " +
-              "el sistema desde la medida) · 2,45 metros de planos = 2.45 (admite decimales). " +
+              "= 100 · 1000 tarjetas = 1000 · UNA lona de 3x1 = 1 (los m2 los calcula el " +
+              "sistema desde la medida) · 3 m² de vinilo = 3 (acá SÍ es directo, sin medida) " +
+              "· 2,45 metros de planos = 2.45 (admite decimales). " +
               "NUNCA conviertas a pliegos, paquetes ni m2 aunque el catálogo cobre así y te " +
               "muestre la cuenta: esa conversión la hace el sistema, y si ya la hiciste vos la " +
               "hace DOS VECES y el precio sale mal.",
