@@ -108,11 +108,14 @@ export function geometriaDe(materiales: Fila[], material: string): Geometria | n
  *
  * Se matchea por PREFIJO: "pliego A3", "pliego A4" y "pliego" son todos modo pliego. Si se
  * comparara por igualdad, un "pliego A4" nuevo caería en silencio al modo m2 y cotizaría mal.
+ *
+ * `fijo` es un monto único que NO depende de la cantidad (el recargo por diseño de corte).
  */
-export function modoDe(unidad: string): "pliego" | "m2" | "item" | "otro" {
+export function modoDe(unidad: string): "pliego" | "m2" | "item" | "fijo" | "otro" {
   const u = unidad.trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
+  if (u.startsWith("modelo")) return "fijo";
   // Unidad de cobro = ítem: la cantidad pedida ES la cantidad de unidades, sin geometría
   // ni conversión. Cubre lo que se cobra de a uno (anillado, sobre, hoja) y lo que se
   // vende por paquete cerrado ("paquete de 100" → pedir 1 son 100 tarjetas).

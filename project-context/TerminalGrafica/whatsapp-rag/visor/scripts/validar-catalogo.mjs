@@ -95,11 +95,12 @@ const num = (v) => {
 
 /** El modo se decide por PREFIJO. La lista de `item` es explícita a propósito: si fuera el
  *  default, una unidad mal escrita ("pliegos A3" en plural) cotizaría como ítem en silencio
- *  en vez de fallar. `otro` es el bucket de error. */
+ *  en vez de fallar. `otro` es el bucket de error. `fijo` es un monto único por trabajo. */
 const modoDe = (unidad) => {
   const u = String(unidad ?? "").trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
+  if (u.startsWith("modelo")) return "fijo";
   if (/^(unidad|hoja|paquete|pack|item|ítem|metro lineal)\b/.test(u)) return "item";
   return "otro";
 };
@@ -167,7 +168,7 @@ for (const [nombre, tramos] of porMaterial) {
   } else if (modo === "otro") {
     err("Materiales", f0,
       `"${nombre}": la unidad "${unidad}" no corresponde a ninguna forma de cobro conocida. ` +
-      `Tiene que empezar con "pliego" o "m2", o ser una de: unidad, hoja, paquete, pack, item, metro lineal. ` +
+      `Tiene que empezar con "pliego", "m2" o "modelo", o ser una de: unidad, hoja, paquete, pack, item, metro lineal. ` +
       `Ojo: "metro cuadrado" NO es "m2" (no empieza igual) y queda sin fórmula.`);
   }
 

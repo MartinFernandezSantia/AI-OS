@@ -153,6 +153,7 @@ const PLURALES: Record<string, string> = {
   ítem: "ítems",
   plancha: "planchas",
   bobina: "bobinas",
+  modelo: "modelos",
 };
 
 /** Adjetivos que acompañan a un sustantivo de unidad y tienen que concordar con su plural.
@@ -388,6 +389,15 @@ function lineasMotor(modo: string, unidad: string, geo: Geometria | null): strin
         `y admite decimales — 2,45 ${u} se declara como 2,45.`,
     ];
   }
+  // Un recargo por trabajo (corte a medida): un monto único que NO depende de la cantidad.
+  // Sin esta línea el modelo leería "Precio por modelo de corte" y multiplicaría la
+  // cantidad pedida por el precio, que es exactamente lo que el modo fijo viene a evitar.
+  if (modo === "fijo") {
+    return [
+      "Precio FIJO por trabajo: no depende de la cantidad de piezas. Declará la cantidad " +
+        "como la pida el cliente (1 modelo, 3 modelos) — el sistema cobra el monto único.",
+    ];
+  }
   return [];
 }
 
@@ -546,8 +556,9 @@ function chunksColeccionMaterial(datos: Datos): Chunk[] {
       if (motor.length) L.push("", ...motor);
       // "Medidas de referencia" significa "estas son ejemplos, pedí la que quieras", y eso
       // solo es cierto donde el precio sale de la superficie. Un recetario A5 se vende A5:
-      // ahí la lista son los productos, no medidas entre las que elegir.
-      L.push("", modo === "item" ? "Productos:" : "Medidas de referencia:");
+      // ahí la lista son los productos, no medidas entre las que elegir. Un recargo fijo
+      // tampoco tiene medida: es el trabajo.
+      L.push("", modo === "item" || modo === "fijo" ? "Productos:" : "Medidas de referencia:");
       for (const p of suyos) {
         const suMat = p["Material"] ?? mat;
         L.push(...itemProducto(p, unidadDe(datos.materiales, suMat), geo, escalaDe(datos.materiales, suMat)));

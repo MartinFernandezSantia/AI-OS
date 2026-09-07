@@ -238,8 +238,9 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
   if (!(q > 0)) return { ok: false, motivo: 'cantidad inválida' };
   if (!Array.isArray(escala) || !escala.length) return { ok: false, motivo: 'el material no tiene escala en el catálogo' };
   // La medida solo hace falta donde el precio depende de ella. Un anillado o un ojalillo
-  // no tienen tamaño: son el trabajo. Exigirla ahí dejaría fuera media colección.
-  if (modo !== 'item' && (!(a > 0) || !(h > 0))) return { ok: false, motivo: 'medida inválida' };
+  // no tienen tamaño: son el trabajo. Exigirla ahí dejaría fuera media colección. Y un
+  // modo fijo es un monto único: no depende ni de la medida ni de la cantidad.
+  if (modo !== 'item' && modo !== 'fijo' && (!(a > 0) || !(h > 0))) return { ok: false, motivo: 'medida inválida' };
 
   let unidades, r = null;
   if (modo === 'item') {
@@ -272,6 +273,11 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
     // El mínimo facturable vive en el tramo (columna "Mínimo facturable" del material).
     const min = Number((escala.find((t) => t.minimo_facturable != null) || {}).minimo_facturable || 0);
     if (min > 0 && unidades < min) unidades = min;
+  } else if (modo === 'fijo') {
+    // Monto único por trabajo: la cantidad NO importa (el recargo por diseño de corte es
+    // una sola vez, se pidan 1 o 50 piezas). El tramo le da el precio (una tarifa plana
+    // tiene un solo tramo); se reporta 1 como unidad de cobro para no cambiar el shape.
+    unidades = 1;
   } else {
     return { ok: false, motivo: 'modo desconocido: ' + modo };
   }
@@ -280,7 +286,7 @@ function cotizar({ modo, ancho_cm, alto_cm, cantidad, escala, geometria, sin_min
   const tramo = tramoDe(escala, unidades);
   if (!tramo) return { ok: false, motivo: 'ningún tramo de la escala cubre ' + unidades + ' unidades' };
 
-  const bruto = unidades * Number(tramo.precio);
+  const bruto = modo === 'fijo' ? Number(tramo.precio) : unidades * Number(tramo.precio);
   // El mínimo por trabajo cubre el armado y el montaje de una PRODUCCIÓN. Las colecciones
   // marcadas "Sin mínimo por trabajo" son agregados sobre un trabajo ya cobrado (laminado,
   // ojalillos): ahí el mínimo multiplicaría por 12 el precio de laminar una hoja.
@@ -342,11 +348,13 @@ function catalogoDe(material) {
 
 /** Modo por PREFIJO de la unidad (calca visor/lib/parse.ts): "pliego A4" es modo pliego.
  *  Con igualdad, una unidad nueva caería al modo equivocado sin ningún aviso.
- *  `item` es lista explícita, no default: ver el comentario en parse.ts. */
+ *  `item` es lista explícita, no default: ver el comentario en parse.ts.
+ *  `fijo` es un monto único que no depende de la cantidad (el recargo por diseño de corte). */
 function modoDe(unidad) {
   const u = String(unidad).trim().toLowerCase();
   if (u.startsWith("pliego")) return "pliego";
   if (u.startsWith("m2") || u.startsWith("m²")) return "m2";
+  if (u.startsWith("modelo")) return "fijo";
   // "metro lineal" entra acá y NO en m2: se cobra cantidad × precio (3 metros de plano
   // escaneado = 3 × $8.000), no ancho × alto. Es "metro lineal" completo y no "metro" a
   // secas: con el prefijo suelto, "metro cuadrado" cobraría por cantidad algo que se
@@ -551,6 +559,9 @@ function correrTests() {
       // es el que importa: con el prefijo escrito "metro" a secas, el CUADRADO también
       // caía en item y cobraba por cantidad algo que se cotiza por superficie.
       ["metro lineal", "item"], ["metro cuadrado", "otro"],
+      // El recargo por diseño: un monto único que no depende de la cantidad. El par de
+      // abajo es el typo defensivo: "modelado" no es "modelo" y tiene que romper visible.
+      ["modelo de corte", "fijo"], ["modelado", "otro"],
       ["bobina", "otro"], ["", "otro"],
     ];
     for (const [unidad, esperado] of CASOS_MODO) {
