@@ -85,9 +85,7 @@ para TG, no un refactor.**
 ```
 project-context/TerminalGrafica/whatsapp-rag/
   HANDOFF.md                 ← este archivo
-  Catalogo-TG-v3.xlsx        ← LA FUENTE ÚNICA (la base está al día: 62 chunks)
-  Catalogo-TG-v2.xlsx        ← el anterior, con los 31 productos. Referencia, no se toca
-  Catalogo_WhatsApp_Terminal_Grafica (1).xlsx  ← entrega del cliente, por única vez
+  Catalogo-TG-v4.xlsx        ← LA FUENTE ÚNICA (la base está al día: 119 chunks)
   n8n/                       ← Fase 3: EMPEZAR ACÁ
     README.md                            ← el flow, el auditor, las trampas, los casos de humo
     build-flow.mjs                       ← EL BUILDER: Excel + prompt → flow JSON (con los tests)
@@ -123,22 +121,63 @@ project-context/TerminalGrafica/whatsapp-rag/
 
 Referencia (NO tocar, es el bot anterior): `../whatsapp-rag-lite/`.
 
+## Estado: las 7 etapas de flexibilidad del motor (branch `feat/flexibilidad-motor-cotizacion`)
+
+Plan `plans/flexibilidad-motor-cotizacion.md`, implementado completo (2026-09-07). El bot
+cotiza casos que antes derivaban a mail, y TG carga productos sin intermediario:
+
+1. **Quitada la columna `Piezas por unidad de cobro`** (Productos). El rinde se calcula solo
+   por geometría. `cotizar()` ya no tiene `rinde_cargado`.
+2. **Modo `fijo`**: monto único por trabajo. Alta de `Corte a medida` ($5.000, sin mínimo,
+   unidad `modelo de corte`).
+3. **Tramos con precio total** (marca POR TRAMO en `Precio total por tramo`, columna N de
+   Materiales). Alta de `Troquelado (corte con forma en papel)` (4 tramos, el 1ro total) y
+   las 2 rifas (6 tramos totales, escala en TALONARIOS).
+4. **Entrada directa en m²**: el cliente puede pedir "3 m² de vinilo" (cantidad directa, sin
+   medida). `ancho_cm`/`alto_cm` dejaron de ser obligatorios en el schema.
+5. **Alternativas de paquete**: cuando la cantidad no da exacto, `cotizar()` devuelve las
+   cantidades de paquete más cercanas (misma presentación) y el auditor suma las de la
+   familia (`variantes`). Se calculan; la etapa 6 las presenta.
+6. **Segundo LLM redactor**: un IF rutea el caso a un Agente dedicado que reescribe el
+   mensaje usando SOLO marcadores {Pn}; Fusionar converge en Responder. Los guards del
+   Responder NO se tocan (la única excepción: el guard de `precio null` ignora las
+   cotizaciones `reemplazada`). El chunk de familia ya no dice "confirmala por mail".
+7. **Columna `Modo de cálculo`** (Materiales, columna O, desplegable desde `_listas`):
+   `proporcional` / `superficie` / `fijo` / `tramo total`. `modoDe()` la lee y cae al
+   prefijo de la unidad si está vacía; un valor inválido aborta el build. La sección
+   "UNA UNIDAD DE COBRO NUEVA" de Instrucciones se regeneró.
+
+**Números actuales**: 166/166 casos en el gate · 23 nodos chat / 59 chatwoot ·
+prompt ~3021/3050 tokens · test-auditor 37 checks verdes. `CATALOGO=Catalogo-TG-v4.xlsx`.
+
+**Pendiente de deploy (lo ejecuta Martin, no el código)**:
+- Re-ingestar el catálogo en Supabase (los chunks cambiaron: materiales nuevos, columnas,
+  coda de familia).
+- Subir `n8n/flows/cotizador-v1.json` a n8n (chat) y smoke de los casos nuevos (corte,
+  troquelado, rifas, m² directo, alternativas). Después portar `cotizador-v1-chatwoot.json`
+  (54→59 nodos, EN PRODUCCIÓN) con diff programático vivo-vs-emitido.
+- Pregunta abierta a TG: si el corte a medida es un recargo POR TRABAJO (una vez) — se cargó
+  con "Sin mínimo por trabajo" = sí (como agregado), y el modo fijo ya no depende de la
+  cantidad.
+
 ## El catálogo del cliente ya está cargado
 
 El cliente trajo un Excel propio (armado con Claude, sin nuestro esquema). Se lo normalizó
 HACIA el nuestro: de ahí salieron los datos y los aprendizajes, no al revés. Plan y
 decisiones en `plans/normalizar-catalogo-cliente.md`.
 
-**`Catalogo-TG-v3.xlsx` es ahora la fuente única.** Tiene los 31 productos del v2 más los
-68 del cliente: 99 productos, 73 materiales, 13 colecciones, 132 casos de prueba. Incluye la
-tarifa de `Vinilo y lona UV` ($21.000 → $22.000 el m², confirmada por TG el 18/08/2026).
+**`Catalogo-TG-v4.xlsx` es la fuente única.** 188 productos, 176 materiales (299 tramos),
+14 colecciones, **166 casos de prueba**. Incluye la tarifa de `Vinilo y lona UV`
+($21.000 → $22.000 el m², confirmada por TG el 18/08/2026).
 
-✅ **La base está al día**: Martin re-ingestó el 31/08. Los 62 chunks incluyen los 7
-materiales nuevos, la descripción del escaneo sin su precio literal y la línea de unidad
-de cobro para las medidas continuas. Verificado en vivo, no deducido.
+✅ **La base está al día**: Martin re-ingestó el 31/08. Los chunks incluyen los materiales
+nuevos, la descripción del escaneo sin su precio literal y la línea de unidad de cobro para
+las medidas continuas. Verificado en vivo, no deducido.
 
-Los scripts leen el archivo con `CATALOGO=Catalogo-TG-v3.xlsx node <script>` (sin la
-variable apuntan al v2, que quedó de referencia).
+Los scripts leen el archivo con `CATALOGO=Catalogo-TG-v4.xlsx node <script>`. Sin la
+variable el default de `lib-xlsx.mjs` es el v4 (commit baseline), pero `build-flow.mjs`
+aborta igual sin `CATALOGO=` (su mensaje de error menciona el v2/v3: desactualizado,
+ignorarlo).
 
 **Qué destapó la carga**: tres bugs del auditor, todos de la misma forma — el modelo
 declaraba bien y el auditor interpretaba mal. Detalle en "Estado: qué falta" § *El catálogo
@@ -148,16 +187,17 @@ despejar — esa apuesta ya había fallado con los pliegos en la Fase 4.
 
 ## Estado: qué está hecho
 
-**El Excel** (`Catalogo-TG-v3.xlsx`) — 6 hojas visibles + `_listas` oculta.
-99 productos, 73 materiales, 13 colecciones, **132 casos de prueba** (los 73 materiales con
-al menos un caso; antes eran 93 casos y 36 materiales cubiertos). Los 31 productos originales
-(11 materiales, 24 tramos, 4 colecciones) más los 68 que trajo el cliente.
-Las reglas de la hoja Instrucciones reproducen **39/39** de los precios que calculó el cliente,
-más 7 casos nuevos del motor (verificados a mano contra la fórmula y las escalas).
+**El Excel** (`Catalogo-TG-v4.xlsx`) — 6 hojas visibles + `_listas` oculta.
+188 productos, 176 materiales (299 tramos), 14 colecciones, **166 casos de prueba**.
+Los 31 productos originales (11 materiales, 24 tramos, 4 colecciones) más los que trajo el
+cliente y los 5 productos offset por pliego (commit `d993532`).
 
-**Tres modos de cobro**, derivados del PREFIJO de la columna `Unidad` del material:
-`pliego` (rinde geométrico), `m2` (superficie) e `item` (la unidad de cobro es un ítem).
-`otro` es el bucket de error: un gate rompe el build si algún material cae ahí.
+**Cinco formas de cobro**, derivadas del PREFIJO de la columna `Unidad` del material, o de
+la columna `Modo de cálculo` cuando está cargada (etapa 7 — la columna manda):
+`pliego` (rinde geométrico), `m2` (superficie, con entrada directa en m²), `item` (la
+unidad de cobro es un ítem), `fijo` (monto único por trabajo) y `tramo total` (marca POR
+TRAMO en la columna `Precio total por tramo`). `otro` es el bucket de error: un gate rompe
+el build si algún material cae ahí.
 
 **MOTOR DE MEDIDA LIBRE** (pedido del cliente, revierte con motivo el "el bot no calcula
 geometría" del plan madre): el bot cotiza CUALQUIER medida, no solo las del catálogo.

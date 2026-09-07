@@ -696,3 +696,31 @@ Enfoque: **base primero, sumar con datos.** v1 = precios sin reglas + handoff su
 **Alternatives considered:** ERROR como `Activa`/`Modo` (desproporcionado: bloquea un import entero por un flag que no cambia ningún número) · dejarlo sin definir como estaba el plan (garantiza que cada implementador elija distinto entre la etapa 5 y la 8).
 
 **Owner:** Martin.
+
+## 2026-09-07 — Flexibilidad del motor de cotización TG: 7 etapas implementadas
+
+**Decision:** se implementó completo el plan `project-context/TerminalGrafica/whatsapp-rag/plans/flexibilidad-motor-cotizacion.md` (branch `feat/flexibilidad-motor-cotizacion`, un commit por etapa). El motor pasa de "unidades × precio del tramo" a cinco formas de cobro: `fijo` (monto único, recargo por diseño), `tramo total` (marca POR TRAMO en `Precio total por tramo`, no por material — el troquelado es mixto), entrada directa en m² ("3 m² de vinilo"), alternativas de paquete cuando la cantidad no da exacto (calculadas por el motor, presentadas por un SEGUNDO LLM que escribe SOLO marcadores {Pn}), y columna `Modo de cálculo` explícita (proporcional/superficie/fijo/tramo total) con desplegable desde `_listas` y fallback al prefijo de la Unidad.
+
+**Why:** los casos reales de imprenta (recargos fijos, troquelado, rifas, paquetes que no cierran exactos, cantidad declarada en la unidad de cobro) vivían en `Pendientes` y el bot derivaba a mail. La regla que sostiene la etapa 6: el auditor calcula, un LLM redacta, y los guards del Responder NO se tocan — cada alternativa entra a `cots` con precio y su marcador, así todo monto visible pasó por inyección, no por la imaginación del modelo. La marca `tramo total` va en la fila del tramo porque un modo a nivel material no puede expresar el troquelado mixto (cotizaría 30 piezas a $1.000 en vez de $30.000).
+
+**Alternatives considered:** modo a nivel material para tramo-total (roto por el troquelado mixto) · tocar los guards del Responder para alternativas (se descartó: rompe la garantía de que ningún número llega al cliente sin pasar por el cálculo) · rifas cargadas en NÚMEROS con una conversión nueva 1:100 (innecesaria: la escala en talonarios es exacta porque 100 números = 1 talonario) · columna `Modo de cálculo` insertada "junto a Precio por unidad" (se puso al final, N/O: la cabecera es dinámica y mover 8 columnas era riesgo sin beneficio).
+
+**Owner:** Martin. Pendiente de deploy manual: re-ingesta en Supabase, subida de flows a n8n (chat primero, chatwoot después, diff programático) y smoke en vivo. Pregunta abierta a TG: si el corte a medida es un recargo POR TRABAJO (se cargó como agregado, "Sin mínimo por trabajo" = sí).
+
+## 2026-09-07 — Rifas: la escala va en TALONARIOS, no en números de rifa
+
+**Decision:** las dos rifas (10x7 y 15x7 cm) se cargaron con la escala de precios indexada en TALONARIOS (1-2 → $7.200 · 3-4 → $9.600 · …), no en números de rifa como la describía `Pendientes` (100-249 → $7.200 …). El cliente pide "2 talonarios" y la conversión 1:100 es exacta (cada talonario = 100 números, y todos los bordes de la escala caen en múltiplos de 100), así que la escala en talonarios es la misma curva sin ningún mecanismo nuevo. La unidad `talonario` entró a la lista de `item` en `modoDe()` y el chunk guía al modelo a declarar en talonarios, no en números ("2 talonarios se declara como 2").
+
+**Why:** cargarlas en números habría hecho que "2 talonarios" cotizara 100× menos (2 caería en el tramo 1-2 de la escala en talonarios → $7.200; en números, 2 no matchea nada). El plan advertía "resolver antes de darlas de alta o cotiza 100 veces menos"; la resolución fue observar que el mapeo es exacto, no inventar una conversión.
+
+**Owner:** Martin.
+
+## 2026-09-07 — La columna "Precio total por tramo" y "Modo de cálculo" van al FINAL de Materiales, no junto a sus vecinas semánticas
+
+**Decision:** `Precio total por tramo` (N) y `Modo de cálculo` (O) se agregaron al final de la hoja Materiales, no "junto a `Precio por unidad`" como pedía el plan. El lector del build y del visor usa la CABECERA como schema (`objetos()`), así que la posición no cambia el comportamiento; insertar en el medio habría corrido 8 columnas (estilos, dimension, riesgo de desalinear una fila) sin ningún beneficio funcional.
+
+**Why:** la regla de la etapa 7 es "ningún precio debe moverse": la columna al final es el camino de menor riesgo para cumplirla. La desviación quedó anotada en los commits de las etapas 3 y 7.
+
+**Alternatives considered:** insertar en el medio (riesgo alto de corrimiento) · agregar al final (elegida).
+
+**Owner:** Martin.
